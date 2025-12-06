@@ -32,6 +32,7 @@ const suites: TestSuite[] = [
   { name: 'Extension System', file: 'apps/api/src/test-extensions.ts', category: 'ext' },
   { name: 'AI Core', file: 'apps/api/src/test-ai.ts', category: 'ai' },
   { name: 'Context System', file: 'apps/api/src/test-context.ts', category: 'ctx' },
+  { name: 'Appointments', file: 'apps/api/src/test-appointments.ts', category: 'appt' },
 ];
 
 async function checkServer(): Promise<boolean> {
