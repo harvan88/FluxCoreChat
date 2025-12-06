@@ -14,7 +14,8 @@
 | 5 | @fluxcore/core-ai | ✅ Completado | ✅ 12/12 pruebas |
 | 6 | Contexto Relacional | ✅ Completado | ✅ 16/16 pruebas |
 | 7 | Extensión de Turnos | ✅ Completado | ✅ 12/12 pruebas |
-| 8 | Adaptadores (WhatsApp) | ⏳ Pendiente | - |
+| 8 | Adaptadores (WhatsApp) | ✅ Completado | ✅ 8/8 pruebas |
+| 9 | Workspaces Colaborativos | ⏳ Pendiente | - |
 
 ## ✅ Funcionalidades Implementadas
 
