@@ -13,7 +13,8 @@
 | 4 | Sistema de Extensiones | ✅ Completado | ✅ 11/11 pruebas |
 | 5 | @fluxcore/core-ai | ✅ Completado | ✅ 12/12 pruebas |
 | 6 | Contexto Relacional | ✅ Completado | ✅ 16/16 pruebas |
-| 7 | Extensión de Turnos | ⏳ Pendiente | - |
+| 7 | Extensión de Turnos | ✅ Completado | ✅ 12/12 pruebas |
+| 8 | Adaptadores (WhatsApp) | ⏳ Pendiente | - |
 
 ## ✅ Funcionalidades Implementadas
 
