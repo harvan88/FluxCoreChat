@@ -10,6 +10,5 @@ export * from './messages';
 export * from './extensions';
 export * from './extension-contexts';
 
-// Placeholders for Hito 5 and beyond
-export const workspaces = null;
-export const workspaceMembers = null;
+// Hito 9: Workspaces Colaborativos
+export * from './workspaces';
