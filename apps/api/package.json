@@ -1,0 +1,25 @@
+{
+  "name": "@fluxcore/api",
+  "version": "0.1.0",
+  "description": "FluxCore API - Backend con Elysia",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^0.8.0",
+    "@elysiajs/swagger": "^0.8.0",
+    "@fluxcore/db": "workspace:*",
+    "@fluxcore/types": "workspace:*",
+    "elysia": "^0.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "bun-types": "^1.0.0",
+    "typescript": "^5.3.3"
+  }
+}
