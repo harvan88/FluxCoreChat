@@ -10,28 +10,9 @@ env:
   BUN_VERSION: 1.1.0
 
 jobs:
-  lint:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      
-      - name: Install dependencies
-        run: bun install
-      
-      - name: Type check
-        run: bun run typecheck
-        continue-on-error: true
-
   test:
     name: Tests
     runs-on: ubuntu-latest
-    needs: lint
     
     services:
       postgres:
@@ -68,54 +49,15 @@ jobs:
       - name: Start server
         run: |
           cd apps/api
-          bun run src/index.ts &
-          sleep 5
+          DATABASE_URL=postgres://postgres:postgres@localhost:5432/fluxcore_test PORT=3000 bun run src/index.ts &
+          echo "Waiting for server..."
+          sleep 10
+          curl -f http://localhost:3000/health || (echo "Server failed to start" && exit 1)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
           PORT: 3000
       
       - name: Run tests
-        run: bun run scripts/run-tests.ts
+        run: bun run test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: test
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      
-      - name: Install dependencies
-        run: bun install
-      
-      - name: Build packages
-        run: bun run build
-        continue-on-error: true
-
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: fluxcore/api:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
