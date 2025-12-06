@@ -8,7 +8,7 @@ import { accountsRoutes } from './routes/accounts.routes';
 import { relationshipsRoutes } from './routes/relationships.routes';
 import { conversationsRoutes } from './routes/conversations.routes';
 import { messagesRoutes } from './routes/messages.routes';
-// WebSocket deshabilitado temporalmente - no hay versión 0.8.x disponible
+import { extensionRoutes } from './routes/extensions.routes';
 
 const PORT = process.env.PORT || 3000;
 
@@ -29,6 +29,7 @@ const app = new Elysia()
           { name: 'Relationships', description: 'Relationship management' },
           { name: 'Conversations', description: 'Conversation management' },
           { name: 'Messages', description: 'Messaging endpoints' },
+          { name: 'Extensions', description: 'Extension management' },
         ],
       },
     })
@@ -39,6 +40,7 @@ const app = new Elysia()
   .use(relationshipsRoutes)
   .use(conversationsRoutes)
   .use(messagesRoutes)
+  .use(extensionRoutes)
   .listen(PORT);
 
 console.log(`🚀 FluxCore API running at http://${app.server?.hostname}:${app.server?.port}`);
