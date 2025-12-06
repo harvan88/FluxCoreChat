@@ -11,35 +11,36 @@ interface WSMessage {
 }
 
 export const websocketRoutes = new Elysia()
-  .use(ws)
+  .use(ws())
   .ws('/ws', {
-    message(ws: any, message: WSMessage) {
+    message(ws: any, message: any) {
       try {
-        switch (message.type) {
+        const msg = message as WSMessage;
+        switch (msg.type) {
           case 'subscribe':
-            if (message.relationshipId) {
+            if (msg.relationshipId) {
               // Subscribe to relationship updates
-              messageCore.subscribe(message.relationshipId, (data) => {
+              messageCore.subscribe(msg.relationshipId, (data) => {
                 ws.send(JSON.stringify(data));
               });
-              ws.send(JSON.stringify({ type: 'subscribed', relationshipId: message.relationshipId }));
+              ws.send(JSON.stringify({ type: 'subscribed', relationshipId: msg.relationshipId }));
             }
             break;
 
           case 'unsubscribe':
-            if (message.relationshipId) {
-              messageCore.unsubscribe(message.relationshipId);
-              ws.send(JSON.stringify({ type: 'unsubscribed', relationshipId: message.relationshipId }));
+            if (msg.relationshipId) {
+              messageCore.unsubscribe(msg.relationshipId);
+              ws.send(JSON.stringify({ type: 'unsubscribed', relationshipId: msg.relationshipId }));
             }
             break;
 
           case 'message':
-            if (message.conversationId && message.content && message.senderAccountId) {
+            if (msg.conversationId && msg.content && msg.senderAccountId) {
               // Send message through MessageCore
               messageCore.send({
-                conversationId: message.conversationId,
-                senderAccountId: message.senderAccountId,
-                content: message.content,
+                conversationId: msg.conversationId,
+                senderAccountId: msg.senderAccountId,
+                content: msg.content,
                 type: 'outgoing',
                 generatedBy: 'human',
               }).then((result) => {
