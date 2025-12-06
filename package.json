@@ -17,7 +17,7 @@
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "typecheck": "turbo run typecheck",
-    "db:migrate": "bun run packages/db/src/migrate-workspaces.ts",
+    "db:migrate": "bun run packages/db/src/migrate-all.ts",
     "api:start": "bun run apps/api/src/index.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
