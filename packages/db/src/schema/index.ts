@@ -1,9 +1,9 @@
 // Export all schema tables
-// These will be implemented in Hito 1 and 2
+export * from './users';
+export * from './accounts';
+export * from './actors';
 
-// Placeholder for now - will be populated with actual schemas
-export const users = null;
-export const accounts = null;
+// Placeholders for Hito 2 and beyond
 export const relationships = null;
 export const conversations = null;
 export const messages = null;

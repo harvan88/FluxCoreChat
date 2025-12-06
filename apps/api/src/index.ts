@@ -3,6 +3,8 @@ import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
 
 import { healthRoutes } from './routes/health';
+import { authRoutes } from './routes/auth.routes';
+import { accountsRoutes } from './routes/accounts.routes';
 
 const PORT = process.env.PORT || 3000;
 
@@ -26,8 +28,11 @@ const app = new Elysia()
     })
   )
   .use(healthRoutes)
+  .use(authRoutes)
+  .use(accountsRoutes)
   .listen(PORT);
 
 console.log(`🚀 FluxCore API running at http://${app.server?.hostname}:${app.server?.port}`);
+console.log(`📚 Swagger docs at http://${app.server?.hostname}:${app.server?.port}/swagger`);
 
 export type App = typeof app;
