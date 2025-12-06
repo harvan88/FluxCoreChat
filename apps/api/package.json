@@ -14,6 +14,7 @@
     "@elysiajs/cors": "^0.8.0",
     "@elysiajs/jwt": "^0.8.0",
     "@elysiajs/swagger": "^0.8.0",
+    "@elysiajs/websocket": "^0.1.0",
     "@fluxcore/db": "workspace:*",
     "@fluxcore/types": "workspace:*",
     "bcrypt": "^6.0.0",
