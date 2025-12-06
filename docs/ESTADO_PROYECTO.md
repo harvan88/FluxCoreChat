@@ -11,7 +11,8 @@
 | 2 | Chat Core | ✅ Completado | ✅ 14/14 pruebas |
 | 3 | Workspace UI | ✅ Completado | ✅ Frontend funcionando |
 | 4 | Sistema de Extensiones | ✅ Completado | ✅ 11/11 pruebas |
-| 5 | @fluxcore/core-ai | ⏳ Pendiente | - |
+| 5 | @fluxcore/core-ai | ✅ Completado | ✅ 12/12 pruebas |
+| 6 | Contexto Relacional | ⏳ Pendiente | - |
 
 ## ✅ Funcionalidades Implementadas
 
