@@ -6,8 +6,9 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
   .use(authMiddleware)
   .get(
     '/',
-    async ({ user }) => {
+    async ({ user, set }) => {
       if (!user) {
+        set.status = 401;
         return {
           success: false,
           message: 'Unauthorized',
@@ -22,7 +23,6 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       };
     },
     {
-      isAuthenticated: true,
       detail: {
         tags: ['Accounts'],
         summary: 'Get user accounts',
