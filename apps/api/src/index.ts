@@ -10,6 +10,7 @@ import { conversationsRoutes } from './routes/conversations.routes';
 import { messagesRoutes } from './routes/messages.routes';
 import { extensionRoutes } from './routes/extensions.routes';
 import { aiRoutes } from './routes/ai.routes';
+import { contextRoutes } from './routes/context.routes';
 
 const PORT = process.env.PORT || 3000;
 
@@ -32,6 +33,7 @@ const app = new Elysia()
           { name: 'Messages', description: 'Messaging endpoints' },
           { name: 'Extensions', description: 'Extension management' },
           { name: 'AI', description: 'AI assistant endpoints' },
+          { name: 'Context', description: 'Relationship context management' },
         ],
       },
     })
@@ -44,6 +46,7 @@ const app = new Elysia()
   .use(messagesRoutes)
   .use(extensionRoutes)
   .use(aiRoutes)
+  .use(contextRoutes)
   .listen(PORT);
 
 console.log(`🚀 FluxCore API running at http://${app.server?.hostname}:${app.server?.port}`);

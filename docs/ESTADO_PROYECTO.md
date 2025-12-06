@@ -12,7 +12,8 @@
 | 3 | Workspace UI | ✅ Completado | ✅ Frontend funcionando |
 | 4 | Sistema de Extensiones | ✅ Completado | ✅ 11/11 pruebas |
 | 5 | @fluxcore/core-ai | ✅ Completado | ✅ 12/12 pruebas |
-| 6 | Contexto Relacional | ⏳ Pendiente | - |
+| 6 | Contexto Relacional | ✅ Completado | ✅ 16/16 pruebas |
+| 7 | Extensión de Turnos | ⏳ Pendiente | - |
 
 ## ✅ Funcionalidades Implementadas
 
