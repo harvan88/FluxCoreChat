@@ -1,0 +1,170 @@
+/**
+ * COR-040: ExtensionsPanel Component
+ * 
+ * Panel para gestionar extensiones instaladas y disponibles.
+ */
+
+import { useState } from 'react';
+import { Search, RefreshCw, Package, Sparkles } from 'lucide-react';
+import clsx from 'clsx';
+import { ExtensionCard } from './ExtensionCard';
+import { useExtensions } from '../../hooks/useExtensions';
+
+type TabType = 'all' | 'installed' | 'available';
+
+interface ExtensionsPanelProps {
+  accountId: string;
+  onConfigureExtension?: (extensionId: string) => void;
+}
+
+export function ExtensionsPanel({ 
+  accountId, 
+  onConfigureExtension 
+}: ExtensionsPanelProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const {
+    extensions,
+    isLoading,
+    error,
+    install,
+    uninstall,
+    toggle,
+    refresh,
+  } = useExtensions(accountId);
+
+  // Filtrar extensiones
+  const filteredExtensions = extensions.filter(ext => {
+    // Filtro por tab
+    if (activeTab === 'installed' && ext.status === 'available') return false;
+    if (activeTab === 'available' && ext.status !== 'available') return false;
+
+    // Filtro por búsqueda
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        ext.name.toLowerCase().includes(query) ||
+        ext.description.toLowerCase().includes(query) ||
+        ext.author.toLowerCase().includes(query)
+      );
+    }
+
+    return true;
+  });
+
+  // Contar extensiones
+  const counts = {
+    all: extensions.length,
+    installed: extensions.filter(e => e.status !== 'available').length,
+    available: extensions.filter(e => e.status === 'available').length,
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-gray-900">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Package className="text-blue-400" size={24} />
+            <h2 className="text-lg font-semibold text-white">Extensiones</h2>
+          </div>
+          <button
+            onClick={refresh}
+            disabled={isLoading}
+            className={clsx(
+              'p-2 rounded-lg transition-colors',
+              isLoading 
+                ? 'text-gray-500 cursor-not-allowed' 
+                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+            )}
+            title="Actualizar"
+          >
+            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar extensiones..."
+            className="w-full bg-gray-800 text-white pl-10 pr-4 py-2 rounded-lg border border-gray-700 focus:border-blue-500 focus:outline-none text-sm"
+          />
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mt-4">
+          {(['all', 'installed', 'available'] as TabType[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={clsx(
+                'px-3 py-1.5 text-sm rounded-lg transition-colors',
+                activeTab === tab
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              )}
+            >
+              {tab === 'all' && 'Todas'}
+              {tab === 'installed' && 'Instaladas'}
+              {tab === 'available' && 'Disponibles'}
+              <span className="ml-1.5 text-xs opacity-70">({counts[tab]})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Extensions List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {filteredExtensions.length === 0 ? (
+          <div className="text-center py-12">
+            <Sparkles className="mx-auto text-gray-600 mb-3" size={48} />
+            <p className="text-gray-400">
+              {searchQuery 
+                ? 'No se encontraron extensiones'
+                : activeTab === 'installed' 
+                  ? 'No tienes extensiones instaladas'
+                  : 'No hay extensiones disponibles'}
+            </p>
+          </div>
+        ) : (
+          filteredExtensions.map((extension) => (
+            <ExtensionCard
+              key={extension.id}
+              extension={extension}
+              onInstall={() => install(extension.id)}
+              onUninstall={() => uninstall(extension.id)}
+              onToggle={(enabled) => toggle(extension.id, enabled)}
+              onConfigure={onConfigureExtension ? () => onConfigureExtension(extension.id) : undefined}
+              isLoading={isLoading}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Footer info */}
+      <div className="p-4 border-t border-gray-700 text-xs text-gray-500">
+        <div className="flex items-center justify-between">
+          <span>{counts.installed} extensiones activas</span>
+          <a 
+            href="#" 
+            className="text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            Explorar marketplace
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}

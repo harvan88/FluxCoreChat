@@ -3,9 +3,10 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Smile, MoreVertical, Phone, Video } from 'lucide-react';
+import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message } from '../../types';
+import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
 
 interface ChatViewProps {
   conversationId: string;
@@ -15,6 +16,14 @@ export function ChatView({ conversationId }: ChatViewProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // COR-043/COR-044: AI Suggestions
+  const { 
+    suggestions, 
+    isGenerating, 
+    addSuggestion, 
+    removeSuggestion 
+  } = useAISuggestions(conversationId);
 
   // Load mock messages
   useEffect(() => {
@@ -55,21 +64,51 @@ export function ChatView({ conversationId }: ChatViewProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
-    if (!message.trim()) return;
+  const handleSend = (text?: string) => {
+    const textToSend = text || message;
+    if (!textToSend.trim()) return;
 
     const newMessage: Message = {
       id: Date.now().toString(),
       conversationId,
       senderAccountId: 'me',
-      content: { text: message },
+      content: { text: textToSend },
       type: 'outgoing',
-      generatedBy: 'human',
+      generatedBy: text ? 'ai' : 'human', // Si viene de sugerencia, es IA
       createdAt: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, newMessage]);
     setMessage('');
+  };
+
+  // COR-044: Handlers para sugerencias de IA
+  const handleApproveSuggestion = (suggestionId: string, text: string) => {
+    handleSend(text);
+    removeSuggestion(suggestionId);
+  };
+
+  const handleDiscardSuggestion = (suggestionId: string) => {
+    removeSuggestion(suggestionId);
+  };
+
+  // Simular sugerencia de IA para demo
+  const simulateAISuggestion = () => {
+    const mockSuggestion: AISuggestion = {
+      id: `sug-${Date.now()}`,
+      conversationId,
+      extensionId: 'core-ai',
+      originalMessageId: messages[messages.length - 1]?.id || '',
+      suggestedText: '¡El proyecto va muy bien! Estamos avanzando según lo planificado. ¿Te gustaría que te cuente los detalles?',
+      confidence: 0.92,
+      reasoning: 'Basado en el contexto de la conversación sobre el proyecto, sugiero una respuesta positiva con oferta de más información.',
+      alternatives: [
+        'Todo marcha según lo previsto con el proyecto.',
+        'El proyecto avanza perfectamente. ¿Quieres saber más?',
+      ],
+      createdAt: new Date().toISOString(),
+    };
+    addSuggestion(mockSuggestion);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -100,6 +139,14 @@ export function ChatView({ conversationId }: ChatViewProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Demo: Simular sugerencia de IA */}
+          <button 
+            onClick={simulateAISuggestion}
+            className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 rounded-lg transition-colors"
+            title="Simular sugerencia de IA (Demo)"
+          >
+            <Sparkles size={20} />
+          </button>
           <button className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors">
             <Phone size={20} />
           </button>
@@ -150,6 +197,25 @@ export function ChatView({ conversationId }: ChatViewProps) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* COR-043/COR-044: AI Suggestions */}
+      {isGenerating && (
+        <AISuggestionCard
+          suggestion={{} as AISuggestion}
+          onApprove={() => {}}
+          onDiscard={() => {}}
+          isLoading={true}
+        />
+      )}
+      {suggestions.map((suggestion) => (
+        <AISuggestionCard
+          key={suggestion.id}
+          suggestion={suggestion}
+          onApprove={(text) => handleApproveSuggestion(suggestion.id, text)}
+          onDiscard={() => handleDiscardSuggestion(suggestion.id)}
+          onRegenerate={simulateAISuggestion}
+        />
+      ))}
+
       {/* Input */}
       <div className="p-4 bg-gray-800 border-t border-gray-700">
         <div className="flex items-end gap-3">
@@ -170,7 +236,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
             <Smile size={20} />
           </button>
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!message.trim()}
             className={clsx(
               'p-3 rounded-full transition-colors',

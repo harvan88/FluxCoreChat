@@ -32,6 +32,7 @@
 | C3 | Offline-First | ✅ Completado | IndexedDB con Dexie.js, SyncManager |
 | COR-007 | Automation Controller | ✅ Completado | Modos automatic/supervised/disabled |
 | C1 | Backend Crítico | ✅ Completado | Todos los COR completados |
+| C5 | UI de Extensiones | ✅ Completado | AISuggestionCard, ExtensionsPanel |
 
 ## 📊 Estado de Alineación TOTEM
 
