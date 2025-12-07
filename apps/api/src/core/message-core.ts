@@ -2,6 +2,7 @@ import { messageService } from '../services/message.service';
 import { conversationService } from '../services/conversation.service';
 import { relationshipService } from '../services/relationship.service';
 import { extensionHost, type ProcessMessageResult } from '../services/extension-host.service';
+import { automationController, type TriggerEvaluation } from '../services/automation-controller.service';
 import type { MessageContent } from '@fluxcore/db';
 
 export interface MessageEnvelope {
@@ -22,6 +23,8 @@ export interface ReceiveResult {
   error?: string;
   // Resultados del procesamiento de extensiones
   extensionResults?: ProcessMessageResult[];
+  // COR-007: Información de automatización
+  automation?: TriggerEvaluation;
 }
 
 /**
@@ -61,6 +64,7 @@ export class MessageCore {
       // 2. Actualizar conversación y obtener datos
       const conversation = await conversationService.getConversationById(envelope.conversationId);
       let extensionResults: ProcessMessageResult[] = [];
+      let automationResult: TriggerEvaluation | undefined;
 
       if (conversation) {
         await conversationService.updateConversation(envelope.conversationId, {
@@ -83,6 +87,7 @@ export class MessageCore {
         // 5. DELEGAR A EXTENSIONHOST (COR-001)
         // Determinar el accountId target para las extensiones
         const relationship = await relationshipService.getRelationshipById(conversation.relationshipId);
+
         if (relationship) {
           // El targetAccountId es la cuenta que RECIBE el mensaje (no el sender)
           const targetAccountId = envelope.targetAccountId || 
@@ -90,29 +95,47 @@ export class MessageCore {
               ? relationship.accountBId 
               : relationship.accountAId);
 
-          // Procesar mensaje con extensiones del target
-          extensionResults = await extensionHost.processMessage({
+          // COR-007: Evaluar automation_controller ANTES de procesar extensiones
+          automationResult = await automationController.evaluateTrigger({
             accountId: targetAccountId,
             relationshipId: conversation.relationshipId,
-            conversationId: envelope.conversationId,
-            message: {
-              id: message.id,
-              content: envelope.content,
-              type: envelope.type,
-              senderAccountId: envelope.senderAccountId,
-            },
+            messageContent: envelope.content.text,
+            messageType: envelope.type,
+            senderId: envelope.senderAccountId,
           });
 
-          // Notificar resultados de extensiones si hay acciones
-          const hasActions = extensionResults.some(r => r.actions && r.actions.length > 0);
-          if (hasActions) {
-            this.broadcast(conversation.relationshipId, {
-              event: 'extension:processed',
-              data: {
-                messageId: message.id,
-                results: extensionResults,
+          // Solo procesar con extensiones si automation lo permite
+          if (automationResult.shouldProcess) {
+            // Procesar mensaje con extensiones del target
+            extensionResults = await extensionHost.processMessage({
+              accountId: targetAccountId,
+              relationshipId: conversation.relationshipId,
+              conversationId: envelope.conversationId,
+              message: {
+                id: message.id,
+                content: envelope.content,
+                type: envelope.type,
+                senderAccountId: envelope.senderAccountId,
               },
+              // COR-007: Pasar modo de automatización a extensiones
+              automationMode: automationResult.mode,
             });
+
+            // Notificar resultados de extensiones si hay acciones
+            const hasActions = extensionResults.some(r => r.actions && r.actions.length > 0);
+            if (hasActions) {
+              this.broadcast(conversation.relationshipId, {
+                event: 'extension:processed',
+                data: {
+                  messageId: message.id,
+                  results: extensionResults,
+                  automationMode: automationResult.mode,
+                },
+              });
+            }
+          } else {
+            // Notificar que automation está deshabilitado
+            console.log(`[MessageCore] Automation disabled for ${targetAccountId}: ${automationResult.reason}`);
           }
         }
       }
@@ -121,6 +144,7 @@ export class MessageCore {
         success: true,
         messageId: message.id,
         extensionResults,
+        automation: automationResult,
       };
     } catch (error: any) {
       console.error('MessageCore.receive error:', error);

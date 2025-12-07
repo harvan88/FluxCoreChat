@@ -30,7 +30,8 @@
 | COR-005 | Alias en Accounts | ✅ Completado | Campo alias para identificación contextual |
 | COR-006 | Validación Límites | ✅ Completado | Validación centralizada de contexto |
 | C3 | Offline-First | ✅ Completado | IndexedDB con Dexie.js, SyncManager |
-| C1 | Backend Crítico (restante) | ⏳ Pendiente | COR-007 (automation_controller) |
+| COR-007 | Automation Controller | ✅ Completado | Modos automatic/supervised/disabled |
+| C1 | Backend Crítico | ✅ Completado | Todos los COR completados |
 
 ## 📊 Estado de Alineación TOTEM
 

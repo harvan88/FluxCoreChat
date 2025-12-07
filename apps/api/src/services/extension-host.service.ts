@@ -22,6 +22,8 @@ export interface ProcessMessageParams {
     type: string;
     senderAccountId: string;
   };
+  // COR-007: Modo de automatización
+  automationMode?: 'automatic' | 'supervised' | 'disabled';
 }
 
 export interface ProcessMessageResult {
