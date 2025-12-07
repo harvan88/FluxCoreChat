@@ -19,6 +19,15 @@ export const messages = pgTable('messages', {
   generatedBy: varchar('generated_by', { length: 20 }).default('human').notNull(), // 'human' | 'ai'
   aiApprovedBy: uuid('ai_approved_by').references(() => users.id),
   
+  // COR-002: Status de sincronización/entrega del mensaje
+  // 'local_only' - Solo existe localmente (offline-first)
+  // 'pending_backend' - Pendiente de sincronizar con backend
+  // 'synced' - Sincronizado con backend
+  // 'sent' - Enviado al destinatario (para adapters externos)
+  // 'delivered' - Entregado al destinatario
+  // 'seen' - Visto por el destinatario
+  status: varchar('status', { length: 20 }).default('synced').notNull(),
+  
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -37,6 +46,15 @@ export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type MessageEnrichment = typeof messageEnrichments.$inferSelect;
 export type NewMessageEnrichment = typeof messageEnrichments.$inferInsert;
+
+// COR-002: Tipos de status para mensajes
+export type MessageStatus = 
+  | 'local_only'      // Solo existe localmente (offline-first)
+  | 'pending_backend' // Pendiente de sincronizar con backend
+  | 'synced'          // Sincronizado con backend
+  | 'sent'            // Enviado al destinatario (adapters externos)
+  | 'delivered'       // Entregado al destinatario
+  | 'seen';           // Visto por el destinatario
 
 // Tipos para el contenido del mensaje
 export interface MessageMedia {
