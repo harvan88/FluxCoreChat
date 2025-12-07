@@ -49,10 +49,17 @@ jobs:
       - name: Start server
         run: |
           cd apps/api
-          bun run src/index.ts &
+          nohup bun run src/index.ts > /tmp/server.log 2>&1 &
           echo "Waiting for server to start..."
-          sleep 15
-          curl -f http://localhost:3000/health || (echo "Server failed to start" && exit 1)
+          for i in {1..30}; do
+            if curl -s http://localhost:3000/health > /dev/null; then
+              echo "Server is up!"
+              break
+            fi
+            echo "Waiting... attempt $i/30"
+            sleep 2
+          done
+          curl -f http://localhost:3000/health || (echo "Server failed to start. Logs:" && cat /tmp/server.log && exit 1)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
           PORT: 3000

@@ -4,16 +4,18 @@
 
 import { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
-import { Mail, Lock, User, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Loader2, Eye, EyeOff } from 'lucide-react';
 import clsx from 'clsx';
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'forgot-password';
 
 export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
 
   const { login, register, isLoading, error, clearError } = useAuthStore();
 
@@ -23,14 +25,12 @@ export function AuthPage() {
 
     if (mode === 'login') {
       await login({ email, password });
-    } else {
+    } else if (mode === 'register') {
       await register({ email, password, name });
+    } else if (mode === 'forgot-password') {
+      // Simular envío de recuperación (TODO: implementar backend)
+      setForgotPasswordSent(true);
     }
-  };
-
-  const toggleMode = () => {
-    setMode(mode === 'login' ? 'register' : 'login');
-    clearError();
   };
 
   return (
@@ -50,8 +50,17 @@ export function AuthPage() {
         {/* Form */}
         <div className="bg-gray-800 rounded-2xl p-8 shadow-xl">
           <h2 className="text-xl font-semibold text-white mb-6 text-center">
-            {mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta'}
+            {mode === 'login' ? 'Iniciar Sesión' : 
+             mode === 'register' ? 'Crear Cuenta' : 
+             'Recuperar Contraseña'}
           </h2>
+
+          {/* Mensaje de éxito para recuperar contraseña */}
+          {forgotPasswordSent && mode === 'forgot-password' && (
+            <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg mb-6 text-sm">
+              Si el correo existe, recibirás un enlace para restablecer tu contraseña.
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm">
@@ -102,26 +111,35 @@ export function AuthPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Contraseña
-              </label>
-              <div className="relative">
-                <Lock
-                  size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-700 text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
+            {mode !== 'forgot-password' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <Lock
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-gray-700 text-white pl-10 pr-12 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <button
               type="submit"
@@ -140,21 +158,47 @@ export function AuthPage() {
                 </>
               ) : mode === 'login' ? (
                 'Iniciar Sesión'
-              ) : (
+              ) : mode === 'register' ? (
                 'Crear Cuenta'
+              ) : (
+                'Enviar enlace'
               )}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button
-              onClick={toggleMode}
-              className="text-blue-400 hover:text-blue-300 text-sm"
-            >
-              {mode === 'login'
-                ? '¿No tienes cuenta? Regístrate'
-                : '¿Ya tienes cuenta? Inicia sesión'}
-            </button>
+          <div className="mt-6 text-center space-y-2">
+            {mode === 'login' && (
+              <>
+                <button
+                  onClick={() => { setMode('forgot-password'); clearError(); setForgotPasswordSent(false); }}
+                  className="text-gray-400 hover:text-gray-300 text-sm block w-full"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+                <button
+                  onClick={() => { setMode('register'); clearError(); }}
+                  className="text-blue-400 hover:text-blue-300 text-sm"
+                >
+                  ¿No tienes cuenta? Regístrate
+                </button>
+              </>
+            )}
+            {mode === 'register' && (
+              <button
+                onClick={() => { setMode('login'); clearError(); }}
+                className="text-blue-400 hover:text-blue-300 text-sm"
+              >
+                ¿Ya tienes cuenta? Inicia sesión
+              </button>
+            )}
+            {mode === 'forgot-password' && (
+              <button
+                onClick={() => { setMode('login'); clearError(); setForgotPasswordSent(false); }}
+                className="text-blue-400 hover:text-blue-300 text-sm"
+              >
+                Volver a iniciar sesión
+              </button>
+            )}
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 # Estado del Proyecto FluxCore
 
-> **Última actualización**: 2025-12-06
+> **Última actualización**: 2025-12-07
+> **Estado**: 🟢 Estable (pre-refactor)
 
 ## 📊 Resumen de Hitos
 
@@ -43,6 +44,8 @@
 | V2-4.2 | Pre-install core-ai | ✅ Completado | Auto-instalación en nuevas cuentas |
 | V2-4.4 | Extensions Sidebar | ✅ Completado | Panel en ActivityBar/Sidebar |
 | V2-5 | Offline-First Integrado | ✅ Completado | useChatOffline, ConnectionIndicator |
+| FIX-1 | Auth UX | ✅ Completado | Mostrar/ocultar contraseña, recuperar pwd |
+| FIX-2 | CI Improvements | ✅ Completado | Retry loop, logs de error |
 
 ## 📊 Estado de Alineación TOTEM
 
