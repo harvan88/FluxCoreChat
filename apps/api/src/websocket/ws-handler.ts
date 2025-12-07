@@ -6,13 +6,17 @@
  */
 
 import { messageCore } from '../core/message-core';
+import { automationController } from '../services/automation-controller.service';
 
 interface WSMessage {
-  type: 'subscribe' | 'unsubscribe' | 'message' | 'ping';
+  type: 'subscribe' | 'unsubscribe' | 'message' | 'ping' | 'request_suggestion' | 'approve_suggestion' | 'discard_suggestion';
   relationshipId?: string;
   conversationId?: string;
   content?: any;
   senderAccountId?: string;
+  accountId?: string;
+  suggestionId?: string;
+  suggestedText?: string;
 }
 
 // Store de conexiones activas por relationshipId
@@ -91,6 +95,52 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
         }));
         break;
 
+      case 'request_suggestion':
+        // Solicitar sugerencia de IA para un mensaje
+        if (data.conversationId && data.accountId) {
+          handleSuggestionRequest(ws, data);
+        } else {
+          ws.send(JSON.stringify({ 
+            type: 'error', 
+            message: 'conversationId and accountId required for suggestion' 
+          }));
+        }
+        break;
+
+      case 'approve_suggestion':
+        // Aprobar y enviar sugerencia como mensaje
+        if (data.conversationId && data.senderAccountId && data.suggestedText) {
+          messageCore.send({
+            conversationId: data.conversationId,
+            senderAccountId: data.senderAccountId,
+            content: { text: data.suggestedText },
+            type: 'outgoing',
+            generatedBy: 'ai',
+          }).then((result) => {
+            if (result.success) {
+              ws.send(JSON.stringify({ 
+                type: 'suggestion:approved', 
+                messageId: result.messageId,
+                suggestionId: data.suggestionId,
+              }));
+            } else {
+              ws.send(JSON.stringify({ 
+                type: 'error', 
+                message: result.error 
+              }));
+            }
+          });
+        }
+        break;
+
+      case 'discard_suggestion':
+        // Descartar sugerencia (solo notificar)
+        ws.send(JSON.stringify({ 
+          type: 'suggestion:discarded', 
+          suggestionId: data.suggestionId 
+        }));
+        break;
+
       default:
         ws.send(JSON.stringify({ 
           type: 'error', 
@@ -140,6 +190,94 @@ function broadcast(relationshipId: string, payload: any): void {
       }
     }
   }
+}
+
+/**
+ * HITO-WEBSOCKET-SUGGESTIONS: Manejar solicitud de sugerencia de IA
+ */
+async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> {
+  const { conversationId, accountId, relationshipId } = data;
+  
+  try {
+    // Verificar modo de automatización
+    const evaluation = await automationController.evaluateTrigger({
+      accountId: accountId!,
+      relationshipId,
+      messageType: 'incoming',
+    });
+
+    if (!evaluation.shouldProcess) {
+      ws.send(JSON.stringify({
+        type: 'suggestion:disabled',
+        reason: evaluation.reason,
+        mode: evaluation.mode,
+      }));
+      return;
+    }
+
+    // Notificar que estamos generando
+    ws.send(JSON.stringify({
+      type: 'suggestion:generating',
+      conversationId,
+    }));
+
+    // Generar sugerencia (mock por ahora, se conectará con AI service)
+    const suggestionId = `sug-${Date.now()}`;
+    const suggestion = {
+      id: suggestionId,
+      conversationId,
+      extensionId: 'core-ai',
+      suggestedText: generateMockSuggestion(),
+      confidence: 0.85 + Math.random() * 0.15,
+      reasoning: 'Basado en el contexto de la conversación y el historial del usuario.',
+      alternatives: [
+        'Alternativa 1: Respuesta más formal.',
+        'Alternativa 2: Respuesta más breve.',
+      ],
+      createdAt: new Date().toISOString(),
+      mode: evaluation.mode,
+    };
+
+    // Enviar sugerencia
+    ws.send(JSON.stringify({
+      type: 'suggestion:ready',
+      data: suggestion,
+    }));
+
+    // Si modo es automatic, enviar automáticamente después de delay
+    if (evaluation.mode === 'automatic') {
+      const config = evaluation.rule?.config as any;
+      const delayMs = config?.delayMs || 2000;
+      
+      setTimeout(() => {
+        ws.send(JSON.stringify({
+          type: 'suggestion:auto_sending',
+          suggestionId,
+          delayMs,
+        }));
+      }, delayMs);
+    }
+
+  } catch (error: any) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: `Failed to generate suggestion: ${error.message}`,
+    }));
+  }
+}
+
+/**
+ * Generar sugerencia mock (será reemplazado por AI service real)
+ */
+function generateMockSuggestion(): string {
+  const suggestions = [
+    '¡Gracias por tu mensaje! Estoy revisando tu consulta y te responderé en breve.',
+    'Entiendo tu situación. ¿Podrías darme más detalles para poder ayudarte mejor?',
+    '¡Claro que sí! Estaré encantado de ayudarte con eso.',
+    'Gracias por contactarnos. Tu solicitud ha sido recibida.',
+    'Perfecto, déjame verificar esa información y te confirmo.',
+  ];
+  return suggestions[Math.floor(Math.random() * suggestions.length)];
 }
 
 // Exportar para uso en servidor híbrido

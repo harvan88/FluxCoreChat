@@ -55,7 +55,7 @@ export function useExtensions(accountId: string | null) {
     setError(null);
     
     try {
-      const response = await fetch(`${API_URL}/extensions/available`, {
+      const response = await fetch(`${API_URL}/extensions`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
         },
@@ -65,11 +65,19 @@ export function useExtensions(accountId: string | null) {
         throw new Error('Failed to load available extensions');
       }
 
-      const data = await response.json();
-      setExtensions(data.map((ext: any) => ({
-        ...ext,
-        status: 'available',
-      })));
+      const result = await response.json();
+      if (result.success && result.data) {
+        setExtensions(result.data.map((ext: any) => ({
+          id: ext.id,
+          name: ext.name,
+          version: ext.version,
+          description: ext.description || '',
+          author: ext.author || 'Unknown',
+          icon: ext.icon,
+          permissions: ext.permissions || [],
+          status: 'available' as const,
+        })));
+      }
     } catch (err: any) {
       setError(err.message);
       // Mock data for development
@@ -115,7 +123,7 @@ export function useExtensions(accountId: string | null) {
     if (!accountId) return;
 
     try {
-      const response = await fetch(`${API_URL}/extensions/installed?accountId=${accountId}`, {
+      const response = await fetch(`${API_URL}/extensions/installed/${accountId}`, {
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
         },
@@ -125,8 +133,18 @@ export function useExtensions(accountId: string | null) {
         throw new Error('Failed to load installed extensions');
       }
 
-      const data = await response.json();
-      setInstallations(data);
+      const result = await response.json();
+      if (result.success && result.data) {
+        setInstallations(result.data.map((inst: any) => ({
+          id: inst.id,
+          extensionId: inst.extensionId,
+          accountId: inst.accountId,
+          enabled: inst.enabled,
+          grantedPermissions: inst.grantedPermissions || [],
+          config: inst.config || {},
+          installedAt: inst.installedAt,
+        })));
+      }
     } catch (err: any) {
       console.warn('[useExtensions] Could not load installations:', err.message);
     }
@@ -166,13 +184,12 @@ export function useExtensions(accountId: string | null) {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/extensions/uninstall`, {
-        method: 'POST',
+      const encodedExtId = encodeURIComponent(extensionId);
+      const response = await fetch(`${API_URL}/extensions/${accountId}/${encodedExtId}`, {
+        method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify({ extensionId, accountId }),
       });
 
       if (!response.ok) {
@@ -194,13 +211,13 @@ export function useExtensions(accountId: string | null) {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/extensions/toggle`, {
+      const encodedExtId = encodeURIComponent(extensionId);
+      const action = enabled ? 'enable' : 'disable';
+      const response = await fetch(`${API_URL}/extensions/${accountId}/${encodedExtId}/${action}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify({ extensionId, accountId, enabled }),
       });
 
       if (!response.ok) {
@@ -223,13 +240,14 @@ export function useExtensions(accountId: string | null) {
     if (!accountId) return;
 
     try {
-      const response = await fetch(`${API_URL}/extensions/config`, {
-        method: 'PUT',
+      const encodedExtId = encodeURIComponent(extensionId);
+      const response = await fetch(`${API_URL}/extensions/${accountId}/${encodedExtId}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify({ extensionId, accountId, config }),
+        body: JSON.stringify({ config }),
       });
 
       if (!response.ok) {
