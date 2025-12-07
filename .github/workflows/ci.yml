@@ -49,15 +49,19 @@ jobs:
       - name: Start server
         run: |
           cd apps/api
-          DATABASE_URL=postgres://postgres:postgres@localhost:5432/fluxcore_test PORT=3000 bun run src/index.ts &
-          echo "Waiting for server..."
-          sleep 10
+          bun run src/index.ts &
+          echo "Waiting for server to start..."
+          sleep 15
           curl -f http://localhost:3000/health || (echo "Server failed to start" && exit 1)
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
           PORT: 3000
+          JWT_SECRET: test-secret-key-for-ci
+          NODE_ENV: test
       
       - name: Run tests
         run: bun run test
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
+          JWT_SECRET: test-secret-key-for-ci
+          NODE_ENV: test
