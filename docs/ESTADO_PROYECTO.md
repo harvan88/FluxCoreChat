@@ -23,7 +23,8 @@
 | Hito | Nombre | Estado | Descripción |
 |------|--------|--------|-------------|
 | C2 | Panel Stack Manager | ✅ Completado | TOTEM PARTE 11 implementado |
-| C1 | Backend Crítico | ⏳ Pendiente | Actor Model, ExtensionHost |
+| COR-001 | ExtensionHost Integration | ✅ Completado | MessageCore delega a ExtensionHost |
+| C1 | Backend Crítico (restante) | ⏳ Pendiente | Actor Model completo |
 | C3 | Offline-First | ⏳ Pendiente | IndexedDB, Dual Source |
 
 ## 📊 Estado de Alineación TOTEM
@@ -31,7 +32,7 @@
 | Área | Estado | Notas |
 |------|--------|-------|
 | PARTE 1-4: Identidad | ✅ 95% | Core sólido |
-| PARTE 5-8: Extensiones | ✅ 85% | Falta integrar ExtensionHost |
+| PARTE 5-8: Extensiones | ✅ 90% | ExtensionHost integrado (COR-001) |
 | PARTE 9-10: Contexto | ✅ 80% | Funcional |
 | PARTE 11: Panel System | ✅ 90% | Recién implementado |
 

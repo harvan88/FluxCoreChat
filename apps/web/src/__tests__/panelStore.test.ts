@@ -164,17 +164,43 @@ describe('Panel Stack Manager', () => {
       const { openContainer, openTab, closeTab } = usePanelStore.getState();
       
       const { containerId } = openContainer('chats');
-      const { tabId } = openTab('chats', {
+      // Agregar 2 tabs para que al cerrar uno, el container no se elimine
+      openTab('chats', {
         type: 'chat',
         title: 'Chat 1',
         context: {},
         closable: true,
       });
+      const { tabId: tabId2 } = openTab('chats', {
+        type: 'chat',
+        title: 'Chat 2',
+        context: {},
+        closable: true,
+      });
       
-      const closed = closeTab(containerId, tabId);
+      const closed = closeTab(containerId, tabId2);
       
       expect(closed).toBe(true);
-      expect(usePanelStore.getState().layout.containers[0].tabs).toHaveLength(0);
+      expect(usePanelStore.getState().layout.containers[0].tabs).toHaveLength(1);
+    });
+
+    it('should auto-close container when last tab is closed', () => {
+      const { openContainer, openTab, closeTab } = usePanelStore.getState();
+      
+      const { containerId } = openContainer('chats');
+      const { tabId } = openTab('chats', {
+        type: 'chat',
+        title: 'Only Tab',
+        context: {},
+        closable: true,
+      });
+      
+      expect(usePanelStore.getState().layout.containers).toHaveLength(1);
+      
+      closeTab(containerId, tabId);
+      
+      // Container se cierra automáticamente cuando queda sin tabs
+      expect(usePanelStore.getState().layout.containers).toHaveLength(0);
     });
 
     it('should not close non-closable tab', () => {
