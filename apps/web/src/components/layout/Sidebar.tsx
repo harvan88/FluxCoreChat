@@ -6,9 +6,10 @@ import { useUIStore } from '../../store/uiStore';
 import { ConversationsList } from '../conversations/ConversationsList';
 import { ContactsList } from '../contacts/ContactsList';
 import { SettingsPanel } from '../settings/SettingsPanel';
+import { ExtensionsPanel } from '../extensions';
 
 export function Sidebar() {
-  const { activeActivity, sidebarOpen } = useUIStore();
+  const { activeActivity, sidebarOpen, selectedAccountId } = useUIStore();
 
   if (!sidebarOpen) return null;
 
@@ -18,6 +19,8 @@ export function Sidebar() {
         return <ConversationsList />;
       case 'contacts':
         return <ContactsList />;
+      case 'extensions':
+        return <ExtensionsPanel accountId={selectedAccountId || ''} />;
       case 'settings':
         return <SettingsPanel />;
       default:
@@ -31,6 +34,8 @@ export function Sidebar() {
         return 'Conversaciones';
       case 'contacts':
         return 'Contactos';
+      case 'extensions':
+        return 'Extensiones';
       case 'settings':
         return 'Configuración';
       default:
