@@ -38,6 +38,8 @@
 | HTP-3 | WebSocket Suggestions | ✅ Completado | Sugerencias IA en tiempo real |
 | V2-1 | Chat Funcional Real | ✅ Completado | useChat, MessageBubble, API real |
 | V2-2 | AI Sugerencias Reales | ✅ Completado | Groq API integrada en WebSocket |
+| V2-3 | Chat Avanzado | ✅ Completado | Edit/Delete/Reply-to endpoints |
+| V2-4 | Extension Config | ✅ Completado | ExtensionConfigPanel component |
 
 ## 📊 Estado de Alineación TOTEM
 
