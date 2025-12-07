@@ -29,8 +29,8 @@
 | COR-003 | from/to_actor_id | ✅ Completado | Campos en messages (incluido en COR-004) |
 | COR-005 | Alias en Accounts | ✅ Completado | Campo alias para identificación contextual |
 | COR-006 | Validación Límites | ✅ Completado | Validación centralizada de contexto |
+| C3 | Offline-First | ✅ Completado | IndexedDB con Dexie.js, SyncManager |
 | C1 | Backend Crítico (restante) | ⏳ Pendiente | COR-007 (automation_controller) |
-| C3 | Offline-First | ⏳ Pendiente | IndexedDB, Dual Source |
 
 ## 📊 Estado de Alineación TOTEM
 
