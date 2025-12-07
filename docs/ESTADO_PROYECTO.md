@@ -33,6 +33,9 @@
 | COR-007 | Automation Controller | ✅ Completado | Modos automatic/supervised/disabled |
 | C1 | Backend Crítico | ✅ Completado | Todos los COR completados |
 | C5 | UI de Extensiones | ✅ Completado | AISuggestionCard, ExtensionsPanel |
+| HTP-1 | API Automation Routes | ✅ Completado | CRUD endpoints automation_rules |
+| HTP-2 | Extensions Integration | ✅ Completado | Hooks conectados a API real |
+| HTP-3 | WebSocket Suggestions | ✅ Completado | Sugerencias IA en tiempo real |
 
 ## 📊 Estado de Alineación TOTEM
 
