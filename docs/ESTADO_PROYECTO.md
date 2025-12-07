@@ -27,7 +27,9 @@
 | COR-002 | Message Status | ✅ Completado | Campo status para offline-first |
 | COR-004 | Actor Model | ✅ Completado | Trazabilidad completa de mensajes |
 | COR-003 | from/to_actor_id | ✅ Completado | Campos en messages (incluido en COR-004) |
-| C1 | Backend Crítico (restante) | ⏳ Pendiente | COR-005, COR-006, COR-007 |
+| COR-005 | Alias en Accounts | ✅ Completado | Campo alias para identificación contextual |
+| COR-006 | Validación Límites | ✅ Completado | Validación centralizada de contexto |
+| C1 | Backend Crítico (restante) | ⏳ Pendiente | COR-007 (automation_controller) |
 | C3 | Offline-First | ⏳ Pendiente | IndexedDB, Dual Source |
 
 ## 📊 Estado de Alineación TOTEM
