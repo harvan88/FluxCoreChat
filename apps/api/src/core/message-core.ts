@@ -1,6 +1,7 @@
 import { messageService } from '../services/message.service';
 import { conversationService } from '../services/conversation.service';
 import { relationshipService } from '../services/relationship.service';
+import { extensionHost, type ProcessMessageResult } from '../services/extension-host.service';
 import type { MessageContent } from '@fluxcore/db';
 
 export interface MessageEnvelope {
@@ -11,12 +12,16 @@ export interface MessageEnvelope {
   type: 'incoming' | 'outgoing' | 'system';
   generatedBy?: 'human' | 'ai';
   timestamp?: Date;
+  // Contexto adicional para extensiones
+  targetAccountId?: string;  // La cuenta que recibe el mensaje (para extensiones)
 }
 
 export interface ReceiveResult {
   success: boolean;
   messageId?: string;
   error?: string;
+  // Resultados del procesamiento de extensiones
+  extensionResults?: ProcessMessageResult[];
 }
 
 /**
@@ -28,6 +33,7 @@ export interface ReceiveResult {
  * 3. Notificar via WebSocket (delegado a NotificationService)
  * 4. Actualizar metadatos de conversación
  * 5. Actualizar última interacción en relationship
+ * 6. DELEGAR a ExtensionHost para procesamiento de extensiones (COR-001)
  * 
  * NO hace:
  * - Lógica de IA (eso es de extensiones)
@@ -39,6 +45,7 @@ export class MessageCore {
 
   /**
    * Recibe y procesa un mensaje
+   * COR-001: Ahora delega a ExtensionHost para que las extensiones procesen el mensaje
    */
   async receive(envelope: MessageEnvelope): Promise<ReceiveResult> {
     try {
@@ -51,8 +58,10 @@ export class MessageCore {
         generatedBy: envelope.generatedBy || 'human',
       });
 
-      // 2. Actualizar conversación
+      // 2. Actualizar conversación y obtener datos
       const conversation = await conversationService.getConversationById(envelope.conversationId);
+      let extensionResults: ProcessMessageResult[] = [];
+
       if (conversation) {
         await conversationService.updateConversation(envelope.conversationId, {
           lastMessageAt: new Date(),
@@ -70,11 +79,48 @@ export class MessageCore {
             content: envelope.content,
           },
         });
+
+        // 5. DELEGAR A EXTENSIONHOST (COR-001)
+        // Determinar el accountId target para las extensiones
+        const relationship = await relationshipService.getRelationshipById(conversation.relationshipId);
+        if (relationship) {
+          // El targetAccountId es la cuenta que RECIBE el mensaje (no el sender)
+          const targetAccountId = envelope.targetAccountId || 
+            (envelope.senderAccountId === relationship.accountAId 
+              ? relationship.accountBId 
+              : relationship.accountAId);
+
+          // Procesar mensaje con extensiones del target
+          extensionResults = await extensionHost.processMessage({
+            accountId: targetAccountId,
+            relationshipId: conversation.relationshipId,
+            conversationId: envelope.conversationId,
+            message: {
+              id: message.id,
+              content: envelope.content,
+              type: envelope.type,
+              senderAccountId: envelope.senderAccountId,
+            },
+          });
+
+          // Notificar resultados de extensiones si hay acciones
+          const hasActions = extensionResults.some(r => r.actions && r.actions.length > 0);
+          if (hasActions) {
+            this.broadcast(conversation.relationshipId, {
+              event: 'extension:processed',
+              data: {
+                messageId: message.id,
+                results: extensionResults,
+              },
+            });
+          }
+        }
       }
 
       return {
         success: true,
         messageId: message.id,
+        extensionResults,
       };
     } catch (error: any) {
       console.error('MessageCore.receive error:', error);
