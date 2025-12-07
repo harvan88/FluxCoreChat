@@ -41,10 +41,12 @@ export class AccountService {
       .returning();
 
     // Create actor (owner relationship)
+    // COR-004: Añadir actorType obligatorio
     await db.insert(actors).values({
+      actorType: 'account',
       userId: data.ownerUserId,
       accountId: account.id,
-      role: 'owner',
+      displayName: data.displayName,
     });
 
     return account;

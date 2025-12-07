@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { conversations } from './conversations';
 import { accounts } from './accounts';
 import { users } from './users';
+import { actors } from './actors';
 
 export const messages = pgTable('messages', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -11,6 +12,11 @@ export const messages = pgTable('messages', {
   senderAccountId: uuid('sender_account_id')
     .notNull()
     .references(() => accounts.id),
+  
+  // COR-003: Actor Model - Trazabilidad completa de origen/destino
+  // Estos campos son opcionales para mantener compatibilidad con datos existentes
+  fromActorId: uuid('from_actor_id').references(() => actors.id),
+  toActorId: uuid('to_actor_id').references(() => actors.id),
   
   content: jsonb('content').notNull(), // { text, media[], location, buttons[] }
   type: varchar('type', { length: 20 }).notNull(), // 'incoming' | 'outgoing' | 'system'
