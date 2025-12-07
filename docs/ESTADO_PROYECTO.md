@@ -36,6 +36,8 @@
 | HTP-1 | API Automation Routes | ✅ Completado | CRUD endpoints automation_rules |
 | HTP-2 | Extensions Integration | ✅ Completado | Hooks conectados a API real |
 | HTP-3 | WebSocket Suggestions | ✅ Completado | Sugerencias IA en tiempo real |
+| V2-1 | Chat Funcional Real | ✅ Completado | useChat, MessageBubble, API real |
+| V2-2 | AI Sugerencias Reales | ✅ Completado | Groq API integrada en WebSocket |
 
 ## 📊 Estado de Alineación TOTEM
 

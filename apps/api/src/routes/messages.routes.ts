@@ -45,6 +45,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         }),
         type: t.Optional(t.Union([t.Literal('incoming'), t.Literal('outgoing'), t.Literal('system')])),
         generatedBy: t.Optional(t.Union([t.Literal('human'), t.Literal('ai')])),
+        replyToId: t.Optional(t.String()),
       }),
       detail: { tags: ['Messages'], summary: 'Send message' },
     }
@@ -71,5 +72,80 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       isAuthenticated: true,
       params: t.Object({ id: t.String() }),
       detail: { tags: ['Messages'], summary: 'Get message by ID' },
+    }
+  )
+  // V2-3: PATCH - Editar mensaje
+  .patch(
+    '/:id',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const { messageService } = await import('../services/message.service');
+        
+        // Verificar que el mensaje existe y pertenece al usuario
+        const message = await messageService.getMessageById(params.id);
+        if (!message) {
+          set.status = 404;
+          return { success: false, message: 'Message not found' };
+        }
+
+        // Actualizar mensaje
+        const updated = await messageService.updateMessage(params.id, {
+          content: body.content,
+        });
+
+        return { success: true, data: updated };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        content: t.Object({
+          text: t.String(),
+        }),
+      }),
+      detail: { tags: ['Messages'], summary: 'Edit message' },
+    }
+  )
+  // V2-3: DELETE - Eliminar mensaje
+  .delete(
+    '/:id',
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const { messageService } = await import('../services/message.service');
+        
+        // Verificar que el mensaje existe
+        const message = await messageService.getMessageById(params.id);
+        if (!message) {
+          set.status = 404;
+          return { success: false, message: 'Message not found' };
+        }
+
+        // Eliminar mensaje (soft delete o hard delete)
+        await messageService.deleteMessage(params.id);
+
+        return { success: true, data: { deleted: true } };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      detail: { tags: ['Messages'], summary: 'Delete message' },
     }
   );
