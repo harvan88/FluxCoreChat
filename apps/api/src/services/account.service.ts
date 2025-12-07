@@ -1,7 +1,17 @@
 import { db } from '@fluxcore/db';
-import { accounts, actors } from '@fluxcore/db';
+import { accounts, actors, extensionInstallations } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
 import { validatePrivateContext, validateAlias, validateDisplayName } from '../utils/context-limits';
+
+// V2-4.2: Configuración por defecto de core-ai
+const DEFAULT_CORE_AI_CONFIG = {
+  enabled: true,
+  mode: 'suggest',
+  responseDelay: 30,
+  model: 'llama-3.1-8b-instant',
+  maxTokens: 256,
+  temperature: 0.7,
+};
 
 export class AccountService {
   async createAccount(data: {
@@ -61,6 +71,16 @@ export class AccountService {
       userId: data.ownerUserId,
       accountId: account.id,
       displayName: data.displayName,
+    });
+
+    // V2-4.2: Pre-instalar core-ai en nuevas cuentas
+    await db.insert(extensionInstallations).values({
+      accountId: account.id,
+      extensionId: '@fluxcore/core-ai',
+      version: '1.0.0',
+      enabled: true,
+      config: DEFAULT_CORE_AI_CONFIG,
+      grantedPermissions: ['messages:read', 'messages:suggest', 'context:read'],
     });
 
     return account;

@@ -2,7 +2,7 @@
  * ActivityBar - Barra lateral de iconos tipo VS Code
  */
 
-import { MessageSquare, Users, Settings, LogOut } from 'lucide-react';
+import { MessageSquare, Users, Settings, LogOut, Puzzle } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -17,6 +17,7 @@ interface ActivityItem {
 const activities: ActivityItem[] = [
   { id: 'conversations', icon: <MessageSquare size={24} />, label: 'Conversaciones' },
   { id: 'contacts', icon: <Users size={24} />, label: 'Contactos' },
+  { id: 'extensions', icon: <Puzzle size={24} />, label: 'Extensiones' },
   { id: 'settings', icon: <Settings size={24} />, label: 'Configuración' },
 ];
 

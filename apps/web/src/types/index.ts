@@ -119,7 +119,7 @@ export interface ApiResponse<T> {
 }
 
 // Activity types for sidebar
-export type ActivityType = 'conversations' | 'contacts' | 'settings';
+export type ActivityType = 'conversations' | 'contacts' | 'extensions' | 'settings';
 
 // UI State
 export interface UIState {
