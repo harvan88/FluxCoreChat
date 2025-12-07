@@ -7,6 +7,7 @@
 
 import { messageCore } from '../core/message-core';
 import { automationController } from '../services/automation-controller.service';
+import { aiService } from '../services/ai.service';
 
 interface WSMessage {
   type: 'subscribe' | 'unsubscribe' | 'message' | 'ping' | 'request_suggestion' | 'approve_suggestion' | 'discard_suggestion';
@@ -221,22 +222,51 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       conversationId,
     }));
 
-    // Generar sugerencia (mock por ahora, se conectará con AI service)
-    const suggestionId = `sug-${Date.now()}`;
-    const suggestion = {
-      id: suggestionId,
-      conversationId,
-      extensionId: 'core-ai',
-      suggestedText: generateMockSuggestion(),
-      confidence: 0.85 + Math.random() * 0.15,
-      reasoning: 'Basado en el contexto de la conversación y el historial del usuario.',
-      alternatives: [
-        'Alternativa 1: Respuesta más formal.',
-        'Alternativa 2: Respuesta más breve.',
-      ],
-      createdAt: new Date().toISOString(),
-      mode: evaluation.mode,
-    };
+    // V2-2: Generar sugerencia con AI service real
+    let suggestion;
+    
+    if (aiService.isConfigured()) {
+      // Usar AI service real con Groq
+      const lastMessage = data.content?.text || 'Mensaje del usuario';
+      const aiSuggestion = await aiService.generateResponse(
+        conversationId!,
+        accountId!,
+        lastMessage
+      );
+
+      if (aiSuggestion) {
+        suggestion = {
+          id: aiSuggestion.id,
+          conversationId,
+          extensionId: 'core-ai',
+          suggestedText: aiSuggestion.content,
+          confidence: 0.9,
+          reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage.totalTokens} tokens)`,
+          alternatives: [],
+          createdAt: aiSuggestion.generatedAt.toISOString(),
+          mode: evaluation.mode,
+        };
+      }
+    }
+
+    // Fallback a mock si no hay API configurada o falla
+    if (!suggestion) {
+      const suggestionId = `sug-${Date.now()}`;
+      suggestion = {
+        id: suggestionId,
+        conversationId,
+        extensionId: 'core-ai',
+        suggestedText: generateMockSuggestion(),
+        confidence: 0.85 + Math.random() * 0.15,
+        reasoning: 'Sugerencia generada localmente (API key no configurada)',
+        alternatives: [
+          'Alternativa 1: Respuesta más formal.',
+          'Alternativa 2: Respuesta más breve.',
+        ],
+        createdAt: new Date().toISOString(),
+        mode: evaluation.mode,
+      };
+    }
 
     // Enviar sugerencia
     ws.send(JSON.stringify({
@@ -252,7 +282,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       setTimeout(() => {
         ws.send(JSON.stringify({
           type: 'suggestion:auto_sending',
-          suggestionId,
+          suggestionId: suggestion.id,
           delayMs,
         }));
       }, delayMs);
