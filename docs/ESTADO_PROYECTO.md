@@ -24,6 +24,7 @@
 |------|--------|--------|-------------|
 | C2 | Panel Stack Manager | ✅ Completado | TOTEM PARTE 11 implementado |
 | COR-001 | ExtensionHost Integration | ✅ Completado | MessageCore delega a ExtensionHost |
+| COR-002 | Message Status | ✅ Completado | Campo status para offline-first |
 | C1 | Backend Crítico (restante) | ⏳ Pendiente | Actor Model completo |
 | C3 | Offline-First | ⏳ Pendiente | IndexedDB, Dual Source |
 
