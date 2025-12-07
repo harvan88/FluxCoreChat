@@ -39,7 +39,9 @@
 | V2-1 | Chat Funcional Real | ✅ Completado | useChat, MessageBubble, API real |
 | V2-2 | AI Sugerencias Reales | ✅ Completado | Groq API integrada en WebSocket |
 | V2-3 | Chat Avanzado | ✅ Completado | Edit/Delete/Reply-to endpoints |
-| V2-4 | Extension Config | ✅ Completado | ExtensionConfigPanel component |
+| V2-4.1 | Extension Config | ✅ Completado | ExtensionConfigPanel component |
+| V2-4.2 | Pre-install core-ai | ✅ Completado | Auto-instalación en nuevas cuentas |
+| V2-4.4 | Extensions Sidebar | ✅ Completado | Panel en ActivityBar/Sidebar |
 
 ## 📊 Estado de Alineación TOTEM
 
