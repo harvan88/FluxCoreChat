@@ -12,3 +12,6 @@ export * from './extension-contexts';
 
 // Hito 9: Workspaces Colaborativos
 export * from './workspaces';
+
+// COR-007: Automation Rules
+export * from './automation-rules';
