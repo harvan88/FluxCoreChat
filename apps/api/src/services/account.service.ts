@@ -1,6 +1,7 @@
 import { db } from '@fluxcore/db';
 import { accounts, actors } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
+import { validatePrivateContext, validateAlias, validateDisplayName } from '../utils/context-limits';
 
 export class AccountService {
   async createAccount(data: {
@@ -10,6 +11,7 @@ export class AccountService {
     accountType: 'personal' | 'business';
     profile?: any;
     privateContext?: string;
+    alias?: string; // COR-005
   }) {
     // Check if username is taken
     const existing = await db
@@ -22,9 +24,20 @@ export class AccountService {
       throw new Error('Username already taken');
     }
 
-    // Validate private_context length
-    if (data.privateContext && data.privateContext.length > 5000) {
-      throw new Error('Private context exceeds 5000 characters');
+    // COR-006: Validación centralizada de límites
+    const displayNameValidation = validateDisplayName(data.displayName);
+    if (!displayNameValidation.valid) {
+      throw new Error(displayNameValidation.error);
+    }
+
+    const privateContextValidation = validatePrivateContext(data.privateContext);
+    if (!privateContextValidation.valid) {
+      throw new Error(privateContextValidation.error);
+    }
+
+    const aliasValidation = validateAlias(data.alias);
+    if (!aliasValidation.valid) {
+      throw new Error(aliasValidation.error);
     }
 
     // Create account
@@ -37,6 +50,7 @@ export class AccountService {
         accountType: data.accountType,
         profile: data.profile || {},
         privateContext: data.privateContext || null,
+        alias: data.alias || null, // COR-005
       })
       .returning();
 
@@ -73,6 +87,7 @@ export class AccountService {
       displayName?: string;
       profile?: any;
       privateContext?: string;
+      alias?: string; // COR-005
     }
   ) {
     // Verify ownership
@@ -86,9 +101,26 @@ export class AccountService {
       throw new Error('Account not found or unauthorized');
     }
 
-    // Validate private_context length
-    if (data.privateContext && data.privateContext.length > 5000) {
-      throw new Error('Private context exceeds 5000 characters');
+    // COR-006: Validación centralizada de límites
+    if (data.displayName) {
+      const displayNameValidation = validateDisplayName(data.displayName);
+      if (!displayNameValidation.valid) {
+        throw new Error(displayNameValidation.error);
+      }
+    }
+
+    if (data.privateContext) {
+      const privateContextValidation = validatePrivateContext(data.privateContext);
+      if (!privateContextValidation.valid) {
+        throw new Error(privateContextValidation.error);
+      }
+    }
+
+    if (data.alias) {
+      const aliasValidation = validateAlias(data.alias);
+      if (!aliasValidation.valid) {
+        throw new Error(aliasValidation.error);
+      }
     }
 
     // Update account

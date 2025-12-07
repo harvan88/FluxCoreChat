@@ -6,8 +6,7 @@ import {
   type RelationshipPerspective,
 } from '@fluxcore/db';
 import { eq, and, or } from 'drizzle-orm';
-
-const MAX_CONTEXT_CHARS = 2000;
+import { validateRelationshipContext, validateContextEntry } from '../utils/context-limits';
 
 export class RelationshipService {
   async createRelationship(accountAId: string, accountBId: string) {
@@ -116,16 +115,20 @@ export class RelationshipService {
       created_at: new Date().toISOString(),
     };
 
-    // Calculate new total chars
-    const newTotalChars = context.total_chars + entry.content.length;
+    // COR-006: Validación centralizada de límites
+    const entryValidation = validateContextEntry(entry.content);
+    if (!entryValidation.valid) {
+      throw new Error(entryValidation.error);
+    }
 
-    if (newTotalChars > MAX_CONTEXT_CHARS) {
-      throw new Error(`Context limit exceeded: ${newTotalChars}/${MAX_CONTEXT_CHARS} characters`);
+    const contextValidation = validateRelationshipContext(context.total_chars, entry.content.length);
+    if (!contextValidation.valid) {
+      throw new Error(contextValidation.error);
     }
 
     const updatedContext: RelationshipContext = {
       entries: [...context.entries, newEntry],
-      total_chars: newTotalChars,
+      total_chars: context.total_chars + entry.content.length,
     };
 
     const [updated] = await db
