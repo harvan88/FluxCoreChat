@@ -42,6 +42,7 @@
 | V2-4.1 | Extension Config | ✅ Completado | ExtensionConfigPanel component |
 | V2-4.2 | Pre-install core-ai | ✅ Completado | Auto-instalación en nuevas cuentas |
 | V2-4.4 | Extensions Sidebar | ✅ Completado | Panel en ActivityBar/Sidebar |
+| V2-5 | Offline-First Integrado | ✅ Completado | useChatOffline, ConnectionIndicator |
 
 ## 📊 Estado de Alineación TOTEM
 
