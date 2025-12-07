@@ -1,21 +1,39 @@
 /**
  * ChatView - Vista de conversación activa
+ * V2-1: Conectado a API real
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Sparkles } from 'lucide-react';
+import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Sparkles, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
+import { MessageBubble } from './MessageBubble';
+import { useChat } from '../../hooks/useChat';
+import { useWebSocket } from '../../hooks/useWebSocket';
 
 interface ChatViewProps {
   conversationId: string;
+  accountId?: string; // Cuenta actual del usuario
+  relationshipId?: string;
 }
 
-export function ChatView({ conversationId }: ChatViewProps) {
+export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // V2-1: useChat para cargar/enviar mensajes
+  const {
+    messages,
+    isLoading,
+    error,
+    sendMessage,
+    addReceivedMessage,
+    updateMessageStatus,
+    deleteMessage,
+    retryMessage,
+  } = useChat({ conversationId, accountId });
   
   // COR-043/COR-044: AI Suggestions
   const { 
@@ -25,61 +43,40 @@ export function ChatView({ conversationId }: ChatViewProps) {
     removeSuggestion 
   } = useAISuggestions(conversationId);
 
-  // Load mock messages
-  useEffect(() => {
-    const mockMessages: Message[] = [
-      {
-        id: '1',
-        conversationId,
-        senderAccountId: 'other',
-        content: { text: '¡Hola! ¿Cómo estás?' },
-        type: 'incoming',
-        generatedBy: 'human',
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-      },
-      {
-        id: '2',
-        conversationId,
-        senderAccountId: 'me',
-        content: { text: '¡Hola! Muy bien, gracias. ¿Y tú?' },
-        type: 'outgoing',
-        generatedBy: 'human',
-        createdAt: new Date(Date.now() - 3500000).toISOString(),
-      },
-      {
-        id: '3',
-        conversationId,
-        senderAccountId: 'other',
-        content: { text: 'Todo bien por aquí. ¿Qué tal el proyecto?' },
-        type: 'incoming',
-        generatedBy: 'human',
-        createdAt: new Date(Date.now() - 3400000).toISOString(),
-      },
-    ];
-    setMessages(mockMessages);
-  }, [conversationId]);
+  // V2-1.3: WebSocket para tiempo real
+  useWebSocket({
+    onMessage: (msg) => {
+      if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
+        addReceivedMessage(msg.data as Message);
+      }
+      if (msg.type === 'message:status') {
+        updateMessageStatus(msg.messageId, msg.status);
+      }
+    },
+    onSuggestion: (suggestion) => {
+      if (suggestion.conversationId === conversationId) {
+        addSuggestion(suggestion);
+      }
+    },
+  });
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = (text?: string) => {
+  const handleSend = async (text?: string, isAI = false) => {
     const textToSend = text || message;
     if (!textToSend.trim()) return;
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      conversationId,
-      senderAccountId: 'me',
+    await sendMessage({
       content: { text: textToSend },
-      type: 'outgoing',
-      generatedBy: text ? 'ai' : 'human', // Si viene de sugerencia, es IA
-      createdAt: new Date().toISOString(),
-    };
+      generatedBy: isAI ? 'ai' : 'human',
+      replyToId: replyingTo?.id,
+    });
 
-    setMessages((prev) => [...prev, newMessage]);
     setMessage('');
+    setReplyingTo(null);
   };
 
   // COR-044: Handlers para sugerencias de IA
@@ -118,11 +115,16 @@ export function ChatView({ conversationId }: ChatViewProps) {
     }
   };
 
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  // Scroll a mensaje específico
+  const scrollToMessage = (messageId: string) => {
+    const element = document.getElementById(`msg-${messageId}`);
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Obtener mensaje de reply
+  const getReplyMessage = (replyToId?: string) => {
+    if (!replyToId) return undefined;
+    return messages.find(m => m.id === replyToId);
   };
 
   return (
@@ -159,39 +161,36 @@ export function ChatView({ conversationId }: ChatViewProps) {
         </div>
       </div>
 
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="animate-spin text-gray-400" size={32} />
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="mx-4 mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={clsx(
-              'flex',
-              msg.type === 'outgoing' ? 'justify-end' : 'justify-start'
-            )}
-          >
-            <div
-              className={clsx(
-                'max-w-[70%] rounded-2xl px-4 py-2',
-                msg.type === 'outgoing'
-                  ? 'bg-blue-600 text-white rounded-br-md'
-                  : 'bg-gray-700 text-white rounded-bl-md'
-              )}
-            >
-              <p className="text-sm">{msg.content.text}</p>
-              <div
-                className={clsx(
-                  'text-xs mt-1',
-                  msg.type === 'outgoing' ? 'text-blue-200' : 'text-gray-400'
-                )}
-              >
-                {formatTime(msg.createdAt)}
-                {msg.generatedBy === 'ai' && (
-                  <span className="ml-2 bg-purple-500/30 px-1.5 py-0.5 rounded text-purple-200">
-                    IA
-                  </span>
-                )}
-              </div>
-            </div>
+          <div key={msg.id} id={`msg-${msg.id}`}>
+            <MessageBubble
+              message={msg}
+              isOwn={msg.senderAccountId === accountId || msg.type === 'outgoing'}
+              replyToMessage={getReplyMessage(msg.replyToId)}
+              onReply={() => setReplyingTo(msg)}
+              onEdit={msg.senderAccountId === accountId ? () => {
+                setMessage(msg.content.text || '');
+              } : undefined}
+              onDelete={msg.senderAccountId === accountId ? () => deleteMessage(msg.id) : undefined}
+              onRetry={msg.status === 'failed' ? () => retryMessage(msg.id) : undefined}
+              onScrollToMessage={scrollToMessage}
+            />
           </div>
         ))}
         <div ref={messagesEndRef} />
@@ -215,6 +214,22 @@ export function ChatView({ conversationId }: ChatViewProps) {
           onRegenerate={simulateAISuggestion}
         />
       ))}
+
+      {/* Reply Preview */}
+      {replyingTo && (
+        <div className="px-4 py-2 bg-gray-800 border-t border-gray-700 flex items-center gap-2">
+          <div className="flex-1 text-sm">
+            <span className="text-gray-400">Respondiendo a: </span>
+            <span className="text-white truncate">{replyingTo.content.text}</span>
+          </div>
+          <button
+            onClick={() => setReplyingTo(null)}
+            className="p-1 text-gray-400 hover:text-white"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div className="p-4 bg-gray-800 border-t border-gray-700">

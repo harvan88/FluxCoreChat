@@ -60,6 +60,8 @@ export interface Conversation {
   updatedAt: string;
 }
 
+export type MessageStatus = 'local_only' | 'pending_backend' | 'synced' | 'sent' | 'delivered' | 'seen' | 'failed';
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -67,8 +69,11 @@ export interface Message {
   content: MessageContent;
   type: 'incoming' | 'outgoing' | 'system';
   generatedBy: 'human' | 'ai';
+  status?: MessageStatus;
+  replyToId?: string;
   aiApprovedBy?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface MessageContent {
