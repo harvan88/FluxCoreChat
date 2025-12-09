@@ -7,6 +7,7 @@ import { persist } from 'zustand/middleware';
 import type { User, LoginCredentials, RegisterData } from '../types';
 import { api } from '../services/api';
 import { useUIStore } from './uiStore';
+import { syncManager } from '../db/sync';
 
 interface AuthStore {
   user: User | null;
@@ -45,6 +46,9 @@ export const useAuthStore = create<AuthStore>()(
             isLoading: false,
           });
           
+          // Set auth token in syncManager for API calls
+          syncManager.setAuthToken(response.data.token);
+          
           // SRG-005: Set selectedAccountId and accounts in uiStore
           const accounts = response.data.accounts || [];
           if (accounts.length > 0) {
@@ -74,6 +78,9 @@ export const useAuthStore = create<AuthStore>()(
             isLoading: false,
           });
           
+          // Set auth token in syncManager
+          syncManager.setAuthToken(response.data.token);
+          
           // SRG-005: Also set accounts after registration
           const accounts = response.data.accounts || [];
           if (accounts.length > 0) {
@@ -93,6 +100,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         api.logout();
+        syncManager.setAuthToken(null);
         set({
           user: null,
           token: null,
@@ -107,6 +115,9 @@ export const useAuthStore = create<AuthStore>()(
         const token = api.getToken();
         if (token) {
           set({ token, isAuthenticated: true });
+          
+          // Set auth token in syncManager
+          syncManager.setAuthToken(token);
           
           // Cargar cuentas del usuario si hay token
           try {
