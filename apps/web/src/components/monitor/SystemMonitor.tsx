@@ -114,22 +114,36 @@ export function SystemMonitor() {
   // Check Endpoints
   const checkEndpoints = useCallback(async () => {
     const endpointList = [
-      { name: 'Health', url: '/health' },
-      { name: 'Health Ready', url: '/health/ready' },
-      { name: 'Accounts', url: '/accounts' },
-      { name: 'Relationships', url: '/relationships' },
+      { name: 'Health', url: '/health', requiresAuth: false },
+      { name: 'Health Ready', url: '/health/ready', requiresAuth: false },
+      { name: 'Diagnostic', url: '/health/diagnostic', requiresAuth: false },
+      { name: 'Accounts', url: '/accounts', requiresAuth: true },
+      { name: 'Relationships', url: '/relationships', requiresAuth: true },
     ];
 
     const results: EndpointStatus[] = [];
+    const token = localStorage.getItem('token');
 
     for (const ep of endpointList) {
+      // Skip auth endpoints if no token
+      if (ep.requiresAuth && !token) {
+        results.push({
+          name: ep.name,
+          url: ep.url,
+          status: 'error',
+          error: 'No token (login required)',
+        });
+        continue;
+      }
+
       try {
         const start = Date.now();
-        const res = await fetch(`${API_BASE}${ep.url}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-        });
+        const headers: Record<string, string> = {};
+        if (ep.requiresAuth && token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const res = await fetch(`${API_BASE}${ep.url}`, { headers });
         
         results.push({
           name: ep.name,
@@ -388,6 +402,27 @@ export function SystemMonitor() {
           </div>
         </div>
 
+        {/* Debug Info */}
+        <div className="bg-surface border border-subtle rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-primary mb-4">🐛 Debug Info</h2>
+          <div className="space-y-2 text-sm font-mono">
+            <div className="flex justify-between">
+              <span className="text-secondary">Auth Token:</span>
+              <span className={localStorage.getItem('token') ? 'text-green-500' : 'text-red-500'}>
+                {localStorage.getItem('token') ? '✓ Present' : '✗ Missing (login required)'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-secondary">API Base:</span>
+              <span className="text-primary">{API_BASE}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-secondary">Browser:</span>
+              <span className="text-primary">{navigator.userAgent.split(' ').slice(-2).join(' ')}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Quick Actions */}
         <div className="bg-surface border border-subtle rounded-lg p-6">
           <h2 className="text-xl font-semibold text-primary mb-4">⚡ Quick Actions</h2>
@@ -420,6 +455,19 @@ export function SystemMonitor() {
             >
               🔍 Raw Diagnostic JSON
             </a>
+            <button
+              onClick={() => {
+                console.log('=== SYSTEM MONITOR DEBUG ===');
+                console.log('PostgreSQL:', postgres);
+                console.log('IndexedDB:', indexedDB);
+                console.log('Endpoints:', endpoints);
+                console.log('Token:', localStorage.getItem('token') ? 'Present' : 'Missing');
+                alert('Debug info logged to console (F12)');
+              }}
+              className="px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded hover:bg-purple-500/30"
+            >
+              🔍 Log Debug to Console
+            </button>
           </div>
         </div>
       </div>
