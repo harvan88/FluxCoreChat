@@ -38,11 +38,18 @@ class ExtensionHostService {
    * Procesar un mensaje entrante con todas las extensiones habilitadas
    */
   async processMessage(params: ProcessMessageParams): Promise<ProcessMessageResult[]> {
-    const { accountId, relationshipId, conversationId, message } = params;
+    const { accountId } = params;
     const results: ProcessMessageResult[] = [];
 
     // Obtener extensiones instaladas y habilitadas
-    const installations = await extensionService.getInstalled(accountId);
+    let installations: any[] = [];
+    try {
+      installations = await extensionService.getInstalled(accountId);
+    } catch (error: any) {
+      // Table may not exist yet, return empty results
+      console.warn('[ExtensionHost] Could not fetch installations:', error.message);
+      return results;
+    }
     const enabledInstallations = installations.filter((i) => i.enabled);
 
     for (const installation of enabledInstallations) {

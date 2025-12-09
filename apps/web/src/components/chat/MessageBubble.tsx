@@ -2,6 +2,7 @@
  * V2-1.4: MessageBubble Component
  * 
  * Muestra un mensaje con estados, reply-to, y acciones.
+ * CORREGIDO: Usando sistema de diseño canónico
  */
 
 import { useState } from 'react';
@@ -39,22 +40,23 @@ export function MessageBubble({
     });
   };
 
+  // Sistema canónico de colores
   const renderStatus = (status?: MessageStatus) => {
     switch (status) {
       case 'pending_backend':
       case 'local_only':
-        return <Clock size={14} className="text-gray-400" />;
+        return <Clock size={14} className="text-muted" />;
       case 'synced':
       case 'sent':
-        return <Check size={14} className="text-gray-400" />;
+        return <Check size={14} className="text-muted" />;
       case 'delivered':
-        return <CheckCheck size={14} className="text-gray-400" />;
+        return <CheckCheck size={14} className="text-muted" />;
       case 'seen':
-        return <CheckCheck size={14} className="text-blue-400" />;
+        return <CheckCheck size={14} className="text-accent" />;
       case 'failed':
-        return <AlertCircle size={14} className="text-red-400" />;
+        return <AlertCircle size={14} className="text-error" />;
       default:
-        return <Check size={14} className="text-gray-400" />;
+        return <Check size={14} className="text-muted" />;
     }
   };
 
@@ -73,7 +75,7 @@ export function MessageBubble({
           {message.status === 'failed' && onRetry && (
             <button
               onClick={onRetry}
-              className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+              className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
               title="Reintentar"
             >
               <RotateCcw size={14} />
@@ -82,7 +84,7 @@ export function MessageBubble({
           {onEdit && message.status !== 'failed' && (
             <button
               onClick={onEdit}
-              className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+              className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
               title="Editar"
             >
               <Pencil size={14} />
@@ -91,7 +93,7 @@ export function MessageBubble({
           {onDelete && (
             <button
               onClick={onDelete}
-              className="p-1 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded"
+              className="p-1 text-muted hover:text-error hover:bg-hover rounded"
               title="Eliminar"
             >
               <Trash2 size={14} />
@@ -100,7 +102,7 @@ export function MessageBubble({
           {onReply && (
             <button
               onClick={onReply}
-              className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+              className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
               title="Responder"
             >
               <Reply size={14} />
@@ -115,21 +117,21 @@ export function MessageBubble({
           'max-w-[70%] rounded-2xl px-4 py-2 relative',
           isOwn
             ? message.status === 'failed'
-              ? 'bg-red-900/50 text-white rounded-br-md'
-              : 'bg-blue-600 text-white rounded-br-md'
-            : 'bg-gray-700 text-white rounded-bl-md'
+              ? 'bg-error/50 text-primary rounded-br-md'
+              : 'bg-accent text-inverse rounded-br-md'
+            : 'bg-elevated text-primary rounded-bl-md'
         )}
       >
         {/* Reply-to preview */}
         {replyToMessage && (
           <button
             onClick={() => onScrollToMessage?.(replyToMessage.id)}
-            className="block w-full text-left mb-2 p-2 bg-black/20 rounded-lg border-l-2 border-blue-400"
+            className="block w-full text-left mb-2 p-2 bg-black/20 rounded-lg border-l-2 border-accent"
           >
-            <div className="text-xs text-blue-300 mb-0.5">
+            <div className="text-xs text-accent mb-0.5">
               {replyToMessage.senderAccountId === message.senderAccountId ? 'Tú' : 'Respuesta a'}
             </div>
-            <div className="text-xs text-gray-300 truncate">
+            <div className="text-xs text-secondary truncate">
               {replyToMessage.content.text}
             </div>
           </button>
@@ -142,7 +144,7 @@ export function MessageBubble({
         <div
           className={clsx(
             'flex items-center gap-1.5 mt-1 text-xs',
-            isOwn ? 'text-blue-200 justify-end' : 'text-gray-400'
+            isOwn ? 'text-inverse/70 justify-end' : 'text-muted'
           )}
         >
           {message.updatedAt && message.updatedAt !== message.createdAt && (
@@ -150,7 +152,7 @@ export function MessageBubble({
           )}
           <span>{formatTime(message.createdAt)}</span>
           {message.generatedBy === 'ai' && (
-            <span className="flex items-center gap-0.5 bg-purple-500/30 px-1.5 py-0.5 rounded text-purple-200">
+            <span className="flex items-center gap-0.5 bg-accent/30 px-1.5 py-0.5 rounded text-accent">
               <Bot size={10} />
               IA
             </span>
@@ -164,7 +166,7 @@ export function MessageBubble({
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={onReply}
-            className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+            className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
             title="Responder"
           >
             <Reply size={14} />

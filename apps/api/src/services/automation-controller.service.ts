@@ -117,7 +117,20 @@ class AutomationControllerService {
    * Evaluar si se debe procesar un mensaje con IA
    */
   async evaluateTrigger(context: TriggerContext): Promise<TriggerEvaluation> {
-    const rule = await this.getEffectiveRule(context.accountId, context.relationshipId);
+    let rule: AutomationRule | null = null;
+    
+    try {
+      rule = await this.getEffectiveRule(context.accountId, context.relationshipId);
+    } catch (error: any) {
+      // Table may not exist, use default behavior
+      console.warn('[AutomationController] Could not fetch rules:', error.message);
+      return {
+        shouldProcess: true,
+        mode: 'supervised',
+        rule: null,
+        reason: 'Rules unavailable, using default supervised mode',
+      };
+    }
     
     // Sin regla = modo supervised por defecto
     if (!rule) {
@@ -329,6 +342,29 @@ class AutomationControllerService {
       .select()
       .from(automationRules)
       .where(eq(automationRules.accountId, accountId));
+  }
+
+  /**
+   * FC-530: Actualizar regla por ID
+   */
+  async updateRuleById(
+    ruleId: string,
+    updates: {
+      mode?: AutomationMode;
+      enabled?: boolean;
+      config?: AutomationConfig;
+    }
+  ): Promise<AutomationRule | null> {
+    const [updated] = await db
+      .update(automationRules)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(automationRules.id, ruleId))
+      .returning();
+    
+    return updated || null;
   }
 
   /**

@@ -15,3 +15,6 @@ export * from './workspaces';
 
 // COR-007: Automation Rules
 export * from './automation-rules';
+
+// Appointments System (migrate-all.ts)
+export * from './appointments';

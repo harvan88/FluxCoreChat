@@ -23,6 +23,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           email: user.email,
         });
 
+        // Get user accounts
+        const { accountService } = await import('../services/account.service');
+        const accounts = await accountService.getAccountsByUserId(user.id);
+
         return {
           success: true,
           data: {
@@ -31,6 +35,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
               email: user.email,
               name: user.name,
             },
+            accounts,
             token,
           },
         };

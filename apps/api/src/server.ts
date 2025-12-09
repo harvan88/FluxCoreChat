@@ -20,9 +20,26 @@ import { conversationsRoutes } from './routes/conversations.routes';
 import { messagesRoutes } from './routes/messages.routes';
 import { automationRoutes } from './routes/automation.routes';
 import { adaptersRoutes } from './routes/adapters.routes';
+import { extensionRoutes } from './routes/extensions.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
+import { manifestLoader } from './services/manifest-loader.service';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const PORT = process.env.PORT || 3000;
+
+// Cargar extensiones desde el directorio /extensions
+const extensionsDir = path.resolve(__dirname, '../../../extensions');
+if (fs.existsSync(extensionsDir)) {
+  const entries = fs.readdirSync(extensionsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const extPath = path.join(extensionsDir, entry.name);
+      manifestLoader.loadFromDirectory(extPath);
+    }
+  }
+  console.log(`🧩 Loaded ${manifestLoader.getAllManifests().length} extensions`);
+}
 
 // Crear app Elysia para HTTP
 const elysiaApp = new Elysia()
@@ -53,7 +70,8 @@ const elysiaApp = new Elysia()
   .use(conversationsRoutes)
   .use(messagesRoutes)
   .use(automationRoutes)
-  .use(adaptersRoutes);
+  .use(adaptersRoutes)
+  .use(extensionRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 const server = Bun.serve({

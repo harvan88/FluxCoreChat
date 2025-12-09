@@ -21,6 +21,7 @@ export function ConnectionIndicator({ showDetails = false, className }: Connecti
   const isOnline = status === 'online';
   const hasPending = queueStats.pending > 0;
 
+  // Sistema canónico de diseño
   return (
     <div className={clsx('flex items-center gap-2', className)}>
       {/* Connection icon */}
@@ -28,8 +29,8 @@ export function ConnectionIndicator({ showDetails = false, className }: Connecti
         className={clsx(
           'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium',
           isOnline
-            ? 'bg-green-500/20 text-green-400'
-            : 'bg-red-500/20 text-red-400'
+            ? 'bg-success/20 text-success'
+            : 'bg-error/20 text-error'
         )}
       >
         {isOnline ? (
@@ -47,7 +48,7 @@ export function ConnectionIndicator({ showDetails = false, className }: Connecti
 
       {/* Sync status */}
       {hasPending && (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-medium">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-warning/20 text-warning text-xs font-medium">
           {isSyncing ? (
             <>
               <RefreshCw size={14} className="animate-spin" />
@@ -67,7 +68,7 @@ export function ConnectionIndicator({ showDetails = false, className }: Connecti
         <button
           onClick={() => sync()}
           disabled={!isOnline}
-          className="p-1.5 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-1.5 text-muted hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title="Sincronizar al conectar"
         >
           <Cloud size={16} />
@@ -76,14 +77,14 @@ export function ConnectionIndicator({ showDetails = false, className }: Connecti
 
       {/* Details */}
       {showDetails && (
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-muted">
           {queueStats.failed > 0 && (
-            <span className="text-red-400 mr-2">
+            <span className="text-error mr-2">
               {queueStats.failed} fallidos
             </span>
           )}
           {status === 'syncing' && (
-            <span className="text-blue-400">
+            <span className="text-accent">
               Sincronizando...
             </span>
           )}
@@ -104,7 +105,7 @@ export function ConnectionDot() {
     <div
       className={clsx(
         'w-2 h-2 rounded-full',
-        isOnline ? 'bg-green-500' : 'bg-red-500'
+        isOnline ? 'bg-success' : 'bg-error'
       )}
       title={isOnline ? 'Conectado' : 'Sin conexión'}
     />

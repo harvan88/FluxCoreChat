@@ -93,8 +93,8 @@ class ApiService {
   }
 
   // Auth
-  async register(data: RegisterData): Promise<ApiResponse<{ user: User; token: string }>> {
-    const response = await this.request<{ user: User; token: string }>('/auth/register', {
+  async register(data: RegisterData): Promise<ApiResponse<{ user: User; token: string; accounts: Account[] }>> {
+    const response = await this.request<{ user: User; token: string; accounts: Account[] }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -104,8 +104,8 @@ class ApiService {
     return response;
   }
 
-  async login(credentials: LoginCredentials): Promise<ApiResponse<{ user: User; token: string }>> {
-    const response = await this.request<{ user: User; token: string }>('/auth/login', {
+  async login(credentials: LoginCredentials): Promise<ApiResponse<{ user: User; token: string; accounts: Account[] }>> {
+    const response = await this.request<{ user: User; token: string; accounts: Account[] }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -156,6 +156,10 @@ class ApiService {
   }
 
   // Conversations
+  async getConversations(): Promise<ApiResponse<Conversation[]>> {
+    return this.request<Conversation[]>('/conversations');
+  }
+
   async createConversation(data: { relationshipId: string; channel: string }): Promise<ApiResponse<Conversation>> {
     return this.request<Conversation>('/conversations', {
       method: 'POST',
@@ -197,6 +201,26 @@ class ApiService {
   // Health
   async health(): Promise<ApiResponse<{ status: string }>> {
     return this.request<{ status: string }>('/health');
+  }
+
+  // Search accounts by @alias, email, or name
+  async searchAccounts(query: string): Promise<ApiResponse<Account[]>> {
+    return this.request<Account[]>(`/accounts/search?q=${encodeURIComponent(query)}`);
+  }
+
+  // Create relationship (add contact)
+  async addContact(accountAId: string, accountBId: string): Promise<ApiResponse<Relationship>> {
+    return this.request<Relationship>('/relationships', {
+      method: 'POST',
+      body: JSON.stringify({ accountAId, accountBId }),
+    });
+  }
+
+  // Convert account to business
+  async convertToBusiness(accountId: string): Promise<ApiResponse<Account>> {
+    return this.request<Account>(`/accounts/${accountId}/convert-to-business`, {
+      method: 'POST',
+    });
   }
 }
 

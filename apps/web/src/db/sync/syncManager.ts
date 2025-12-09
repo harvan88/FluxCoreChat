@@ -34,6 +34,10 @@ class SyncManager {
   private listeners: Set<(status: ConnectionStatus) => void> = new Set();
   private syncInProgress = false;
   private authToken: string | null = null;
+  
+  // FC-522: Retry configuration
+  private readonly MAX_RETRIES = 5;
+  private readonly BASE_DELAY_MS = 1000; // 1 segundo
 
   constructor() {
     // Listen for online/offline events
@@ -269,16 +273,182 @@ class SyncManager {
   }
 
   /**
-   * Sync a single queue item
+   * FC-522: Calculate exponential backoff delay
+   */
+  private calculateBackoffDelay(retryCount: number): number {
+    return Math.min(
+      this.BASE_DELAY_MS * Math.pow(2, retryCount),
+      30000 // Max 30 segundos
+    );
+  }
+
+  /**
+   * FC-522: Check if item should be retried
+   */
+  private shouldRetry(item: SyncQueueItem): boolean {
+    return item.retryCount < this.MAX_RETRIES;
+  }
+
+  /**
+   * Sync a single queue item with retry logic
    */
   private async syncQueueItem(item: SyncQueueItem): Promise<boolean> {
-    if (item.entityType === 'message') {
-      return this.syncMessage(item.entityId);
+    // FC-522: Check if max retries exceeded
+    if (!this.shouldRetry(item)) {
+      console.warn(`[SyncManager] Max retries exceeded for ${item.entityType} ${item.entityId}`);
+      await db.syncQueue.update(item.id, { status: 'failed' });
+      return false;
     }
-    
-    // TODO: Add conversation and relationship sync
-    console.warn('[SyncManager] Unknown entity type:', item.entityType);
-    return false;
+
+    // FC-522: Apply backoff delay if this is a retry
+    if (item.retryCount > 0) {
+      const delay = this.calculateBackoffDelay(item.retryCount);
+      console.log(`[SyncManager] Retry ${item.retryCount}/${this.MAX_RETRIES} after ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    // FC-523: Sync by entity type
+    switch (item.entityType) {
+      case 'message':
+        return this.syncMessage(item.entityId);
+      case 'conversation':
+        return this.syncConversation(item.entityId);
+      case 'relationship':
+        return this.syncRelationship(item.entityId);
+      default:
+        console.warn('[SyncManager] Unknown entity type:', item.entityType);
+        return false;
+    }
+  }
+
+  /**
+   * FC-523: Sync a conversation to backend
+   */
+  async syncConversation(conversationId: string): Promise<boolean> {
+    if (!this.authToken) {
+      console.warn('[SyncManager] No auth token, skipping conversation sync');
+      return false;
+    }
+
+    const conversation = await db.conversations.get(conversationId);
+    if (!conversation || conversation.syncState === 'synced') {
+      return true;
+    }
+
+    try {
+      await db.conversations.update(conversationId, { syncState: 'pending_backend' });
+
+      const response = await fetch(`${API_URL}/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({
+          relationshipId: conversation.relationshipId,
+          channel: conversation.channel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      await db.conversations.update(conversationId, {
+        syncState: 'synced',
+        serverCreatedAt: new Date(),
+        pendingOperation: undefined,
+      });
+
+      await db.syncQueue
+        .where({ entityType: 'conversation', entityId: conversationId })
+        .delete();
+
+      console.log('[SyncManager] Conversation synced:', conversationId);
+      return true;
+
+    } catch (error: any) {
+      console.error('[SyncManager] Conversation sync failed:', error);
+      
+      const queueItem = await db.syncQueue
+        .where({ entityType: 'conversation', entityId: conversationId })
+        .first();
+      
+      if (queueItem) {
+        await db.syncQueue.update(queueItem.id, {
+          status: 'failed',
+          lastError: error.message,
+          retryCount: queueItem.retryCount + 1,
+        });
+      }
+
+      return false;
+    }
+  }
+
+  /**
+   * FC-523: Sync a relationship to backend
+   */
+  async syncRelationship(relationshipId: string): Promise<boolean> {
+    if (!this.authToken) {
+      console.warn('[SyncManager] No auth token, skipping relationship sync');
+      return false;
+    }
+
+    const relationship = await db.relationships.get(relationshipId);
+    if (!relationship || relationship.syncState === 'synced') {
+      return true;
+    }
+
+    try {
+      await db.relationships.update(relationshipId, { syncState: 'pending_backend' });
+
+      const response = await fetch(`${API_URL}/relationships`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({
+          accountAId: relationship.accountAId,
+          accountBId: relationship.accountBId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      await db.relationships.update(relationshipId, {
+        syncState: 'synced',
+        serverCreatedAt: new Date(),
+        pendingOperation: undefined,
+      });
+
+      await db.syncQueue
+        .where({ entityType: 'relationship', entityId: relationshipId })
+        .delete();
+
+      console.log('[SyncManager] Relationship synced:', relationshipId);
+      return true;
+
+    } catch (error: any) {
+      console.error('[SyncManager] Relationship sync failed:', error);
+      
+      const queueItem = await db.syncQueue
+        .where({ entityType: 'relationship', entityId: relationshipId })
+        .first();
+      
+      if (queueItem) {
+        await db.syncQueue.update(queueItem.id, {
+          status: 'failed',
+          lastError: error.message,
+          retryCount: queueItem.retryCount + 1,
+        });
+      }
+
+      return false;
+    }
   }
 
   /**
@@ -328,13 +498,31 @@ class SyncManager {
             serverCreatedAt: new Date(serverMsg.createdAt),
           });
         } else if (existing.syncState !== 'synced') {
-          // Resolve conflict - backend wins
+          // FC-521: Conflict resolution - Backend prevalece (Dual Source of Truth)
+          console.log(`[SyncManager] Resolving conflict for message ${serverMsg.id} - Backend wins`);
           await db.messages.update(serverMsg.id, {
             ...serverMsg,
             syncState: 'synced',
             serverCreatedAt: new Date(serverMsg.createdAt),
             pendingOperation: undefined,
           });
+          
+          // Remove from sync queue if exists
+          await db.syncQueue
+            .where({ entityType: 'message', entityId: serverMsg.id })
+            .delete();
+        } else {
+          // Already synced - update if server version is newer
+          const serverDate = new Date(serverMsg.createdAt);
+          const localDate = existing.serverCreatedAt || existing.localCreatedAt;
+          
+          if (serverDate > localDate) {
+            await db.messages.update(serverMsg.id, {
+              ...serverMsg,
+              syncState: 'synced',
+              serverCreatedAt: serverDate,
+            });
+          }
         }
       }
 

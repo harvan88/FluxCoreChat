@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
@@ -89,24 +89,7 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
     removeSuggestion(suggestionId);
   };
 
-  // Simular sugerencia de IA para demo
-  const simulateAISuggestion = () => {
-    const mockSuggestion: AISuggestion = {
-      id: `sug-${Date.now()}`,
-      conversationId,
-      extensionId: 'core-ai',
-      originalMessageId: messages[messages.length - 1]?.id || '',
-      suggestedText: '¡El proyecto va muy bien! Estamos avanzando según lo planificado. ¿Te gustaría que te cuente los detalles?',
-      confidence: 0.92,
-      reasoning: 'Basado en el contexto de la conversación sobre el proyecto, sugiero una respuesta positiva con oferta de más información.',
-      alternatives: [
-        'Todo marcha según lo previsto con el proyecto.',
-        'El proyecto avanza perfectamente. ¿Quieres saber más?',
-      ],
-      createdAt: new Date().toISOString(),
-    };
-    addSuggestion(mockSuggestion);
-  };
+  // NOTA: Simulación de IA removida - conectar a API real
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -133,22 +116,18 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
       <div className="h-14 bg-surface border-b border-subtle px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
-            <span className="text-inverse font-semibold text-sm">JP</span>
+            <span className="text-inverse font-semibold text-sm">
+              {conversationId?.charAt(0).toUpperCase() || '?'}
+            </span>
           </div>
           <div>
-            <div className="text-primary font-medium">Juan Pérez</div>
+            <div className="text-primary font-medium">
+              Conversación {conversationId?.slice(0, 8) || 'Nueva'}
+            </div>
             <div className="text-xs text-muted">En línea</div>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {/* Demo: Simular sugerencia de IA */}
-          <button 
-            onClick={simulateAISuggestion}
-            className="p-2 text-accent hover:bg-accent-muted rounded-lg transition-colors"
-            title="Simular sugerencia de IA (Demo)"
-          >
-            <Sparkles size={20} />
-          </button>
           <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
             <Phone size={20} />
           </button>
@@ -211,7 +190,7 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
           suggestion={suggestion}
           onApprove={(text) => handleApproveSuggestion(suggestion.id, text)}
           onDiscard={() => handleDiscardSuggestion(suggestion.id)}
-          onRegenerate={simulateAISuggestion}
+          // onRegenerate removed - will connect to real AI API
         />
       ))}
 

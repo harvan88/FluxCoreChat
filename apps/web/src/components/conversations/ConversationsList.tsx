@@ -1,12 +1,13 @@
 /**
  * ConversationsList - Lista de conversaciones activas
+ * Conectada a API real - SIN DATOS MOCK
  */
 
-import { useEffect } from 'react';
-import { Search, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Plus, Loader2, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
-import type { Conversation } from '../../types';
+import { api } from '../../services/api';
 
 export function ConversationsList() {
   const {
@@ -16,37 +17,38 @@ export function ConversationsList() {
     setSelectedConversation,
   } = useUIStore();
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Cargar conversaciones desde API real
   useEffect(() => {
-    // TODO: Cargar conversaciones desde la API
-    // Por ahora usamos datos de ejemplo
-    const mockConversations: Conversation[] = [
-      {
-        id: '1',
-        relationshipId: 'r1',
-        channel: 'web',
-        status: 'active',
-        lastMessageAt: new Date().toISOString(),
-        lastMessageText: '¡Hola! ¿Cómo estás?',
-        unreadCountA: 2,
-        unreadCountB: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        relationshipId: 'r2',
-        channel: 'whatsapp',
-        status: 'active',
-        lastMessageAt: new Date(Date.now() - 3600000).toISOString(),
-        lastMessageText: 'Perfecto, nos vemos mañana',
-        unreadCountA: 0,
-        unreadCountB: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ];
-    setConversations(mockConversations);
+    async function loadConversations() {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await api.getConversations();
+      
+      if (response.success && response.data) {
+        setConversations(response.data);
+      } else {
+        setError(response.error || 'Error al cargar conversaciones');
+        setConversations([]); // Limpiar cualquier dato previo
+      }
+      
+      setIsLoading(false);
+    }
+    
+    loadConversations();
   }, [setConversations]);
+
+  // Filtrar conversaciones por búsqueda
+  const filteredConversations = conversations.filter((conv) => {
+    if (!searchQuery) return true;
+    const search = searchQuery.toLowerCase();
+    return conv.lastMessageText?.toLowerCase().includes(search) ||
+           conv.channel.toLowerCase().includes(search);
+  });
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
@@ -63,15 +65,21 @@ export function ConversationsList() {
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
   };
 
+  // Colores canónicos para canales
   const getChannelBadge = (channel: string) => {
     switch (channel) {
       case 'whatsapp':
-        return 'bg-green-600';
+        return 'bg-success'; // Sistema canónico, no hardcoded
       case 'telegram':
-        return 'bg-blue-500';
+        return 'bg-info'; // Sistema canónico
       default:
-        return 'bg-gray-600';
+        return 'bg-muted'; // Sistema canónico
     }
+  };
+
+  const handleNewConversation = () => {
+    // TODO: Implementar modal para nueva conversación
+    console.log('[ConversationsList] New conversation clicked - TODO: implement modal');
   };
 
   return (
@@ -82,6 +90,8 @@ export function ConversationsList() {
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar conversaciones..."
             className="w-full bg-elevated text-primary pl-10 pr-4 py-2 rounded-lg text-sm border border-subtle focus:outline-none focus:border-accent transition-colors"
           />
@@ -90,20 +100,40 @@ export function ConversationsList() {
 
       {/* New conversation button */}
       <div className="px-3 pb-3">
-        <button className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-hover text-inverse py-2 px-4 rounded-lg transition-colors text-sm font-medium">
+        <button 
+          onClick={handleNewConversation}
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 text-inverse py-2 px-4 rounded-lg transition-colors text-sm font-medium"
+        >
           <Plus size={18} />
           Nueva conversación
         </button>
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="mx-3 mb-3 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
+          {error}
+        </div>
+      )}
+
       {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {conversations.length === 0 ? (
-          <div className="p-4 text-center text-muted">
-            No hay conversaciones
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-accent" />
+          </div>
+        ) : filteredConversations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+            <MessageSquare size={48} className="text-muted mb-3" />
+            <p className="text-muted text-sm">
+              {searchQuery ? 'No se encontraron conversaciones' : 'No tienes conversaciones aún'}
+            </p>
+            <p className="text-muted text-xs mt-1">
+              {!searchQuery && 'Usa el botón "Nueva conversación" para comenzar'}
+            </p>
           </div>
         ) : (
-          conversations.map((conversation) => (
+          filteredConversations.map((conversation) => (
             <button
               key={conversation.id}
               onClick={() => setSelectedConversation(conversation.id)}
@@ -116,7 +146,7 @@ export function ConversationsList() {
               <div className="relative">
                 <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
                   <span className="text-inverse font-semibold text-sm">
-                    {conversation.id === '1' ? 'JP' : 'MA'}
+                    {conversation.relationshipId?.charAt(0).toUpperCase() || '?'}
                   </span>
                 </div>
                 <div
@@ -131,7 +161,7 @@ export function ConversationsList() {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center">
                   <span className="text-primary font-medium truncate">
-                    {conversation.id === '1' ? 'Juan Pérez' : 'María Gómez'}
+                    Conversación {conversation.id.slice(0, 8)}
                   </span>
                   <span className="text-xs text-muted">
                     {formatTime(conversation.lastMessageAt)}
@@ -139,7 +169,7 @@ export function ConversationsList() {
                 </div>
                 <div className="flex justify-between items-center mt-1">
                   <span className="text-sm text-secondary truncate">
-                    {conversation.lastMessageText}
+                    {conversation.lastMessageText || 'Sin mensajes'}
                   </span>
                   {conversation.unreadCountA > 0 && (
                     <span className="ml-2 bg-accent text-inverse text-xs px-2 py-0.5 rounded-full">

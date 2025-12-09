@@ -75,35 +75,36 @@ export function AISuggestionCard({
     setShowAlternatives(false);
   };
 
+  // Sistema canónico de diseño
   if (isLoading) {
     return (
-      <div className="mx-4 mb-4 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-xl p-4">
+      <div className="mx-4 mb-4 bg-accent/10 border border-accent/30 rounded-xl p-4">
         <div className="flex items-center gap-3">
           <div className="animate-spin">
-            <Sparkles size={20} className="text-purple-400" />
+            <Sparkles size={20} className="text-accent" />
           </div>
-          <span className="text-purple-300 text-sm">La IA está generando una respuesta...</span>
+          <span className="text-accent text-sm">La IA está generando una respuesta...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-4 mb-4 bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/30 rounded-xl overflow-hidden">
+    <div className="mx-4 mb-4 bg-accent/10 border border-accent/30 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-purple-500/10 border-b border-purple-500/20 flex items-center justify-between">
+      <div className="px-4 py-3 bg-accent/10 border-b border-accent/20 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles size={16} className="text-purple-400" />
-          <span className="text-purple-300 text-sm font-medium">
+          <Sparkles size={16} className="text-accent" />
+          <span className="text-accent text-sm font-medium">
             Sugerencia de IA
           </span>
           {suggestion.confidence !== undefined && (
-            <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">
               {Math.round(suggestion.confidence * 100)}% confianza
             </span>
           )}
         </div>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-muted">
           {suggestion.extensionId === 'core-ai' ? 'FluxCore AI' : suggestion.extensionId}
         </span>
       </div>
@@ -114,18 +115,18 @@ export function AISuggestionCard({
           <textarea
             value={editedText}
             onChange={(e) => setEditedText(e.target.value)}
-            className="w-full bg-gray-800/50 text-white rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/50 min-h-[100px]"
+            className="w-full bg-elevated text-primary rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 min-h-[100px]"
             autoFocus
           />
         ) : (
-          <p className="text-white text-sm whitespace-pre-wrap">{editedText}</p>
+          <p className="text-primary text-sm whitespace-pre-wrap">{editedText}</p>
         )}
 
         {/* Reasoning toggle */}
         {suggestion.reasoning && (
           <button
             onClick={() => setShowReasoning(!showReasoning)}
-            className="mt-3 flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            className="mt-3 flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors"
           >
             {showReasoning ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             {showReasoning ? 'Ocultar razonamiento' : 'Ver razonamiento'}
@@ -133,7 +134,7 @@ export function AISuggestionCard({
         )}
         
         {showReasoning && suggestion.reasoning && (
-          <div className="mt-2 p-3 bg-gray-800/30 rounded-lg text-xs text-gray-400 italic">
+          <div className="mt-2 p-3 bg-elevated rounded-lg text-xs text-muted italic">
             {suggestion.reasoning}
           </div>
         )}
@@ -143,7 +144,7 @@ export function AISuggestionCard({
           <>
             <button
               onClick={() => setShowAlternatives(!showAlternatives)}
-              className="mt-3 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              className="mt-3 flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors"
             >
               {showAlternatives ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               {suggestion.alternatives.length} alternativas
@@ -155,7 +156,7 @@ export function AISuggestionCard({
                   <button
                     key={idx}
                     onClick={() => handleSelectAlternative(alt)}
-                    className="w-full text-left p-2 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg text-xs text-gray-300 transition-colors"
+                    className="w-full text-left p-2 bg-elevated hover:bg-hover rounded-lg text-xs text-secondary transition-colors"
                   >
                     {alt}
                   </button>
@@ -167,20 +168,20 @@ export function AISuggestionCard({
       </div>
 
       {/* Actions */}
-      <div className="px-4 py-3 bg-gray-800/30 border-t border-purple-500/20 flex items-center justify-between">
+      <div className="px-4 py-3 bg-elevated border-t border-accent/20 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isEditing ? (
             <>
               <button
                 onClick={handleSaveEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/90 text-inverse text-sm rounded-lg transition-colors"
               >
                 <Check size={14} />
                 Guardar
               </button>
               <button
                 onClick={handleCancelEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-hover hover:bg-active text-primary text-sm rounded-lg transition-colors"
               >
                 <X size={14} />
                 Cancelar
@@ -190,21 +191,21 @@ export function AISuggestionCard({
             <>
               <button
                 onClick={handleApprove}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-success hover:bg-success/90 text-inverse text-sm rounded-lg transition-colors"
               >
                 <Check size={14} />
                 Enviar
               </button>
               <button
                 onClick={handleEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/90 text-inverse text-sm rounded-lg transition-colors"
               >
                 <Edit3 size={14} />
                 Editar
               </button>
               <button
                 onClick={onDiscard}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-hover hover:bg-active text-primary text-sm rounded-lg transition-colors"
               >
                 <X size={14} />
                 Descartar
@@ -216,7 +217,7 @@ export function AISuggestionCard({
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopy}
-            className="p-1.5 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 text-muted hover:text-primary transition-colors"
             title="Copiar"
           >
             <Copy size={14} />
@@ -224,7 +225,7 @@ export function AISuggestionCard({
           {onRegenerate && (
             <button
               onClick={onRegenerate}
-              className="p-1.5 text-gray-400 hover:text-purple-400 transition-colors"
+              className="p-1.5 text-muted hover:text-accent transition-colors"
               title="Regenerar"
             >
               <RefreshCw size={14} />

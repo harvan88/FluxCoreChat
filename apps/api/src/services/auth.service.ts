@@ -1,9 +1,10 @@
 import { hash, compare } from 'bcrypt';
 import { db } from '@fluxcore/db';
-import { users, accounts, actors, type NewUser, type NewAccount } from '@fluxcore/db';
+import { users, accounts, actors, relationships, conversations, messages } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 
 const SALT_ROUNDS = 10;
+const FLUXI_USERNAME = 'fluxi';
 
 export class AuthService {
   async register(data: { email: string; password: string; name: string }) {
@@ -30,6 +31,32 @@ export class AuthService {
         name: data.name,
       })
       .returning();
+
+    // Create default personal account for the user
+    const username = data.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const [account] = await db
+      .insert(accounts)
+      .values({
+        ownerUserId: user.id,
+        username: `${username}_${Date.now().toString(36)}`, // Ensure unique
+        displayName: data.name,
+        accountType: 'personal',
+        profile: {},
+        privateContext: null,
+      })
+      .returning();
+
+    // Create actor (owner relationship)
+    await db.insert(actors).values({
+      userId: user.id,
+      accountId: account.id,
+      role: 'owner',
+    });
+
+    console.log(`[Auth] Created user ${user.id} with account ${account.id}`);
+
+    // Crear relación con Fluxi y conversación de bienvenida
+    await this.createFluxiWelcome(account.id, data.name);
 
     return user;
   }
@@ -82,6 +109,60 @@ export class AuthService {
       email: user.email,
       name: user.name,
     };
+  }
+
+  /**
+   * Crear relación con Fluxi y mensaje de bienvenida
+   */
+  private async createFluxiWelcome(newAccountId: string, userName: string) {
+    try {
+      // Buscar cuenta de Fluxi
+      const [fluxiAccount] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.username, FLUXI_USERNAME))
+        .limit(1);
+
+      if (!fluxiAccount) {
+        console.warn('[Auth] Fluxi account not found. Run seed:fluxi first.');
+        return;
+      }
+
+      // Crear relación Fluxi -> Nuevo usuario
+      const [relationship] = await db
+        .insert(relationships)
+        .values({
+          accountAId: fluxiAccount.id,
+          accountBId: newAccountId,
+          perspectiveA: { savedName: userName },
+          perspectiveB: { savedName: 'Fluxi' },
+        })
+        .returning();
+
+      // Crear conversación de bienvenida
+      const [conversation] = await db
+        .insert(conversations)
+        .values({
+          relationshipId: relationship.id,
+          channel: 'web',
+        })
+        .returning();
+
+      // Crear mensaje de bienvenida
+      await db.insert(messages).values({
+        conversationId: conversation.id,
+        senderAccountId: fluxiAccount.id,
+        type: 'incoming',
+        content: {
+          text: `¡Hola ${userName}! 👋\n\nSoy Fluxi, tu asistente de FluxCore. Estoy aquí para ayudarte a:\n\n• Configurar tu perfil\n• Añadir contactos\n• Explorar las extensiones\n\n¿En qué puedo ayudarte hoy?`,
+        },
+      });
+
+      console.log(`[Auth] Created Fluxi welcome for account ${newAccountId}`);
+    } catch (error) {
+      console.error('[Auth] Error creating Fluxi welcome:', error);
+      // No fallar el registro si Fluxi no está disponible
+    }
   }
 }
 

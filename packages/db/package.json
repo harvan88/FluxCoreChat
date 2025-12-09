@@ -20,7 +20,9 @@
     "db:generate": "drizzle-kit generate:pg",
     "db:migrate": "bun run src/migrate.ts",
     "db:push": "drizzle-kit push:pg",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:test": "bun run src/seed-test-users.ts",
+    "seed:fluxi": "bun run src/seed-fluxi.ts"
   },
   "dependencies": {
     "@fluxcore/types": "workspace:*",
@@ -28,6 +30,7 @@
     "postgres": "^3.4.3"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20.10.0",
     "drizzle-kit": "^0.20.6",
     "tsup": "^8.0.1",

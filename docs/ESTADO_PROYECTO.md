@@ -1,7 +1,18 @@
 # Estado del Proyecto FluxCore
 
-> **Última actualización**: 2024-12-09
-> **Estado**: 🟢 **PRODUCTION-READY** - Todos los hitos completados (0-16)
+> **Última actualización**: 2024-12-09  
+> **Estado**: 🟡 **EN PRUEBA** - Sistema técnico listo, pendiente validación UI/UX
+
+## ⚠️ Estado Actual
+
+El sistema está técnicamente completo pero la **PRUEBA_DE_PRODUCCION.md** aún no pasa:
+- ✅ Backend: 100% funcional
+- ✅ Database: 17 tablas sincronizadas
+- ✅ Sincronización: IndexedDB ↔ PostgreSQL
+- 🟡 Frontend: Perfil no muestra datos correctamente
+- 🟡 UI/UX: Pendiente validación escenario Carlos
+
+Ver `PRUEBA_DE_PRODUCCION.md` para detalles del escenario de prueba.
 
 ## 📊 Resumen de Hitos
 
