@@ -465,7 +465,10 @@ class SyncManager {
    * Fetch and cache messages from backend
    */
   async fetchMessages(conversationId: string): Promise<LocalMessage[]> {
+    console.log(`[SyncManager] fetchMessages called for ${conversationId}, token: ${this.authToken ? 'present' : 'MISSING'}, status: ${this.status}`);
+    
     if (!this.authToken || this.status === 'offline') {
+      console.log('[SyncManager] Skipping fetch - no token or offline');
       return this.getMessages(conversationId);
     }
 
@@ -483,7 +486,11 @@ class SyncManager {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const serverMessages = await response.json();
+      const json = await response.json();
+      // El endpoint devuelve { success: true, data: [...] }
+      const serverMessages = json.data || json || [];
+      
+      console.log(`[SyncManager] Fetched ${serverMessages.length} messages for conversation ${conversationId}`);
 
       // Merge with local messages
       for (const serverMsg of serverMessages) {

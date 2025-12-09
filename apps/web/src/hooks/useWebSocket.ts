@@ -148,10 +148,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         }
       };
 
-      ws.onerror = (error) => {
+      ws.onerror = () => {
+        // Silenciar errores esperados durante reconexión
+        // El evento onclose manejará la reconexión
         if (!mountedRef.current) return;
-        console.error('[WebSocket] Error:', error);
-        // Don't set status to error here - let onclose handle reconnection
+        // Solo loguear si no estamos en proceso de reconexión
+        if (reconnectAttemptsRef.current === 0) {
+          console.warn('[WebSocket] Connection error (will retry)');
+        }
       };
 
       wsRef.current = ws;

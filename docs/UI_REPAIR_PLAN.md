@@ -93,11 +93,28 @@
 
 | Hito | Estado | Notas |
 |------|--------|-------|
-| R1 | ⏳ Pendiente | |
-| R2 | ⏳ Pendiente | |
-| R3 | ⏳ Pendiente | |
-| R4 | ⏳ Pendiente | |
+| R1 | ✅ Completado | Endpoints verificados, content doblemente serializado encontrado |
+| R2 | ✅ Completado | Content corregido con UPDATE SQL, relationships enriquecidas |
+| R3 | ⏳ Pendiente | Verificar que mensajes se cargan en frontend |
+| R4 | ✅ Parcial | contactName implementado, falta handler de click completo |
 | R5 | ⏳ Pendiente | |
 | R6 | ⏳ Pendiente | |
 | R7 | ⏳ Pendiente | |
+
+## Correcciones Aplicadas
+
+### 2024-12-09
+
+1. **Content doblemente serializado** (R2)
+   ```sql
+   UPDATE messages SET content = (content #>> '{}')::jsonb WHERE jsonb_typeof(content) = 'string';
+   ```
+   - 4 mensajes corregidos
+
+2. **Relationships sin nombre** (R2)
+   - `relationships.routes.ts`: enriquecer con `contactName` del otro participante
+
+3. **ContactsList sin nombre** (R4)
+   - Usar `contactName` del backend
+   - Añadir handler de click (log por ahora)
 
