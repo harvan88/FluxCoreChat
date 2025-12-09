@@ -1,6 +1,7 @@
 import { db } from '@fluxcore/db';
 import {
   relationships,
+  conversations,
   type RelationshipContext,
   type ContextEntry,
   type RelationshipPerspective,
@@ -23,6 +24,20 @@ export class RelationshipService {
       .limit(1);
 
     if (existing.length > 0) {
+      // BUG-003: Asegurar que existe conversación para relación existente
+      const existingConv = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.relationshipId, existing[0].id))
+        .limit(1);
+      
+      if (existingConv.length === 0) {
+        await db.insert(conversations).values({
+          relationshipId: existing[0].id,
+          channel: 'web',
+        });
+      }
+      
       return existing[0];
     }
 
@@ -34,6 +49,12 @@ export class RelationshipService {
         accountBId,
       })
       .returning();
+
+    // BUG-003: Crear conversación automáticamente al crear relación
+    await db.insert(conversations).values({
+      relationshipId: relationship.id,
+      channel: 'web',
+    });
 
     return relationship;
   }

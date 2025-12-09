@@ -62,6 +62,7 @@ export class AccountService {
       userId: data.ownerUserId,
       accountId: account.id,
       role: 'owner',
+      actorType: 'user', // BUG-001: Campo requerido por schema
     });
 
     // V2-4.2: Pre-instalar core-ai en nuevas cuentas

@@ -96,10 +96,10 @@
 | R1 | ✅ Completado | Endpoints verificados, content doblemente serializado encontrado |
 | R2 | ✅ Completado | Content corregido con UPDATE SQL, relationships enriquecidas |
 | R3 | ✅ Completado | syncManager.fetchMessages corregido para extraer .data |
-| R4 | ✅ Parcial | contactName implementado, falta handler de click completo |
+| R4 | ✅ Completado | contactName + click abre conversación existente |
 | R5 | ✅ Completado | WebSocket errores silenciados durante reconexión |
-| R6 | ⏳ Pendiente | |
-| R7 | ⏳ Pendiente | |
+| R6 | ⏳ Pendiente | Validación TOTEM (colores canónicos) |
+| R7 | ✅ Completado | DB verificada: mensajes y conversaciones OK |
 
 ## Correcciones Aplicadas
 
