@@ -15,6 +15,7 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
       // Get all accounts of the user
       const { accountService } = await import('../services/account.service');
       const accounts = await accountService.getAccountsByUserId(user.id);
+      const userAccountIds = accounts.map(a => a.id);
       
       // Get relationships for all accounts
       const allRelationships = [];
@@ -23,7 +24,25 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
         allRelationships.push(...rels);
       }
 
-      return { success: true, data: allRelationships };
+      // Enrich with contact name (the OTHER account, not the user's)
+      const enrichedRelationships = await Promise.all(
+        allRelationships.map(async (rel) => {
+          // Find the OTHER account ID
+          const otherAccountId = userAccountIds.includes(rel.accountAId)
+            ? rel.accountBId
+            : rel.accountAId;
+          
+          const otherAccount = await accountService.getAccountById(otherAccountId);
+          
+          return {
+            ...rel,
+            contactName: otherAccount?.displayName || 'Desconocido',
+            contactAccountId: otherAccountId,
+          };
+        })
+      );
+
+      return { success: true, data: enrichedRelationships };
     },
     {
       isAuthenticated: true,
