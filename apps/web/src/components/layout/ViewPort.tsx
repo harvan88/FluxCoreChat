@@ -12,41 +12,40 @@ import { WelcomeView } from '../chat/WelcomeView';
 export function ViewPort() {
   const { selectedConversationId, activeActivity } = useUIStore();
   const containers = useContainers();
-  const { layout, openTab, openContainer } = usePanelStore();
+  const { layout, openTab, activateTab, focusContainer } = usePanelStore();
 
   // Efecto para abrir chat cuando se selecciona una conversación
   useEffect(() => {
     if (selectedConversationId && activeActivity === 'conversations') {
-      openTab('chats', {
-        type: 'chat',
-        title: `Chat`,
-        context: { chatId: selectedConversationId },
-        closable: true,
-      });
-    }
-  }, [selectedConversationId, activeActivity, openTab]);
-
-  // Efecto para abrir settings
-  useEffect(() => {
-    if (activeActivity === 'settings') {
-      const existingSettings = containers.find(c => c.type === 'settings');
-      if (!existingSettings) {
-        openContainer('settings', {
-          initialTabs: [{
-            type: 'settings',
-            title: 'Configuración',
-            context: {},
-            closable: false,
-          }],
+      // FC-401: Verificar si ya existe un tab para este chat
+      const existingTab = containers
+        .flatMap(c => c.tabs.map(t => ({ tab: t, containerId: c.id })))
+        .find(({ tab }) => tab.type === 'chat' && tab.context.chatId === selectedConversationId);
+      
+      if (existingTab) {
+        // Activar tab existente
+        activateTab(existingTab.containerId, existingTab.tab.id);
+        focusContainer(existingTab.containerId);
+      } else {
+        // Crear nuevo tab
+        openTab('chats', {
+          type: 'chat',
+          title: `Chat`,
+          context: { chatId: selectedConversationId },
+          closable: true,
         });
       }
     }
-  }, [activeActivity, containers, openContainer]);
+  }, [selectedConversationId, activeActivity, openTab, containers, activateTab, focusContainer]);
+
+  // FC-402 & FC-403: Settings ahora se maneja desde Sidebar
+  // El flujo correcto es: ActivityBar → Sidebar (SettingsPanel) → DynamicContainer
+  // Ya no abrimos container automáticamente desde aquí
 
   // Si no hay containers, mostrar welcome
   if (containers.length === 0) {
     return (
-      <div className="flex-1 bg-gray-900">
+      <div className="flex-1 bg-base">
         <WelcomeView />
       </div>
     );
@@ -60,7 +59,7 @@ export function ViewPort() {
   return (
     <div 
       className={`
-        flex-1 flex gap-1 p-1 bg-gray-950 overflow-hidden
+        flex-1 flex gap-1 p-1 bg-base overflow-hidden
         ${layout.splitDirection === 'horizontal' ? 'flex-row' : 'flex-col'}
       `}
     >

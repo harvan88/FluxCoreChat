@@ -317,6 +317,147 @@ interface ContextEntry {
 
 ---
 
+### Hito 11: Madurez Operativa de Extensiones (NUEVO)
+
+**Objetivo:** Sistema de extensiones robusto con ejecución paralela, persistencia real y broadcast.
+
+**Duración:** 1 semana
+
+**Aprendizaje de:** Auditoría de código INHOST (ver `AUDIT_LEARNING_REPORT.md`)
+
+| ID | Descripción | Prioridad | Dependencias | Notas |
+|----|-------------|-----------|--------------|-------|
+| FC-300 | Ejecución paralela de extensiones con timeout | Alta | Hito 4 | Promise.allSettled + timeout por extensión |
+| FC-301 | Persistencia real de enrichments | Alta | FC-300 | Usar tabla message_enrichments existente |
+| FC-302 | Broadcast de enrichments vía WebSocket | Alta | FC-301 | Nuevo evento `enrichment:batch` |
+| FC-303 | Health checks de extensiones | Media | FC-300 | Endpoint `/admin/extensions/health` |
+| FC-304 | Estadísticas de ExtensionHost | Media | FC-300 | Endpoint `/admin/extensions/stats` |
+| FC-305 | Logger service centralizado | Media | - | Reemplazar console.log |
+
+**Implementación FC-300 (Ejecución Paralela):**
+```typescript
+// Antes: Secuencial
+for (const extension of extensions) {
+  await extension.process(context);
+}
+
+// Después: Paralelo con timeout y aislamiento
+const results = await Promise.allSettled(
+  extensions.map(ext => this.executeWithTimeout(ext, context))
+);
+```
+
+**Implementación FC-302 (WebSocket Event):**
+```typescript
+// Nuevo evento WebSocket
+{
+  type: 'enrichment:batch',
+  data: {
+    conversationId: string;
+    messageId: string;
+    enrichments: Array<{
+      id: string;
+      extensionId: string;
+      type: string;
+      payload: any;
+      confidence: number;
+    }>;
+    processingTimeMs: number;
+  }
+}
+```
+
+---
+
+### Hito 12: Frontend de Enrichments (NUEVO)
+
+**Objetivo:** Frontend muestra enrichments en tiempo real.
+
+**Duración:** 0.5 semana
+
+| ID | Descripción | Prioridad | Dependencias | Notas |
+|----|-------------|-----------|--------------|-------|
+| FC-306 | Store de enrichments en Zustand | Media | FC-302 | Map<messageId, Enrichment[]> |
+| FC-307 | Enrichments en IndexedDB | Baja | FC-306 | Dexie schema v2 |
+| FC-308 | Handler WebSocket enrichment:batch | Media | FC-302 | - |
+| FC-309 | Componente EnrichmentBadge | Media | FC-306 | UI para mostrar enrichments |
+
+---
+
+### Hito 13: Component Library & UI Unification (NUEVO)
+
+**Objetivo:** Establecer sistema de componentes predefinidos y eliminar HTML arbitrario.
+
+**Duración:** 3 semanas
+
+**Aprendizaje de:** Auditoría de UI (ver `docs/UI_AUDIT_REPORT.md`)
+
+| ID | Descripción | Prioridad | Dependencias | Notas |
+|----|-------------|-----------|--------------|-------|
+| **FC-400** | Migrar ExtensionsPanel al sistema canónico | Alta | Hito 3 | Eliminar colores hardcodeados |
+| **FC-401** | Prevenir duplicación de tabs de chat | Alta | Hito 3 | Verificar tab existente antes de crear |
+| **FC-402** | Corregir flujo de navegación de Settings | Alta | Hito 3 | ActivityBar → Sidebar → Container |
+| **FC-403** | Hacer tab de Settings closable | Alta | FC-402 | Cambiar closable: false → true |
+| **FC-404** | Crear Button component | Alta | - | Variantes: primary, secondary, ghost, danger |
+| **FC-405** | Crear Input component | Alta | - | Variantes: text, search, email, password |
+| **FC-406** | Crear Card component | Alta | - | Con Header, Body, Footer |
+| **FC-407** | Crear Badge component | Alta | - | Variantes: info, success, warning, error |
+| **FC-408** | Crear Table component | Media | - | Con sorting y paginación |
+| **FC-409** | Crear Select component | Media | - | Dropdown estándar |
+| **FC-410** | Crear Checkbox component | Media | - | Checkbox y radio |
+| **FC-411** | Crear Avatar component | Media | - | Con fallback a iniciales |
+| **FC-412** | Crear SidebarLayout unificado | Media | FC-404-411 | Estructura estándar para sidebars |
+| **FC-413** | Eliminar botón X de Sidebar | Media | FC-412 | Implementar lógica de pin |
+| **FC-414** | Refactorizar tabs para usar componentes | Media | FC-404-411 | Eliminar HTML arbitrario |
+| **FC-415** | Hacer ActivityBar header responsive | Baja | - | Logo adaptable al colapso |
+| **FC-416** | Documentar Component Library | Alta | FC-404-411 | Guía para extensiones |
+| **FC-417** | Crear guía de diseño para extensiones | Alta | FC-416 | Ejemplos visuales y reglas |
+
+**Implementación FC-404 (Button):**
+```tsx
+interface ButtonProps {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+  icon?: React.ReactNode;
+  loading?: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+  onClick?: () => void;
+}
+
+// Variantes con clases canónicas
+const variants = {
+  primary: 'bg-accent text-inverse hover:bg-accent-hover',
+  secondary: 'bg-elevated text-primary border border-default hover:bg-hover',
+  ghost: 'bg-transparent text-secondary hover:text-primary hover:bg-hover',
+  danger: 'bg-error text-inverse hover:bg-error-hover'
+};
+```
+
+**Implementación FC-412 (SidebarLayout):**
+```tsx
+interface SidebarLayoutProps {
+  header: React.ReactNode;
+  search?: React.ReactNode;
+  actions?: React.ReactNode;
+  tabs?: React.ReactNode;
+  content: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
+// Estructura estándar para todos los sidebars
+<div className="flex flex-col h-full bg-surface">
+  <div className="px-4 py-3 border-b border-subtle">{header}</div>
+  {search && <div className="px-4 py-3">{search}</div>}
+  {actions && <div className="px-4 pb-3">{actions}</div>}
+  {tabs && <div className="px-4 pb-3">{tabs}</div>}
+  <div className="flex-1 overflow-y-auto">{content}</div>
+  {footer && <div className="px-4 py-3 border-t border-subtle">{footer}</div>}
+</div>
+```
+
+---
+
 ## Cronograma de Ejecución
 
 ```
@@ -331,8 +472,11 @@ Semana 12-13: Hito 7 - Extensión Turnos
 Semana 14-15: Hito 8 - WhatsApp
 Semana 16:    Hito 9 - Workspaces
 Semana 17-18: Hito 10 - Producción
+Semana 19:    Hito 11 - Madurez Operativa Extensiones
+Semana 19.5:  Hito 12 - Frontend Enrichments
+Semana 20-22: Hito 13 - Component Library & UI Unification (NUEVO)
 
-Total: ~18 semanas
+Total: ~23 semanas
 ```
 
 ---
@@ -373,6 +517,36 @@ Total: ~18 semanas
 
 **Impacto:** Schema de relationships cambia.
 
+### Component Library como Fuente Única de UI
+
+**Decisión:** Todas las extensiones DEBEN usar componentes predefinidos de la Component Library. HTML arbitrario está prohibido.
+
+**Justificación:**
+- Garantiza unicidad visual del sistema
+- Facilita mantenimiento y actualizaciones
+- Previene inconsistencias de diseño
+- Simplifica desarrollo de extensiones de terceros
+- Permite evolución del diseño sin romper extensiones
+
+**Impacto:**
+- Nuevos componentes en `apps/web/src/components/ui/`
+- Manifest de extensiones debe declarar componentes permitidos
+- Validación en ExtensionHost de componentes usados
+- Documentación exhaustiva para desarrolladores
+
+**Reglas de Enforcement:**
+```typescript
+// En manifest.json de extensión
+{
+  "ui": {
+    "allowedComponents": ["Button", "Input", "Card", "Badge"],
+    "customCSS": false  // Prohibido
+  }
+}
+
+// ExtensionHost valida que solo use componentes permitidos
+```
+
 ---
 
 ## Riesgos
@@ -383,6 +557,91 @@ Total: ~18 semanas
 | Permisos de contexto complejos | Media | Medio | UI clara de permisos en manifest |
 | Crecimiento de overlays | Alta | Medio | Límites por plan, cleanup policies |
 | Complejidad de extensiones | Media | Medio | SDK bien documentado, ejemplos |
+| **Ejecución paralela causa race conditions** | Baja | Medio | Promise.allSettled aísla fallos, no comparten estado |
+| **Persistencia enrichments falla** | Baja | Alto | Transacciones DB, retry logic |
+| **WebSocket broadcast sobrecarga** | Baja | Bajo | Throttling si necesario |
+| **Component Library limita creatividad de extensiones** | Media | Medio | Componentes flexibles con props, feedback de comunidad |
+| **Extensiones existentes rompen con Component Library** | Alta | Alto | Migración gradual, deprecation warnings, guías de migración |
+| **Mantenimiento de Component Library complejo** | Media | Medio | Versionado semántico, changelog detallado, tests exhaustivos |
+
+---
+
+## Análisis de Impacto de Nuevos Hitos
+
+### Impacto en Base de Datos
+
+| Issue | Tabla Afectada | Tipo de Cambio |
+|-------|---------------|----------------|
+| FC-301 | `message_enrichments` | INSERT (ya existe) |
+| FC-307 | IndexedDB `enrichments` | Nueva tabla (Dexie v2) |
+
+**No requiere migraciones PostgreSQL** - la tabla `message_enrichments` ya existe.
+
+### Impacto en APIs
+
+| Issue | Endpoint | Tipo |
+|-------|----------|------|
+| FC-302 | WebSocket `enrichment:batch` | Evento nuevo |
+| FC-303 | `GET /admin/extensions/health` | Endpoint nuevo |
+| FC-304 | `GET /admin/extensions/stats` | Endpoint nuevo |
+
+**Todos son adiciones**, no modificaciones de APIs existentes.
+
+### Impacto en Frontend
+
+| Issue | Componente/Store | Tipo |
+|-------|------------------|------|
+| FC-306 | `enrichmentsStore.ts` | Store nuevo |
+| FC-308 | WebSocket handler | Handler nuevo |
+| FC-309 | `EnrichmentBadge.tsx` | Componente nuevo |
+
+**Sin breaking changes** en componentes existentes
+
+### Impacto del Hito 13 (Component Library)
+
+#### Base de Datos
+**Ninguno** - Todos los cambios son de UI/Frontend
+
+#### APIs
+**Ninguno** - No se modifican endpoints
+
+#### Stores
+| Store | Cambio | Tipo |
+|-------|--------|------|
+| `panelStore.ts` | Agregar `findTabByContext()` | Método nuevo |
+| `uiStore.ts` | Modificar lógica de pin en `setActiveActivity()` | Modificación |
+
+#### Componentes
+| Componente | Tipo de Cambio | Breaking |
+|------------|----------------|----------|
+| ExtensionsPanel | Refactor colores | No |
+| ExtensionCard | Refactor colores | No |
+| ExtensionConfigPanel | Refactor colores | No |
+| ViewPort | Lógica de tabs | No |
+| Sidebar | Eliminar botón X | Sí (menor) |
+| ActivityBar | Lógica de pin | No |
+| ConversationsList | Usar SidebarLayout | Sí (refactor) |
+| ContactsList | Usar SidebarLayout | Sí (refactor) |
+| SettingsPanel | Usar SidebarLayout | Sí (refactor) |
+| DynamicContainer | Usar componentes predefinidos | Sí (refactor) |
+
+#### Nuevos Componentes
+- `apps/web/src/components/ui/Button.tsx`
+- `apps/web/src/components/ui/Input.tsx`
+- `apps/web/src/components/ui/Card.tsx`
+- `apps/web/src/components/ui/Badge.tsx`
+- `apps/web/src/components/ui/Table.tsx`
+- `apps/web/src/components/ui/Select.tsx`
+- `apps/web/src/components/ui/Checkbox.tsx`
+- `apps/web/src/components/ui/Avatar.tsx`
+- `apps/web/src/components/layout/SidebarLayout.tsx`
+- `apps/web/src/components/layout/SidebarHeader.tsx`
+- `apps/web/src/components/layout/SidebarSearch.tsx`
+- `apps/web/src/components/layout/SidebarActions.tsx`
+
+#### Documentación
+- `docs/COMPONENT_LIBRARY.md` - Guía de componentes
+- `docs/EXTENSION_DESIGN_GUIDE.md` - Guía de diseño para extensiones
 
 ---
 

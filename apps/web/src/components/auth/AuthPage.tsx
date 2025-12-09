@@ -2,8 +2,9 @@
  * AuthPage - Página de autenticación (Login/Register)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeStore } from '../../store/themeStore';
 import { Mail, Lock, User, Loader2, Eye, EyeOff } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -18,6 +19,12 @@ export function AuthPage() {
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
 
   const { login, register, isLoading, error, clearError } = useAuthStore();
+  const { resolvedTheme } = useThemeStore();
+
+  // Aplicar tema al documento
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+  }, [resolvedTheme]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,22 +41,22 @@ export function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-theme-primary flex items-center justify-center p-4 transition-theme">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-accent-primary rounded-2xl mb-4 shadow-lg">
             <span className="text-white font-bold text-3xl">F</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">FluxCore</h1>
-          <p className="text-gray-400 mt-2">
+          <h1 className="text-3xl font-bold text-theme-primary">FluxCore</h1>
+          <p className="text-theme-secondary mt-2">
             Sistema de Mensajería Universal
           </p>
         </div>
 
         {/* Form */}
-        <div className="bg-gray-800 rounded-2xl p-8 shadow-xl">
-          <h2 className="text-xl font-semibold text-white mb-6 text-center">
+        <div className="bg-theme-tertiary rounded-2xl p-8 shadow-xl border border-theme-primary">
+          <h2 className="text-xl font-semibold text-theme-primary mb-6 text-center">
             {mode === 'login' ? 'Iniciar Sesión' : 
              mode === 'register' ? 'Crear Cuenta' : 
              'Recuperar Contraseña'}
@@ -57,13 +64,13 @@ export function AuthPage() {
 
           {/* Mensaje de éxito para recuperar contraseña */}
           {forgotPasswordSent && mode === 'forgot-password' && (
-            <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg mb-6 text-sm">
+            <div className="bg-color-success-muted border border-[var(--color-success)] text-[var(--color-success)] px-4 py-3 rounded-lg mb-6 text-sm">
               Si el correo existe, recibirás un enlace para restablecer tu contraseña.
             </div>
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm">
+            <div className="bg-color-error-muted border border-[var(--color-error)] text-[var(--color-error)] px-4 py-3 rounded-lg mb-6 text-sm">
               {error}
             </div>
           )}
@@ -71,19 +78,19 @@ export function AuthPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-theme-secondary mb-2">
                   Nombre
                 </label>
                 <div className="relative">
                   <User
                     size={18}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted"
                   />
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-gray-700 text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-theme-elevated text-theme-primary pl-10 pr-4 py-3 rounded-lg border border-theme-primary focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
                     placeholder="Tu nombre"
                     required
                   />
@@ -92,19 +99,19 @@ export function AuthPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-theme-secondary mb-2">
                 Correo electrónico
               </label>
               <div className="relative">
                 <Mail
                   size={18}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted"
                 />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-700 text-white pl-10 pr-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-theme-elevated text-theme-primary pl-10 pr-4 py-3 rounded-lg border border-theme-primary focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
                   placeholder="correo@ejemplo.com"
                   required
                 />
@@ -113,19 +120,19 @@ export function AuthPage() {
 
             {mode !== 'forgot-password' && (
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-theme-secondary mb-2">
                   Contraseña
                 </label>
                 <div className="relative">
                   <Lock
                     size={18}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted"
                   />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-gray-700 text-white pl-10 pr-12 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-theme-elevated text-theme-primary pl-10 pr-12 py-3 rounded-lg border border-theme-primary focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-transparent"
                     placeholder="••••••••"
                     required
                     minLength={6}
@@ -133,7 +140,7 @@ export function AuthPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
@@ -145,10 +152,10 @@ export function AuthPage() {
               type="submit"
               disabled={isLoading}
               className={clsx(
-                'w-full py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2',
+                'w-full py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-inverse',
                 isLoading
-                  ? 'bg-blue-600/50 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  ? 'bg-accent/50 cursor-not-allowed'
+                  : 'bg-accent hover:bg-accent/80'
               )}
             >
               {isLoading ? (
@@ -171,13 +178,13 @@ export function AuthPage() {
               <>
                 <button
                   onClick={() => { setMode('forgot-password'); clearError(); setForgotPasswordSent(false); }}
-                  className="text-gray-400 hover:text-gray-300 text-sm block w-full"
+                  className="text-theme-muted hover:text-theme-secondary text-sm block w-full"
                 >
                   ¿Olvidaste tu contraseña?
                 </button>
                 <button
                   onClick={() => { setMode('register'); clearError(); }}
-                  className="text-blue-400 hover:text-blue-300 text-sm"
+                  className="text-[var(--accent-primary)] hover:text-accent-hover text-sm"
                 >
                   ¿No tienes cuenta? Regístrate
                 </button>
@@ -186,7 +193,7 @@ export function AuthPage() {
             {mode === 'register' && (
               <button
                 onClick={() => { setMode('login'); clearError(); }}
-                className="text-blue-400 hover:text-blue-300 text-sm"
+                className="text-[var(--accent-primary)] hover:text-accent-hover text-sm"
               >
                 ¿Ya tienes cuenta? Inicia sesión
               </button>
@@ -194,7 +201,7 @@ export function AuthPage() {
             {mode === 'forgot-password' && (
               <button
                 onClick={() => { setMode('login'); clearError(); setForgotPasswordSent(false); }}
-                className="text-blue-400 hover:text-blue-300 text-sm"
+                className="text-[var(--accent-primary)] hover:text-accent-hover text-sm"
               >
                 Volver a iniciar sesión
               </button>
@@ -203,7 +210,7 @@ export function AuthPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-gray-500 text-sm">
+        <div className="text-center mt-8 text-theme-muted text-sm">
           <p>FluxCore v0.2.0</p>
         </div>
       </div>

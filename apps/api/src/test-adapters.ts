@@ -55,7 +55,7 @@ async function runTests() {
   // Check if API is running
   try {
     const health = await request('/health');
-    if (health.status !== 'ok') throw new Error('API not healthy');
+    if (health.status !== 'healthy') throw new Error('API not healthy');
     console.log('✅ API is running\n');
   } catch (e) {
     console.log('❌ API is not running. Please start the server first.');

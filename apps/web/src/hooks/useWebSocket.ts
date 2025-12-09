@@ -6,6 +6,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AISuggestion } from '../components/extensions';
+import type { EnrichmentBatch } from '../types/enrichments';
+import { useEnrichmentStore } from '../store/enrichmentStore';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
 
@@ -93,6 +95,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               
             case 'suggestion:disabled':
               onSuggestionDisabled?.(message.reason || 'Automation disabled');
+              break;
+            
+            // FC-308: Handler para enrichment batch
+            case 'enrichment:batch':
+              if (message.data) {
+                const batch = message.data as EnrichmentBatch;
+                useEnrichmentStore.getState().processBatch(batch);
+              }
               break;
               
             default:

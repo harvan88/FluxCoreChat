@@ -138,20 +138,20 @@ export function ExtensionConfigPanel({
               type="checkbox"
               checked={value}
               onChange={(e) => handleChange(key, e.target.checked)}
-              className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+              className="w-5 h-5 rounded bg-elevated border-subtle text-accent focus:ring-accent"
             />
-            <span className="text-white">{field.label}</span>
+            <span className="text-primary">{field.label}</span>
           </label>
         );
 
       case 'select':
         return (
           <div>
-            <label className="block text-sm text-gray-300 mb-1">{field.label}</label>
+            <label className="block text-sm text-secondary mb-1">{field.label}</label>
             <select
               value={value}
               onChange={(e) => handleChange(key, e.target.value)}
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-blue-500 focus:outline-none"
+              className="w-full bg-elevated text-primary rounded-lg px-3 py-2 border border-subtle focus:border-accent focus:outline-none"
             >
               {field.options?.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -165,7 +165,7 @@ export function ExtensionConfigPanel({
       case 'number':
         return (
           <div>
-            <label className="block text-sm text-gray-300 mb-1">{field.label}</label>
+            <label className="block text-sm text-secondary mb-1">{field.label}</label>
             <input
               type="number"
               value={value}
@@ -173,7 +173,7 @@ export function ExtensionConfigPanel({
               min={field.min}
               max={field.max}
               step={field.max && field.max <= 2 ? 0.1 : 1}
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-blue-500 focus:outline-none"
+              className="w-full bg-elevated text-primary rounded-lg px-3 py-2 border border-subtle focus:border-accent focus:outline-none"
             />
           </div>
         );
@@ -182,12 +182,12 @@ export function ExtensionConfigPanel({
       default:
         return (
           <div>
-            <label className="block text-sm text-gray-300 mb-1">{field.label}</label>
+            <label className="block text-sm text-secondary mb-1">{field.label}</label>
             <input
               type="text"
               value={value || ''}
               onChange={(e) => handleChange(key, e.target.value)}
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-blue-500 focus:outline-none"
+              className="w-full bg-elevated text-primary rounded-lg px-3 py-2 border border-subtle focus:border-accent focus:outline-none"
             />
           </div>
         );
@@ -195,16 +195,16 @@ export function ExtensionConfigPanel({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-surface">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+      <div className="p-4 border-b border-subtle flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Settings className="text-blue-400" size={20} />
-          <h2 className="text-lg font-semibold text-white">{extensionName}</h2>
+          <Settings className="text-accent" size={20} />
+          <h2 className="text-lg font-semibold text-primary">{extensionName}</h2>
         </div>
         <button
           onClick={onClose}
-          className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+          className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors"
         >
           <X size={20} />
         </button>
@@ -216,7 +216,7 @@ export function ExtensionConfigPanel({
           <div key={key}>
             {renderField(key, field)}
             {field.description && (
-              <p className="text-xs text-gray-500 mt-1 flex items-start gap-1">
+              <p className="text-xs text-muted mt-1 flex items-start gap-1">
                 <Info size={12} className="mt-0.5 flex-shrink-0" />
                 {field.description}
               </p>
@@ -225,7 +225,7 @@ export function ExtensionConfigPanel({
         ))}
 
         {Object.keys(activeSchema).length === 0 && (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-muted">
             <Settings size={48} className="mx-auto mb-3 opacity-50" />
             <p>Esta extensión no tiene opciones configurables.</p>
           </div>
@@ -233,10 +233,10 @@ export function ExtensionConfigPanel({
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-700 flex items-center justify-between">
+      <div className="p-4 border-t border-subtle flex items-center justify-between">
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-3 py-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors"
         >
           <RotateCcw size={16} />
           Restablecer
@@ -247,8 +247,8 @@ export function ExtensionConfigPanel({
           className={clsx(
             'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors',
             hasChanges && !isSaving
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+              ? 'bg-accent text-inverse hover:bg-accent/80'
+              : 'bg-elevated text-muted cursor-not-allowed'
           )}
         >
           <Save size={16} />

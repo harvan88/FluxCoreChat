@@ -8,7 +8,7 @@
 export interface WhatsAppConfig {
   phoneNumberId: string;       // ID del número de teléfono de WhatsApp Business
   accessToken: string;         // Token de acceso de Meta
-  apiVersion?: string;         // Versión de la API (default: v18.0)
+  apiVersion?: string;         // Versión de la API (default: v22.0)
   webhookVerifyToken?: string; // Token para verificar webhook
 }
 
@@ -40,7 +40,7 @@ export class WhatsAppClient {
 
   constructor(config: WhatsAppConfig) {
     this.config = {
-      apiVersion: 'v18.0',
+      apiVersion: 'v22.0',
       webhookVerifyToken: '',
       ...config,
     };

@@ -62,12 +62,18 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
         return { success: false, message: 'Unauthorized' };
       }
 
-      const { messageService } = await import('../services/message.service');
-      const limit = parseInt(query.limit || '50');
-      const offset = parseInt(query.offset || '0');
+      try {
+        const { messageService } = await import('../services/message.service');
+        const limit = parseInt(query.limit || '50');
+        const offset = parseInt(query.offset || '0');
 
-      const messages = await messageService.getMessagesByConversationId(params.id, limit, offset);
-      return { success: true, data: messages };
+        const messages = await messageService.getMessagesByConversationId(params.id, limit, offset);
+        return { success: true, data: messages };
+      } catch (error: any) {
+        console.error('[API] Error loading messages:', error);
+        set.status = 500;
+        return { success: false, message: 'Error al cargar mensajes', error: error.message };
+      }
     },
     {
       isAuthenticated: true,
