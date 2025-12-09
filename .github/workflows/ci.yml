@@ -72,3 +72,59 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
           JWT_SECRET: test-secret-key-for-ci
           NODE_ENV: test
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fluxcore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install Playwright Browsers
+        run: cd apps/web && bunx playwright install --with-deps chromium
+
+      - name: Setup database
+        run: bun run db:migrate
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
+
+      - name: Run E2E tests
+        run: cd apps/web && bun run test:e2e --project=chromium
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fluxcore_test
+          PORT: 3000
+          JWT_SECRET: test-secret-key-for-ci
+          NODE_ENV: test
+          CI: true
+
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 30
