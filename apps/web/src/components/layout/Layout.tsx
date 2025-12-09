@@ -50,7 +50,7 @@ export function Layout() {
   // Layout Desktop
   if (!isMobile) {
     return (
-      <div className="h-screen flex bg-base text-primary overflow-hidden">
+      <div data-testid="main-layout" className="h-screen flex bg-base text-primary overflow-hidden">
         <ActivityBar />
         <Sidebar />
         <ViewPort />
@@ -60,7 +60,7 @@ export function Layout() {
 
   // Layout Mobile
   return (
-    <div className="h-screen flex flex-col bg-base text-primary overflow-hidden">
+    <div data-testid="main-layout" className="h-screen flex flex-col bg-base text-primary overflow-hidden">
       {/* Mobile Header */}
       <header className="h-14 flex items-center justify-between px-4 border-b border-subtle bg-surface flex-shrink-0">
         <button

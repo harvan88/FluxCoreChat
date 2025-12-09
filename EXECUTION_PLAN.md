@@ -458,6 +458,26 @@ interface SidebarLayoutProps {
 
 ---
 
+## Hito 14: Testing E2E & Production Hardening (Semana 23)
+
+**Objetivo:** Garantizar calidad de producción con tests automatizados end-to-end.
+
+**Duración estimada:** 1 semana
+
+### Tareas
+
+| ID | Tarea | Prioridad | Dependencia | Descripción |
+|----|-------|-----------|-------------|-------------|
+| **FC-500** | Configurar Playwright | Alta | - | Setup inicial para tests E2E |
+| **FC-501** | Test E2E: Autenticación | Alta | FC-500 | Login, Register, Logout |
+| **FC-502** | Test E2E: Chat | Alta | FC-501 | Enviar mensajes, ver conversaciones |
+| **FC-503** | Test E2E: Settings | Media | FC-501 | Cambio de tema, configuración |
+| **FC-504** | Test E2E: Extensions | Media | FC-501 | Listar, instalar, configurar |
+| **FC-505** | Integrar E2E en CI/CD | Alta | FC-501-504 | GitHub Actions con Playwright |
+| **FC-506** | Documentar deployment | Media | - | Guía completa de producción |
+
+---
+
 ## Cronograma de Ejecución
 
 ```
@@ -474,9 +494,10 @@ Semana 16:    Hito 9 - Workspaces
 Semana 17-18: Hito 10 - Producción
 Semana 19:    Hito 11 - Madurez Operativa Extensiones
 Semana 19.5:  Hito 12 - Frontend Enrichments
-Semana 20-22: Hito 13 - Component Library & UI Unification (NUEVO)
+Semana 20-22: Hito 13 - Component Library & UI Unification
+Semana 23:    Hito 14 - Testing E2E & Production Hardening (NUEVO)
 
-Total: ~23 semanas
+Total: ~24 semanas
 ```
 
 ---

@@ -33,6 +33,7 @@ El hito se considerará completado cuando se cumpla **AL MENOS**:
 Al finalizar un hito, la IA DEBE:
 1. ✅ Evaluar y decidir autónomamente el siguiente hito según:
 2. ✅ Commitear cambios con mensaje estructurado:
+3. ✅ He terminado el hito ¿debo consultar con cual seguir? No sería un error, inmedaitamente debo continuar con el siguiente hito. 
 3. ✅ Inmediatamente comenzar ejecución del siguiente hito usando HTP
 
 ---
