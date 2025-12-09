@@ -10,7 +10,7 @@ import { DynamicContainer } from '../panels';
 import { WelcomeView } from '../chat/WelcomeView';
 
 export function ViewPort() {
-  const { selectedConversationId, activeActivity } = useUIStore();
+  const { selectedConversationId, activeActivity, setSelectedConversation } = useUIStore();
   const containers = useContainers();
   const { layout, openTab, activateTab, focusContainer } = usePanelStore();
 
@@ -35,8 +35,11 @@ export function ViewPort() {
           closable: true,
         });
       }
+
+      // Evitar loops de render: limpiamos la selección una vez manejada
+      setSelectedConversation(null);
     }
-  }, [selectedConversationId, activeActivity, openTab, containers, activateTab, focusContainer]);
+  }, [selectedConversationId, activeActivity, openTab, containers, activateTab, focusContainer, setSelectedConversation]);
 
   // FC-402 & FC-403: Settings ahora se maneja desde Sidebar
   // El flujo correcto es: ActivityBar → Sidebar (SettingsPanel) → DynamicContainer

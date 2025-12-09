@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react';
 import { usePanelStore } from '../../store/panelStore';
+import { useUIStore } from '../../store/uiStore';
 import { TabBar } from './TabBar';
 import { ChatView } from '../chat/ChatView';
 import { WelcomeView } from '../chat/WelcomeView';
@@ -80,10 +81,15 @@ interface TabContentProps {
 }
 
 function TabContent({ tab }: TabContentProps) {
+  const { selectedAccountId } = useUIStore();
+  
   switch (tab.type) {
     case 'chat':
       return tab.context.chatId ? (
-        <ChatView conversationId={tab.context.chatId} />
+        <ChatView 
+          conversationId={tab.context.chatId} 
+          accountId={selectedAccountId || undefined}
+        />
       ) : (
         <WelcomeView />
       );

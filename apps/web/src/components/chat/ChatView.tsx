@@ -19,7 +19,7 @@ interface ChatViewProps {
   relationshipId?: string;
 }
 
-export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
+export function ChatView({ conversationId, accountId }: ChatViewProps) {
   const [message, setMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -59,6 +59,11 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
   const handleSend = async (text?: string) => {
     const textToSend = text || message;
     if (!textToSend.trim()) return;
+    
+    if (!accountId) {
+      console.error('[ChatView] Cannot send: no accountId');
+      return;
+    }
 
     try {
       await sendMsg(accountId, { text: textToSend });
@@ -145,6 +150,13 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
       {error && (
         <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
           {error}
+        </div>
+      )}
+      
+      {/* No account warning */}
+      {!accountId && !isLoading && (
+        <div className="mx-4 mt-3 p-3 bg-warning/10 border border-warning/30 rounded-lg text-warning text-sm">
+          ⚠️ No se ha seleccionado una cuenta. Por favor recarga la página o inicia sesión de nuevo.
         </div>
       )}
 
