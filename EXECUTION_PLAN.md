@@ -478,6 +478,24 @@ interface SidebarLayoutProps {
 
 ---
 
+## Hito 15: Performance Optimization (Semana 24)
+
+**Objetivo:** Optimizar rendimiento del frontend reduciendo tamaño de bundle y mejorando tiempo de carga.
+
+**Duración estimada:** 0.5 semanas
+
+### Tareas
+
+| ID | Tarea | Prioridad | Descripción |
+|----|-------|-----------|-------------|
+| **FC-600** | Code Splitting con React.lazy | Alta | Lazy loading de rutas y componentes pesados |
+| **FC-601** | Optimizar imports | Alta | Tree shaking de lucide-react y dependencias |
+| **FC-602** | Bundle Analysis | Media | Configurar visualizador de bundle |
+| **FC-603** | Image Optimization | Baja | Lazy loading de imágenes |
+| **FC-604** | Preload críticos | Media | Prefetch de chunks esenciales |
+
+---
+
 ## Cronograma de Ejecución
 
 ```
@@ -495,9 +513,10 @@ Semana 17-18: Hito 10 - Producción
 Semana 19:    Hito 11 - Madurez Operativa Extensiones
 Semana 19.5:  Hito 12 - Frontend Enrichments
 Semana 20-22: Hito 13 - Component Library & UI Unification
-Semana 23:    Hito 14 - Testing E2E & Production Hardening (NUEVO)
+Semana 23:    Hito 14 - Testing E2E & Production Hardening
+Semana 24:    Hito 15 - Performance Optimization (NUEVO)
 
-Total: ~24 semanas
+Total: ~25 semanas
 ```
 
 ---
