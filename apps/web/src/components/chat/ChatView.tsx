@@ -9,8 +9,9 @@ import clsx from 'clsx';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
 import { MessageBubble } from './MessageBubble';
-import { useChat } from '../../hooks/useChat';
+import { useOfflineMessages } from '../../hooks/useOfflineFirst';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { db } from '../../db';
 
 interface ChatViewProps {
   conversationId: string;
@@ -23,17 +24,8 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // V2-1: useChat para cargar/enviar mensajes
-  const {
-    messages,
-    isLoading,
-    error,
-    sendMessage,
-    addReceivedMessage,
-    updateMessageStatus,
-    deleteMessage,
-    retryMessage,
-  } = useChat({ conversationId, accountId });
+  // V2-1: useOfflineMessages para persistencia local + sync
+  const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
   
   // COR-043/COR-044: AI Suggestions
   const { 
@@ -46,11 +38,10 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
   // V2-1.3: WebSocket para tiempo real
   useWebSocket({
     onMessage: (msg) => {
+      // syncManager maneja mensajes entrantes automáticamente
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
-        addReceivedMessage(msg.data as Message);
-      }
-      if (msg.type === 'message:status') {
-        updateMessageStatus(msg.messageId, msg.status);
+        // Trigger refresh
+        window.location.reload(); // TODO: implementar refresh sin reload
       }
     },
     onSuggestion: (suggestion) => {
@@ -65,18 +56,17 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async (text?: string, isAI = false) => {
+  const handleSend = async (text?: string) => {
     const textToSend = text || message;
     if (!textToSend.trim()) return;
 
-    await sendMessage({
-      content: { text: textToSend },
-      generatedBy: isAI ? 'ai' : 'human',
-      replyToId: replyingTo?.id,
-    });
-
-    setMessage('');
-    setReplyingTo(null);
+    try {
+      await sendMsg(accountId, { text: textToSend });
+      setMessage('');
+      setReplyingTo(null);
+    } catch (err) {
+      console.error('[ChatView] Send error:', err);
+    }
   };
 
   // COR-044: Handlers para sugerencias de IA
@@ -104,10 +94,14 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  // Obtener mensaje de reply
-  const getReplyMessage = (replyToId?: string) => {
-    if (!replyToId) return undefined;
-    return messages.find(m => m.id === replyToId);
+  // Delete message
+  const handleDelete = async (messageId: string) => {
+    try {
+      await db.messages.delete(messageId);
+      refresh();
+    } catch (err) {
+      console.error('[ChatView] Delete error:', err);
+    }
   };
 
   return (
@@ -156,22 +150,42 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => (
-          <div key={msg.id} id={`msg-${msg.id}`}>
-            <MessageBubble
-              message={msg}
-              isOwn={msg.senderAccountId === accountId || msg.type === 'outgoing'}
-              replyToMessage={getReplyMessage(msg.replyToId)}
-              onReply={() => setReplyingTo(msg)}
-              onEdit={msg.senderAccountId === accountId ? () => {
-                setMessage(msg.content.text || '');
-              } : undefined}
-              onDelete={msg.senderAccountId === accountId ? () => deleteMessage(msg.id) : undefined}
-              onRetry={msg.status === 'failed' ? () => retryMessage(msg.id) : undefined}
-              onScrollToMessage={scrollToMessage}
-            />
+        {!isLoading && messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="text-6xl mb-4">💬</div>
+            <h3 className="text-lg font-medium text-primary mb-2">No hay mensajes aún</h3>
+            <p className="text-sm text-secondary">Envía el primer mensaje para iniciar la conversación</p>
           </div>
-        ))}
+        ) : (
+          messages.map((msg) => {
+            // Convert LocalMessage to Message for MessageBubble
+            const messageForBubble: Message = {
+              id: msg.id,
+              conversationId: msg.conversationId,
+              senderAccountId: msg.senderAccountId,
+              content: msg.content,
+              type: msg.type,
+              generatedBy: msg.generatedBy || 'human',
+              status: msg.syncState === 'synced' ? 'synced' : 'pending_backend',
+              createdAt: msg.localCreatedAt.toISOString(),
+            };
+            
+            return (
+              <div key={msg.id} id={`msg-${msg.id}`}>
+                <MessageBubble
+                  message={messageForBubble}
+                  isOwn={msg.senderAccountId === accountId || msg.type === 'outgoing'}
+                  onReply={() => setReplyingTo(messageForBubble)}
+                  onEdit={msg.senderAccountId === accountId ? () => {
+                    setMessage(msg.content.text || '');
+                  } : undefined}
+                  onDelete={msg.senderAccountId === accountId ? () => handleDelete(msg.id) : undefined}
+                  onScrollToMessage={scrollToMessage}
+                />
+              </div>
+            );
+          })
+        )}
         <div ref={messagesEndRef} />
       </div>
 
