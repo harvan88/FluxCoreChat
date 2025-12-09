@@ -3,11 +3,15 @@ import { useAuthStore } from './store/authStore';
 import { useThemeStore } from './store/themeStore';
 import { Layout } from './components/layout/Layout';
 import { AuthPage } from './components/auth/AuthPage';
+import { SystemMonitor } from './components/monitor';
 
 function App() {
   const { isAuthenticated, initFromStorage } = useAuthStore();
   const { resolvedTheme } = useThemeStore();
   const [isInitializing, setIsInitializing] = useState(true);
+  
+  // Check if we're on /monitor route
+  const isMonitorRoute = window.location.pathname === '/monitor';
 
   useEffect(() => {
     initFromStorage();
@@ -33,6 +37,11 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Monitor route is always accessible (for debugging)
+  if (isMonitorRoute) {
+    return <SystemMonitor />;
   }
 
   if (!isAuthenticated) {

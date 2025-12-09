@@ -42,28 +42,34 @@ http://localhost:5173
 bun run packages/db/src/audit-database.ts
 
 # Drizzle Studio (GUI)
-cd packages/db && bun run db:studio
+cd packages/db 
+bun run db:studio
 
 # Generar migración
-cd packages/db && bun run db:generate
+cd packages/db
+bun run db:generate
 ```
 
 ### Testing
 ```powershell
 # Tests unitarios
-cd apps/web && bun run test
+cd apps/web
+bun run test
 
 # Tests E2E
-cd apps/web && bun run test:e2e
+cd apps/web
+bun run test:e2e
 ```
 
 ### Build
 ```powershell
 # Build producción
-cd apps/web && bun run build
+cd apps/web
+bun run build
 
 # Build API
-cd apps/api && bun run build
+cd apps/api
+bun run build
 ```
 
 ---
@@ -91,9 +97,28 @@ taskkill /PID <PID> /F
 | Servicio | URL |
 |----------|-----|
 | Web App | http://localhost:5173 |
+| **System Monitor** | **http://localhost:5173/monitor** |
 | API | http://localhost:3000 |
 | Swagger | http://localhost:3000/swagger |
 | Health | http://localhost:3000/health |
+| Diagnostic | http://localhost:3000/health/diagnostic |
+
+---
+
+## 🔍 System Monitor
+
+Dashboard de monitoreo en tiempo real que muestra:
+- **PostgreSQL**: Conteo de todas las tablas, estado de conexión
+- **IndexedDB**: Estado del storage local, cola de sincronización
+- **Endpoints**: Estado de los endpoints principales
+- **Sync Comparison**: Comparación PostgreSQL vs IndexedDB
+
+### Acceso
+```
+http://localhost:5173/monitor
+```
+
+No requiere autenticación. Auto-refresh cada 5 segundos.
 
 ---
 

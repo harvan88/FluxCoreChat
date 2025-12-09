@@ -99,4 +99,81 @@ export const healthRoutes = new Elysia({ prefix: '/health' })
       platform: process.platform,
       arch: process.arch,
     };
+  })
+
+  // Diagnostic endpoint - Full database state
+  .get('/diagnostic', async () => {
+    const start = Date.now();
+    const errors: string[] = [];
+    
+    // Import all tables dynamically
+    const { 
+      accounts, 
+      actors, 
+      conversations, 
+      messages, 
+      relationships,
+      workspaces,
+      workspaceMembers,
+      workspaceInvitations,
+      extensionInstallations,
+      automationRules,
+    } = await import('@fluxcore/db');
+    
+    // Count all tables
+    const counts: Record<string, number> = {};
+    
+    try {
+      counts.users = (await db.select().from(users)).length;
+    } catch (e) { errors.push(`users: ${(e as Error).message}`); counts.users = -1; }
+    
+    try {
+      counts.accounts = (await db.select().from(accounts)).length;
+    } catch (e) { errors.push(`accounts: ${(e as Error).message}`); counts.accounts = -1; }
+    
+    try {
+      counts.actors = (await db.select().from(actors)).length;
+    } catch (e) { errors.push(`actors: ${(e as Error).message}`); counts.actors = -1; }
+    
+    try {
+      counts.relationships = (await db.select().from(relationships)).length;
+    } catch (e) { errors.push(`relationships: ${(e as Error).message}`); counts.relationships = -1; }
+    
+    try {
+      counts.conversations = (await db.select().from(conversations)).length;
+    } catch (e) { errors.push(`conversations: ${(e as Error).message}`); counts.conversations = -1; }
+    
+    try {
+      counts.messages = (await db.select().from(messages)).length;
+    } catch (e) { errors.push(`messages: ${(e as Error).message}`); counts.messages = -1; }
+    
+    try {
+      counts.workspaces = (await db.select().from(workspaces)).length;
+    } catch (e) { errors.push(`workspaces: ${(e as Error).message}`); counts.workspaces = -1; }
+    
+    try {
+      counts.workspaceMembers = (await db.select().from(workspaceMembers)).length;
+    } catch (e) { errors.push(`workspaceMembers: ${(e as Error).message}`); counts.workspaceMembers = -1; }
+    
+    try {
+      counts.workspaceInvitations = (await db.select().from(workspaceInvitations)).length;
+    } catch (e) { errors.push(`workspaceInvitations: ${(e as Error).message}`); counts.workspaceInvitations = -1; }
+    
+    try {
+      counts.extensionInstallations = (await db.select().from(extensionInstallations)).length;
+    } catch (e) { errors.push(`extensionInstallations: ${(e as Error).message}`); counts.extensionInstallations = -1; }
+    
+    try {
+      counts.automationRules = (await db.select().from(automationRules)).length;
+    } catch (e) { errors.push(`automationRules: ${(e as Error).message}`); counts.automationRules = -1; }
+    
+    return {
+      timestamp: new Date().toISOString(),
+      responseTimeMs: Date.now() - start,
+      database: 'postgresql',
+      status: errors.length === 0 ? 'healthy' : 'degraded',
+      tables: counts,
+      errors: errors.length > 0 ? errors : undefined,
+      totalRecords: Object.values(counts).filter(v => v >= 0).reduce((a, b) => a + b, 0),
+    };
   });
