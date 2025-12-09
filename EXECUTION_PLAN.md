@@ -496,6 +496,24 @@ interface SidebarLayoutProps {
 
 ---
 
+## Hito 16: PWA Support (Semana 25)
+
+**Objetivo:** Convertir FluxCore en Progressive Web App instalable.
+
+**Duración estimada:** 0.5 semanas
+
+### Tareas
+
+| ID | Tarea | Prioridad | Descripción |
+|----|-------|-----------|-------------|
+| **FC-700** | Configurar vite-plugin-pwa | Alta | Service worker y manifest |
+| **FC-701** | Crear manifest.json | Alta | Iconos, colores, nombre |
+| **FC-702** | Configurar caching strategy | Alta | Cache-first para assets |
+| **FC-703** | Crear offline fallback | Media | Página offline básica |
+| **FC-704** | Agregar install prompt | Baja | UI para instalar app |
+
+---
+
 ## Cronograma de Ejecución
 
 ```
@@ -514,9 +532,10 @@ Semana 19:    Hito 11 - Madurez Operativa Extensiones
 Semana 19.5:  Hito 12 - Frontend Enrichments
 Semana 20-22: Hito 13 - Component Library & UI Unification
 Semana 23:    Hito 14 - Testing E2E & Production Hardening
-Semana 24:    Hito 15 - Performance Optimization (NUEVO)
+Semana 24:    Hito 15 - Performance Optimization
+Semana 25:    Hito 16 - PWA Support (NUEVO)
 
-Total: ~25 semanas
+Total: ~26 semanas
 ```
 
 ---
