@@ -69,6 +69,7 @@ async function seedFluxi() {
     userId: fluxi.id,
     accountId: account.id,
     role: 'owner',
+    actorType: 'user',
   });
 
   console.log('✅ Fluxi seed completado');
