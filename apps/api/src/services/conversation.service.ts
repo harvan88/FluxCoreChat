@@ -96,6 +96,7 @@ export class ConversationService {
 
   /**
    * Get all conversations for a user (via their accounts and relationships)
+   * Returns conversations enriched with contact name
    */
   async getConversationsByUserId(userId: string) {
     // 1. Get all accounts owned by this user
@@ -133,7 +134,32 @@ export class ConversationService {
       .from(conversations)
       .where(inArray(conversations.relationshipId, relationshipIds));
 
-    return userConversations;
+    // 4. Enrich with contact name
+    const enrichedConversations = await Promise.all(
+      userConversations.map(async (conv) => {
+        const rel = userRelationships.find(r => r.id === conv.relationshipId);
+        if (!rel) return { ...conv, contactName: 'Desconocido' };
+        
+        // Find the OTHER account (not the user's)
+        const otherAccountId = accountIds.includes(rel.accountAId) 
+          ? rel.accountBId 
+          : rel.accountAId;
+        
+        const [otherAccount] = await db
+          .select()
+          .from(accounts)
+          .where(eq(accounts.id, otherAccountId))
+          .limit(1);
+        
+        return {
+          ...conv,
+          contactName: otherAccount?.displayName || 'Desconocido',
+          contactAccountId: otherAccountId,
+        };
+      })
+    );
+
+    return enrichedConversations;
   }
 }
 

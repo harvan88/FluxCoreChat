@@ -11,6 +11,7 @@ import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extens
 import { MessageBubble } from './MessageBubble';
 import { useOfflineMessages } from '../../hooks/useOfflineFirst';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useUIStore } from '../../store/uiStore';
 import { db } from '../../db';
 
 interface ChatViewProps {
@@ -23,6 +24,11 @@ export function ChatView({ conversationId, accountId }: ChatViewProps) {
   const [message, setMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Obtener nombre del contacto desde las conversaciones cargadas
+  const conversations = useUIStore((state) => state.conversations);
+  const currentConversation = conversations.find(c => c.id === conversationId);
+  const contactName = (currentConversation as any)?.contactName || `Chat ${conversationId?.slice(0, 8)}`;
   
   // V2-1: useOfflineMessages para persistencia local + sync
   const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
@@ -116,12 +122,12 @@ export function ChatView({ conversationId, accountId }: ChatViewProps) {
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
             <span className="text-inverse font-semibold text-sm">
-              {conversationId?.charAt(0).toUpperCase() || '?'}
+              {contactName.charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
             <div className="text-primary font-medium">
-              Conversación {conversationId?.slice(0, 8) || 'Nueva'}
+              {contactName}
             </div>
             <div className="text-xs text-muted">En línea</div>
           </div>

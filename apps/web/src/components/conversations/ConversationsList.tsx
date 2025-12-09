@@ -146,7 +146,7 @@ export function ConversationsList() {
               <div className="relative">
                 <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
                   <span className="text-inverse font-semibold text-sm">
-                    {conversation.relationshipId?.charAt(0).toUpperCase() || '?'}
+                    {(conversation as any).contactName?.charAt(0).toUpperCase() || '?'}
                   </span>
                 </div>
                 <div
@@ -161,7 +161,7 @@ export function ConversationsList() {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center">
                   <span className="text-primary font-medium truncate">
-                    Conversación {conversation.id.slice(0, 8)}
+                    {(conversation as any).contactName || `Chat ${conversation.id.slice(0, 8)}`}
                   </span>
                   <span className="text-xs text-muted">
                     {formatTime(conversation.lastMessageAt)}
