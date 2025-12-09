@@ -95,9 +95,9 @@
 |------|--------|-------|
 | R1 | ✅ Completado | Endpoints verificados, content doblemente serializado encontrado |
 | R2 | ✅ Completado | Content corregido con UPDATE SQL, relationships enriquecidas |
-| R3 | ⏳ Pendiente | Verificar que mensajes se cargan en frontend |
+| R3 | ✅ Completado | syncManager.fetchMessages corregido para extraer .data |
 | R4 | ✅ Parcial | contactName implementado, falta handler de click completo |
-| R5 | ⏳ Pendiente | |
+| R5 | ✅ Completado | WebSocket errores silenciados durante reconexión |
 | R6 | ⏳ Pendiente | |
 | R7 | ⏳ Pendiente | |
 
@@ -117,4 +117,13 @@
 3. **ContactsList sin nombre** (R4)
    - Usar `contactName` del backend
    - Añadir handler de click (log por ahora)
+
+4. **syncManager.fetchMessages no extraía .data** (R3)
+   - El endpoint devuelve `{ success: true, data: [...] }`
+   - syncManager ahora extrae `.data` correctamente
+   - Añadidos logs de debug
+
+5. **WebSocket errores molestos** (R5)
+   - Silenciados errores durante reconexión
+   - Solo loguea si no está en proceso de retry
 

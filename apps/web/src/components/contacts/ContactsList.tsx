@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, UserPlus, Loader2, Users, X, Plus, Check } from 'lucide-react';
 import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
+import { usePanelStore } from '../../store/panelStore';
 import type { Relationship, Account } from '../../types';
 
 export function ContactsList() {
@@ -16,7 +17,8 @@ export function ContactsList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const { selectedAccountId } = useUIStore();
+  const { selectedAccountId, conversations, setActiveActivity } = useUIStore();
+  const { openTab } = usePanelStore();
 
   // Cargar contactos desde API real
   const loadContacts = useCallback(async (force = false) => {
@@ -125,8 +127,24 @@ export function ContactsList() {
               <button
                 key={contact.id}
                 onClick={() => {
-                  // TODO: Abrir perfil del contacto o iniciar conversación
-                  console.log('[ContactsList] Click on contact:', contact.id, displayName);
+                  // Buscar conversación existente con este contacto
+                  const existingConv = conversations.find(
+                    (c: any) => c.relationshipId === contact.id
+                  );
+                  
+                  if (existingConv) {
+                    // Abrir conversación existente
+                    setActiveActivity('conversations');
+                    openTab('chats', {
+                      type: 'chat',
+                      title: displayName,
+                      context: { chatId: existingConv.id },
+                      closable: true,
+                    });
+                  } else {
+                    // TODO: Crear nueva conversación si no existe
+                    console.log('[ContactsList] No conversation found for contact:', contact.id);
+                  }
                 }}
                 className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left"
               >
