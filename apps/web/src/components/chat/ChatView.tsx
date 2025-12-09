@@ -128,34 +128,34 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
   };
 
   return (
-    <div className="flex-1 bg-gray-900 flex flex-col">
+    <div className="flex-1 bg-base flex flex-col">
       {/* Header */}
-      <div className="h-16 bg-gray-800 border-b border-gray-700 px-4 flex items-center justify-between">
+      <div className="h-14 bg-surface border-b border-subtle px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center">
-            <span className="text-white font-semibold">JP</span>
+          <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center">
+            <span className="text-inverse font-semibold text-sm">JP</span>
           </div>
           <div>
-            <div className="text-white font-medium">Juan Pérez</div>
-            <div className="text-xs text-gray-400">En línea</div>
+            <div className="text-primary font-medium">Juan Pérez</div>
+            <div className="text-xs text-muted">En línea</div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {/* Demo: Simular sugerencia de IA */}
           <button 
             onClick={simulateAISuggestion}
-            className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 rounded-lg transition-colors"
+            className="p-2 text-accent hover:bg-accent-muted rounded-lg transition-colors"
             title="Simular sugerencia de IA (Demo)"
           >
             <Sparkles size={20} />
           </button>
-          <button className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors">
+          <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
             <Phone size={20} />
           </button>
-          <button className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors">
+          <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
             <Video size={20} />
           </button>
-          <button className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors">
+          <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
             <MoreVertical size={20} />
           </button>
         </div>
@@ -164,13 +164,13 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
       {/* Loading */}
       {isLoading && (
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="animate-spin text-gray-400" size={32} />
+          <Loader2 className="animate-spin text-muted" size={32} />
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="mx-4 mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
           {error}
         </div>
       )}
@@ -217,14 +217,14 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
 
       {/* Reply Preview */}
       {replyingTo && (
-        <div className="px-4 py-2 bg-gray-800 border-t border-gray-700 flex items-center gap-2">
+        <div className="px-4 py-2 bg-surface border-t border-subtle flex items-center gap-2">
           <div className="flex-1 text-sm">
-            <span className="text-gray-400">Respondiendo a: </span>
-            <span className="text-white truncate">{replyingTo.content.text}</span>
+            <span className="text-muted">Respondiendo a: </span>
+            <span className="text-primary truncate">{replyingTo.content.text}</span>
           </div>
           <button
             onClick={() => setReplyingTo(null)}
-            className="p-1 text-gray-400 hover:text-white"
+            className="p-1 text-muted hover:text-primary transition-colors"
           >
             ×
           </button>
@@ -232,22 +232,22 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
       )}
 
       {/* Input */}
-      <div className="p-4 bg-gray-800 border-t border-gray-700">
+      <div className="p-4 bg-surface border-t border-subtle">
         <div className="flex items-end gap-3">
-          <button className="p-2 text-gray-400 hover:text-white transition-colors">
+          <button className="p-2 text-muted hover:text-primary transition-colors">
             <Paperclip size={20} />
           </button>
-          <div className="flex-1 bg-gray-700 rounded-2xl px-4 py-2">
+          <div className="flex-1 bg-elevated rounded-xl px-4 py-2.5 border border-subtle focus-within:border-accent transition-colors">
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Escribe un mensaje..."
-              className="w-full bg-transparent text-white resize-none focus:outline-none text-sm max-h-32"
+              className="w-full bg-transparent text-primary placeholder:text-muted resize-none focus:outline-none text-sm max-h-32"
               rows={1}
             />
           </div>
-          <button className="p-2 text-gray-400 hover:text-white transition-colors">
+          <button className="p-2 text-muted hover:text-primary transition-colors">
             <Smile size={20} />
           </button>
           <button
@@ -256,8 +256,8 @@ export function ChatView({ conversationId, accountId = 'me' }: ChatViewProps) {
             className={clsx(
               'p-3 rounded-full transition-colors',
               message.trim()
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                ? 'bg-accent text-inverse hover:bg-accent-hover'
+                : 'bg-elevated text-muted cursor-not-allowed'
             )}
           >
             <Send size={20} />

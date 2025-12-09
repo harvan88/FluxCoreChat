@@ -19,12 +19,8 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1.1-alpine AS builder
 WORKDIR /app
 
-# Copy dependencies
+# Copy dependencies (Bun workspaces hoistea todo al root node_modules)
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
-COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
-COPY --from=deps /app/packages/adapters/node_modules ./packages/adapters/node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 
 # Copy source
 COPY . .

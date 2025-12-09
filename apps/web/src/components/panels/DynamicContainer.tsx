@@ -35,8 +35,8 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
     return (
       <div 
         className={`
-          flex flex-col bg-gray-900 border border-gray-700 rounded-t
-          ${isActive ? 'ring-2 ring-blue-500' : ''}
+          flex flex-col bg-surface border border-subtle rounded-t
+          ${isActive ? 'ring-1 ring-[var(--accent-primary)]' : ''}
         `}
         onClick={handleFocus}
       >
@@ -48,8 +48,8 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
   return (
     <div 
       className={`
-        flex flex-col h-full bg-gray-900 border border-gray-700 rounded overflow-hidden
-        ${isActive ? 'ring-2 ring-blue-500' : ''}
+        flex flex-col h-full bg-surface border border-subtle rounded overflow-hidden
+        ${isActive ? 'ring-1 ring-[var(--accent-primary)]' : ''}
       `}
       onClick={handleFocus}
     >
@@ -88,10 +88,10 @@ function TabContent({ tab }: TabContentProps) {
     case 'contact':
       return (
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-primary">
             Contacto: {tab.context.contactName || 'Sin nombre'}
           </h2>
-          <p className="text-gray-400 mt-2">
+          <p className="text-secondary mt-2">
             ID: {tab.context.contactId}
           </p>
           {/* TODO: Implementar vista detallada de contacto */}
@@ -104,7 +104,7 @@ function TabContent({ tab }: TabContentProps) {
     case 'extension':
       return (
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-lg font-semibold text-primary">
             Extensión: {tab.context.extensionName || 'Desconocida'}
           </h2>
           {/* TODO: Cargar UI de extensión */}
@@ -114,9 +114,9 @@ function TabContent({ tab }: TabContentProps) {
     case 'editor':
       return (
         <div className="p-4">
-          <h2 className="text-lg font-semibold text-white">Editor</h2>
+          <h2 className="text-lg font-semibold text-primary">Editor</h2>
           <textarea 
-            className="w-full h-64 mt-4 p-2 bg-gray-800 text-white rounded border border-gray-700"
+            className="w-full h-64 mt-4 p-2 bg-elevated text-primary rounded border border-subtle focus:border-accent transition-colors"
             placeholder="Contenido del editor..."
             defaultValue={tab.context.content || ''}
           />
@@ -125,7 +125,7 @@ function TabContent({ tab }: TabContentProps) {
 
     default:
       return (
-        <div className="flex items-center justify-center h-full text-gray-500">
+        <div className="flex items-center justify-center h-full text-muted">
           Tipo de tab no reconocido: {tab.type}
         </div>
       );
@@ -176,8 +176,8 @@ function EmptyContainer({ type }: EmptyContainerProps) {
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-4">
-      <p className="text-lg text-gray-400">{msg.title}</p>
-      <p className="text-sm text-gray-600 mt-2">{msg.subtitle}</p>
+      <p className="text-lg text-secondary">{msg.title}</p>
+      <p className="text-sm text-muted mt-2">{msg.subtitle}</p>
     </div>
   );
 }

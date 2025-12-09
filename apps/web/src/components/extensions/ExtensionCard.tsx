@@ -38,8 +38,8 @@ export function ExtensionCard({
 
   return (
     <div className={clsx(
-      'bg-gray-800 rounded-xl border overflow-hidden transition-all',
-      isEnabled ? 'border-green-500/30' : 'border-gray-700',
+      'bg-elevated rounded-xl border overflow-hidden transition-all',
+      isEnabled ? 'border-success/30' : 'border-subtle',
       isLoading && 'opacity-50 pointer-events-none'
     )}>
       {/* Header */}
@@ -47,7 +47,7 @@ export function ExtensionCard({
         {/* Icon */}
         <div className={clsx(
           'w-12 h-12 rounded-xl flex items-center justify-center text-2xl',
-          isEnabled ? 'bg-green-500/20' : 'bg-gray-700'
+          isEnabled ? 'bg-success/20' : 'bg-hover'
         )}>
           {extension.icon || '🧩'}
         </div>
@@ -55,21 +55,21 @@ export function ExtensionCard({
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-white font-medium truncate">{extension.name}</h3>
-            <span className="text-xs text-gray-500">v{extension.version}</span>
+            <h3 className="text-primary font-medium truncate">{extension.name}</h3>
+            <span className="text-xs text-muted">v{extension.version}</span>
           </div>
-          <p className="text-sm text-gray-400 mt-0.5 line-clamp-2">
+          <p className="text-sm text-secondary mt-0.5 line-clamp-2">
             {extension.description}
           </p>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs text-gray-500">por {extension.author}</span>
+            <span className="text-xs text-muted">por {extension.author}</span>
             {isEnabled && (
-              <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+              <span className="text-xs bg-success/20 text-success px-2 py-0.5 rounded-full">
                 Activa
               </span>
             )}
             {isInstalled && !isEnabled && (
-              <span className="text-xs bg-gray-600 text-gray-400 px-2 py-0.5 rounded-full">
+              <span className="text-xs bg-hover text-secondary px-2 py-0.5 rounded-full">
                 Desactivada
               </span>
             )}
@@ -83,8 +83,8 @@ export function ExtensionCard({
             className={clsx(
               'p-2 rounded-lg transition-colors',
               isEnabled 
-                ? 'text-green-400 hover:bg-green-500/20' 
-                : 'text-gray-400 hover:bg-gray-700'
+                ? 'text-success hover:bg-success/20' 
+                : 'text-secondary hover:bg-hover'
             )}
             title={isEnabled ? 'Desactivar' : 'Activar'}
           >
@@ -95,10 +95,10 @@ export function ExtensionCard({
 
       {/* Permissions */}
       <div className="px-4 pb-3">
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+        <div className="flex items-center gap-1.5 text-xs text-muted">
           <Shield size={12} />
           <span>Permisos:</span>
-          <span className="text-gray-400">
+          <span className="text-secondary">
             {extension.permissions.slice(0, 3).join(', ')}
             {extension.permissions.length > 3 && ` +${extension.permissions.length - 3}`}
           </span>
@@ -106,12 +106,12 @@ export function ExtensionCard({
       </div>
 
       {/* Actions */}
-      <div className="px-4 py-3 bg-gray-900/50 border-t border-gray-700 flex items-center justify-between">
+      <div className="px-4 py-3 bg-base/50 border-t border-subtle flex items-center justify-between">
         <div className="flex items-center gap-2">
           {!isInstalled && onInstall && (
             <button
               onClick={onInstall}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80 text-inverse text-sm rounded-lg transition-colors"
             >
               <Download size={14} />
               Instalar
@@ -121,7 +121,7 @@ export function ExtensionCard({
           {isInstalled && onUninstall && (
             <button
               onClick={onUninstall}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-sm rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-error/20 hover:bg-error/30 text-error text-sm rounded-lg transition-colors"
             >
               <Trash2 size={14} />
               Desinstalar
@@ -131,7 +131,7 @@ export function ExtensionCard({
           {isInstalled && onConfigure && (
             <button
               onClick={onConfigure}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-elevated hover:bg-hover text-primary text-sm rounded-lg transition-colors"
             >
               <Settings size={14} />
               Configurar
@@ -140,7 +140,7 @@ export function ExtensionCard({
         </div>
 
         <button
-          className="p-1.5 text-gray-400 hover:text-white transition-colors"
+          className="p-1.5 text-secondary hover:text-primary transition-colors"
           title="Ver detalles"
         >
           <ExternalLink size={14} />

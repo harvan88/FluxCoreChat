@@ -1,29 +1,232 @@
+/* Tipografía base - DEBE ir primero */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+/* ============================================================================
+   FLUXCORE DESIGN SYSTEM - Sistema de Diseño Canónico
+   Ver: docs/DESIGN_SYSTEM.md para reglas completas
+   ============================================================================ */
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ============================================================================
+   TEMA OSCURO (DEFAULT) - Minimalista, Moderno, Profesional
+   ============================================================================ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  
+  /* Fondos - Escala de grises neutros muy oscuros */
+  --bg-base: #0d0d0d;
+  --bg-surface: #141414;
+  --bg-elevated: #1a1a1a;
+  --bg-hover: #242424;
+  --bg-active: #2a2a2a;
+  
+  /* Bordes - Sutiles, bajo contraste */
+  --border-subtle: #1f1f1f;
+  --border-default: #2a2a2a;
+  --border-strong: #3a3a3a;
+  
+  /* Texto */
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #666666;
+  --text-inverse: #0d0d0d;
+  
+  /* Accent - Azul frío profesional */
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-muted: rgba(59, 130, 246, 0.12);
+  
+  /* Estados semánticos */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  
+  /* Overlays */
+  --overlay-light: rgba(255, 255, 255, 0.03);
+  --overlay-dark: rgba(0, 0, 0, 0.6);
 }
 
+/* ============================================================================
+   TEMA CLARO - Limpio, profesional
+   ============================================================================ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  
+  /* Fondos */
+  --bg-base: #ffffff;
+  --bg-surface: #fafafa;
+  --bg-elevated: #f5f5f5;
+  --bg-hover: #ebebeb;
+  --bg-active: #e0e0e0;
+  
+  /* Bordes */
+  --border-subtle: #f0f0f0;
+  --border-default: #e5e5e5;
+  --border-strong: #d4d4d4;
+  
+  /* Texto */
+  --text-primary: #171717;
+  --text-secondary: #525252;
+  --text-muted: #a3a3a3;
+  --text-inverse: #ffffff;
+  
+  /* Accent */
+  --accent-primary: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37, 99, 235, 0.08);
+  
+  /* Estados semánticos */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
+  
+  /* Overlays */
+  --overlay-light: rgba(0, 0, 0, 0.03);
+  --overlay-dark: rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================================================
+   BASE STYLES
+   ============================================================================ */
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   width: 100%;
   height: 100vh;
+}
+
+/* ============================================================================
+   UTILITY CLASSES - Sistema Canónico
+   Usar SOLO estas clases para colores, NO Tailwind colors directos
+   ============================================================================ */
+
+/* Fondos - Jerarquía visual */
+.bg-base { background-color: var(--bg-base); }
+.bg-surface { background-color: var(--bg-surface); }
+.bg-elevated { background-color: var(--bg-elevated); }
+.bg-hover { background-color: var(--bg-hover); }
+.bg-active { background-color: var(--bg-active); }
+
+/* Bordes */
+.border-subtle { border-color: var(--border-subtle); }
+.border-default { border-color: var(--border-default); }
+.border-strong { border-color: var(--border-strong); }
+
+/* Texto */
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+.text-inverse { color: var(--text-inverse); }
+
+/* Accent */
+.bg-accent { background-color: var(--accent-primary); }
+.bg-accent-hover { background-color: var(--accent-hover); }
+.bg-accent-muted { background-color: var(--accent-muted); }
+.text-accent { color: var(--accent-primary); }
+.border-accent { border-color: var(--accent-primary); }
+
+/* Estados semánticos */
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-error { color: var(--color-error); }
+.bg-success { background-color: var(--color-success); }
+.bg-warning { background-color: var(--color-warning); }
+.bg-error { background-color: var(--color-error); }
+
+/* ============================================================================
+   LEGACY COMPATIBILITY - Mapeo de clases antiguas a nuevas
+   TODO: Migrar componentes y eliminar estas clases
+   ============================================================================ */
+.bg-theme-primary { background-color: var(--bg-base); }
+.bg-theme-secondary { background-color: var(--bg-surface); }
+.bg-theme-tertiary { background-color: var(--bg-elevated); }
+.bg-theme-elevated { background-color: var(--bg-elevated); }
+.bg-theme-hover { background-color: var(--bg-hover); }
+.bg-theme-active { background-color: var(--bg-active); }
+
+.text-theme-primary { color: var(--text-primary); }
+.text-theme-secondary { color: var(--text-secondary); }
+.text-theme-muted { color: var(--text-muted); }
+
+.border-theme-primary { border-color: var(--border-default); }
+.border-theme-secondary { border-color: var(--border-strong); }
+
+.bg-accent-primary { background-color: var(--accent-primary); }
+
+/* ============================================================================
+   TRANSITIONS
+   ============================================================================ */
+.transition-colors {
+  transition: background-color 200ms ease,
+              color 200ms ease,
+              border-color 200ms ease;
+}
+
+.transition-all {
+  transition: all 200ms ease;
+}
+
+.transition-theme {
+  transition: background-color 200ms ease,
+              color 200ms ease,
+              border-color 200ms ease;
+}
+
+/* ============================================================================
+   SCROLLBAR STYLING - Minimalista
+   ============================================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+/* ============================================================================
+   FOCUS STYLES - Accesibilidad
+   ============================================================================ */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   SELECTION - Texto seleccionado
+   ============================================================================ */
+::selection {
+  background-color: var(--accent-muted);
+  color: var(--text-primary);
 }

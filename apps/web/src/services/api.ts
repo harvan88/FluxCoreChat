@@ -51,17 +51,40 @@ class ApiService {
         headers,
       });
 
-      const data = await response.json();
+      // Intentar parsear JSON
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Si no es JSON, obtener texto para debug
+        const text = await response.text();
+        console.error(`[API] Non-JSON response from ${endpoint}:`, text.substring(0, 200));
+        return {
+          success: false,
+          error: `Error del servidor: ${response.status} ${response.statusText}`,
+        };
+      }
 
       if (!response.ok) {
         return {
           success: false,
-          error: data.message || 'Error en la solicitud',
+          error: data.message || data.error || `Error ${response.status}: ${response.statusText}`,
         };
       }
 
       return data;
     } catch (error: any) {
+      console.error(`[API] Request failed for ${endpoint}:`, error);
+      
+      // Detectar errores específicos de red
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        return {
+          success: false,
+          error: 'No se puede conectar al servidor. Verifica que el backend esté corriendo.',
+        };
+      }
+      
       return {
         success: false,
         error: error.message || 'Error de conexión',

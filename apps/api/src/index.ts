@@ -1,6 +1,8 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
+import { logger } from './utils/logger';
+import { errorTracker, isOperationalError } from './middleware/error-tracking';
 
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth.routes';
@@ -18,6 +20,22 @@ import { workspacesRoutes } from './routes/workspaces.routes';
 const PORT = process.env.PORT || 3000;
 
 const app = new Elysia()
+  .onError(({ error, request }) => {
+    const url = new URL(request.url);
+    const severity = isOperationalError(error) ? 'warning' : 'error';
+    
+    errorTracker.capture(error, severity, {
+      method: request.method,
+      path: url.pathname,
+    });
+
+    const statusCode = (error as any).statusCode || 500;
+    return {
+      error: error.message,
+      statusCode,
+      code: (error as any).code,
+    };
+  })
   .use(cors())
   .use(
     swagger({
@@ -58,7 +76,13 @@ const app = new Elysia()
   .use(workspacesRoutes)
   .listen(PORT);
 
-console.log(`🚀 FluxCore API running at http://${app.server?.hostname}:${app.server?.port}`);
-console.log(`📚 Swagger docs at http://${app.server?.hostname}:${app.server?.port}/swagger`);
+logger.info('FluxCore API started', {
+  hostname: app.server?.hostname,
+  port: app.server?.port,
+  nodeVersion: process.version,
+  environment: process.env.NODE_ENV || 'development',
+});
+
+logger.info(`Swagger docs available at http://${app.server?.hostname}:${app.server?.port}/swagger`);
 
 export type App = typeof app;

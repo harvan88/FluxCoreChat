@@ -1,10 +1,18 @@
 /**
  * TabBar - Barra de pestañas para Dynamic Container
  * TOTEM PARTE 11: Tab navigation
+ * 
+ * Controles de header: [📌] [⤢] [×]
+ * - Pin: Fijar container
+ * - Maximize: Expandir/restaurar
+ * - Close: Cerrar container
  */
 
 import { useState } from 'react';
-import { usePanelStore } from '../../store/panelStore';
+import { Pin, PinOff, Maximize2, Minimize2, X } from 'lucide-react';
+import clsx from 'clsx';
+import { usePanelStore, useContainers } from '../../store/panelStore';
+
 import type { Tab, DynamicContainer } from '../../types/panels';
 
 interface TabBarProps {
@@ -12,7 +20,15 @@ interface TabBarProps {
 }
 
 export function TabBar({ container }: TabBarProps) {
-  const { activateTab, closeTab, moveTab, pinContainer } = usePanelStore();
+  const { 
+    activateTab, 
+    closeTab, 
+    moveTab, 
+    pinContainer, 
+    closeContainer,
+    minimizeContainer,
+  } = usePanelStore();
+  const containers = useContainers();
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
 
   const handleTabClick = (tabId: string) => {
@@ -59,9 +75,22 @@ export function TabBar({ container }: TabBarProps) {
     pinContainer(container.id, !container.pinned);
   };
 
+  const handleMaximizeToggle = () => {
+    minimizeContainer(container.id, !container.minimized);
+  };
+
+  const handleCloseContainer = () => {
+    // No permitir cerrar si es el último container
+    if (containers.length <= 1) {
+      // TODO: Mostrar diálogo "No puedes cerrar el último container"
+      return;
+    }
+    closeContainer(container.id);
+  };
+
   return (
     <div 
-      className="flex items-center bg-gray-800 border-b border-gray-700 h-9"
+      className="flex items-center bg-elevated border-b border-subtle h-9"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
@@ -81,17 +110,44 @@ export function TabBar({ container }: TabBarProps) {
         ))}
       </div>
 
-      {/* Container Actions */}
-      <div className="flex items-center px-2 gap-1">
+      {/* Container Actions - Esquina superior derecha: [📌] [⤢] [×] */}
+      <div className="flex items-center px-2 gap-0.5">
         {/* Pin Button */}
         <button
           onClick={handlePinToggle}
-          className={`p-1 rounded hover:bg-gray-700 transition-colors ${
-            container.pinned ? 'text-yellow-400' : 'text-gray-500'
-          }`}
+          className={clsx(
+            'w-7 h-7 flex items-center justify-center rounded transition-colors',
+            container.pinned
+              ? 'text-accent bg-accent-muted'
+              : 'text-muted hover:text-primary hover:bg-hover'
+          )}
           title={container.pinned ? 'Desfijar panel' : 'Fijar panel'}
         >
-          <PinIcon pinned={container.pinned} />
+          {container.pinned ? <Pin size={14} /> : <PinOff size={14} />}
+        </button>
+
+        {/* Maximize/Minimize Button */}
+        <button
+          onClick={handleMaximizeToggle}
+          className="w-7 h-7 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+          title={container.minimized ? 'Restaurar panel' : 'Minimizar panel'}
+        >
+          {container.minimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+        </button>
+
+        {/* Close Button */}
+        <button
+          onClick={handleCloseContainer}
+          className={clsx(
+            'w-7 h-7 flex items-center justify-center rounded transition-colors',
+            containers.length <= 1
+              ? 'text-muted cursor-not-allowed opacity-50'
+              : 'text-muted hover:text-error hover:bg-hover'
+          )}
+          title={containers.length <= 1 ? 'No puedes cerrar el último panel' : 'Cerrar panel'}
+          disabled={containers.length <= 1}
+        >
+          <X size={14} />
         </button>
       </div>
     </div>
@@ -127,20 +183,19 @@ function TabItem({
       onClick={onClick}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`
-        group flex items-center gap-2 px-3 py-1.5 min-w-0 max-w-[180px]
-        border-r border-gray-700 cursor-pointer select-none
-        transition-colors
-        ${isActive 
-          ? 'bg-gray-900 text-white border-b-2 border-b-blue-500' 
-          : 'text-gray-400 hover:text-white hover:bg-gray-750'
-        }
-        ${isDragging ? 'opacity-50' : ''}
-      `}
+      className={clsx(
+        'group flex items-center gap-2 px-3 py-1.5 min-w-0 max-w-[180px]',
+        'border-r border-subtle cursor-pointer select-none',
+        'transition-all duration-200',
+        isActive 
+          ? 'bg-surface text-primary border-b-2 border-b-[var(--accent-primary)]' 
+          : 'text-secondary hover:text-primary hover:bg-hover',
+        isDragging && 'opacity-50'
+      )}
     >
       {/* Icon */}
       {tab.icon && (
-        <span className="text-sm">{tab.icon}</span>
+        <span className="text-sm flex-shrink-0">{tab.icon}</span>
       )}
       
       {/* Title */}
@@ -148,45 +203,18 @@ function TabItem({
       
       {/* Dirty Indicator */}
       {tab.dirty && (
-        <span className="w-2 h-2 rounded-full bg-white" />
+        <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
       )}
       
-      {/* Close Button */}
+      {/* Close Button - visible on hover */}
       {tab.closable && (
         <button
           onClick={onClose}
-          className="opacity-0 group-hover:opacity-100 ml-auto p-0.5 rounded hover:bg-gray-600 transition-opacity"
+          className="opacity-0 group-hover:opacity-100 ml-auto p-0.5 rounded hover:bg-active transition-opacity flex-shrink-0"
         >
-          <CloseIcon />
+          <X size={12} />
         </button>
       )}
     </div>
-  );
-}
-
-// ============================================================================
-// Icons
-// ============================================================================
-
-function CloseIcon() {
-  return (
-    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-function PinIcon({ pinned }: { pinned: boolean }) {
-  if (pinned) {
-    return (
-      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-    </svg>
   );
 }

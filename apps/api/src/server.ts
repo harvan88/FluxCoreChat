@@ -19,6 +19,7 @@ import { relationshipsRoutes } from './routes/relationships.routes';
 import { conversationsRoutes } from './routes/conversations.routes';
 import { messagesRoutes } from './routes/messages.routes';
 import { automationRoutes } from './routes/automation.routes';
+import { adaptersRoutes } from './routes/adapters.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 
 const PORT = process.env.PORT || 3000;
@@ -51,7 +52,8 @@ const elysiaApp = new Elysia()
   .use(relationshipsRoutes)
   .use(conversationsRoutes)
   .use(messagesRoutes)
-  .use(automationRoutes);
+  .use(automationRoutes)
+  .use(adaptersRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 const server = Bun.serve({
