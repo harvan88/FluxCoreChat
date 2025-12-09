@@ -115,29 +115,40 @@ export function ContactsList() {
             </p>
           </div>
         ) : (
-          filteredContacts.map((contact) => (
-            <button
-              key={contact.id}
-              className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left"
-            >
-              {/* Avatar */}
-              <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
-                <span className="text-inverse font-semibold text-sm">
-                  {contact.accountBId?.charAt(0).toUpperCase() || '?'}
-                </span>
-              </div>
+          filteredContacts.map((contact) => {
+            // Usar contactName enriquecido del backend
+            const displayName = (contact as any).contactName || 
+              contact.perspectiveA?.savedName || 
+              `Contacto ${contact.accountBId?.slice(0, 8)}`;
+            
+            return (
+              <button
+                key={contact.id}
+                onClick={() => {
+                  // TODO: Abrir perfil del contacto o iniciar conversación
+                  console.log('[ContactsList] Click on contact:', contact.id, displayName);
+                }}
+                className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left"
+              >
+                {/* Avatar */}
+                <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
+                  <span className="text-inverse font-semibold text-sm">
+                    {displayName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="text-primary font-medium truncate">
-                  {contact.perspectiveA?.savedName || `Contacto ${contact.accountBId?.slice(0, 8)}`}
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-primary font-medium truncate">
+                    {displayName}
+                  </div>
+                  <div className="text-sm text-secondary">
+                    {contact.perspectiveA?.status === 'active' ? 'Activo' : contact.perspectiveA?.status || 'Sin estado'}
+                  </div>
                 </div>
-                <div className="text-sm text-secondary">
-                  {contact.perspectiveA?.status === 'active' ? 'Activo' : contact.perspectiveA?.status || 'Sin estado'}
-                </div>
-              </div>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
 
