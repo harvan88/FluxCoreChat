@@ -51,6 +51,7 @@ export class AuthService {
       userId: user.id,
       accountId: account.id,
       role: 'owner',
+      actorType: 'user',
     });
 
     console.log(`[Auth] Created user ${user.id} with account ${account.id}`);

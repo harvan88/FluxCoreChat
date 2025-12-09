@@ -39,7 +39,16 @@ http://localhost:5173
 ### Base de Datos
 ```powershell
 # Auditar estado de la DB
-bun run packages/db/src/audit-database.ts
+cd packages/db
+bun run src/audit-database.ts
+
+# Seed Fluxi (cuenta del sistema)
+cd packages/db
+bun run src/seed-fluxi.ts
+
+# Reparar usuarios sin cuenta
+cd packages/db
+bun run src/repair-users.ts
 
 # Drizzle Studio (GUI)
 cd packages/db 
