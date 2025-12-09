@@ -1,6 +1,17 @@
 /**
  * Migration Script: All Tables
  * Ejecuta todas las migraciones en orden
+ * 
+ * ⚠️ DEPRECATED - FC-510
+ * Este script está DEPRECADO. Las tablas core (users, accounts, relationships, etc.)
+ * ya fueron creadas por Drizzle migrations (0000, 0001).
+ * 
+ * Solo se usa para tablas legacy de appointments y extensions (tabla antigua).
+ * Para nuevas migraciones, usar Drizzle Kit:
+ *   bun run db:generate
+ *   bun run db:push
+ * 
+ * @deprecated Usar Drizzle migrations en su lugar
  */
 
 import postgres from 'postgres';

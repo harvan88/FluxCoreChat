@@ -496,7 +496,119 @@ interface SidebarLayoutProps {
 
 ---
 
-## Hito 16: PWA Support (Semana 25)
+## Hito 16: Profile System (CRÍTICO - Prueba Producción)
+
+**Objetivo:** Sistema completo de perfil de usuario para la prueba de producción.
+
+**Duración estimada:** 1 semana
+
+**Referencia:** `docs/AUDIT_PRODUCTION_TEST.md`
+
+### Tareas
+
+| ID | Tarea | Prioridad | Descripción |
+|----|-------|-----------|-------------|
+| **FC-800** | ProfileSection completa | Alta | Reemplaza "Próximamente" con UI funcional |
+| **FC-801** | BioEditor (presentación) | Alta | Campo 0/150 chars con placeholder |
+| **FC-802** | AvatarUploader | Alta | Upload de foto de perfil |
+| **FC-803** | AIContextEditor básico | Alta | Campo 0/5000 chars |
+| **FC-804** | ExpandedEditor (tipo GitHub) | Media | Vista previa/código, contador tokens |
+| **FC-805** | TokenCounter | Media | Contador de líneas y tokens aproximados |
+| **FC-806** | BusinessToggle | Alta | Toggle "Activar cuenta de negocio" |
+| **FC-807** | Hook useProfile | Alta | CRUD de perfil conectado a API |
+
+**Criterios de aceptación:**
+- [ ] Usuario puede editar foto de perfil
+- [ ] Usuario puede escribir presentación (0/150 chars)
+- [ ] Usuario puede editar nombre visible
+- [ ] Usuario puede escribir contexto IA (0/5000 chars)
+- [ ] Editor expandible funciona en nueva tab
+- [ ] Toggle de cuenta de negocio visible
+
+---
+
+## Hito 17: Account Management (CRÍTICO - Prueba Producción)
+
+**Objetivo:** Gestión de cuentas personales y de negocio.
+
+**Duración estimada:** 1 semana
+
+### Tareas
+
+| ID | Tarea | Prioridad | Descripción |
+|----|-------|-----------|-------------|
+| **FC-810** | AccountStore | Alta | Store Zustand para cuentas |
+| **FC-811** | AccountSwitcher | Alta | Selector en header (avatar superior izq) |
+| **FC-812** | AccountsSection | Alta | Sección en Settings |
+| **FC-813** | ConvertToBusiness | Alta | UI para convertir cuenta a negocio |
+| **FC-814** | CreateBusinessAccount | Alta | UI para crear cuenta de negocio |
+| **FC-815** | Hook useAccounts | Alta | CRUD de cuentas conectado a API |
+| **FC-816** | API client accounts | Alta | `services/accounts.ts` |
+
+**Criterios de aceptación:**
+- [ ] Usuario puede ver sus cuentas (personal/negocio)
+- [ ] Usuario puede convertir cuenta a negocio
+- [ ] Usuario puede crear cuenta de negocio nueva
+- [ ] Selector de cuenta visible en header/ActivityBar
+- [ ] Cambio de cuenta funciona correctamente
+
+---
+
+## Hito 18: Workspace & Collaborators UI (CRÍTICO - Prueba Producción)
+
+**Objetivo:** Frontend completo para workspaces colaborativos.
+
+**Duración estimada:** 1.5 semanas
+
+### Tareas
+
+| ID | Tarea | Prioridad | Descripción |
+|----|-------|-----------|-------------|
+| **FC-820** | Hook useWorkspaces | Alta | CRUD de workspaces |
+| **FC-821** | WorkspaceStore | Alta | Store Zustand |
+| **FC-822** | CollaboratorsList | Alta | Lista de miembros del workspace |
+| **FC-823** | UserSearch | Alta | Búsqueda de usuarios por alias |
+| **FC-824** | InviteCollaborator | Alta | Modal/form para invitar |
+| **FC-825** | PermissionsSelector | Media | Selector de permisos por módulo |
+| **FC-826** | Hook useInvitations | Alta | Gestión de invitaciones |
+| **FC-827** | InvitationsList | Alta | Lista de invitaciones pendientes |
+| **FC-828** | AcceptInvitation | Alta | UI para aceptar invitación |
+| **FC-829** | PendingInvitations | Alta | Indicador en header |
+| **FC-830** | API client workspaces | Alta | `services/workspaces.ts` |
+
+**Criterios de aceptación:**
+- [ ] Usuario puede ver lista de colaboradores
+- [ ] Usuario puede buscar usuarios por alias
+- [ ] Usuario puede invitar por email
+- [ ] Usuario puede asignar permisos específicos
+- [ ] Invitado puede ver y aceptar invitación
+- [ ] Invitado ve workspace según sus permisos
+
+---
+
+## Hito 19: Welcome Experience (Prueba Producción)
+
+**Objetivo:** Experiencia de bienvenida para nuevos usuarios.
+
+**Duración estimada:** 0.5 semanas
+
+### Tareas
+
+| ID | Tarea | Prioridad | Descripción |
+|----|-------|-----------|-------------|
+| **FC-840** | WelcomeMessage | Alta | Mensaje inicial de Fluxi |
+| **FC-841** | FluxiAvatar | Media | Avatar distintivo de Fluxi |
+| **FC-842** | OnboardingConversation | Alta | Crear conversación inicial (backend) |
+| **FC-843** | FirstTimeExperience | Media | Detectar primer login |
+
+**Criterios de aceptación:**
+- [ ] Usuario nuevo ve mensaje de bienvenida de Fluxi
+- [ ] Conversación inicial creada automáticamente
+- [ ] Avatar de Fluxi distintivo
+
+---
+
+## Hito 20: PWA Support (Futuro)
 
 **Objetivo:** Convertir FluxCore en Progressive Web App instalable.
 
@@ -506,11 +618,11 @@ interface SidebarLayoutProps {
 
 | ID | Tarea | Prioridad | Descripción |
 |----|-------|-----------|-------------|
-| **FC-700** | Configurar vite-plugin-pwa | Alta | Service worker y manifest |
-| **FC-701** | Crear manifest.json | Alta | Iconos, colores, nombre |
-| **FC-702** | Configurar caching strategy | Alta | Cache-first para assets |
-| **FC-703** | Crear offline fallback | Media | Página offline básica |
-| **FC-704** | Agregar install prompt | Baja | UI para instalar app |
+| **FC-900** | Configurar vite-plugin-pwa | Alta | Service worker y manifest |
+| **FC-901** | Crear manifest.json | Alta | Iconos, colores, nombre |
+| **FC-902** | Configurar caching strategy | Alta | Cache-first para assets |
+| **FC-903** | Crear offline fallback | Media | Página offline básica |
+| **FC-904** | Agregar install prompt | Baja | UI para instalar app |
 
 ---
 
@@ -525,17 +637,22 @@ Semana 8-9:   Hito 4 - Sistema de Extensiones
 Semana 10:    Hito 5 - @fluxcore/core-ai
 Semana 11:    Hito 6 - Contexto Relacional
 Semana 12-13: Hito 7 - Extensión Turnos
-Semana 14-15: Hito 8 - WhatsApp
-Semana 16:    Hito 9 - Workspaces
-Semana 17-18: Hito 10 - Producción
+Semana 14-15: Hito 8 - WhatsApp Adapter
+Semana 16:    Hito 9 - Workspaces Backend
+Semana 17-18: Hito 10 - Producción Ready
 Semana 19:    Hito 11 - Madurez Operativa Extensiones
 Semana 19.5:  Hito 12 - Frontend Enrichments
 Semana 20-22: Hito 13 - Component Library & UI Unification
 Semana 23:    Hito 14 - Testing E2E & Production Hardening
 Semana 24:    Hito 15 - Performance Optimization
-Semana 25:    Hito 16 - PWA Support (NUEVO)
+Semana 25:    Hito 16 - Profile System (CRÍTICO)
+Semana 26:    Hito 17 - Account Management (CRÍTICO)
+Semana 27-28: Hito 18 - Workspace & Collaborators UI (CRÍTICO)
+Semana 28.5:  Hito 19 - Welcome Experience
+Semana 29:    🎯 PRUEBA DE PRODUCCIÓN (Carlos, María, Daniel)
+Semana 30:    Hito 20 - PWA Support
 
-Total: ~26 semanas
+Total: ~30 semanas
 ```
 
 ---
@@ -701,6 +818,59 @@ Total: ~26 semanas
 #### Documentación
 - `docs/COMPONENT_LIBRARY.md` - Guía de componentes
 - `docs/EXTENSION_DESIGN_GUIDE.md` - Guía de diseño para extensiones
+
+---
+
+### Hito 24: Emparejamiento Frontend-Backend (COMPLETADO 2024-12-09)
+
+**Duración:** 4 horas
+**Estado:** ✅ COMPLETADO
+
+| ID | Descripción | Estado | Archivos |
+|----|-------------|--------|----------|
+| EMF-001 | Conectar búsqueda contactos a API | ✅ | `api.ts`, `ContactsList.tsx` |
+| EMF-002 | Modal agregar contacto funcional | ✅ | `ContactsList.tsx` |
+| EMF-003 | Endpoint convert-to-business | ✅ | `accounts.routes.ts`, `account.service.ts` |
+| EMF-004 | Frontend usa endpoint real | ✅ | `accounts.ts`, `api.ts` |
+
+**Endpoints Agregados:**
+- `GET /accounts/search?q=` - Búsqueda de usuarios
+- `POST /accounts/:id/convert-to-business` - Conversión a cuenta de negocio
+
+---
+
+### Hito 25: Arquitectura Settings Canónica (COMPLETADO 2024-12-09)
+
+**Duración:** 2 horas
+**Estado:** ✅ COMPLETADO
+
+| ID | Descripción | Estado | Archivos |
+|----|-------------|--------|----------|
+| SET-001 | SettingsMenu en Sidebar (solo menú) | ✅ | `SettingsMenu.tsx` |
+| SET-002 | Settings abre tabs en DynamicContainer | ✅ | `DynamicContainer.tsx` |
+| SET-003 | ProfileSection como tab | ✅ | `DynamicContainer.tsx` |
+| SET-004 | AccountsSection como tab | ✅ | `DynamicContainer.tsx` |
+
+**Arquitectura Canónica:**
+```
+ActivityBar → Sidebar (Menú) → DynamicContainer (Contenido)
+```
+
+---
+
+### Hito 26: Estabilización Core (COMPLETADO 2024-12-09)
+
+**Duración:** 2 horas
+**Estado:** ✅ COMPLETADO
+
+| ID | Descripción | Estado | Archivos Modificados |
+|----|-------------|--------|---------------------|
+| STB-001 | WebSocket loop infinito | ✅ | `useWebSocket.ts` - Max 5 intentos, backoff exponencial |
+| STB-002 | API calls redundantes | ✅ | `useProfile.ts`, `ContactsList.tsx` - hasLoaded flags |
+| FIX-001 | Crear account al registrar | ✅ | `auth.service.ts` - Auto-create personal account |
+| FIX-002 | Scroll en contenedores | ✅ | `DynamicContainer.tsx` - overflow-auto |
+
+**Causa raíz identificada:** El registro de usuarios NO creaba una cuenta asociada, causando "No se encontraron cuentas".
 
 ---
 

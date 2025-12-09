@@ -1,6 +1,6 @@
 import { db } from '@fluxcore/db';
-import { conversations } from '@fluxcore/db';
-import { eq, and } from 'drizzle-orm';
+import { conversations, relationships, accounts } from '@fluxcore/db';
+import { eq, and, or, inArray } from 'drizzle-orm';
 
 export class ConversationService {
   async createConversation(relationshipId: string, channel: 'web' | 'whatsapp' | 'telegram') {
@@ -92,6 +92,48 @@ export class ConversationService {
         [field]: 0,
       })
       .where(eq(conversations.id, conversationId));
+  }
+
+  /**
+   * Get all conversations for a user (via their accounts and relationships)
+   */
+  async getConversationsByUserId(userId: string) {
+    // 1. Get all accounts owned by this user
+    const userAccounts = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.ownerUserId, userId));
+
+    if (userAccounts.length === 0) {
+      return [];
+    }
+
+    const accountIds = userAccounts.map((a) => a.id);
+
+    // 2. Get all relationships where user's accounts are involved
+    const userRelationships = await db
+      .select()
+      .from(relationships)
+      .where(
+        or(
+          inArray(relationships.accountAId, accountIds),
+          inArray(relationships.accountBId, accountIds)
+        )
+      );
+
+    if (userRelationships.length === 0) {
+      return [];
+    }
+
+    // 3. Get all conversations for those relationships
+    const relationshipIds = userRelationships.map((r) => r.id);
+    
+    const userConversations = await db
+      .select()
+      .from(conversations)
+      .where(inArray(conversations.relationshipId, relationshipIds));
+
+    return userConversations;
   }
 }
 

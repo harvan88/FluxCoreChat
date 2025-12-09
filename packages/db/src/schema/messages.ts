@@ -12,28 +12,15 @@ export const messages = pgTable('messages', {
   senderAccountId: uuid('sender_account_id')
     .notNull()
     .references(() => accounts.id),
-  
-  // COR-003: Actor Model - Trazabilidad completa de origen/destino
-  // Estos campos son opcionales para mantener compatibilidad con datos existentes
-  fromActorId: uuid('from_actor_id').references(() => actors.id),
-  toActorId: uuid('to_actor_id').references(() => actors.id),
-  
   content: jsonb('content').notNull(), // { text, media[], location, buttons[] }
   type: varchar('type', { length: 20 }).notNull(), // 'incoming' | 'outgoing' | 'system'
-  
-  // IA metadata
   generatedBy: varchar('generated_by', { length: 20 }).default('human').notNull(), // 'human' | 'ai'
   aiApprovedBy: uuid('ai_approved_by').references(() => users.id),
-  
-  // COR-002: Status de sincronización/entrega del mensaje
-  // 'local_only' - Solo existe localmente (offline-first)
-  // 'pending_backend' - Pendiente de sincronizar con backend
-  // 'synced' - Sincronizado con backend
-  // 'sent' - Enviado al destinatario (para adapters externos)
-  // 'delivered' - Entregado al destinatario
-  // 'seen' - Visto por el destinatario
+  // COR-002: Status de sincronización/entrega (migration-007)
   status: varchar('status', { length: 20 }).default('synced').notNull(),
-  
+  // COR-003: Actor model para mensajes (migration-008)
+  fromActorId: uuid('from_actor_id').references(() => actors.id),
+  toActorId: uuid('to_actor_id').references(() => actors.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

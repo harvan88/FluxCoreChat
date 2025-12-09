@@ -1,7 +1,7 @@
 import { db } from '@fluxcore/db';
-import { accounts, actors, extensionInstallations } from '@fluxcore/db';
-import { eq, and } from 'drizzle-orm';
-import { validatePrivateContext, validateAlias, validateDisplayName } from '../utils/context-limits';
+import { accounts, actors, extensionInstallations, users } from '@fluxcore/db';
+import { eq, and, or, ilike } from 'drizzle-orm';
+import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
 
 // V2-4.2: Configuración por defecto de core-ai
 const DEFAULT_CORE_AI_CONFIG = {
@@ -21,7 +21,6 @@ export class AccountService {
     accountType: 'personal' | 'business';
     profile?: any;
     privateContext?: string;
-    alias?: string; // COR-005
   }) {
     // Check if username is taken
     const existing = await db
@@ -45,11 +44,6 @@ export class AccountService {
       throw new Error(privateContextValidation.error);
     }
 
-    const aliasValidation = validateAlias(data.alias);
-    if (!aliasValidation.valid) {
-      throw new Error(aliasValidation.error);
-    }
-
     // Create account
     const [account] = await db
       .insert(accounts)
@@ -60,17 +54,14 @@ export class AccountService {
         accountType: data.accountType,
         profile: data.profile || {},
         privateContext: data.privateContext || null,
-        alias: data.alias || null, // COR-005
       })
       .returning();
 
     // Create actor (owner relationship)
-    // COR-004: Añadir actorType obligatorio
     await db.insert(actors).values({
-      actorType: 'account',
       userId: data.ownerUserId,
       accountId: account.id,
-      displayName: data.displayName,
+      role: 'owner',
     });
 
     // V2-4.2: Pre-instalar core-ai en nuevas cuentas
@@ -107,7 +98,6 @@ export class AccountService {
       displayName?: string;
       profile?: any;
       privateContext?: string;
-      alias?: string; // COR-005
     }
   ) {
     // Verify ownership
@@ -136,18 +126,91 @@ export class AccountService {
       }
     }
 
-    if (data.alias) {
-      const aliasValidation = validateAlias(data.alias);
-      if (!aliasValidation.valid) {
-        throw new Error(aliasValidation.error);
-      }
-    }
-
     // Update account
     const [updated] = await db
       .update(accounts)
       .set({
         ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(accounts.id, accountId))
+      .returning();
+
+    return updated;
+  }
+
+  /**
+   * Search accounts by username, alias, or owner email
+   * @param query - Search query (can be @username, email, or partial match)
+   */
+  async searchAccounts(query: string) {
+    // Remove @ prefix if present
+    const searchTerm = query.startsWith('@') ? query.slice(1) : query;
+    const pattern = `%${searchTerm}%`;
+
+    // Search in accounts by username or displayName
+    const accountResults = await db
+      .select({
+        id: accounts.id,
+        username: accounts.username,
+        displayName: accounts.displayName,
+        accountType: accounts.accountType,
+      })
+      .from(accounts)
+      .where(
+        or(
+          ilike(accounts.username, pattern),
+          ilike(accounts.displayName, pattern)
+        )
+      )
+      .limit(20);
+
+    // Also search by owner email
+    const userResults = await db
+      .select({
+        id: accounts.id,
+        username: accounts.username,
+        displayName: accounts.displayName,
+        accountType: accounts.accountType,
+      })
+      .from(accounts)
+      .innerJoin(users, eq(accounts.ownerUserId, users.id))
+      .where(ilike(users.email, pattern))
+      .limit(10);
+
+    // Combine and deduplicate
+    const allResults = [...accountResults, ...userResults];
+    const uniqueResults = allResults.filter(
+      (item, index, self) => self.findIndex((t) => t.id === item.id) === index
+    );
+
+    return uniqueResults.slice(0, 20);
+  }
+
+  /**
+   * Convert a personal account to business account
+   */
+  async convertToBusiness(accountId: string, userId: string) {
+    // Verify ownership
+    const [account] = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.id, accountId), eq(accounts.ownerUserId, userId)))
+      .limit(1);
+
+    if (!account) {
+      throw new Error('Account not found or unauthorized');
+    }
+
+    if (account.accountType === 'business') {
+      throw new Error('Account is already a business account');
+    }
+
+    // Update account type to business
+    const [updated] = await db
+      .update(accounts)
+      .set({
+        accountType: 'business',
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, accountId))

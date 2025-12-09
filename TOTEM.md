@@ -4,6 +4,11 @@
 > Cualquier decisión técnica debe alinearse con los principios aquí definidos.  
 > Si algo contradice este documento, el documento gana.
 
+### Modificaciones Autorizadas
+| Fecha | Modificación |
+|-------|--------------|
+| 2024-12-09 | **Mobile-First:** Los DynamicContainer son mobile-first, diseñados para verse perfectamente desde dispositivo móvil. |
+
 ---
 
 ## PARTE 1: VISIÓN

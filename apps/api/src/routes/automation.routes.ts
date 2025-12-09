@@ -224,7 +224,7 @@ export const automationRoutes = new Elysia({ prefix: '/automation' })
     }),
   })
 
-  // PATCH /automation/rules/:ruleId - Actualizar regla existente
+  // PATCH /automation/rules/:ruleId - Actualizar regla existente (FC-530)
   .patch('/rules/:ruleId', async ({ user, params, body, set }) => {
     if (!user) {
       set.status = 401;
@@ -234,15 +234,21 @@ export const automationRoutes = new Elysia({ prefix: '/automation' })
     try {
       const { mode, config, enabled } = body as any;
 
-      // Obtener regla existente
-      const rules = await automationController.getRules('');
-      // Este es un workaround - necesitamos un método getRuleById
-      
-      // Por ahora usamos setRule que hace upsert
-      // TODO: Implementar updateRuleById en automationController
-      
-      set.status = 501;
-      return { success: false, message: 'Direct rule update not yet implemented. Use POST /rules with same accountId/relationshipId' };
+      const updated = await automationController.updateRuleById(params.ruleId, {
+        mode,
+        config,
+        enabled,
+      });
+
+      if (!updated) {
+        set.status = 404;
+        return { success: false, message: 'Rule not found' };
+      }
+
+      return {
+        success: true,
+        data: updated,
+      };
     } catch (error: any) {
       set.status = 500;
       return { success: false, message: error.message };

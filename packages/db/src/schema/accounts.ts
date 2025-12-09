@@ -9,14 +9,10 @@ export const accounts = pgTable('accounts', {
   username: varchar('username', { length: 100 }).notNull().unique(),
   displayName: varchar('display_name', { length: 255 }).notNull(),
   accountType: varchar('account_type', { length: 20 }).notNull(), // 'personal' | 'business'
-  
-  // COR-005: Alias para identificación contextual en relaciones
-  // Permite que una cuenta tenga un nombre diferente según la relación
-  // Ej: "Mi Negocio" puede ser "Proveedor Juan" en una relación específica
-  alias: varchar('alias', { length: 100 }),
-  
   profile: jsonb('profile').default({}).notNull(),
   privateContext: text('private_context'),
+  // COR-005: Alias para identificación contextual (migration-009)
+  alias: varchar('alias', { length: 100 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

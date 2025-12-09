@@ -8,7 +8,10 @@ import { usePanelStore } from '../../store/panelStore';
 import { TabBar } from './TabBar';
 import { ChatView } from '../chat/ChatView';
 import { WelcomeView } from '../chat/WelcomeView';
-import { SettingsPanel } from '../settings/SettingsPanel';
+import { ProfileSection } from '../settings/ProfileSection';
+import { AccountsSection } from '../accounts';
+import { ThemeSettings } from '../common';
+import { ExpandedEditor } from '../editors/ExpandedEditor';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
 
 interface DynamicContainerProps {
@@ -56,8 +59,8 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
       {/* Tab Bar */}
       <TabBar container={container} />
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-hidden">
+      {/* Content Area - con scroll */}
+      <div className="flex-1 overflow-auto">
         {activeTab ? (
           <TabContent tab={activeTab} />
         ) : (
@@ -99,7 +102,7 @@ function TabContent({ tab }: TabContentProps) {
       );
 
     case 'settings':
-      return <SettingsPanel />;
+      return <SettingsTabContent section={tab.context.settingsSection} />;
 
     case 'extension':
       return (
@@ -113,14 +116,14 @@ function TabContent({ tab }: TabContentProps) {
 
     case 'editor':
       return (
-        <div className="p-4">
-          <h2 className="text-lg font-semibold text-primary">Editor</h2>
-          <textarea 
-            className="w-full h-64 mt-4 p-2 bg-elevated text-primary rounded border border-subtle focus:border-accent transition-colors"
-            placeholder="Contenido del editor..."
-            defaultValue={tab.context.content || ''}
-          />
-        </div>
+        <ExpandedEditor
+          title={tab.context.title || 'Editor'}
+          content={tab.context.content || ''}
+          maxLength={tab.context.maxLength || 5000}
+          placeholder={tab.context.placeholder || 'Escribe aquí...'}
+          onSave={tab.context.onSave || (() => {})}
+          onClose={tab.context.onClose || (() => {})}
+        />
       );
 
     default:
@@ -180,4 +183,65 @@ function EmptyContainer({ type }: EmptyContainerProps) {
       <p className="text-sm text-muted mt-2">{msg.subtitle}</p>
     </div>
   );
+}
+
+// ============================================================================
+// Settings Tab Content - Renderiza la sección de settings apropiada
+// ============================================================================
+
+interface SettingsTabContentProps {
+  section?: string;
+}
+
+function SettingsTabContent({ section }: SettingsTabContentProps) {
+  // Wrapper para secciones que necesitan onBack (lo ignoramos en este contexto)
+  const handleBack = () => {
+    // En el contexto de tabs, no hay "back" - el usuario cierra el tab
+  };
+
+  switch (section) {
+    case 'profile':
+      return <ProfileSection onBack={handleBack} />;
+
+    case 'accounts':
+      return <AccountsSection onBack={handleBack} />;
+
+    case 'appearance':
+      return (
+        <div className="h-full overflow-y-auto p-6">
+          <h2 className="text-xl font-semibold text-primary mb-6">Apariencia</h2>
+          <ThemeSettings />
+        </div>
+      );
+
+    case 'notifications':
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg text-secondary">Notificaciones</p>
+            <p className="text-sm text-muted mt-2">Próximamente</p>
+          </div>
+        </div>
+      );
+
+    case 'privacy':
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg text-secondary">Privacidad</p>
+            <p className="text-sm text-muted mt-2">Próximamente</p>
+          </div>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg text-secondary">Configuración</p>
+            <p className="text-sm text-muted mt-2">Selecciona una opción del menú</p>
+          </div>
+        </div>
+      );
+  }
 }

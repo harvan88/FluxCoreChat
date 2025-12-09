@@ -421,6 +421,21 @@ export class WorkspaceService {
       );
   }
 
+  /**
+   * FC-531: Obtener invitaciones pendientes por email del usuario
+   */
+  async getPendingInvitationsByEmail(email: string): Promise<WorkspaceInvitation[]> {
+    return db
+      .select()
+      .from(workspaceInvitations)
+      .where(
+        and(
+          eq(workspaceInvitations.email, email),
+          eq(workspaceInvitations.acceptedAt, null as any)
+        )
+      );
+  }
+
   // ============ PERMISOS ============
 
   /**

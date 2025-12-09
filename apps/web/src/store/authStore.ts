@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, LoginCredentials, RegisterData } from '../types';
 import { api } from '../services/api';
+import { useUIStore } from './uiStore';
 
 interface AuthStore {
   user: User | null;
@@ -36,12 +37,21 @@ export const useAuthStore = create<AuthStore>()(
         const response = await api.login(credentials);
 
         if (response.success && response.data) {
+          // Set user and auth state
           set({
             user: response.data.user,
             token: response.data.token,
             isAuthenticated: true,
             isLoading: false,
           });
+          
+          // SRG-005: Set selectedAccountId and accounts in uiStore
+          const accounts = response.data.accounts || [];
+          if (accounts.length > 0) {
+            useUIStore.getState().setAccounts(accounts);
+            useUIStore.getState().setSelectedAccount(accounts[0].id);
+          }
+          
           return true;
         } else {
           set({
@@ -63,6 +73,14 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          
+          // SRG-005: Also set accounts after registration
+          const accounts = response.data.accounts || [];
+          if (accounts.length > 0) {
+            useUIStore.getState().setAccounts(accounts);
+            useUIStore.getState().setSelectedAccount(accounts[0].id);
+          }
+          
           return true;
         } else {
           set({

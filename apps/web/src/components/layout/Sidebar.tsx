@@ -13,7 +13,7 @@ import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { ConversationsList } from '../conversations/ConversationsList';
 import { ContactsList } from '../contacts/ContactsList';
-import { SettingsPanel } from '../settings/SettingsPanel';
+import { SettingsMenu } from '../settings/SettingsMenu';
 import { ExtensionsPanel } from '../extensions';
 
 export function Sidebar() {
@@ -35,7 +35,7 @@ export function Sidebar() {
       case 'extensions':
         return <ExtensionsPanel accountId={selectedAccountId || ''} />;
       case 'settings':
-        return <SettingsPanel />;
+        return <SettingsMenu />;
       default:
         return null;
     }

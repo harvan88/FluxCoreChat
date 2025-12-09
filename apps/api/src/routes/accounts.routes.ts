@@ -4,6 +4,39 @@ import { accountService } from '../services/account.service';
 
 export const accountsRoutes = new Elysia({ prefix: '/accounts' })
   .use(authMiddleware)
+  // GET /accounts/search?q=@alias or email
+  .get(
+    '/search',
+    async ({ user, query, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const searchQuery = query.q?.trim();
+      if (!searchQuery || searchQuery.length < 2) {
+        return { success: true, data: [] };
+      }
+
+      try {
+        const results = await accountService.searchAccounts(searchQuery);
+        return { success: true, data: results };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message || 'Search failed' };
+      }
+    },
+    {
+      isAuthenticated: true,
+      query: t.Object({
+        q: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ['Accounts'],
+        summary: 'Search accounts by username or email',
+      },
+    }
+  )
   .get(
     '/',
     async ({ user, set }) => {
@@ -149,6 +182,32 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       detail: {
         tags: ['Accounts'],
         summary: 'Update account',
+      },
+    }
+  )
+  // POST /accounts/:id/convert-to-business
+  .post(
+    '/:id/convert-to-business',
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const account = await accountService.convertToBusiness(params.id, user.id);
+        return { success: true, data: account };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message || 'Failed to convert account' };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      detail: {
+        tags: ['Accounts'],
+        summary: 'Convert personal account to business',
       },
     }
   );

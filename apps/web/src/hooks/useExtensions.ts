@@ -79,40 +79,9 @@ export function useExtensions(accountId: string | null) {
         })));
       }
     } catch (err: any) {
-      setError(err.message);
-      // Mock data for development
-      setExtensions([
-        {
-          id: 'core-ai',
-          name: 'FluxCore AI',
-          version: '1.0.0',
-          description: 'Asistente de IA integrado para respuestas automáticas',
-          author: 'FluxCore Team',
-          icon: '🤖',
-          permissions: ['read:messages', 'send:messages', 'modify:automation'],
-          status: 'enabled',
-        },
-        {
-          id: 'appointments',
-          name: 'Citas y Reservas',
-          version: '1.0.0',
-          description: 'Gestión de citas y reservas para tu negocio',
-          author: 'FluxCore Team',
-          icon: '📅',
-          permissions: ['read:messages', 'send:messages'],
-          status: 'available',
-        },
-        {
-          id: 'analytics',
-          name: 'Analytics',
-          version: '0.9.0',
-          description: 'Estadísticas y análisis de conversaciones',
-          author: 'Community',
-          icon: '📊',
-          permissions: ['read:messages', 'read:stats'],
-          status: 'disabled',
-        },
-      ]);
+      setError(err.message || 'Error al cargar extensiones');
+      // NO MOCK DATA - Mostrar lista vacía y error
+      setExtensions([]);
     } finally {
       setIsLoading(false);
     }

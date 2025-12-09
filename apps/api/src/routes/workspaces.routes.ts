@@ -458,6 +458,26 @@ export const workspacesRoutes = new Elysia({ prefix: '/workspaces' })
     params: t.Object({
       token: t.String(),
     }),
+  })
+
+  // GET /workspaces/invitations/pending - Obtener invitaciones pendientes del usuario (FC-531)
+  .get('/invitations/pending', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const invitations = await workspaceService.getPendingInvitationsByEmail(user.email);
+
+      return {
+        success: true,
+        data: invitations,
+      };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
   });
 
 export default workspacesRoutes;

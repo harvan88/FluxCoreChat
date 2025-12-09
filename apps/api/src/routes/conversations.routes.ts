@@ -4,6 +4,29 @@ import { conversationService } from '../services/conversation.service';
 
 export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
   .use(authMiddleware)
+  // GET /conversations - Listar todas las conversaciones del usuario
+  .get(
+    '/',
+    async ({ user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const conversations = await conversationService.getConversationsByUserId(user.id);
+        return { success: true, data: conversations };
+      } catch (error: any) {
+        console.error('[API] Error loading conversations:', error);
+        set.status = 500;
+        return { success: false, message: 'Error al cargar conversaciones', error: error.message };
+      }
+    },
+    {
+      isAuthenticated: true,
+      detail: { tags: ['Conversations'], summary: 'List all conversations for current user' },
+    }
+  )
   .post(
     '/',
     async ({ user, body, set }) => {

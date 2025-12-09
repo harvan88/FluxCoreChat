@@ -90,50 +90,12 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
     } catch (err: any) {
       console.error('[useChat] Failed to load messages:', err);
       
-      // Modo demo: cargar mensajes mock cuando la API falla
-      if (import.meta.env.DEV) {
-        console.log('[useChat] Loading demo messages...');
-        const demoMessages: Message[] = [
-          {
-            id: 'demo-1',
-            conversationId,
-            senderAccountId: 'contact-1',
-            content: { text: '¡Hola! ¿Cómo estás?' },
-            type: 'incoming',
-            generatedBy: 'human',
-            status: 'synced',
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            id: 'demo-2',
-            conversationId,
-            senderAccountId: accountId,
-            content: { text: '¡Muy bien! Trabajando en el proyecto.' },
-            type: 'outgoing',
-            generatedBy: 'human',
-            status: 'synced',
-            createdAt: new Date(Date.now() - 3500000).toISOString(),
-          },
-          {
-            id: 'demo-3',
-            conversationId,
-            senderAccountId: 'contact-1',
-            content: { text: '¿Cómo va todo?' },
-            type: 'incoming',
-            generatedBy: 'human',
-            status: 'synced',
-            createdAt: new Date(Date.now() - 1800000).toISOString(),
-          },
-        ];
-        setMessages(demoMessages);
-        setError(null); // Clear error in demo mode
+      // NO MOCK DATA - Mostrar error real
+      setMessages([]); // Limpiar mensajes previos
+      if (err.message?.includes('fetch')) {
+        setError('No se puede conectar al servidor');
       } else {
-        // Production: show error
-        if (err.message?.includes('fetch')) {
-          setError('No se puede conectar al servidor');
-        } else {
-          setError(err.message || 'Error al cargar mensajes');
-        }
+        setError(err.message || 'Error al cargar mensajes');
       }
     } finally {
       setIsLoading(false);

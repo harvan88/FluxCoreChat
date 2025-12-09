@@ -45,6 +45,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribedRelationshipsRef = useRef<Set<string>>(new Set());
+  const reconnectAttemptsRef = useRef(0);
+  const wasConnectedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  
+  // Refs para callbacks estables (evitar loops de reconexión)
+  const callbacksRef = useRef({ onMessage, onSuggestion, onSuggestionGenerating, onSuggestionDisabled });
+  callbacksRef.current = { onMessage, onSuggestion, onSuggestionGenerating, onSuggestionDisabled };
 
   // Limpiar timeout de reconexión
   const clearReconnectTimeout = useCallback(() => {
@@ -67,8 +75,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
+        if (!mountedRef.current) return;
         console.log('[WebSocket] Connected');
         setStatus('connected');
+        wasConnectedRef.current = true;
+        reconnectAttemptsRef.current = 0; // Reset on successful connection
         
         // Re-suscribir a relationships anteriores
         subscribedRelationshipsRef.current.forEach(relationshipId => {
@@ -81,20 +92,22 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
           const message = JSON.parse(event.data) as WSMessage;
           setLastMessage(message);
           
-          // Manejar tipos específicos
+          // Manejar tipos específicos (usar refs para callbacks estables)
+          const { onMessage: onMsg, onSuggestion: onSug, onSuggestionGenerating: onGen, onSuggestionDisabled: onDis } = callbacksRef.current;
+          
           switch (message.type) {
             case 'suggestion:generating':
-              onSuggestionGenerating?.();
+              onGen?.();
               break;
               
             case 'suggestion:ready':
-              if (message.data && onSuggestion) {
-                onSuggestion(message.data as AISuggestion);
+              if (message.data && onSug) {
+                onSug(message.data as AISuggestion);
               }
               break;
               
             case 'suggestion:disabled':
-              onSuggestionDisabled?.(message.reason || 'Automation disabled');
+              onDis?.(message.reason || 'Automation disabled');
               break;
             
             // FC-308: Handler para enrichment batch
@@ -106,7 +119,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               break;
               
             default:
-              onMessage?.(message);
+              onMsg?.(message);
           }
         } catch (e) {
           console.warn('[WebSocket] Failed to parse message:', e);
@@ -114,22 +127,31 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       };
 
       ws.onclose = () => {
+        if (!mountedRef.current) return;
         console.log('[WebSocket] Disconnected');
         setStatus('disconnected');
         wsRef.current = null;
         
-        // Intentar reconectar
-        if (reconnect) {
+        // Solo reconectar si: estaba conectado antes, no excede intentos, y reconnect está habilitado
+        if (reconnect && wasConnectedRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttemptsRef.current++;
+          const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1); // Exponential backoff
+          console.log(`[WebSocket] Reconnect attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('[WebSocket] Attempting to reconnect...');
-            connect();
-          }, reconnectInterval);
+            if (mountedRef.current) {
+              connect();
+            }
+          }, delay);
+        } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          console.warn('[WebSocket] Max reconnect attempts reached. Giving up.');
+          setStatus('error');
         }
       };
 
       ws.onerror = (error) => {
+        if (!mountedRef.current) return;
         console.error('[WebSocket] Error:', error);
-        setStatus('error');
+        // Don't set status to error here - let onclose handle reconnection
       };
 
       wsRef.current = ws;
@@ -137,7 +159,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       console.error('[WebSocket] Failed to connect:', error);
       setStatus('error');
     }
-  }, [clearReconnectTimeout, reconnect, reconnectInterval, onMessage, onSuggestion, onSuggestionGenerating, onSuggestionDisabled]);
+  }, [clearReconnectTimeout, reconnect, reconnectInterval]); // Callbacks ahora usan refs
 
   // Desconectar WebSocket
   const disconnect = useCallback(() => {
@@ -221,16 +243,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     return send({ type: 'ping' });
   }, [send]);
 
-  // Auto-conectar
+  // Auto-conectar (solo una vez al montar)
   useEffect(() => {
+    mountedRef.current = true;
+    
     if (autoConnect) {
       connect();
     }
 
     return () => {
+      mountedRef.current = false;
       disconnect();
     };
-  }, [autoConnect, connect, disconnect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - solo ejecutar una vez al montar
 
   // Ping periódico para mantener conexión
   useEffect(() => {
