@@ -20,7 +20,7 @@ interface AuthStore {
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => void;
   clearError: () => void;
-  initFromStorage: () => void;
+  initFromStorage: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -103,10 +103,24 @@ export const useAuthStore = create<AuthStore>()(
 
       clearError: () => set({ error: null }),
 
-      initFromStorage: () => {
+      initFromStorage: async () => {
         const token = api.getToken();
         if (token) {
           set({ token, isAuthenticated: true });
+          
+          // Cargar cuentas del usuario si hay token
+          try {
+            const response = await api.getAccounts();
+            if (response.success && response.data && response.data.length > 0) {
+              useUIStore.getState().setAccounts(response.data);
+              // Solo setear si no hay uno seleccionado
+              if (!useUIStore.getState().selectedAccountId) {
+                useUIStore.getState().setSelectedAccount(response.data[0].id);
+              }
+            }
+          } catch (err) {
+            console.error('[AuthStore] Error loading accounts on init:', err);
+          }
         }
       },
     }),
