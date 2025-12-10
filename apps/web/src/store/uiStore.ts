@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { api } from '../services/api';
 
 import type { ActivityType, Account, Conversation } from '../types';
 
@@ -53,6 +54,7 @@ interface UIStore {
   setAccounts: (accounts: Account[]) => void;
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
+  loadConversations: () => Promise<void>;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -133,6 +135,18 @@ export const useUIStore = create<UIStore>()(
         set((state) => ({
           conversations: [conversation, ...state.conversations],
         })),
+      
+      // Cargar conversaciones desde API
+      loadConversations: async () => {
+        try {
+          const response = await api.getConversations();
+          if (response.success && response.data) {
+            set({ conversations: response.data });
+          }
+        } catch (error) {
+          console.error('[UIStore] Failed to load conversations:', error);
+        }
+      },
     }),
     {
       name: 'fluxcore-ui',

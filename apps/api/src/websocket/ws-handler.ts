@@ -249,23 +249,14 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       }
     }
 
-    // Fallback a mock si no hay API configurada o falla
+    // Si no hay sugerencia (API no configurada), notificar al cliente
     if (!suggestion) {
-      const suggestionId = `sug-${Date.now()}`;
-      suggestion = {
-        id: suggestionId,
+      ws.send(JSON.stringify({
+        type: 'suggestion:unavailable',
+        reason: 'AI service not configured. Set GROQ_API_KEY environment variable.',
         conversationId,
-        extensionId: 'core-ai',
-        suggestedText: generateMockSuggestion(),
-        confidence: 0.85 + Math.random() * 0.15,
-        reasoning: 'Sugerencia generada localmente (API key no configurada)',
-        alternatives: [
-          'Alternativa 1: Respuesta más formal.',
-          'Alternativa 2: Respuesta más breve.',
-        ],
-        createdAt: new Date().toISOString(),
-        mode: evaluation.mode,
-      };
+      }));
+      return;
     }
 
     // Enviar sugerencia
@@ -294,20 +285,6 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       message: `Failed to generate suggestion: ${error.message}`,
     }));
   }
-}
-
-/**
- * Generar sugerencia mock (será reemplazado por AI service real)
- */
-function generateMockSuggestion(): string {
-  const suggestions = [
-    '¡Gracias por tu mensaje! Estoy revisando tu consulta y te responderé en breve.',
-    'Entiendo tu situación. ¿Podrías darme más detalles para poder ayudarte mejor?',
-    '¡Claro que sí! Estaré encantado de ayudarte con eso.',
-    'Gracias por contactarnos. Tu solicitud ha sido recibida.',
-    'Perfecto, déjame verificar esa información y te confirmo.',
-  ];
-  return suggestions[Math.floor(Math.random() * suggestions.length)];
 }
 
 // Exportar para uso en servidor híbrido

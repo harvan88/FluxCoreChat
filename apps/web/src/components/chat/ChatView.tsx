@@ -46,8 +46,8 @@ export function ChatView({ conversationId, accountId }: ChatViewProps) {
     onMessage: (msg) => {
       // syncManager maneja mensajes entrantes automáticamente
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
-        // Trigger refresh
-        window.location.reload(); // TODO: implementar refresh sin reload
+        // Refresh sin reload - usar la función del hook
+        refresh();
       }
     },
     onSuggestion: (suggestion) => {

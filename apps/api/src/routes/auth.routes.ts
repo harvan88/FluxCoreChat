@@ -113,4 +113,41 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         summary: 'Logout user',
       },
     }
+  )
+  .post(
+    '/forgot-password',
+    async ({ body, set }) => {
+      try {
+        // Verificar que el email existe
+        const exists = await authService.checkEmailExists(body.email);
+        
+        // Siempre devolver éxito para no revelar si el email existe
+        // En producción, aquí se enviaría un email con link de reset
+        if (exists) {
+          console.log(`[Auth] Password reset requested for: ${body.email}`);
+          // TODO: Implementar envío de email con token de reset
+          // Por ahora solo logueamos la solicitud
+        }
+        
+        return {
+          success: true,
+          message: 'Si el email existe, recibirás instrucciones para restablecer tu contraseña.',
+        };
+      } catch (error: any) {
+        set.status = 500;
+        return {
+          success: false,
+          message: 'Error processing request',
+        };
+      }
+    },
+    {
+      body: t.Object({
+        email: t.String({ format: 'email' }),
+      }),
+      detail: {
+        tags: ['Auth'],
+        summary: 'Request password reset',
+      },
+    }
   );

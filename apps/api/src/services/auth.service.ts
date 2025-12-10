@@ -112,6 +112,16 @@ export class AuthService {
     };
   }
 
+  async checkEmailExists(email: string): Promise<boolean> {
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    
+    return !!user;
+  }
+
   /**
    * Crear relación con Fluxi y mensaje de bienvenida
    */

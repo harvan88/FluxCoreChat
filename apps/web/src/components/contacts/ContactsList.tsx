@@ -17,8 +17,9 @@ export function ContactsList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const { selectedAccountId, conversations, setActiveActivity } = useUIStore();
+  const { selectedAccountId, conversations, setActiveActivity, loadConversations } = useUIStore();
   const { openTab } = usePanelStore();
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
 
   // Cargar contactos desde API real
   const loadContacts = useCallback(async (force = false) => {
@@ -126,14 +127,39 @@ export function ContactsList() {
             return (
               <button
                 key={contact.id}
-                onClick={() => {
+                onClick={async () => {
                   // Buscar conversación existente con este contacto
-                  const existingConv = conversations.find(
+                  let existingConv = conversations.find(
                     (c: any) => c.relationshipId === contact.id
                   );
                   
+                  if (!existingConv) {
+                    // Crear conversación si no existe
+                    setIsCreatingConversation(true);
+                    try {
+                      const response = await api.createConversation({
+                        relationshipId: contact.id,
+                        channel: 'web',
+                      });
+                      
+                      if (response.success && response.data) {
+                        existingConv = response.data;
+                        // Recargar conversaciones en el store
+                        await loadConversations();
+                      } else {
+                        console.error('[ContactsList] Failed to create conversation:', response.error);
+                        return;
+                      }
+                    } catch (err) {
+                      console.error('[ContactsList] Error creating conversation:', err);
+                      return;
+                    } finally {
+                      setIsCreatingConversation(false);
+                    }
+                  }
+                  
                   if (existingConv) {
-                    // Abrir conversación existente
+                    // Abrir conversación
                     setActiveActivity('conversations');
                     openTab('chats', {
                       type: 'chat',
@@ -141,9 +167,6 @@ export function ContactsList() {
                       context: { chatId: existingConv.id },
                       closable: true,
                     });
-                  } else {
-                    // TODO: Crear nueva conversación si no existe
-                    console.log('[ContactsList] No conversation found for contact:', contact.id);
                   }
                 }}
                 className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left"

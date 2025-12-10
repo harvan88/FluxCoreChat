@@ -222,6 +222,14 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  // Forgot password
+  async forgotPassword(email: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
 }
 
 export const api = new ApiService();
