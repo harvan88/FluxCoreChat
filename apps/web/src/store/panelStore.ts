@@ -172,6 +172,31 @@ export const usePanelStore = create<PanelStore>()(
         let targetContainer = getContainerByType(containerType);
         let isNewContainer = false;
 
+        // ISSUE-002: Verificar si ya existe un tab con el mismo chatId
+        if (tabContext.type === 'chat' && tabContext.context?.chatId) {
+          for (const container of layout.containers) {
+            const existingTab = container.tabs.find(
+              t => t.type === 'chat' && t.context?.chatId === tabContext.context?.chatId
+            );
+            if (existingTab) {
+              // Activar tab existente en vez de crear duplicado
+              set((state) => ({
+                layout: {
+                  ...state.layout,
+                  containers: state.layout.containers.map(c => 
+                    c.id === container.id 
+                      ? { ...c, activeTabId: existingTab.id }
+                      : c
+                  ),
+                  focusedContainerId: container.id,
+                },
+              }));
+              emit('tab.activated', { containerId: container.id, tabId: existingTab.id });
+              return { containerId: container.id, tabId: existingTab.id, isNewContainer: false };
+            }
+          }
+        }
+
         // Smart Priority: Si no hay container del tipo o forzamos nuevo
         if (!targetContainer || forceNewContainer) {
           // Verificar si podemos abrir nuevo container

@@ -13,10 +13,20 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       }
 
       try {
+        // Asegurar que content es un objeto, no un string
+        let content = body.content;
+        if (typeof content === 'string') {
+          try {
+            content = JSON.parse(content);
+          } catch {
+            content = { text: content };
+          }
+        }
+        
         const result = await messageCore.send({
           conversationId: body.conversationId,
           senderAccountId: body.senderAccountId,
-          content: body.content,
+          content,
           type: body.type || 'outgoing',
           generatedBy: body.generatedBy || 'human',
         });
