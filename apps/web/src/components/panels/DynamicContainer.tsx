@@ -60,8 +60,8 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
       {/* Tab Bar */}
       <TabBar container={container} />
 
-      {/* Content Area - con scroll */}
-      <div className="flex-1 overflow-auto">
+      {/* Content Area - sin scroll propio, el hijo maneja su scroll */}
+      <div className="flex-1 overflow-hidden">
         {activeTab ? (
           <TabContent tab={activeTab} />
         ) : (

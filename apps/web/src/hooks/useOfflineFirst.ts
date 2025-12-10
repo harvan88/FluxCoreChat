@@ -72,8 +72,13 @@ export function useOfflineMessages(conversationId: string | null) {
         type
       );
       
-      // Update local state immediately (optimistic)
-      setMessages(prev => [...prev, newMessage]);
+      // Update local state immediately (optimistic) - evitar duplicados
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMessage.id)) {
+          return prev;
+        }
+        return [...prev, newMessage];
+      });
       
       return newMessage;
     } catch (err: any) {
@@ -82,8 +87,21 @@ export function useOfflineMessages(conversationId: string | null) {
     }
   }, [conversationId]);
 
-  // Refresh messages
-  const refresh = useCallback(() => loadMessages(), [loadMessages]);
+  // Refresh messages - con deduplicación
+  const refresh = useCallback(async () => {
+    if (!conversationId) return;
+    
+    try {
+      // Fetch del backend primero
+      await syncManager.fetchMessages(conversationId);
+      // Luego cargar de IndexedDB (ya deduplicado por syncManager)
+      await loadMessages();
+    } catch (err) {
+      console.error('[useOfflineMessages] Refresh error:', err);
+      // Fallback: solo cargar local
+      await loadMessages();
+    }
+  }, [conversationId, loadMessages]);
 
   return {
     messages,
