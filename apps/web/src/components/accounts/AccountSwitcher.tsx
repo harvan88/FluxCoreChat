@@ -6,6 +6,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Plus, Building2, User, Check } from 'lucide-react';
 import { useAccounts } from '../../store/accountStore';
+import { usePanelStore } from '../../store/panelStore';
+import { useUIStore } from '../../store/uiStore';
 import type { Account } from '../../types';
 
 interface AccountSwitcherProps {
@@ -129,6 +131,7 @@ function AccountDropdown({
   accounts,
   activeAccountId,
   onSelect,
+  onClose,
 }: AccountDropdownProps) {
   const personalAccounts = accounts.filter((a) => a.accountType === 'personal');
   const businessAccounts = accounts.filter((a) => a.accountType === 'business');
@@ -174,7 +177,17 @@ function AccountDropdown({
         <button
           className="w-full px-3 py-2 flex items-center gap-2 text-accent hover:bg-hover transition-colors"
           onClick={() => {
-            // TODO: Open create account modal
+            // Abrir settings en la sección de cuentas
+            const { setActiveActivity } = useUIStore.getState();
+            const { openTab } = usePanelStore.getState();
+            setActiveActivity('settings');
+            openTab('settings', {
+              type: 'settings',
+              title: 'Nueva Cuenta',
+              context: { section: 'accounts', action: 'create' },
+              closable: true,
+            });
+            onClose();
           }}
         >
           <Plus size={16} />

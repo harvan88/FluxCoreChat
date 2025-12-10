@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
+import { api } from '../../services/api';
 import { Mail, Lock, User, Loader2, Eye, EyeOff } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -35,8 +36,13 @@ export function AuthPage() {
     } else if (mode === 'register') {
       await register({ email, password, name });
     } else if (mode === 'forgot-password') {
-      // Simular envío de recuperación (TODO: implementar backend)
-      setForgotPasswordSent(true);
+      // Llamar al endpoint real
+      try {
+        await api.forgotPassword(email);
+        setForgotPasswordSent(true);
+      } catch (err) {
+        console.error('[AuthPage] Forgot password error:', err);
+      }
     }
   };
 

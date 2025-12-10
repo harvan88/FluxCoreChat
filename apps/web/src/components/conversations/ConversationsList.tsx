@@ -78,8 +78,9 @@ export function ConversationsList() {
   };
 
   const handleNewConversation = () => {
-    // TODO: Implementar modal para nueva conversación
-    console.log('[ConversationsList] New conversation clicked - TODO: implement modal');
+    // Ir a contactos para seleccionar con quién iniciar conversación
+    const { setActiveActivity } = useUIStore.getState();
+    setActiveActivity('contacts');
   };
 
   return (
