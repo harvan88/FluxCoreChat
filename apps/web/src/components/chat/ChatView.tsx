@@ -44,10 +44,12 @@ export function ChatView({ conversationId, accountId }: ChatViewProps) {
   // V2-1.3: WebSocket para tiempo real
   useWebSocket({
     onMessage: (msg) => {
-      // syncManager maneja mensajes entrantes automáticamente
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
-        // Refresh sin reload - usar la función del hook
-        refresh();
+        // Solo refresh si el mensaje NO es nuestro (evitar duplicados)
+        const incomingAccountId = msg.data?.senderAccountId;
+        if (incomingAccountId !== accountId) {
+          refresh();
+        }
       }
     },
     onSuggestion: (suggestion) => {
