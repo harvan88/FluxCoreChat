@@ -18,6 +18,11 @@
 |------|-----------|---------|------|
 | Mensajería básica | 4 | 0 | 0 |
 | Modos de IA | 3 | 0 | 0 |
+| **Header del Chat** | 1 | 0 | 4 |
+| **Menú de Opciones** | 0 | 2 | 6 |
+| **Hover en Mensajes** | 0 | 0 | 3 |
+| **Feedback IA** | 0 | 0 | 2 |
+| **Refinación IA** | 0 | 0 | 1 |
 | Adjuntos | 1 | 0 | 7 |
 | Audio | 0 | 0 | 4 |
 | Emojis | 0 | 0 | 2 |
@@ -27,6 +32,125 @@
 ---
 
 ## 2. MAPEO DETALLADO
+
+### 2.0 Header del Chat (Frame 10, 15, 16)
+
+| Componente Frontend | Endpoint Backend | Estado | Notas |
+|---------------------|------------------|--------|-------|
+| `ChatHeader` - Info contacto | `GET /conversations/:id` | ✅ | Retorna contactName, contactPhone |
+| `ChatHeader` - Tags (#) | ❌ No existe | ❌ | Falta sistema de etiquetas |
+| `ChatHeader` - Asignación (@) | ❌ No existe | ❌ | Falta asignación de conversaciones |
+| `ChatHeader` - Buscar en chat | ❌ No existe | ❌ | Falta `GET /conversations/:id/search` |
+| `ChatHeader` - Opciones menú | ⚠️ Parcial | ⚠️ | Algunas acciones existen dispersas |
+
+**GAPS:**
+1. **Sistema de Tags**: No hay CRUD para etiquetas de conversación
+2. **Asignación**: No hay asignación de conversaciones a usuarios/cuentas
+3. **Búsqueda**: No hay búsqueda dentro de conversación
+
+---
+
+### 2.0.1 Menú de Opciones del Header
+
+| Opción del Menú | Endpoint Backend | Estado | Notas |
+|-----------------|------------------|--------|-------|
+| Reenviar | ❌ No existe | ❌ | Forward de conversación completa |
+| Calendario/Programar | ❌ No existe | ❌ | Falta scheduler de mensajes |
+| Mención (@) | ❌ No existe | ❌ | Falta sistema de menciones |
+| Tag (#) | ❌ No existe | ❌ | Falta CRUD tags |
+| Seguridad | ⚠️ Parcial | ⚠️ | Configuración básica existe |
+| Buscar | ❌ No existe | ❌ | Falta búsqueda en conversación |
+| Descargar | ❌ No existe | ❌ | Falta export de conversación |
+| Bloquear | ❌ No existe | ❌ | Falta bloqueo de contactos |
+| Compartir | ❌ No existe | ❌ | Falta compartir conversación |
+| Eliminar | `DELETE /conversations/:id` | ⚠️ | Existe pero sin soft-delete |
+
+---
+
+### 2.0.2 Hover en Mensajes y Reacciones
+
+| Componente Frontend | Endpoint Backend | Estado | Notas |
+|---------------------|------------------|--------|-------|
+| `MessageHoverMenu` - Emoji reaction | ❌ No existe | ❌ | Falta sistema de reacciones |
+| `MessageHoverMenu` - Opciones | ⚠️ Parcial | ⚠️ | Algunas acciones existen |
+| Reacciones emoji en mensaje | ❌ No existe | ❌ | Falta `POST /messages/:id/reactions` |
+
+**GAPS:**
+1. **Reacciones**: No hay sistema de reacciones emoji a mensajes
+2. **Almacenamiento**: No hay tabla/campo para guardar reacciones
+
+---
+
+### 2.0.3 Feedback de Mensajes IA
+
+| Componente Frontend | Endpoint Backend | Estado | Notas |
+|---------------------|------------------|--------|-------|
+| 👍 Thumbs Up | ❌ No existe | ❌ | Falta `POST /messages/:id/feedback` |
+| 👎 Thumbs Down | ❌ No existe | ❌ | Falta endpoint de feedback negativo |
+| Historial de feedback | ❌ No existe | ❌ | Falta tabla `ai_feedback` |
+
+**Endpoint Sugerido:**
+```typescript
+POST /messages/:id/feedback
+  body: {
+    type: 'positive' | 'negative',
+    reason?: string,
+    accountId: string
+  }
+  returns: { success: boolean }
+```
+
+**Schema Sugerido:**
+```sql
+CREATE TABLE ai_feedback (
+  id UUID PRIMARY KEY,
+  message_id UUID REFERENCES messages(id),
+  account_id UUID REFERENCES accounts(id),
+  type TEXT NOT NULL,  -- 'positive', 'negative'
+  reason TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+### 2.0.4 Refinación de Mensajes IA
+
+| Componente Frontend | Endpoint Backend | Estado | Notas |
+|---------------------|------------------|--------|-------|
+| `AIRefinementPanel` - Enviar observación | ❌ No existe | ❌ | Falta `POST /messages/:id/refine` |
+| Historial de refinaciones | ❌ No existe | ❌ | Falta almacenamiento de observaciones |
+| Regenerar mensaje con observación | ❌ No existe | ❌ | Falta integración con LLM |
+
+**Endpoint Sugerido:**
+```typescript
+POST /messages/:id/refine
+  body: {
+    observation: string,
+    accountId: string
+  }
+  returns: {
+    refinedMessage: Message,  // Nuevo mensaje generado
+    originalMessageId: string
+  }
+```
+
+**Flujo:**
+1. Usuario escribe observación en `AIRefinementPanel`
+2. Frontend envía `POST /messages/:id/refine`
+3. Backend obtiene mensaje original
+4. Backend envía a LLM con contexto + observación
+5. Backend crea nuevo mensaje con `generatedBy: 'ai'`
+6. Backend relaciona con mensaje original vía `refinedFrom`
+7. Frontend muestra nuevo mensaje
+
+**Schema Sugerido:**
+```sql
+ALTER TABLE messages ADD COLUMN refined_from UUID REFERENCES messages(id);
+ALTER TABLE messages ADD COLUMN refinement_observation TEXT;
+```
+
+---
 
 ### 2.1 Mensajería Básica
 
@@ -233,6 +357,9 @@ DELETE /messages/:id  # Individual, no batch
 | G-03 | Indicador "escribiendo" | ChatInputBar | Agregar WS event `typing` |
 | G-04 | Forward de mensajes | MessageSelectionBar | Crear `POST /messages/forward` |
 | G-05 | Eliminar múltiples mensajes | MessageSelectionBar | Crear `DELETE /messages/batch` |
+| **G-15** | **Feedback IA (👍👎)** | **MessageHoverMenu** | **Crear `POST /messages/:id/feedback`** |
+| **G-16** | **Refinación de mensajes IA** | **AIRefinementPanel** | **Crear `POST /messages/:id/refine`** |
+| **G-17** | **Reacciones emoji** | **MessageHoverMenu** | **Crear `POST /messages/:id/reactions`** |
 
 ### 🟡 Prioridad MEDIA (Features Secundarias)
 
@@ -243,6 +370,10 @@ DELETE /messages/:id  # Individual, no batch
 | G-08 | Compartir contacto | AttachmentPanel | Crear endpoint contacto |
 | G-09 | Read receipts | Mensajes | Agregar WS events `message:read` |
 | G-10 | Presence (online/offline) | Header/Avatar | Agregar WS events `presence` |
+| **G-18** | **Sistema de Tags (#)** | **ChatHeader** | **CRUD `POST /tags`, `POST /conversations/:id/tags`** |
+| **G-19** | **Asignación de conversaciones (@)** | **ChatHeader** | **Crear `POST /conversations/:id/assign`** |
+| **G-20** | **Búsqueda en conversación** | **ChatHeader** | **Crear `GET /conversations/:id/search`** |
+| **G-21** | **Bloqueo de contactos** | **ChatOptionsMenu** | **Crear `POST /contacts/:id/block`** |
 
 ### 🟢 Prioridad BAJA (Nice-to-have)
 
@@ -252,6 +383,8 @@ DELETE /messages/:id  # Individual, no batch
 | G-12 | Integración GIFs | EmojiPanel | Integrar Giphy/Tenor API |
 | G-13 | Quick replies CRUD | AttachmentPanel | CRUD respuestas rápidas |
 | G-14 | Transcripción audio | AudioRecordingInterface | Integrar speech-to-text |
+| **G-22** | **Export de conversación** | **ChatOptionsMenu** | **Crear `GET /conversations/:id/export`** |
+| **G-23** | **Programar mensajes** | **ChatOptionsMenu** | **Crear `POST /messages/schedule`** |
 
 ---
 
