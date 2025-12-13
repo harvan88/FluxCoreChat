@@ -10,14 +10,26 @@
 ### 1.1 Layout Principal
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    HEADER (opcional)                     │
+│  HEADER                                                 │
+│  [←] [Nombre] [+547 12:35] ... [#] [@] [⋮]             │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│                   ÁREA DE MENSAJES                      │
-│                   (Chat Messages)                       │
+│  ÁREA DE MENSAJES                                       │
+│  ┌─────────────────────────────────┐                   │
+│  │ [□] Mensaje recibido            │ ← Checkbox modo   │
+│  │     (hover: [😊] [⋮])           │   selección       │
+│  └─────────────────────────────────┘                   │
+│           ┌─────────────────────────────────┐          │
+│           │ Mensaje enviado (humano)    [□] │          │
+│           │ (hover: [😊] [⋮])               │          │
+│           └─────────────────────────────────┘          │
+│           ┌─────────────────────────────────┐          │
+│           │ Mensaje IA (borde azul)     [□] │          │
+│           │ (hover: [👍] [👎] [⋮])          │          │
+│           └─────────────────────────────────┘          │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
-│                   INPUT AREA (Footer)                   │
+│  INPUT AREA (Footer)                                    │
 │  [Emoji] [TextField] [Attach] [Mic] [AI Mode] [Send]   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -32,6 +44,183 @@
 ---
 
 ## 2. INVENTARIO DE COMPONENTES
+
+### 2.0 HEADER DEL CHAT (Frame 10, 15, 16)
+
+#### `ChatHeader`
+**Descripción**: Barra superior del chat con información del contacto y acciones
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `contactName` | `string` | Nombre del contacto |
+| `contactPhone` | `string` | Teléfono/identificador |
+| `timestamp` | `string` | Última actividad (ej: "12:35") |
+| `onBack` | `() => void` | Navegar hacia atrás |
+| `onOpenOptions` | `() => void` | Abrir menú de opciones |
+
+**Elementos del Header (izquierda a derecha)**:
+
+| Icono | Acción | Descripción |
+|-------|--------|-------------|
+| ← (Flecha) | `onBack()` | Volver a la lista de conversaciones |
+| Nombre | - | Nombre del contacto ("Cristian") |
+| Teléfono | - | Identificador ("+547 12:35") |
+| # (Tag) | `onOpenTags()` | Sistema de etiquetas para categorizar |
+| @ (Arroba) | `onOpenAssign()` | Asignar/mencionar otra cuenta |
+| ⋮ (Options) | `onOpenOptions()` | Menú desplegable de opciones |
+
+**Colores**:
+- **Fondo**: `bg-elevated` (`#2C2C2C`)
+- **Iconos**: `text-muted` (`#B0AFBD`)
+- **Texto nombre**: `text-primary`
+- **Texto teléfono**: `text-secondary`
+
+---
+
+### 2.0.1 MENÚ DE OPCIONES DEL HEADER (Sidebar Derecho)
+
+#### `ChatOptionsMenu`
+**Descripción**: Panel lateral con opciones de conversación (visible en Frame 10, 15)
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `isOpen` | `boolean` | Panel visible |
+| `onClose` | `() => void` | Cerrar panel |
+| `onAction` | `(action: string) => void` | Ejecutar acción |
+
+**Opciones del Menú** (icono izquierda, texto derecha):
+
+| Icono | Acción | Descripción |
+|-------|--------|-------------|
+| ↩️ Reenviar | `forward` | Reenviar conversación |
+| 📅 Calendario | `schedule` | Programar mensaje/recordatorio |
+| @ Mención | `mention` | Mencionar otra cuenta |
+| # Tag | `tag` | Etiquetar conversación |
+| 🛡️ Seguridad | `security` | Configuración de privacidad |
+| 🔍 Buscar | `search` | Buscar en conversación |
+| ⬇️ Descargar | `download` | Descargar conversación/archivos |
+| 🚫 Bloquear | `block` | Bloquear contacto |
+| 📤 Compartir | `share` | Compartir conversación |
+| 🗑️ Eliminar | `delete` | Eliminar conversación |
+
+**Estilos**:
+- **Fondo panel**: `bg-elevated` (`#2C2C2C`)
+- **Items hover**: `bg-hover`
+- **Iconos**: `text-muted`
+- **Texto**: `text-primary`
+
+---
+
+### 2.0.2 BURBUJAS DE MENSAJE
+
+#### `MessageBubble`
+**Descripción**: Contenedor de mensaje individual con estados según origen
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `id` | `string` | ID del mensaje |
+| `content` | `MessageContent` | Contenido del mensaje |
+| `sender` | `'self' \| 'other' \| 'ai'` | Origen del mensaje |
+| `generatedBy` | `'human' \| 'ai'` | Generado por humano o IA |
+| `timestamp` | `string` | Hora del mensaje |
+| `isSelected` | `boolean` | Seleccionado (modo selección) |
+| `onSelect` | `() => void` | Toggle selección |
+
+**Estilos por tipo**:
+
+| Tipo | Fondo | Borde | Alineación |
+|------|-------|-------|------------|
+| Recibido (otro) | `bg-elevated` (`#2C2C2C`) | Ninguno | Izquierda |
+| Enviado (self, humano) | `bg-elevated` (`#2C2C2C`) | Ninguno | Derecha |
+| Enviado (self, IA) | `bg-surface` (`#2F4053`) | `border-accent` (`#3B82F6`) 2px | Derecha |
+
+---
+
+### 2.0.3 MENÚ HOVER EN MENSAJES
+
+#### `MessageHoverMenu`
+**Descripción**: Menú contextual que aparece al pasar el mouse sobre un mensaje
+
+**Para mensajes HUMANOS (enviados o recibidos)**:
+
+| Icono | Acción | Descripción |
+|-------|--------|-------------|
+| 😊 Emoji | `react` | Agregar reacción emoji |
+| ⋮ Options | `openMenu` | Abrir menú de opciones |
+
+**Para mensajes generados por IA** (burbuja azul):
+
+| Icono | Acción | Descripción |
+|-------|--------|-------------|
+| 👍 Thumbs Up | `feedback:positive` | Feedback positivo a la IA |
+| 👎 Thumbs Down | `feedback:negative` | Feedback negativo a la IA |
+| ⋮ Options | `openMenu` | Abrir menú de opciones (incluye "Refinar") |
+
+**Menú de Opciones del Mensaje** (al hacer click en ⋮):
+
+| Opción | Acción | Solo IA |
+|--------|--------|---------|
+| Responder | `reply` | No |
+| Copiar | `copy` | No |
+| Reenviar | `forward` | No |
+| Marcar | `flag` | No |
+| Eliminar | `delete` | No |
+| **Refinar** | `refine` | **Sí** |
+
+---
+
+### 2.0.4 INTERFAZ DE REFINACIÓN DE IA
+
+#### `AIRefinementPanel`
+**Descripción**: Panel que transforma la burbuja de mensaje IA para recibir observaciones
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `messageId` | `string` | ID del mensaje a refinar |
+| `originalContent` | `string` | Contenido original del mensaje |
+| `onSubmit` | `(observation: string) => void` | Enviar observación |
+| `onCancel` | `() => void` | Cancelar refinación |
+
+**Estructura visual**:
+```
+┌─────────────────────────────────────────┐
+│ Mensaje original de IA                  │
+├─────────────────────────────────────────┤
+│ [Título: "Observación de refinación"]   │
+│ ┌─────────────────────────────────────┐ │
+│ │                                     │ │
+│ │  Textarea para escribir             │ │
+│ │  la observación...                  │ │
+│ │                                     │ │
+│ └─────────────────────────────────────┘ │
+│           [Cancelar] [Enviar]           │
+└─────────────────────────────────────────┘
+```
+
+**Flujo**:
+1. Usuario hace click en "Refinar" en menú del mensaje IA
+2. La burbuja se expande mostrando el panel de refinación
+3. Usuario escribe observación
+4. Al enviar, se genera nuevo mensaje con las correcciones
+5. Al cancelar, vuelve al estado normal
+
+---
+
+### 2.0.5 CHECKBOX DE SELECCIÓN (Modo Selección)
+
+#### `MessageSelectionCheckbox`
+**Descripción**: Checkbox que aparece junto a cada mensaje en modo selección
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `isSelected` | `boolean` | Estado de selección |
+| `onChange` | `() => void` | Toggle selección |
+
+**Posición**: Izquierda del mensaje (mensajes recibidos) o derecha (mensajes enviados)
+**Icono**: Cuadrado con check cuando seleccionado
+**Color seleccionado**: `text-accent` (`#3B82F6`)
+
+---
 
 ### 2.1 INPUT AREA - Componente Principal
 
@@ -66,9 +255,9 @@
 | `isActive` | `boolean` | Panel de emojis abierto |
 | `onClick` | `() => void` | Toggle panel emojis |
 
-**Icono**: Cara sonriente con signo + (posición: izquierda del input)
-**Color inactivo**: `#B0AFBD`
-**Color activo**: Destacado
+**Icono**: Cara sonriente con signo (posición: izquierda del input)
+**Color inactivo**: `text-muted` (hereda del tema)
+**Color activo**: `text-accent` (azul principal)
 
 ---
 
@@ -79,7 +268,7 @@
 | `onClick` | `() => void` | Toggle panel adjuntos |
 
 **Icono**: Clip de papel (paperclip)
-**Color inactivo**: `#B0AEBD`
+**Color inactivo**: `text-muted` (hereda del tema)
 **Posición**: Derecha del campo de texto
 
 ---
@@ -92,8 +281,8 @@
 | `onClick` | `() => void` | Iniciar/pausar grabación |
 
 **Icono**: Micrófono
-**Color inactivo**: `#B0AFBD`
-**Color grabando**: `#EF0054` (rojo/rosa)
+**Color inactivo**: `text-muted` (hereda del tema)
+**Color grabando**: `text-error` (rojo semántico)
 **Posición**: Derecha del botón de adjuntos
 
 ---
@@ -105,9 +294,9 @@
 | `onClick` | `() => void` | Abrir selector de modo |
 
 **Iconos por modo**:
-- **Off**: Robot tachado (`#B0AFBD`)
-- **Automático**: Robot con check (`#14D32A` verde)
-- **Supervisión**: Burbuja de chat con puntos (`#FF9500` naranja)
+- **Off**: Robot tachado (`text-muted`)
+- **Automático**: Robot con check (`text-success` verde semántico)
+- **Supervisión**: Burbuja de chat con puntos (`text-warning` amarillo semántico)
 
 **Posición**: Extremo derecho, antes del botón enviar
 
@@ -120,8 +309,8 @@
 | `onClick` | `() => void` | Enviar mensaje |
 
 **Icono**: Flecha hacia arriba
-**Color activo**: `#3B82F6` (azul, fondo circular)
-**Color inactivo**: Gris
+**Color activo**: `bg-accent` (azul principal, fondo circular)
+**Color inactivo**: `text-muted` (gris semántico)
 **Posición**: Extremo derecho
 
 ---
@@ -139,10 +328,10 @@
 | `onBlur` | `() => void` | Al desenfocar |
 
 **Estilos**:
-- **Fondo**: `#757575` con opacidad 0.5
-- **Borde**: `#AEAEAE`
-- **Border-radius**: Pill/redondeado (32px+)
-- **Texto placeholder**: Visible cuando vacío
+- **Fondo**: `bg-elevated` con opacidad reducida
+- **Borde**: `border-default`
+- **Border-radius**: `rounded-full` (32px+)
+- **Texto placeholder**: `text-muted` cuando está vacío
 
 ---
 
@@ -178,14 +367,14 @@
 
 | Icono | Tipo | Color | Descripción |
 |-------|------|-------|-------------|
-| Documento | `document` | `#44EFFF` (cyan) | Archivos/documentos |
-| Cámara | `camera` | `#0A63E9` (azul) | Tomar foto |
-| Galería | `gallery` | `#D30BB1` (magenta) | Imágenes existentes |
-| Audio | `audio` | `#CE1499` (rosa) | Notas de voz/audio |
-| Recibo | `receipt` | `#E60E0E` (rojo) | Recibos/facturas |
-| Ubicación | `location` | `#14D32A` (verde) | Compartir ubicación |
-| Quick reply | `quick` | `#FBFF00` (amarillo) | Respuestas rápidas |
-| Contacto | `contact` | `#25E7DE` (turquesa) | Compartir contacto |
+| Documento | `document` | `text-info` (azul información) | Archivos/documentos |
+| Cámara | `camera` | `text-accent` (azul principal) | Tomar foto |
+| Galería | `gallery` | `text-error` (rosa/error) | Imágenes existentes |
+| Audio | `audio` | `text-error` (rosa semántico) | Notas de voz/audio |
+| Recibo | `receipt` | `text-error` (rojo semántico) | Recibos/facturas |
+| Ubicación | `location` | `text-success` (verde semántico) | Compartir ubicación |
+| Quick reply | `quick` | `text-warning` (amarillo semántico) | Respuestas rápidas |
+| Contacto | `contact` | `text-info` (azul información) | Compartir contacto |
 
 **Estructura**: 
 - 8 botones en grid 4x2
@@ -207,11 +396,11 @@
 
 | Modo | Icono | Color | Label |
 |------|-------|-------|-------|
-| Supervisión | Burbuja chat | `#FF9500` | "Modo Supervisión" |
-| Automático | Robot calendario | `#14D32A` | "FluxCore Automático" |
-| Desactivado | Robot tachado | `#B0AFBD` | "Desactivado" |
+| Supervisión | Burbuja chat | `text-warning` | "Modo Supervisión" |
+| Automático | Robot calendario | `text-success` | "FluxCore Automático" |
+| Desactivado | Robot tachado | `text-muted` | "Desactivado" |
 
-**Indicador superior**: Barra azul `#3B82F6` (217x5px)
+**Indicador superior**: Barra `bg-accent` (azul principal)
 
 ---
 
@@ -231,11 +420,11 @@
 **Elementos visuales**:
 - **Waveform**: Visualización de ondas de audio (barras verticales)
 - **Timer**: Contador de tiempo (`0:32` format)
-- **Indicador grabando**: Punto verde `#1FFF02`
-- **Botón pausa**: Dos barras verticales `#EF0054`
-- **Botón play** (cuando pausado): Triángulo blanco
-- **Botón papelera**: Icono trash para descartar
-- **Botón enviar**: Flecha azul `#3B82F6`
+- **Indicador grabando**: Punto `text-success` (verde semántico)
+- **Botón pausa**: Dos barras verticales `text-error` (rojo semántico)
+- **Botón play** (cuando pausado): Triángulo `text-inverse`
+- **Botón papelera**: Icono trash `text-muted`
+- **Botón enviar**: Flecha `bg-accent` (azul principal)
 
 ---
 
@@ -265,37 +454,37 @@
 
 ---
 
-## 3. SISTEMA DE COLORES
+## 3. SISTEMA DE COLORES CANÓNICO
 
-### 3.1 Colores Base (Dark Theme)
-| Token | Hex | Uso |
-|-------|-----|-----|
-| `bg-container` | `#2C2C2C` | Fondo del input area |
-| `bg-input` | `#757575` (50% opacity) | Fondo del campo de texto |
-| `border-input` | `#AEAEAE` | Borde del campo de texto |
-| `text-icon-inactive` | `#B0AFBD` | Iconos inactivos |
-| `bg-base` | `#0D0D0D` | Fondo de panels/cards |
+### 3.1 Tokens de Color (Tema Oscuro)
+| Token | Variable CSS | Uso en Componentes |
+|-------|-------------|-------------------|
+| `bg-base` | `var(--bg-base)` | Fondo principal de la aplicación |
+| `bg-surface` | `var(--bg-surface)` | Contenedores, paneles principales |
+| `bg-elevated` | `var(--bg-elevated)` | Inputs, cards, elementos elevados |
+| `bg-hover` | `var(--bg-hover)` | Estados hover interactivos |
+| `bg-active` | `var(--bg-active)` | Estados activos/seleccionados |
+| `border-subtle` | `var(--border-subtle)` | Bordes sutiles de bajo contraste |
+| `border-default` | `var(--border-default)` | Bordes estándar |
+| `text-primary` | `var(--text-primary)` | Texto principal |
+| `text-secondary` | `var(--text-secondary)` | Texto secundario |
+| `text-muted` | `var(--text-muted)` | Iconos inactivos, placeholders |
+| `text-inverse` | `var(--text-inverse)` | Texto sobre fondos accent |
 
-### 3.2 Colores de Acción
-| Token | Hex | Uso |
-|-------|-----|-----|
-| `accent-primary` | `#3B82F6` | Botón enviar, indicadores activos |
-| `ai-automatic` | `#14D32A` | Modo IA automático |
-| `ai-supervision` | `#FF9500` | Modo IA supervisión |
-| `recording` | `#EF0054` | Grabación activa |
-| `recording-indicator` | `#1FFF02` | Indicador punto verde |
+### 3.2 Colores Semánticos
+| Token | Variable CSS | Uso |
+|-------|-------------|-----|
+| `bg-accent` | `var(--accent-primary)` | Botones activos, elementos importantes |
+| `text-accent` | `var(--accent-primary)` | Iconos activos, texto destacado |
+| `text-success` | `var(--color-success)` | Estados exitosos, ubicación, IA automático |
+| `text-warning` | `var(--color-warning)` | Estados de advertencia, IA supervisión |
+| `text-error` | `var(--color-error)` | Estados de error, grabación activa |
+| `text-info` | `var(--color-info)` | Información, documentos, contactos |
 
-### 3.3 Colores de Adjuntos
-| Tipo | Hex |
-|------|-----|
-| Documento | `#44EFFF` |
-| Cámara | `#0A63E9` |
-| Galería | `#D30BB1` |
-| Audio | `#CE1499` |
-| Recibo | `#E60E0E` |
-| Ubicación | `#14D32A` |
-| Quick Reply | `#FBFF00` |
-| Contacto | `#25E7DE` |
+### 3.3 Regla de Botones
+- **Inactivos**: `var(--text-muted)` (gris semántico)
+- **Activos/Importantes**: `var(--bg-accent)` (azul principal)
+- **Semánticos**: Usar tokens semánticos (`text-success`, `text-warning`, `text-error`, `text-info`)
 
 ---
 
