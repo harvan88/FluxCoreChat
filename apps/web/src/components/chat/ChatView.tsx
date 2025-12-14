@@ -4,12 +4,14 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Loader2, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
 import { MessageBubble } from './MessageBubble';
-import { useOfflineMessages } from '../../hooks/useOfflineFirst';
+import { AttachmentPanel, type AttachmentAction } from './AttachmentPanel';
+import { useConnectionStatus, useOfflineMessages } from '../../hooks/useOfflineFirst';
+import { useFileUpload } from '../../hooks/useFileUpload';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useUIStore } from '../../store/uiStore';
 import { db } from '../../db';
@@ -23,11 +25,19 @@ interface ChatViewProps {
 
 export function ChatView({ conversationId, accountId, relationshipId }: ChatViewProps) {
   const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const pendingConversationScrollRef = useRef(false);
+
+  const openCameraRef = useRef<(() => void) | null>(null);
+  const openGalleryRef = useRef<(() => void) | null>(null);
+  const openDocumentRef = useRef<(() => void) | null>(null);
+  const openAudioRef = useRef<(() => void) | null>(null);
   
   // Obtener nombre del contacto desde las conversaciones cargadas
   const conversations = useUIStore((state) => state.conversations);
@@ -37,6 +47,19 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   
   // V2-1: useOfflineMessages para persistencia local + sync
   const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
+
+  // PC-9: uploads (con progress)
+  const {
+    uploadFile,
+    uploadAudio,
+    isUploading: isUploadingAttachment,
+    progress: uploadProgress,
+    error: uploadError,
+    clearError: clearUploadError,
+  } = useFileUpload();
+
+  // C3: Estado de conexión offline-first (online/offline/syncing)
+  const syncConnectionStatus = useConnectionStatus();
   
   // COR-043/COR-044: AI Suggestions
   const { 
@@ -47,7 +70,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   } = useAISuggestions(conversationId);
 
   // V2-1.3: WebSocket para tiempo real
-  const { subscribe, unsubscribe } = useWebSocket({
+  const { status: wsStatus, lastError: wsLastError, reconnectAttempts: wsReconnectAttempts, connect: connectWS, subscribe, unsubscribe } = useWebSocket({
     onMessage: (msg) => {
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
         // Solo refresh si el mensaje NO es nuestro (evitar duplicados)
@@ -84,8 +107,10 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     let raf: number | null = null;
 
     const scrollToBottom = (behavior: ScrollBehavior) => {
+      const el = messagesContainerRef.current;
+      if (!el) return;
       raf = requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior });
+        el.scrollTo({ top: el.scrollHeight, behavior });
       });
     };
 
@@ -96,7 +121,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       pendingConversationScrollRef.current = false;
       scrollToBottom('auto');
     } else if (isAtBottomRef.current) {
-      scrollToBottom('smooth');
+      scrollToBottom('auto');
     }
 
     return () => {
@@ -112,9 +137,13 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     isAtBottomRef.current = distanceFromBottom <= threshold;
   };
 
-  const handleSend = async (text?: string) => {
-    const textToSend = text || message;
-    if (!textToSend.trim()) return;
+  const handleSend = async (overrideContent?: { text: string; media?: any[] }) => {
+    const content = overrideContent ?? { text: message };
+    const hasText = typeof content.text === 'string' && content.text.trim().length > 0;
+    const hasMedia = Array.isArray(content.media) && content.media.length > 0;
+    if (!hasText && !hasMedia) return;
+
+    if (isSending) return;
     
     if (!accountId) {
       console.error('[ChatView] Cannot send: no accountId');
@@ -122,17 +151,41 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     }
 
     try {
-      await sendMsg(accountId, { text: textToSend });
+      setIsSending(true);
+      setSendError(null);
+      await sendMsg(accountId, {
+        text: content.text || '',
+        ...(hasMedia ? { media: content.media } : {}),
+      } as any);
       setMessage('');
       setReplyingTo(null);
     } catch (err) {
       console.error('[ChatView] Send error:', err);
+      setSendError(err instanceof Error ? err.message : 'Error al enviar mensaje');
+    } finally {
+      setIsSending(false);
     }
+  };
+
+  const getConnectionLabel = () => {
+    if (syncConnectionStatus === 'offline') return 'Sin conexión';
+    if (wsStatus === 'error') return 'Sin conexión';
+    if (wsStatus === 'connecting' || wsStatus === 'disconnected') return 'Conectando...';
+    if (syncConnectionStatus === 'syncing') return 'Sincronizando...';
+    return 'En línea';
+  };
+
+  const getConnectionDotClass = () => {
+    if (syncConnectionStatus === 'offline') return 'bg-error';
+    if (wsStatus === 'error') return 'bg-error';
+    if (wsStatus === 'connecting' || wsStatus === 'disconnected') return 'bg-warning';
+    if (syncConnectionStatus === 'syncing') return 'bg-warning';
+    return 'bg-success';
   };
 
   // COR-044: Handlers para sugerencias de IA
   const handleApproveSuggestion = (suggestionId: string, text: string) => {
-    handleSend(text);
+    handleSend({ text });
     removeSuggestion(suggestionId);
   };
 
@@ -147,6 +200,34 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleSelectAttachment = (action: AttachmentAction) => {
+    setIsAttachmentOpen(false);
+    clearUploadError();
+
+    switch (action) {
+      case 'camera':
+        openCameraRef.current?.();
+        break;
+      case 'gallery':
+      case 'receipt':
+        openGalleryRef.current?.();
+        break;
+      case 'document':
+        openDocumentRef.current?.();
+        break;
+      case 'audio':
+        openAudioRef.current?.();
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleUploadedMediaSend = async (mediaItem: any) => {
+    const caption = message;
+    await handleSend({ text: caption || '', media: [mediaItem] });
   };
 
   // Scroll a mensaje específico
@@ -180,7 +261,12 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
             <div className="text-primary font-medium">
               {contactName}
             </div>
-            <div className="text-xs text-muted">En línea</div>
+            <div className="text-xs text-muted flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5">
+                <span className={clsx('w-2 h-2 rounded-full', getConnectionDotClass())} />
+                <span>{getConnectionLabel()}</span>
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -203,10 +289,61 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         </div>
       )}
 
+      {/* Upload error */}
+      {uploadError && (
+        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm flex items-start justify-between gap-3">
+          <div className="min-w-0">{uploadError}</div>
+          <button
+            onClick={() => clearUploadError()}
+            className="p-1 text-error hover:text-primary transition-colors"
+            aria-label="Cerrar"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* WebSocket status banner (errores visibles + reintentar) */}
+      {(wsStatus === 'error' || wsStatus === 'disconnected' || wsStatus === 'connecting' || syncConnectionStatus === 'offline') && (
+        <div className="mx-4 mt-3 p-3 bg-elevated border border-subtle rounded-lg flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm text-primary font-medium">{getConnectionLabel()}</div>
+            <div className="text-xs text-muted break-words">
+              {syncConnectionStatus === 'offline'
+                ? 'Tu dispositivo está offline. Los mensajes quedarán en cola hasta que vuelva la conexión.'
+                : wsLastError || 'Conexión inestable. Intentando reconectar...'}
+              {wsReconnectAttempts > 0 ? ` (reintento ${wsReconnectAttempts}/5)` : ''}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => connectWS()}
+              className="px-3 py-1.5 text-xs rounded-md bg-hover text-primary hover:bg-active transition-colors"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
           {error}
+        </div>
+      )}
+
+      {/* Send error (feedback visual mínimo) */}
+      {sendError && (
+        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm flex items-start justify-between gap-3">
+          <div className="min-w-0">{sendError}</div>
+          <button
+            onClick={() => setSendError(null)}
+            className="p-1 text-error hover:text-primary transition-colors"
+            aria-label="Cerrar"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
       
@@ -301,9 +438,140 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       )}
 
       {/* Input */}
-      <div className="p-4 bg-surface border-t border-subtle flex-shrink-0">
+      <div className="p-4 bg-surface border-t border-subtle flex-shrink-0 relative">
+        <AttachmentPanel
+          open={isAttachmentOpen}
+          onClose={() => setIsAttachmentOpen(false)}
+          onSelect={handleSelectAttachment}
+        />
+
+        {/* Hidden file inputs */}
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          ref={(el) => {
+            openCameraRef.current = () => el?.click();
+          }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            e.target.value = '';
+            const res = await uploadFile({ file, type: 'image' });
+            if (res.success && res.data?.attachment) {
+              await handleUploadedMediaSend({
+                type: 'image',
+                url: res.data.attachment.url,
+                attachmentId: res.data.attachment.id,
+                filename: res.data.attachment.filename,
+                mimeType: res.data.attachment.mimeType,
+                size: res.data.attachment.sizeBytes,
+              });
+            }
+          }}
+        />
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          ref={(el) => {
+            openGalleryRef.current = () => el?.click();
+          }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            e.target.value = '';
+            const res = await uploadFile({ file, type: 'image' });
+            if (res.success && res.data?.attachment) {
+              await handleUploadedMediaSend({
+                type: 'image',
+                url: res.data.attachment.url,
+                attachmentId: res.data.attachment.id,
+                filename: res.data.attachment.filename,
+                mimeType: res.data.attachment.mimeType,
+                size: res.data.attachment.sizeBytes,
+              });
+            }
+          }}
+        />
+        <input
+          type="file"
+          accept="application/pdf,text/plain,application/msword"
+          className="hidden"
+          ref={(el) => {
+            openDocumentRef.current = () => el?.click();
+          }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            e.target.value = '';
+            const res = await uploadFile({ file, type: 'document' });
+            if (res.success && res.data?.attachment) {
+              await handleUploadedMediaSend({
+                type: 'document',
+                url: res.data.attachment.url,
+                attachmentId: res.data.attachment.id,
+                filename: res.data.attachment.filename,
+                mimeType: res.data.attachment.mimeType,
+                size: res.data.attachment.sizeBytes,
+              });
+            }
+          }}
+        />
+        <input
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          ref={(el) => {
+            openAudioRef.current = () => el?.click();
+          }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            e.target.value = '';
+            const res = await uploadAudio({ file });
+            if (res.success && res.data?.attachment) {
+              await handleUploadedMediaSend({
+                type: 'audio',
+                url: res.data.attachment.url,
+                attachmentId: res.data.attachment.id,
+                filename: res.data.attachment.filename,
+                mimeType: res.data.attachment.mimeType,
+                size: res.data.attachment.sizeBytes,
+                waveformData: res.data.waveformData,
+              });
+            }
+          }}
+        />
+
+        {isUploadingAttachment && (
+          <div className="mb-2">
+            <div className="h-1 w-full bg-elevated rounded-full overflow-hidden border border-subtle">
+              <div
+                className="h-full bg-accent"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+            <div className="mt-1 text-xs text-muted">Subiendo... {uploadProgress}%</div>
+          </div>
+        )}
+
         <div className="flex items-end gap-3">
-          <button className="p-2 text-muted hover:text-primary transition-colors">
+          <button
+            onClick={() => {
+              if (isUploadingAttachment) return;
+              setIsAttachmentOpen((v) => !v);
+            }}
+            className={clsx(
+              'p-2 transition-colors',
+              isUploadingAttachment
+                ? 'text-muted cursor-not-allowed opacity-60'
+                : 'text-muted hover:text-primary'
+            )}
+            title="Adjuntar"
+            disabled={isUploadingAttachment}
+          >
             <Paperclip size={20} />
           </button>
           <div className="flex-1 bg-elevated rounded-xl px-4 py-2.5 border border-subtle focus-within:border-accent transition-colors">
@@ -312,6 +580,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Escribe un mensaje..."
+              disabled={isSending || !accountId}
               className="w-full bg-transparent text-primary placeholder:text-muted resize-none focus:outline-none text-sm max-h-32"
               rows={1}
             />
@@ -321,15 +590,15 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
           </button>
           <button
             onClick={() => handleSend()}
-            disabled={!message.trim()}
+            disabled={!accountId || isSending || !message.trim()}
             className={clsx(
               'p-3 rounded-full transition-colors',
-              message.trim()
+              accountId && message.trim() && !isSending
                 ? 'bg-accent text-inverse hover:bg-accent-hover'
                 : 'bg-elevated text-muted cursor-not-allowed'
             )}
           >
-            <Send size={20} />
+            {isSending ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
           </button>
         </div>
       </div>

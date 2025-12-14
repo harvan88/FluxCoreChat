@@ -1,6 +1,6 @@
 import { db } from '@fluxcore/db';
-import { messages, type MessageContent } from '@fluxcore/db';
-import { eq, desc } from 'drizzle-orm';
+import { mediaAttachments, messages, type MessageContent } from '@fluxcore/db';
+import { desc, eq, inArray } from 'drizzle-orm';
 
 export class MessageService {
   /**
@@ -25,6 +25,17 @@ export class MessageService {
         aiApprovedBy: data.aiApprovedBy || null,
       })
       .returning();
+
+    const attachmentIds = (data.content.media || [])
+      .map((m: any) => m?.attachmentId)
+      .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+
+    if (attachmentIds.length > 0) {
+      await db
+        .update(mediaAttachments)
+        .set({ messageId: message.id })
+        .where(inArray(mediaAttachments.id, attachmentIds));
+    }
 
     return message;
   }

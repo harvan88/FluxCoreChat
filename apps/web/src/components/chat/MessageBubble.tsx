@@ -33,6 +33,42 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
 
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const resolveMediaUrl = (url: string) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return `${apiUrl}${url}`;
+    return url;
+  };
+
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '';
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const renderWaveform = (samples: unknown) => {
+    if (!Array.isArray(samples) || samples.length === 0) return null;
+    const max = Math.max(...samples.map((n) => (typeof n === 'number' ? n : 0)), 1);
+
+    return (
+      <div className="mt-2 flex items-end gap-0.5 h-8">
+        {samples.slice(0, 64).map((n, i) => {
+          const v = typeof n === 'number' ? n : 0;
+          const h = Math.max(2, Math.round((v / max) * 28));
+          return (
+            <div
+              key={i}
+              className={clsx('w-1 rounded-sm', isOwn ? 'bg-inverse/60' : 'bg-muted')}
+              style={{ height: `${h}px` }}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
   const formatTime = (dateString: string) => {
     return new Date(dateString).toLocaleTimeString('es-ES', {
       hour: '2-digit',
@@ -124,7 +160,7 @@ export function MessageBubble({
         {replyToMessage && (
           <button
             onClick={() => onScrollToMessage?.(replyToMessage.id)}
-            className="block w-full text-left mb-2 p-2 bg-black/20 rounded-lg border-l-2 border-accent"
+            className="block w-full text-left mb-2 p-2 bg-active rounded-lg border-l-2 border-accent"
           >
             <div className="text-xs text-accent mb-0.5">
               {replyToMessage.senderAccountId === message.senderAccountId ? 'Tú' : 'Respuesta a'}
@@ -135,8 +171,70 @@ export function MessageBubble({
           </button>
         )}
 
+        {/* Media previews */}
+        {Array.isArray(message.content.media) && message.content.media.length > 0 && (
+          <div className="flex flex-col gap-2 mb-2">
+            {message.content.media.map((m, idx) => {
+              const url = resolveMediaUrl(m.url);
+
+              switch (m.type) {
+                case 'image':
+                  return (
+                    <img
+                      key={`${m.type}-${idx}`}
+                      src={url}
+                      alt={m.filename || 'imagen'}
+                      className="rounded-lg max-h-64 object-cover border border-subtle"
+                      loading="lazy"
+                    />
+                  );
+                case 'audio':
+                  return (
+                    <div key={`${m.type}-${idx}`} className="bg-surface/40 rounded-lg p-2 border border-subtle">
+                      <audio controls src={url} className="w-full" />
+                      {renderWaveform((m as any)?.waveformData?.samples)}
+                      {m.filename && (
+                        <div className={clsx('mt-1 text-xs', isOwn ? 'text-inverse/70' : 'text-muted')}>
+                          {m.filename}
+                        </div>
+                      )}
+                    </div>
+                  );
+                case 'document':
+                default:
+                  return (
+                    <a
+                      key={`${m.type}-${idx}`}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={clsx(
+                        'flex items-center gap-2 rounded-lg p-2 border border-subtle',
+                        isOwn ? 'bg-surface/40' : 'bg-active'
+                      )}
+                    >
+                      <span className="text-lg">📎</span>
+                      <div className="min-w-0">
+                        <div className={clsx('text-sm truncate', isOwn ? 'text-inverse' : 'text-primary')}>
+                          {m.filename || 'Documento'}
+                        </div>
+                        {(m.mimeType || m.size) && (
+                          <div className={clsx('text-xs truncate', isOwn ? 'text-inverse/70' : 'text-muted')}>
+                            {m.mimeType || ''}{m.mimeType && m.size ? ' · ' : ''}{formatBytes(m.size)}
+                          </div>
+                        )}
+                      </div>
+                    </a>
+                  );
+              }
+            })}
+          </div>
+        )}
+
         {/* Message content */}
-        <p className="text-sm whitespace-pre-wrap break-words">{message.content.text}</p>
+        {typeof message.content.text === 'string' && message.content.text.trim().length > 0 && (
+          <p className="text-sm whitespace-pre-wrap break-words">{message.content.text}</p>
+        )}
 
         {/* Footer: time, AI badge, status */}
         <div

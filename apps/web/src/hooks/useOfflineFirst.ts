@@ -60,7 +60,7 @@ export function useOfflineMessages(conversationId: string | null) {
   // Send message with optimistic update
   const sendMessage = useCallback(async (
     senderAccountId: string,
-    content: { text: string; type?: string },
+    content: LocalMessage['content'],
     type: 'incoming' | 'outgoing' | 'system' = 'outgoing'
   ) => {
     if (!conversationId) {

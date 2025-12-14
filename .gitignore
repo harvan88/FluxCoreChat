@@ -57,3 +57,9 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+db-state.json
+FluxCoreChat.code-workspace
+apps/api/uploads/
+apps/api/public/sites/
+apps/web/vite.config.ts.timestamp-*.mjs

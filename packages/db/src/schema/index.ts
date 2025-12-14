@@ -5,6 +5,7 @@ export * from './actors';
 export * from './relationships';
 export * from './conversations';
 export * from './messages';
+export * from './media-attachments';
 
 // Hito 4: Sistema de Extensiones
 export * from './extensions';

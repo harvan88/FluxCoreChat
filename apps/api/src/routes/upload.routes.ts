@@ -3,6 +3,8 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { join } from 'path';
 import { mkdir } from 'fs/promises';
 import { accountService } from '../services/account.service';
+import { fileUploadService } from '../services/file-upload.service';
+import { audioProcessingService } from '../services/audio-processing.service';
 
 // Get upload directory path
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'avatars');
@@ -100,6 +102,110 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
       detail: {
         tags: ['Upload'],
         summary: 'Upload avatar image'
+      }
+    }
+  )
+  .post(
+    '/file',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const file = body.file as File;
+        const type = body.type as 'image' | 'document' | 'audio' | 'video';
+        const messageId = body.messageId as string | undefined;
+
+        if (!file) {
+          set.status = 400;
+          return { success: false, message: 'No file uploaded' };
+        }
+
+        const result = await fileUploadService.upload({
+          file,
+          type,
+          messageId,
+        });
+
+        return {
+          success: true,
+          data: {
+            attachment: result.attachment,
+            url: result.url,
+          },
+        };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message || 'Failed to upload file' };
+      }
+    },
+    {
+      isAuthenticated: true,
+      body: t.Object({
+        file: t.File(),
+        type: t.Union([
+          t.Literal('image'),
+          t.Literal('document'),
+          t.Literal('audio'),
+          t.Literal('video'),
+        ]),
+        messageId: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ['Upload'],
+        summary: 'Upload generic file'
+      }
+    }
+  )
+  .post(
+    '/audio',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const file = body.file as File;
+        const messageId = body.messageId as string | undefined;
+
+        if (!file) {
+          set.status = 400;
+          return { success: false, message: 'No file uploaded' };
+        }
+
+        const waveform = await audioProcessingService.generateWaveform(file);
+        const result = await fileUploadService.upload({
+          file,
+          type: 'audio',
+          messageId,
+          waveformData: waveform,
+        });
+
+        return {
+          success: true,
+          data: {
+            attachment: result.attachment,
+            url: result.url,
+            waveformData: { samples: waveform },
+          },
+        };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message || 'Failed to upload audio' };
+      }
+    },
+    {
+      isAuthenticated: true,
+      body: t.Object({
+        file: t.File(),
+        messageId: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ['Upload'],
+        summary: 'Upload audio (voice note)'
       }
     }
   );

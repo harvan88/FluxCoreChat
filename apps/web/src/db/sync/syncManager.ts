@@ -106,7 +106,7 @@ class SyncManager {
   async createMessage(
     conversationId: string,
     senderAccountId: string,
-    content: { text: string; type?: string },
+    content: LocalMessage['content'],
     type: 'incoming' | 'outgoing' | 'system' = 'outgoing'
   ): Promise<LocalMessage> {
     // Create local message

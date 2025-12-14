@@ -53,9 +53,11 @@ export type MessageStatus =
 export interface MessageMedia {
   type: 'image' | 'video' | 'audio' | 'document';
   url: string;
+  attachmentId?: string;
   filename?: string;
   mimeType?: string;
   size?: number;
+  waveformData?: any;
 }
 
 export interface MessageLocation {

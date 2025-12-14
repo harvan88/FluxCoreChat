@@ -45,12 +45,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const selectedAccountId = useUIStore((state) => state.selectedAccountId);
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribedRelationshipsRef = useRef<Set<string>>(new Set());
   const reconnectAttemptsRef = useRef(0);
-  const wasConnectedRef = useRef(false);
+  const manualDisconnectRef = useRef(false);
   const mountedRef = useRef(true);
   const currentAccountIdRef = useRef<string | null>(null);
   const MAX_RECONNECT_ATTEMPTS = 5;
@@ -74,7 +76,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     }
 
     setStatus('connecting');
+    setLastError(null);
     clearReconnectTimeout();
+    manualDisconnectRef.current = false;
 
     try {
       const ws = new WebSocket(WS_URL);
@@ -83,11 +87,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         if (!mountedRef.current) return;
         console.log('[WebSocket] Connected');
         setStatus('connected');
-        wasConnectedRef.current = true;
         reconnectAttemptsRef.current = 0; // Reset on successful connection
+        setReconnectAttempts(0);
+        setLastError(null);
         
         // Actualizar accountId actual
-        currentAccountIdRef.current = selectedAccountId;
+        currentAccountIdRef.current = useUIStore.getState().selectedAccountId;
         
         // Re-suscribir a relationships anteriores
         subscribedRelationshipsRef.current.forEach(relationshipId => {
@@ -138,11 +143,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         if (!mountedRef.current) return;
         console.log('[WebSocket] Disconnected:', event.code, event.reason);
         setStatus('disconnected');
+        setLastError(`WebSocket cerrado (${event.code})${event.reason ? `: ${event.reason}` : ''}`);
         wsRef.current = null;
+
+        if (manualDisconnectRef.current) {
+          return;
+        }
         
-        // Solo reconectar si: estaba conectado antes, no excede intentos, y reconnect está habilitado
-        if (reconnect && wasConnectedRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        if (reconnect && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttemptsRef.current++;
+          setReconnectAttempts(reconnectAttemptsRef.current);
           const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1); // Exponential backoff
           console.log(`[WebSocket] Reconnect attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
           reconnectTimeoutRef.current = setTimeout(() => {
@@ -153,6 +163,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
           console.warn('[WebSocket] Max reconnect attempts reached. Giving up.');
           setStatus('error');
+          setLastError('WebSocket: máximo de reintentos alcanzado');
         }
       };
 
@@ -164,18 +175,21 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         if (reconnectAttemptsRef.current === 0) {
           console.warn('[WebSocket] Connection error (will retry)');
         }
+        setLastError('WebSocket: error de conexión');
       };
 
       wsRef.current = ws;
     } catch (error) {
       console.error('[WebSocket] Failed to connect:', error);
       setStatus('error');
+      setLastError('WebSocket: no se pudo conectar');
     }
   }, [clearReconnectTimeout, reconnect, reconnectInterval]); // Callbacks ahora usan refs
 
   // Desconectar WebSocket
   const disconnect = useCallback(() => {
     clearReconnectTimeout();
+    manualDisconnectRef.current = true;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -298,6 +312,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   return {
     status,
     isConnected: status === 'connected',
+    lastError,
+    reconnectAttempts,
     lastMessage,
     connect,
     disconnect,

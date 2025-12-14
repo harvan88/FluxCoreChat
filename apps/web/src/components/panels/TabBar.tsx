@@ -177,6 +177,11 @@ function TabItem({
   onDragStart,
   onDragEnd,
 }: TabItemProps) {
+  const displayIcon = tab.icon ?? (tab.type === 'chat' ? '✉️' : null);
+  const maxTitleChars = tab.type === 'chat' ? 5 : 18;
+  const displayTitle =
+    tab.title.length > maxTitleChars ? `${tab.title.slice(0, maxTitleChars)}…` : tab.title;
+
   return (
     <div
       draggable
@@ -192,14 +197,15 @@ function TabItem({
           : 'text-secondary hover:text-primary hover:bg-hover',
         isDragging && 'opacity-50'
       )}
+      title={tab.title}
     >
       {/* Icon */}
-      {tab.icon && (
-        <span className="text-sm flex-shrink-0">{tab.icon}</span>
+      {displayIcon && (
+        <span className="text-sm flex-shrink-0">{displayIcon}</span>
       )}
       
       {/* Title */}
-      <span className="truncate text-sm">{tab.title}</span>
+      <span className="truncate text-sm" title={tab.title}>{displayTitle}</span>
       
       {/* Dirty Indicator */}
       {tab.dirty && (

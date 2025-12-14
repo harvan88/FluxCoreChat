@@ -9,6 +9,7 @@
     "./whatsapp": "./src/whatsapp/index.ts"
   },
   "scripts": {
+    "dev": "bun -e \"process.exit(0)\"",
     "build": "bun build ./src/index.ts --outdir ./dist",
     "typecheck": "tsc --noEmit"
   },
