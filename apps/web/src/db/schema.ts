@@ -28,7 +28,11 @@ export interface MessageContent {
   media?: Array<{
     type: 'image' | 'video' | 'audio' | 'document';
     url: string;
+    attachmentId?: string;
     filename?: string;
+    mimeType?: string;
+    size?: number;
+    waveformData?: any;
   }>;
 }
 

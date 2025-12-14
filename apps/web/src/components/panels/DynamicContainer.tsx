@@ -3,7 +3,7 @@
  * TOTEM PARTE 11: Dynamic Container
  */
 
-import { useMemo } from 'react';
+import { useMemo, Component, type ReactNode } from 'react';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
 import { TabBar } from './TabBar';
@@ -81,16 +81,59 @@ interface TabContentProps {
   tab: Tab;
 }
 
+class ChatViewErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; errorMessage: string | null }
+> {
+  state = { hasError: false, errorMessage: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return {
+      hasError: true,
+      errorMessage: error instanceof Error ? error.message : 'Error desconocido',
+    };
+  }
+
+  reset = () => {
+    this.setState({ hasError: false, errorMessage: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-full flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-elevated border border-subtle rounded-lg p-4">
+            <div className="text-primary font-medium">Error en el chat</div>
+            <div className="text-sm text-muted mt-1 break-words">{this.state.errorMessage}</div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={this.reset}
+                className="px-3 py-2 rounded-md bg-hover text-primary hover:bg-active transition-colors"
+              >
+                Reintentar
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function TabContent({ tab }: TabContentProps) {
   const { selectedAccountId } = useUIStore();
   
   switch (tab.type) {
     case 'chat':
       return tab.context.chatId ? (
-        <ChatView 
-          conversationId={tab.context.chatId} 
-          accountId={selectedAccountId || undefined}
-        />
+        <ChatViewErrorBoundary>
+          <ChatView 
+            conversationId={tab.context.chatId} 
+            accountId={selectedAccountId || undefined}
+          />
+        </ChatViewErrorBoundary>
       ) : (
         <WelcomeView />
       );

@@ -39,8 +39,11 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const token = this.getToken();
+
+    const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
@@ -272,6 +275,38 @@ class ApiService {
     });
     
     return response;
+  }
+
+  // Generic file upload (attachments)
+  async uploadFile(params: {
+    file: File;
+    type: 'image' | 'document' | 'audio' | 'video';
+    messageId?: string;
+  }): Promise<ApiResponse<{ attachment: any; url: string }>> {
+    const formData = new FormData();
+    formData.append('file', params.file);
+    formData.append('type', params.type);
+    if (params.messageId) formData.append('messageId', params.messageId);
+
+    return this.request<{ attachment: any; url: string }>('/upload/file', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  // Voice note upload
+  async uploadAudio(params: {
+    file: File;
+    messageId?: string;
+  }): Promise<ApiResponse<{ attachment: any; url: string; waveformData?: any }>> {
+    const formData = new FormData();
+    formData.append('file', params.file);
+    if (params.messageId) formData.append('messageId', params.messageId);
+
+    return this.request<{ attachment: any; url: string; waveformData?: any }>('/upload/audio', {
+      method: 'POST',
+      body: formData,
+    });
   }
 }
 

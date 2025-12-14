@@ -42,6 +42,7 @@ Estas migraciones se ejecutaron manualmente y NO están en el journal de Drizzle
 | `run-migration-008-actors.ts` | actors.actor_type, messages.from_actor_id/to_actor_id | ✅ Aplicada | Actor model |
 | `run-migration-009-alias.ts` | accounts.alias | ✅ Aplicada | Alias contextual |
 | `run-migration-010-automation-rules.ts` | automation_rules | ✅ Aplicada | Tabla completa |
+| `012_media_attachments.sql` | media_attachments | ✅ Aplicada | PC-9: attachments para mensajes |
 | `migrate-extensions.ts` | extension_installations, extension_contexts | ✅ Aplicada | Sistema de extensiones |
 | `migrate-workspaces.ts` | workspaces, workspace_members, workspace_invitations | ✅ Aplicada | Workspaces colaborativos |
 | `migrate-website-configs.ts` / `007_website_configs.sql` | website_configs | ✅ Aplicada | Website builder (Karen) |

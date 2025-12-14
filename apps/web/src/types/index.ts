@@ -85,6 +85,11 @@ export interface MessageContent {
 export interface MediaItem {
   type: 'image' | 'video' | 'audio' | 'document';
   url: string;
+  attachmentId?: string;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  waveformData?: any;
   name?: string;
 }
 

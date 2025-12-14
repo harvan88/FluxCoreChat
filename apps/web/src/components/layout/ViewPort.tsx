@@ -10,7 +10,7 @@ import { DynamicContainer } from '../panels';
 import { WelcomeView } from '../chat/WelcomeView';
 
 export function ViewPort() {
-  const { selectedConversationId, activeActivity, setSelectedConversation } = useUIStore();
+  const { selectedConversationId, activeActivity, setSelectedConversation, conversations } = useUIStore();
   const containers = useContainers();
   const { layout, openTab, activateTab, focusContainer } = usePanelStore();
   
@@ -20,6 +20,9 @@ export function ViewPort() {
   // Efecto para abrir chat cuando se selecciona una conversación
   useEffect(() => {
     if (selectedConversationId && activeActivity === 'conversations') {
+      const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+      const tabTitle = (selectedConversation as any)?.contactName || 'Chat';
+
       // FIX: Evitar procesar la misma conversación múltiples veces
       if (processingRef.current === selectedConversationId) {
         return;
@@ -39,7 +42,7 @@ export function ViewPort() {
         // Crear nuevo tab
         openTab('chats', {
           type: 'chat',
-          title: `Chat`,
+          title: tabTitle,
           context: { chatId: selectedConversationId },
           closable: true,
         });
@@ -53,7 +56,7 @@ export function ViewPort() {
         processingRef.current = null;
       }, 100);
     }
-  }, [selectedConversationId, activeActivity, openTab, containers, activateTab, focusContainer, setSelectedConversation]);
+  }, [selectedConversationId, activeActivity, openTab, containers, activateTab, focusContainer, setSelectedConversation, conversations]);
 
   // FC-402 & FC-403: Settings ahora se maneja desde Sidebar
   // El flujo correcto es: ActivityBar → Sidebar (SettingsPanel) → DynamicContainer
