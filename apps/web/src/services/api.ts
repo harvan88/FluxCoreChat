@@ -144,8 +144,9 @@ class ApiService {
   }
 
   // Relationships
-  async getRelationships(): Promise<ApiResponse<Relationship[]>> {
-    return this.request<Relationship[]>('/relationships');
+  async getRelationships(accountId?: string): Promise<ApiResponse<Relationship[]>> {
+    const query = accountId ? `?accountId=${accountId}` : '';
+    return this.request<Relationship[]>(`/relationships${query}`);
   }
 
   async createRelationship(data: { accountAId: string; accountBId: string }): Promise<ApiResponse<Relationship>> {
@@ -156,8 +157,9 @@ class ApiService {
   }
 
   // Conversations
-  async getConversations(): Promise<ApiResponse<Conversation[]>> {
-    return this.request<Conversation[]>('/conversations');
+  async getConversations(accountId?: string): Promise<ApiResponse<Conversation[]>> {
+    const query = accountId ? `?accountId=${accountId}` : '';
+    return this.request<Conversation[]>(`/conversations${query}`);
   }
 
   async createConversation(data: { relationshipId: string; channel: string }): Promise<ApiResponse<Conversation>> {
@@ -198,6 +200,10 @@ class ApiService {
     return this.request<Message>(`/messages/${id}`);
   }
 
+  async deleteMessage(id: string): Promise<ApiResponse<void>> {
+    return this.request(`/messages/${id}`, { method: 'DELETE' });
+  }
+
   // Health
   async health(): Promise<ApiResponse<{ status: string }>> {
     return this.request<{ status: string }>('/health');
@@ -216,6 +222,20 @@ class ApiService {
     });
   }
 
+  // Delete relationship (remove contact)
+  async deleteContact(relationshipId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/relationships/${relationshipId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Delete conversation
+  async deleteConversation(conversationId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/conversations/${conversationId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Convert account to business
   async convertToBusiness(accountId: string): Promise<ApiResponse<Account>> {
     return this.request<Account>(`/accounts/${accountId}/convert-to-business`, {
@@ -229,6 +249,29 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
+  }
+
+  // Reset password
+  async resetPassword(token: string, password: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    });
+  }
+
+  // Avatar upload
+  async uploadAvatar(file: File, accountId?: string): Promise<ApiResponse<{ url: string; filename: string }>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const query = accountId ? `?accountId=${accountId}` : '';
+    
+    const response = await this.request<{ url: string; filename: string }>(`/upload/avatar${query}`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    return response;
   }
 }
 

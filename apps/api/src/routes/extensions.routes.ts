@@ -8,6 +8,7 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { extensionService } from '../services/extension.service';
 import { extensionHost } from '../services/extension-host.service';
 import { manifestLoader } from '../services/manifest-loader.service';
+import { extensionPermissionsService } from '../services/extension-permissions.service';
 
 export const extensionRoutes = new Elysia({ prefix: '/extensions' })
   .use(authMiddleware)
@@ -78,16 +79,35 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
         return { success: false, message: `Extension ${extensionId} not found` };
       }
 
+      // Verificar si ya está instalada ANTES de intentar instalar
+      const existingInstallations = await extensionService.getInstalled(accountId);
+      const alreadyInstalled = existingInstallations.find(
+        (inst: any) => inst.extensionId === extensionId
+      );
+      
+      if (alreadyInstalled) {
+        // Devolver la instalación existente en lugar de error
+        return {
+          success: true,
+          data: alreadyInstalled,
+          message: 'Extension already installed',
+          alreadyInstalled: true,
+        };
+      }
+
       // Obtener configuración por defecto
       const defaultConfig = manifestLoader.getDefaultConfig(extensionId);
 
-      // Instalar
+      // Instalar con auto-concesión de permisos al propietario
+      // El propietario siempre recibe todos los permisos del manifest
       const installation = await extensionService.install({
         accountId,
         extensionId,
         version: manifest.version,
         config: defaultConfig,
         grantedPermissions: grantPermissions || manifest.permissions,
+        grantedBy: undefined, // null = auto-concedido (propietario)
+        canSharePermissions: true, // Propietario puede compartir permisos
       });
 
       return {
@@ -95,11 +115,16 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
         data: installation,
       };
     } catch (error: any) {
-      if (error.message.includes('already installed')) {
+      // Manejar error de constraint único (por si acaso)
+      if (error.message.includes('already installed') || error.code === '23505') {
         set.status = 409;
-      } else {
-        set.status = 500;
+        return { 
+          success: false, 
+          message: 'Extension already installed for this account',
+          code: 'ALREADY_INSTALLED',
+        };
       }
+      set.status = 500;
       return { success: false, message: error.message };
     }
   }, {
@@ -257,6 +282,147 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
   }, {
     params: t.Object({
+      extensionId: t.String(),
+    }),
+  })
+
+  // ═══════════════════════════════════════════════════════════════
+  // PERMISSIONS ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════
+
+  // GET /extensions/:accountId/:extensionId/permissions - Obtener permisos
+  .get('/:accountId/:extensionId/permissions', async ({ user, params, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const extensionId = decodeURIComponent(params.extensionId);
+      const permissions = await extensionPermissionsService.getPermissions(
+        params.accountId,
+        extensionId
+      );
+
+      if (!permissions) {
+        set.status = 404;
+        return { success: false, message: 'Extension not installed for this account' };
+      }
+
+      return {
+        success: true,
+        data: permissions,
+      };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
+  }, {
+    params: t.Object({
+      accountId: t.String(),
+      extensionId: t.String(),
+    }),
+  })
+
+  // POST /extensions/:accountId/:extensionId/permissions - Otorgar permisos
+  .post('/:accountId/:extensionId/permissions', async ({ user, params, body, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const extensionId = decodeURIComponent(params.extensionId);
+      const { permissions, grantedBy, canShare } = body as any;
+
+      const result = await extensionPermissionsService.grantPermissions({
+        accountId: params.accountId,
+        extensionId,
+        permissions,
+        grantedBy: grantedBy || params.accountId,
+        canShare: canShare ?? false,
+      });
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error: any) {
+      set.status = 400;
+      return { success: false, message: error.message };
+    }
+  }, {
+    params: t.Object({
+      accountId: t.String(),
+      extensionId: t.String(),
+    }),
+    body: t.Object({
+      permissions: t.Array(t.String()),
+      grantedBy: t.Optional(t.String()),
+      canShare: t.Optional(t.Boolean()),
+    }),
+  })
+
+  // DELETE /extensions/:accountId/:extensionId/permissions - Revocar permisos
+  .delete('/:accountId/:extensionId/permissions', async ({ user, params, body, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const extensionId = decodeURIComponent(params.extensionId);
+      const { permissions } = body as any;
+
+      const result = await extensionPermissionsService.revokePermissions({
+        accountId: params.accountId,
+        extensionId,
+        permissions,
+      });
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error: any) {
+      set.status = 400;
+      return { success: false, message: error.message };
+    }
+  }, {
+    params: t.Object({
+      accountId: t.String(),
+      extensionId: t.String(),
+    }),
+    body: t.Object({
+      permissions: t.Array(t.String()),
+    }),
+  })
+
+  // GET /extensions/:accountId/:extensionId/can-share - Verificar si puede compartir
+  .get('/:accountId/:extensionId/can-share', async ({ user, params, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const extensionId = decodeURIComponent(params.extensionId);
+      const result = await extensionPermissionsService.canGrantPermissions(
+        params.accountId,
+        extensionId
+      );
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
+  }, {
+    params: t.Object({
+      accountId: t.String(),
       extensionId: t.String(),
     }),
   });

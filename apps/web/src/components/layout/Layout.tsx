@@ -42,6 +42,18 @@ export function Layout() {
     document.documentElement.setAttribute('data-theme', resolvedTheme);
   }, [resolvedTheme]);
 
+  // Escuchar cambios de cuenta para forzar re-render
+  useEffect(() => {
+    const handleAccountChange = (event: CustomEvent) => {
+      console.log('[Layout] Account changed event received:', event.detail);
+      // React se re-renderizará automáticamente por cambios en stores
+      // Este efecto asegura que cualquier componente que dependa del evento se actualice
+    };
+    
+    window.addEventListener('account:changed', handleAccountChange as EventListener);
+    return () => window.removeEventListener('account:changed', handleAccountChange as EventListener);
+  }, []);
+
   // Cerrar menú móvil al hacer clic fuera
   const handleOverlayClick = () => {
     setMobileMenuOpen(false);

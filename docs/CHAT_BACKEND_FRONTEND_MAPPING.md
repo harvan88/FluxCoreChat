@@ -39,14 +39,35 @@
 |---------------------|------------------|--------|-------|
 | `ChatHeader` - Info contacto | `GET /conversations/:id` | ✅ | Retorna contactName, contactPhone |
 | `ChatHeader` - Tags (#) | ❌ No existe | ❌ | Falta sistema de etiquetas |
-| `ChatHeader` - Asignación (@) | ❌ No existe | ❌ | Falta asignación de conversaciones |
+| `ChatHeader` - Asignación (@) | ❌ No existe | ❌ | Falta asignación de conversaciones a miembros del workspace (users) |
 | `ChatHeader` - Buscar en chat | ❌ No existe | ❌ | Falta `GET /conversations/:id/search` |
 | `ChatHeader` - Opciones menú | ⚠️ Parcial | ⚠️ | Algunas acciones existen dispersas |
 
 **GAPS:**
 1. **Sistema de Tags**: No hay CRUD para etiquetas de conversación
-2. **Asignación**: No hay asignación de conversaciones a usuarios/cuentas
+2. **Asignación**: No hay asignación de conversaciones a miembros del workspace (users)
 3. **Búsqueda**: No hay búsqueda dentro de conversación
+
+**Notas de UX (Wireframe):**
+- **Tags (#)**: Popover inline con filtro `#Int`, lista de tags + acción "Nueva etiqueta" (tags de cuenta + tags del workspace con herencia).
+- **Asignación (@)**: Popover inline con `@usuario` y opciones de alcance: `acceso completo` / `acceso a seleccionados`.
+  - Semántica adoptada: **asignación + notificación (workflow), no permisos**. El target es un miembro del workspace (`workspace_members.user_id`).
+  - `acceso a seleccionados`: notifica/dirige a **mensajes seleccionados** (PC-10) sin cambios de permisos.
+- **Búsqueda**: Barra inline con sintaxis tipo comando `/buscar ...`, contador `1/2` y navegación prev/next.
+
+**Endpoint sugerido (Búsqueda / G-20):**
+```typescript
+GET /conversations/:id/search?q=<string>&cursor?=<string>&limit?=<number>
+  returns: {
+    matches: { messageId: string; preview: string }[];
+    total: number;
+    nextCursor?: string;
+  }
+```
+
+**DB/Índices sugeridos (Búsqueda):**
+- Índice `GIN` para full-text search (por definir estrategia exacta dado que `messages.content` es JSONB).
+- Índice `btree` sobre `(conversation_id, created_at)` para paginación estable.
 
 ---
 

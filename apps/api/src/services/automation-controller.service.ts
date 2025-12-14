@@ -7,15 +7,24 @@
  * - disabled: Sin IA
  */
 
+import { randomUUID } from 'crypto';
+import { Cron } from 'croner';
 import { db } from '@fluxcore/db';
-import { 
-  automationRules, 
-  type AutomationRule, 
+import {
+  automationRules,
+  type AutomationRule,
   type AutomationMode,
   type AutomationConfig,
-  type AutomationTrigger 
+  type AutomationTrigger,
 } from '@fluxcore/db';
-import { eq, and, isNull, or } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
+
+export class AutomationTriggerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AutomationTriggerError';
+  }
+}
 
 /**
  * Resultado de evaluación de trigger
@@ -36,6 +45,8 @@ export interface TriggerContext {
   messageContent?: string;
   messageType?: 'incoming' | 'outgoing' | 'system';
   senderId?: string;
+  payload?: unknown;
+  trigger?: AutomationTrigger;
 }
 
 /**
@@ -193,7 +204,16 @@ class AutomationControllerService {
    * Verificar si algún trigger coincide
    */
   private matchTriggers(triggers: AutomationTrigger[], context: TriggerContext): boolean {
+    if (context.trigger) {
+      return triggers.some(
+        (trigger) =>
+          trigger.type === context.trigger?.type &&
+          trigger.value === context.trigger?.value
+      );
+    }
+
     for (const trigger of triggers) {
+
       switch (trigger.type) {
         case 'message_received':
           // Siempre coincide para mensajes incoming
@@ -209,11 +229,14 @@ class AutomationControllerService {
           break;
           
         case 'schedule':
-          // TODO: Implementar triggers programados
+          // Schedule triggers se ejecutan exclusivamente vía cron scheduler
+          // Si llegamos aquí sin trigger explícito, no corresponde procesar
           break;
           
         case 'webhook':
-          // TODO: Implementar triggers de webhook
+          if (trigger.value && context.payload) {
+            return true;
+          }
           break;
       }
     }
@@ -286,8 +309,7 @@ class AutomationControllerService {
   ): Promise<AutomationRule> {
     const { relationshipId, config, enabled = true } = options;
 
-    // Buscar regla existente
-    const existingCondition = relationshipId
+    const condition = relationshipId
       ? and(
           eq(automationRules.accountId, accountId),
           eq(automationRules.relationshipId, relationshipId)
@@ -300,37 +322,37 @@ class AutomationControllerService {
     const [existing] = await db
       .select()
       .from(automationRules)
-      .where(existingCondition)
+      .where(condition)
       .limit(1);
 
     if (existing) {
-      // Actualizar existente
       const [updated] = await db
         .update(automationRules)
         .set({
           mode,
           enabled,
-          config: config || existing.config,
+          config: config ?? existing.config,
           updatedAt: new Date(),
         })
         .where(eq(automationRules.id, existing.id))
         .returning();
-      
+
+      await this.notifyScheduler(accountId);
       return updated;
     }
 
-    // Crear nueva
     const [created] = await db
       .insert(automationRules)
       .values({
         accountId,
-        relationshipId: relationshipId || null,
+        relationshipId: relationshipId ?? null,
         mode,
         enabled,
-        config: config || null,
+        config: config ?? null,
       })
       .returning();
 
+    await this.notifyScheduler(accountId);
     return created;
   }
 
@@ -371,12 +393,17 @@ class AutomationControllerService {
    * Eliminar una regla
    */
   async deleteRule(ruleId: string): Promise<boolean> {
-    const result = await db
+    const deleted = await db
       .delete(automationRules)
       .where(eq(automationRules.id, ruleId))
       .returning();
-    
-    return result.length > 0;
+
+    if (deleted.length > 0) {
+      await this.notifyScheduler(deleted[0].accountId);
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -389,24 +416,157 @@ class AutomationControllerService {
       relationshipId?: string;
       mode?: AutomationMode;
     } = {}
-  ): Promise<AutomationRule> {
-    const rule = await this.getEffectiveRule(accountId, options.relationshipId);
-    const config: AutomationConfig = (rule?.config as AutomationConfig) || {};
-    
-    // Añadir trigger si no existe
-    const triggers = config.triggers || [];
-    const exists = triggers.some(
-      t => t.type === trigger.type && t.value === trigger.value
-    );
-    
-    if (!exists) {
-      triggers.push(trigger);
+  ): Promise<{ rule: AutomationRule; trigger: AutomationTrigger }> {
+    const currentRule = await this.getEffectiveRule(accountId, options.relationshipId);
+    const config: AutomationConfig = {
+      ...((currentRule?.config as AutomationConfig) || {}),
+    };
+
+    const triggers = [...(config.triggers || [])];
+
+    const normalizedTrigger: AutomationTrigger & { metadata?: Record<string, unknown> } = {
+      ...trigger,
+    };
+
+    if (normalizedTrigger.type === 'schedule') {
+      const { value, metadata } = this.normalizeScheduleTrigger(normalizedTrigger);
+      normalizedTrigger.value = value;
+      normalizedTrigger.metadata = metadata;
     }
 
-    return this.setRule(accountId, options.mode || 'automatic', {
+    if (normalizedTrigger.type === 'webhook') {
+      normalizedTrigger.value = normalizedTrigger.value || randomUUID().replace(/-/g, '');
+    }
+
+    const existingIndex = triggers.findIndex(
+      (t) => t.type === normalizedTrigger.type && t.value === normalizedTrigger.value
+    );
+
+    if (existingIndex >= 0) {
+      triggers[existingIndex] = {
+        ...triggers[existingIndex],
+        ...normalizedTrigger,
+      };
+    } else {
+      triggers.push(normalizedTrigger);
+    }
+
+    config.triggers = triggers;
+
+    const mode = options.mode ?? (currentRule?.mode as AutomationMode) ?? 'automatic';
+    const enabled = currentRule?.enabled ?? true;
+
+    const rule = await this.setRule(accountId, mode, {
       relationshipId: options.relationshipId,
-      config: { ...config, triggers },
+      config,
+      enabled,
     });
+
+    return {
+      rule,
+      trigger: normalizedTrigger,
+    };
+  }
+
+  private normalizeScheduleTrigger(
+    trigger: AutomationTrigger & { metadata?: Record<string, unknown> }
+  ): { value: string; metadata: Record<string, unknown> } {
+    const value = (trigger.value ?? '').trim();
+
+    if (!value) {
+      throw new AutomationTriggerError('Schedule trigger requires a cron expression.');
+    }
+
+    const metadata = trigger.metadata ?? {};
+    const rawTimezone = metadata?.timezone;
+    const timezone =
+      typeof rawTimezone === 'string' && rawTimezone.trim().length > 0
+        ? rawTimezone.trim()
+        : undefined;
+
+    const rawMatch = metadata?.match;
+    const match = rawMatch === 'minute' ? 'minute' : 'cron';
+
+    try {
+      const cron = new Cron(value, { timezone }, () => {});
+      cron.stop();
+    } catch (error: any) {
+      throw new AutomationTriggerError(`Invalid cron expression: ${error?.message ?? String(error)}`);
+    }
+
+    return {
+      value,
+      metadata: {
+        match,
+        ...(timezone ? { timezone } : {}),
+      },
+    };
+  }
+
+  private async findWebhookTrigger(token: string): Promise<{
+    rule: AutomationRule | null;
+    trigger: AutomationTrigger | null;
+  }> {
+    const rules = await db.select().from(automationRules);
+    for (const rule of rules) {
+      const config = rule.config as AutomationConfig | null;
+      const trigger = config?.triggers?.find(
+        (t) => t.type === 'webhook' && t.value === token
+      );
+      if (trigger) {
+        return { rule, trigger };
+      }
+    }
+    return { rule: null, trigger: null };
+  }
+
+  async triggerWebhook(
+    token: string,
+    payload: unknown
+  ): Promise<{
+    success: boolean;
+    processed: boolean;
+    reason?: string;
+    actions?: WorkflowAction[];
+  }> {
+    const { rule, trigger } = await this.findWebhookTrigger(token);
+
+    if (!rule || !trigger) {
+      return {
+        success: false,
+        processed: false,
+        reason: 'Webhook token not found',
+      };
+    }
+
+    const evaluation = await this.evaluateTrigger({
+      accountId: rule.accountId,
+      relationshipId: rule.relationshipId ?? undefined,
+      trigger,
+      payload,
+    });
+
+    if (!evaluation.shouldProcess) {
+      return {
+        success: true,
+        processed: false,
+        reason: evaluation.reason,
+      };
+    }
+
+    const workflowResult = await this.executeWorkflow(rule.id, {
+      accountId: rule.accountId,
+      relationshipId: rule.relationshipId ?? undefined,
+      trigger,
+      payload,
+    });
+
+    return {
+      success: true,
+      processed: workflowResult.success,
+      actions: workflowResult.actions,
+      reason: workflowResult.success ? undefined : 'Workflow execution failed',
+    };
   }
 
   /**
@@ -414,7 +574,7 @@ class AutomationControllerService {
    */
   async executeWorkflow(
     ruleId: string,
-    context: TriggerContext
+    _context: TriggerContext
   ): Promise<{ success: boolean; actions: WorkflowAction[] }> {
     const [rule] = await db
       .select()
@@ -429,7 +589,6 @@ class AutomationControllerService {
     const config = rule.config as AutomationConfig | null;
     const mode = rule.mode as AutomationMode;
 
-    // Determinar acciones basadas en modo
     const actions: WorkflowAction[] = [];
 
     if (mode === 'automatic') {
@@ -446,7 +605,18 @@ class AutomationControllerService {
 
     return { success: true, actions };
   }
-}
 
+  private async notifyScheduler(accountId: string) {
+    try {
+      const { automationScheduler } = await import('./automation-scheduler.service');
+      await automationScheduler.refreshAccount(accountId);
+    } catch (error) {
+      console.error('[AutomationController] Scheduler refresh failed', {
+        accountId,
+        error,
+      });
+    }
+  }
+}
 // Singleton export
 export const automationController = new AutomationControllerService();

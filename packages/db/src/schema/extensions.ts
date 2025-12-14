@@ -31,6 +31,11 @@ export const extensionInstallations = pgTable('extension_installations', {
   // Permisos concedidos (subconjunto de los solicitados)
   grantedPermissions: jsonb('granted_permissions').default([]).$type<string[]>(),
   
+  // Sistema de permisos granulares
+  grantedBy: uuid('granted_by').references(() => accounts.id),
+  canSharePermissions: boolean('can_share_permissions').default(true),
+  permissionsGrantedAt: timestamp('permissions_granted_at').defaultNow(),
+  
   // Timestamps
   installedAt: timestamp('installed_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

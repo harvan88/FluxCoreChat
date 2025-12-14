@@ -6,6 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
 import type { Account } from '../types';
 
 export interface ProfileData {
@@ -44,12 +45,14 @@ export interface UseProfileReturn {
 
 export function useProfile(): UseProfileReturn {
   const { user } = useAuthStore();
+  const { selectedAccountId } = useUIStore();
   const [account, setAccount] = useState<Account | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null);
 
   // Load profile from API
   const loadProfile = useCallback(async () => {
@@ -62,18 +65,27 @@ export function useProfile(): UseProfileReturn {
       const response = await api.getAccounts();
       
       if (response.success && response.data && response.data.length > 0) {
-        // Get the first account (personal account)
-        const primaryAccount = response.data[0];
-        setAccount(primaryAccount);
+        // BUG FIX: Get the SELECTED account, not always the first one
+        let targetAccount = response.data[0]; // fallback to first
+        
+        if (selectedAccountId) {
+          const selected = response.data.find(acc => acc.id === selectedAccountId);
+          if (selected) {
+            targetAccount = selected;
+          }
+        }
+        
+        setAccount(targetAccount);
+        setLoadedAccountId(targetAccount.id);
         
         // Map account to profile data
         const profileData: ProfileData = {
-          displayName: primaryAccount.displayName || '',
-          bio: primaryAccount.profile?.bio || '',
-          privateContext: primaryAccount.privateContext || '',
-          accountType: primaryAccount.accountType as 'personal' | 'business',
-          avatarUrl: primaryAccount.profile?.avatarUrl,
-          profile: primaryAccount.profile || {},
+          displayName: targetAccount.displayName || '',
+          bio: targetAccount.profile?.bio || '',
+          privateContext: targetAccount.privateContext || '',
+          accountType: targetAccount.accountType as 'personal' | 'business',
+          avatarUrl: targetAccount.profile?.avatarUrl,
+          profile: targetAccount.profile || {},
         };
         
         setProfile(profileData);
@@ -86,7 +98,7 @@ export function useProfile(): UseProfileReturn {
       setIsLoading(false);
       setHasLoaded(true);
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, selectedAccountId]);
 
   // Update profile
   const updateProfile = useCallback(async (data: Partial<ProfileData>): Promise<boolean> => {
@@ -106,11 +118,12 @@ export function useProfile(): UseProfileReturn {
         updateData.privateContext = data.privateContext;
       }
       
-      if (data.bio !== undefined || data.profile !== undefined) {
+      if (data.bio !== undefined || data.profile !== undefined || data.avatarUrl !== undefined) {
         updateData.profile = {
           ...account.profile,
           ...data.profile,
-          bio: data.bio ?? account.profile?.bio,
+          ...(data.bio !== undefined ? { bio: data.bio } : {}),
+          ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         };
       }
       
@@ -177,6 +190,16 @@ export function useProfile(): UseProfileReturn {
       loadProfile();
     }
   }, [user, hasLoaded, isLoading, loadProfile]);
+
+  // BUG FIX: Reload when selectedAccountId changes
+  useEffect(() => {
+    if (selectedAccountId && loadedAccountId && selectedAccountId !== loadedAccountId) {
+      console.log('[useProfile] Account changed, reloading profile:', selectedAccountId);
+      setHasLoaded(false);
+      setProfile(null);
+      setAccount(null);
+    }
+  }, [selectedAccountId, loadedAccountId]);
 
   return {
     profile,

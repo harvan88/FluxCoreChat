@@ -3,13 +3,14 @@
  */
 
 import { useState } from 'react';
-import { User, Bell, Shield, Palette, ChevronRight, Building2 } from 'lucide-react';
+import { User, Bell, Shield, Palette, ChevronRight, Building2, Bot } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { ThemeSettings } from '../common';
 import { ProfileSection } from './ProfileSection';
+import { AutomationSection } from './AutomationSection';
 import { AccountsSection } from '../accounts';
 
-type SettingsSection = 'menu' | 'profile' | 'accounts' | 'notifications' | 'privacy' | 'appearance';
+type SettingsSection = 'menu' | 'profile' | 'accounts' | 'notifications' | 'privacy' | 'appearance' | 'automation';
 
 interface SettingItem {
   id: SettingsSection;
@@ -21,6 +22,7 @@ interface SettingItem {
 const settingItems: SettingItem[] = [
   { id: 'profile', icon: <User size={20} />, label: 'Perfil', description: 'Gestiona tu información personal' },
   { id: 'accounts', icon: <Building2 size={20} />, label: 'Cuentas', description: 'Gestiona tus cuentas y colaboradores' },
+  { id: 'automation', icon: <Bot size={20} />, label: 'Automatización', description: 'Configura reglas y triggers avanzados' },
   { id: 'notifications', icon: <Bell size={20} />, label: 'Notificaciones', description: 'Configura las alertas' },
   { id: 'privacy', icon: <Shield size={20} />, label: 'Privacidad', description: 'Controla quién puede verte' },
   { id: 'appearance', icon: <Palette size={20} />, label: 'Apariencia', description: 'Personaliza la interfaz' },
@@ -38,6 +40,8 @@ export function SettingsPanel() {
         return <ProfileSection onBack={() => setActiveSection('menu')} />;
       case 'accounts':
         return <AccountsSection onBack={() => setActiveSection('menu')} />;
+      case 'automation':
+        return <AutomationSection onBack={() => setActiveSection('menu')} />;
       case 'notifications':
         return <ComingSoonSection title="Notificaciones" onBack={() => setActiveSection('menu')} />;
       case 'privacy':

@@ -75,7 +75,8 @@ export interface AutomationConfig {
  */
 export interface AutomationTrigger {
   type: 'message_received' | 'keyword' | 'schedule' | 'webhook';
-  value?: string; // keyword pattern, cron expression, etc.
+  value?: string; // keyword pattern, cron expression, cron string, webhook token, etc.
+  metadata?: Record<string, unknown>;
 }
 
 /**

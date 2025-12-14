@@ -55,6 +55,9 @@ interface UIStore {
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
   loadConversations: () => Promise<void>;
+  
+  // Account-specific data reset
+  resetAccountData: () => void;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -138,8 +141,15 @@ export const useUIStore = create<UIStore>()(
       
       // Cargar conversaciones desde API
       loadConversations: async () => {
+        const accountId = get().selectedAccountId;
+        if (!accountId) {
+          console.log('[UIStore] No account selected, skipping load conversations');
+          return;
+        }
+        
         try {
-          const response = await api.getConversations();
+          // MA-203: Pasar accountId para filtrar por cuenta específica
+          const response = await api.getConversations(accountId);
           if (response.success && response.data) {
             set({ conversations: response.data });
           }
@@ -147,13 +157,24 @@ export const useUIStore = create<UIStore>()(
           console.error('[UIStore] Failed to load conversations:', error);
         }
       },
+
+      // Resetear datos específicos de cuenta
+      resetAccountData: () => {
+        console.log('[UIStore] Resetting account-specific data');
+        set({
+          conversations: [],
+          selectedConversationId: null,
+          // Mantener selectedAccountId ya que se actualiza externamente
+        });
+      },
     }),
     {
       name: 'fluxcore-ui',
       partialize: (state) => ({
-        // Solo persistir preferencias de UI, no datos
+        // Persistir preferencias de UI y selección de cuenta
         activityBarExpanded: state.activityBarExpanded,
         sidebarPinned: state.sidebarPinned,
+        selectedAccountId: state.selectedAccountId, // VER-001: Persistir cuenta seleccionada
       }),
     }
   )

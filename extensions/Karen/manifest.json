@@ -1,0 +1,55 @@
+{
+  "id": "@fluxcore/website-builder",
+  "name": "Karen Website Builder",
+  "version": "1.0.0",
+  "description": "Generador de sitios web estáticos con integración de chat contextual para cuentas de negocio",
+  "author": "FluxCore",
+  "preinstalled": false,
+  "permissions": [
+    "read:context.public",
+    "write:context.overlay",
+    "read:website",
+    "write:website",
+    "public:website"
+  ],
+  "hooks": [
+    "onInstall",
+    "onUninstall",
+    "onConfigChange"
+  ],
+  "configSchema": {
+    "theme": {
+      "type": "string",
+      "enum": ["default", "minimal", "corporate"],
+      "default": "default",
+      "description": "Tema visual del sitio"
+    },
+    "seoAuto": {
+      "type": "boolean",
+      "default": true,
+      "description": "Generar meta tags SEO automáticamente"
+    },
+    "chatWidgetEnabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Mostrar widget de chat en el sitio público"
+    },
+    "language": {
+      "type": "string",
+      "default": "es",
+      "enum": ["es", "en", "pt"],
+      "description": "Idioma del sitio"
+    }
+  },
+  "ui": {
+    "sidebar": {
+      "icon": "globe",
+      "title": "Sitio Web"
+    },
+    "panel": {
+      "title": "Website Builder",
+      "component": "WebsiteBuilderPanel"
+    }
+  },
+  "entrypoint": "./src/index.ts"
+}

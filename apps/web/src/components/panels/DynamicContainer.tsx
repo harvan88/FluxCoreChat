@@ -9,6 +9,7 @@ import { useUIStore } from '../../store/uiStore';
 import { TabBar } from './TabBar';
 import { ChatView } from '../chat/ChatView';
 import { WelcomeView } from '../chat/WelcomeView';
+import { ContactDetails } from '../contacts/ContactDetails';
 import { ProfileSection } from '../settings/ProfileSection';
 import { AccountsSection } from '../accounts';
 import { ThemeSettings } from '../common';
@@ -61,7 +62,7 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
       <TabBar container={container} />
 
       {/* Content Area - sin scroll propio, el hijo maneja su scroll */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab ? (
           <TabContent tab={activeTab} />
         ) : (
@@ -95,15 +96,11 @@ function TabContent({ tab }: TabContentProps) {
       );
 
     case 'contact':
-      return (
-        <div className="p-4">
-          <h2 className="text-lg font-semibold text-primary">
-            Contacto: {tab.context.contactName || 'Sin nombre'}
-          </h2>
-          <p className="text-secondary mt-2">
-            ID: {tab.context.contactId}
-          </p>
-          {/* TODO: Implementar vista detallada de contacto */}
+      return tab.context.contactId ? (
+        <ContactDetails contactId={tab.context.contactId} />
+      ) : (
+        <div className="flex items-center justify-center h-full text-muted">
+          No se especificó un contacto
         </div>
       );
 

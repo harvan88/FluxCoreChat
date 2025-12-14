@@ -44,6 +44,7 @@ export interface AutomationConfig {
 export interface AutomationTrigger {
   type: 'message_received' | 'keyword' | 'schedule' | 'webhook';
   value?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 /**
@@ -80,18 +81,44 @@ export function useAutomation(accountId: string | null) {
   const loadRules = useCallback(async () => {
     if (!accountId) return;
 
+    const token = getAuthToken();
+    if (!token) {
+      setError('No hay sesión activa');
+      setRules([]);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch(`${API_URL}/automation/rules/${accountId}`, {
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
+      // Manejar errores específicos por código HTTP
+      if (response.status === 401) {
+        setError('Sesión expirada. Por favor, inicia sesión de nuevo.');
+        setRules([]);
+        return;
+      }
+      
+      if (response.status === 403) {
+        setError('No tienes permiso para ver las reglas de automatización.');
+        setRules([]);
+        return;
+      }
+      
+      if (response.status === 404) {
+        // No hay reglas configuradas - no es un error
+        setRules([]);
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to load automation rules');
+        throw new Error(`Error ${response.status}: No se pudieron cargar las reglas`);
       }
 
       const result = await response.json();
@@ -99,8 +126,12 @@ export function useAutomation(accountId: string | null) {
         setRules(result.data);
       }
     } catch (err: any) {
-      setError(err.message);
-      // Mock data for development
+      // Errores de red específicos
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setError('No se puede conectar al servidor. Verifica tu conexión.');
+      } else {
+        setError(err.message || 'Error al cargar reglas de automatización');
+      }
       setRules([]);
     } finally {
       setIsLoading(false);
@@ -212,7 +243,7 @@ export function useAutomation(accountId: string | null) {
 
       const result = await response.json();
       await loadRules();
-      return result.data;
+      return result.data as { rule: AutomationRule; trigger: AutomationTrigger } | undefined;
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -246,6 +277,45 @@ export function useAutomation(accountId: string | null) {
       setIsLoading(false);
     }
   }, [loadRules]);
+
+  // Actualizar regla por ID
+  const updateRule = useCallback(async (
+    ruleId: string,
+    updates: {
+      mode?: AutomationMode;
+      enabled?: boolean;
+      config?: AutomationConfig | null;
+    }
+  ) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_URL}/automation/rules/${ruleId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update rule');
+      }
+
+      const result = await response.json();
+      await loadRules();
+      return result.data as AutomationRule | null;
+    } catch (err: any) {
+      setError(err.message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getAuthToken, loadRules]);
+
+  const resetError = useCallback(() => setError(null), []);
 
   // Evaluar trigger (para testing)
   const evaluate = useCallback(async (context: {
@@ -306,5 +376,7 @@ export function useAutomation(accountId: string | null) {
     registerTrigger,
     deleteRule,
     evaluate,
+    updateRule,
+    resetError,
   };
 }

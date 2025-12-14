@@ -6,7 +6,6 @@
 import { useState, useEffect } from 'react';
 import {
   ChevronRight,
-  Camera,
   Save,
   Loader2,
   Sparkles,
@@ -19,6 +18,7 @@ import {
 import { useProfile } from '../../hooks/useProfile';
 import { usePanelStore } from '../../store/panelStore';
 import { Button, Input, Card } from '../ui';
+import { AvatarUpload } from '../profile/AvatarUpload';
 
 interface ProfileSectionProps {
   onBack: () => void;
@@ -38,6 +38,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   // Local state for form
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [privateContext, setPrivateContext] = useState('');
   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -67,6 +68,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     if (profile) {
       setDisplayName(profile.displayName || '');
       setBio(profile.bio || '');
+      setAvatarUrl(profile.avatarUrl || '');
       setPrivateContext(profile.privateContext || '');
       setIsBusinessEnabled(profile.accountType === 'business');
     }
@@ -78,16 +80,18 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       const changed =
         displayName !== (profile.displayName || '') ||
         bio !== (profile.bio || '') ||
+        avatarUrl !== (profile.avatarUrl || '') ||
         privateContext !== (profile.privateContext || '');
       setHasChanges(changed);
     }
-  }, [displayName, bio, privateContext, profile]);
+  }, [displayName, bio, avatarUrl, privateContext, profile]);
 
   // Handle save
   const handleSave = async () => {
     const success = await updateProfile({
       displayName,
       bio,
+      avatarUrl,
       privateContext,
     });
     
@@ -125,11 +129,11 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <button
         onClick={onBack}
-        className="w-full p-4 flex items-center gap-2 border-b border-subtle text-primary hover:bg-hover transition-colors"
+        className="w-full p-4 flex items-center gap-2 border-b border-subtle text-primary hover:bg-hover transition-colors flex-shrink-0"
       >
         <ChevronRight size={20} className="rotate-180" />
         <span className="font-medium">Perfil</span>
@@ -137,30 +141,20 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
 
       {/* Error message */}
       {error && (
-        <div className="mx-4 mt-4 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
+        <div className="mx-4 mt-4 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm flex-shrink-0">
           {error}
         </div>
       )}
 
       {/* Content */}
-      <div className="p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-6">
         {/* Avatar Section */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative">
-            <div className="w-24 h-24 bg-accent rounded-full flex items-center justify-center">
-              <span className="text-inverse font-bold text-3xl">
-                {displayName?.charAt(0) || 'U'}
-              </span>
-            </div>
-            <button
-              className="absolute bottom-0 right-0 w-8 h-8 bg-surface border border-default rounded-full flex items-center justify-center text-secondary hover:text-primary hover:bg-hover transition-colors"
-              title="Cambiar foto"
-            >
-              <Camera size={16} />
-            </button>
-          </div>
-          <span className="text-sm text-muted">Cambiar foto</span>
-        </div>
+        <AvatarUpload
+          currentAvatarUrl={avatarUrl}
+          name={displayName}
+          onUpload={(url) => setAvatarUrl(url)}
+        />
 
         {/* Display Name */}
         <div className="space-y-2">
@@ -297,6 +291,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
               </>
             )}
           </Button>
+        </div>
         </div>
       </div>
     </div>

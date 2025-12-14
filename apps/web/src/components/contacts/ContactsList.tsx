@@ -4,10 +4,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, UserPlus, Loader2, Users, X, Plus, Check } from 'lucide-react';
+import { Search, UserPlus, Loader2, Users, X, Plus, Check, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 import { usePanelStore } from '../../store/panelStore';
+import { Avatar } from '../ui';
 import type { Relationship, Account } from '../../types';
 
 export function ContactsList() {
@@ -20,33 +21,51 @@ export function ContactsList() {
   const { selectedAccountId, conversations, setActiveActivity, loadConversations } = useUIStore();
   const { openTab } = usePanelStore();
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Cargar contactos desde API real
   const loadContacts = useCallback(async (force = false) => {
     if (isLoading || (hasLoaded && !force)) return; // Prevent duplicate calls
+    if (!selectedAccountId) {
+      console.log('[ContactsList] No account selected, skipping load');
+      setContacts([]);
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await api.getRelationships();
+      // MA-204: Pasar accountId para filtrar por cuenta específica
+      console.log('[ContactsList] Loading contacts for account:', selectedAccountId);
+      const response = await api.getRelationships(selectedAccountId);
       
       if (response.success && response.data) {
+        console.log('[ContactsList] Loaded contacts:', response.data.length);
         setContacts(response.data);
       } else {
         setError(response.error || 'Error al cargar contactos');
+        setContacts([]);
       }
     } finally {
       setIsLoading(false);
       setHasLoaded(true);
     }
-  }, [isLoading, hasLoaded]);
+  }, [isLoading, hasLoaded, selectedAccountId]);
 
   useEffect(() => {
     if (!hasLoaded) {
       loadContacts();
     }
   }, [hasLoaded, loadContacts]);
+
+  // MA-302: Reset hasLoaded cuando cambia la cuenta seleccionada
+  useEffect(() => {
+    console.log('[ContactsList] Account changed, resetting hasLoaded');
+    setHasLoaded(false);
+    setContacts([]);
+  }, [selectedAccountId]);
 
   // Filtrar contactos por búsqueda local
   const filteredContacts = contacts.filter((contact) => {
@@ -65,6 +84,27 @@ export function ContactsList() {
   const handleContactAdded = () => {
     setShowAddModal(false);
     loadContacts(true); // Forzar recarga
+  };
+
+  // Eliminar contacto
+  const handleDeleteContact = async (contactId: string) => {
+    setDeletingContactId(contactId);
+    try {
+      const response = await api.deleteContact(contactId);
+      if (response.success) {
+        // Recargar lista de contactos
+        loadContacts(true);
+        // Recargar conversaciones también
+        loadConversations();
+        setConfirmDeleteId(null);
+      } else {
+        setError(response.error || 'Error al eliminar contacto');
+      }
+    } catch (err) {
+      setError('Error al eliminar contacto');
+    } finally {
+      setDeletingContactId(null);
+    }
   };
 
   return (
@@ -169,14 +209,21 @@ export function ContactsList() {
                     });
                   }
                 }}
-                className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left"
+                className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left disabled:opacity-50 group"
+                disabled={isCreatingConversation}
               >
-                {/* Avatar */}
-                <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
-                  <span className="text-inverse font-semibold text-sm">
-                    {displayName.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                {/* Avatar - Bug 3 Fix: Usar Avatar component con imagen real */}
+                {isCreatingConversation ? (
+                  <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
+                    <Loader2 className="animate-spin text-inverse" size={20} />
+                  </div>
+                ) : (
+                  <Avatar
+                    src={(contact as any).contactAvatar}
+                    name={displayName}
+                    size="lg"
+                  />
+                )}
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
@@ -187,6 +234,48 @@ export function ContactsList() {
                     {contact.perspectiveA?.status === 'active' ? 'Activo' : contact.perspectiveA?.status || 'Sin estado'}
                   </div>
                 </div>
+
+                {/* Delete button */}
+                {confirmDeleteId === contact.id ? (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteContact(contact.id);
+                      }}
+                      disabled={deletingContactId === contact.id}
+                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                      title="Confirmar eliminación"
+                    >
+                      {deletingContactId === contact.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Check size={14} />
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDeleteId(null);
+                      }}
+                      className="p-1.5 bg-elevated hover:bg-hover text-muted rounded transition-colors"
+                      title="Cancelar"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteId(contact.id);
+                    }}
+                    className="p-1.5 text-muted hover:text-red-500 hover:bg-hover rounded transition-colors opacity-0 group-hover:opacity-100"
+                    title="Eliminar contacto"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </button>
             );
           })

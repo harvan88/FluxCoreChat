@@ -9,7 +9,11 @@ export type ContextPermission =
   | 'write:enrichments'
   | 'send:messages'
   | 'modify:automation'
-  | 'tools:register';
+  | 'tools:register'
+  // Karen Website Builder permissions
+  | 'read:website'
+  | 'write:website'
+  | 'public:website';
 
 export interface PermissionRequest {
   permission: ContextPermission;

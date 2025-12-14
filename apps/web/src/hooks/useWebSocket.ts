@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AISuggestion } from '../components/extensions';
 import type { EnrichmentBatch } from '../types/enrichments';
 import { useEnrichmentStore } from '../store/enrichmentStore';
+import { useUIStore } from '../store/uiStore';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
 
@@ -40,6 +41,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     reconnectInterval = 3000,
   } = options;
 
+  // Obtener accountId actual para reconexión automática
+  const selectedAccountId = useUIStore((state) => state.selectedAccountId);
+
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -48,6 +52,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const reconnectAttemptsRef = useRef(0);
   const wasConnectedRef = useRef(false);
   const mountedRef = useRef(true);
+  const currentAccountIdRef = useRef<string | null>(null);
   const MAX_RECONNECT_ATTEMPTS = 5;
   
   // Refs para callbacks estables (evitar loops de reconexión)
@@ -80,6 +85,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         setStatus('connected');
         wasConnectedRef.current = true;
         reconnectAttemptsRef.current = 0; // Reset on successful connection
+        
+        // Actualizar accountId actual
+        currentAccountIdRef.current = selectedAccountId;
         
         // Re-suscribir a relationships anteriores
         subscribedRelationshipsRef.current.forEach(relationshipId => {
@@ -126,9 +134,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (!mountedRef.current) return;
-        console.log('[WebSocket] Disconnected');
+        console.log('[WebSocket] Disconnected:', event.code, event.reason);
         setStatus('disconnected');
         wsRef.current = null;
         
@@ -261,6 +269,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - solo ejecutar una vez al montar
+
+  // Reconectar automáticamente cuando cambia el accountId
+  useEffect(() => {
+    if (selectedAccountId && selectedAccountId !== currentAccountIdRef.current) {
+      console.log('[WebSocket] Account changed, reconnecting...');
+      disconnect();
+      // Pequeña pausa para asegurar limpieza completa
+      setTimeout(() => {
+        if (mountedRef.current) {
+          connect();
+        }
+      }, 100);
+    }
+  }, [selectedAccountId, disconnect, connect]);
 
   // Ping periódico para mantener conexión
   useEffect(() => {

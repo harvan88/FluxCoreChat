@@ -119,7 +119,20 @@ export interface ApiResponse<T> {
 }
 
 // Activity types for sidebar
-export type ActivityType = 'conversations' | 'contacts' | 'extensions' | 'settings';
+// Extensiones dinámicas usan el formato 'ext:{extensionId}'
+export type ActivityType = 'conversations' | 'contacts' | 'extensions' | 'settings' | `ext:${string}`;
+
+// Extension UI configuration from manifest
+export interface ExtensionUIConfig {
+  sidebar?: {
+    icon: string;
+    title: string;
+  };
+  panel?: {
+    title: string;
+    component: string;
+  };
+}
 
 // UI State
 export interface UIState {

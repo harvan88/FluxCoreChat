@@ -1,7 +1,7 @@
 import { hash, compare } from 'bcrypt';
 import { db } from '@fluxcore/db';
-import { users, accounts, actors, relationships, conversations, messages } from '@fluxcore/db';
-import { eq } from 'drizzle-orm';
+import { users, accounts, actors, relationships, conversations, messages, passwordResetTokens } from '@fluxcore/db';
+import { eq, and, gt } from 'drizzle-orm';
 
 const SALT_ROUNDS = 10;
 const FLUXI_USERNAME = 'fluxi';
@@ -120,6 +120,61 @@ export class AuthService {
       .limit(1);
     
     return !!user;
+  }
+
+  async requestPasswordReset(email: string): Promise<string | null> {
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (!user) return null;
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await db.insert(passwordResetTokens).values({
+      userId: user.id,
+      token,
+      expiresAt,
+    });
+
+    return token;
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<boolean> {
+    // Find valid token
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.token, token),
+          eq(passwordResetTokens.used, false),
+          gt(passwordResetTokens.expiresAt, new Date())
+        )
+      )
+      .limit(1);
+
+    if (!resetToken) return false;
+
+    // Hash new password
+    const passwordHash = await hash(newPassword, SALT_ROUNDS);
+
+    // Update user password
+    await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, resetToken.userId));
+
+    // Mark token as used
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.id, resetToken.id));
+
+    return true;
   }
 
   /**

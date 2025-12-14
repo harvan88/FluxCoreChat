@@ -36,7 +36,12 @@ const app = new Elysia()
       code: (error as any).code,
     };
   })
-  .use(cors())
+  .use(cors({
+    origin: true, // Allow all origins in development
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true,
+  }))
   .use(
     swagger({
       documentation: {

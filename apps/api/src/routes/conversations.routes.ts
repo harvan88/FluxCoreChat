@@ -4,16 +4,35 @@ import { conversationService } from '../services/conversation.service';
 
 export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
   .use(authMiddleware)
-  // GET /conversations - Listar todas las conversaciones del usuario
+  // GET /conversations - Listar conversaciones (filtradas por accountId si se provee)
   .get(
     '/',
-    async ({ user, set }) => {
+    async ({ user, query, set }) => {
       if (!user) {
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
       }
 
       try {
+        const { accountId } = query;
+        
+        // MA-102: Si se provee accountId, filtrar por esa cuenta específica
+        if (accountId) {
+          // MA-105: Verificar que el accountId pertenece al usuario
+          const { accountService } = await import('../services/account.service');
+          const userAccounts = await accountService.getAccountsByUserId(user.id);
+          const userAccountIds = userAccounts.map(a => a.id);
+          
+          if (!userAccountIds.includes(accountId)) {
+            set.status = 403;
+            return { success: false, message: 'Account does not belong to user' };
+          }
+          
+          const conversations = await conversationService.getConversationsByAccountId(accountId);
+          return { success: true, data: conversations };
+        }
+        
+        // Fallback: devolver todas las conversaciones del usuario (deprecated behavior)
         const conversations = await conversationService.getConversationsByUserId(user.id);
         return { success: true, data: conversations };
       } catch (error: any) {
@@ -24,7 +43,10 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
     },
     {
       isAuthenticated: true,
-      detail: { tags: ['Conversations'], summary: 'List all conversations for current user' },
+      query: t.Object({
+        accountId: t.Optional(t.String()),
+      }),
+      detail: { tags: ['Conversations'], summary: 'List conversations for account' },
     }
   )
   .post(
@@ -131,5 +153,27 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
         status: t.Optional(t.Union([t.Literal('active'), t.Literal('archived'), t.Literal('closed')])),
       }),
       detail: { tags: ['Conversations'], summary: 'Update conversation' },
+    }
+  )
+  .delete(
+    '/:id',
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        await conversationService.deleteConversation(params.id, user.id);
+        return { success: true, message: 'Conversation deleted' };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      detail: { tags: ['Conversations'], summary: 'Delete conversation and its messages' },
     }
   );

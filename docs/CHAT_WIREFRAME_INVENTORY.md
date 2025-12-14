@@ -5,6 +5,55 @@
 
 ---
 
+## 0. CATÁLOGO DE ACCIONES, ICONOS Y ATAJOS (Wireframe)
+
+| Acción | Icono (lucide) | Atajo de teclado |
+|---|---|---|
+| Responder (yo) | `reply` | Por definir |
+| Responder con IA | `bot` | Por definir |
+| Asignar conversación | `at-sign` | Por definir |
+| Etiquetar conversación | `tag` | Por definir |
+| Buscar en chat | `search` | Por definir |
+| Información de contacto | `info` | Por definir |
+| Opciones (menú) | `ellipsis-vertical` | Por definir |
+| Compartir | `share-2` | Por definir |
+| Bloquear | `shield-ban` | Por definir |
+| Vaciar chat | `circle-minus` | Por definir |
+| Exportar chat | `download` | Por definir |
+| Copiar | `copy` | Por definir |
+| Reenviar | `forward` | Por definir |
+| Destacar | `star` | Por definir |
+| Fijar | `pin` | Por definir |
+| Bandera (reportar) | `flag` | Por definir |
+| Eliminar para mí | `trash-2` | Por definir |
+| Seleccionar (modo selección) | `square` | Por definir |
+| Resumir con IA | `captions` | Por definir |
+| Refinar respuesta | `biceps-flexed` | Por definir |
+| Reacción: 👍 | `thumbs-up` | Por definir |
+| Reacción: 👎 | `thumbs-down` | Por definir |
+| Reacción: emoji | `smile-plus` | Por definir |
+| Clip (adjuntar) | `paperclip` | Por definir |
+| Micrófono | `mic` | Por definir |
+| Pausar grabación | `pause` | Por definir |
+| IA apagada | `bot-off` | Por definir |
+| IA en supervisión | `bot-message-square` | Por definir |
+| IA automática | `bot` | Por definir |
+| Cerrar | `x` | Por definir |
+| Enviar | `move-up` | Por definir |
+| Eliminar caracter | `delete` | Por definir |
+| Teclado | `keyboard` | Por definir |
+| Recargar (repreguntar a la IA) | `refresh-ccw` | Por definir |
+| Navegar izquierda | `chevron-left` | Por definir |
+| Navegar derecha | `chevron-right` | Por definir |
+| Adjunto: Documento | `file` | Por definir |
+| Adjunto: Cámara | `camera` | Por definir |
+| Adjunto: Galería | `images` | Por definir |
+| Adjunto: Audio | `audio-lines` | Por definir |
+| Adjunto: Contacto | `user-round` | Por definir |
+| Adjunto: Ubicación | `map-pin` | Por definir |
+| Adjunto: Respuesta rápida | `zap` | Por definir |
+| Adjunto: Pedido | `receipt-text` | Por definir |
+
 ## 1. ESTRUCTURA GENERAL DE LA INTERFAZ
 
 ### 1.1 Layout Principal
@@ -56,6 +105,8 @@
 | `contactPhone` | `string` | Teléfono/identificador |
 | `timestamp` | `string` | Última actividad (ej: "12:35") |
 | `onBack` | `() => void` | Navegar hacia atrás |
+| `onOpenTags` | `() => void` | Abrir sistema de etiquetas |
+| `onOpenAssign` | `() => void` | Abrir asignación y notificación |
 | `onOpenOptions` | `() => void` | Abrir menú de opciones |
 
 **Elementos del Header (izquierda a derecha)**:
@@ -64,16 +115,72 @@
 |-------|--------|-------------|
 | ← (Flecha) | `onBack()` | Volver a la lista de conversaciones |
 | Nombre | - | Nombre del contacto ("Cristian") |
-| Teléfono | - | Identificador ("+547 12:35") |
+| Teléfono | - | Identificador ("+5491126884928") |
 | # (Tag) | `onOpenTags()` | Sistema de etiquetas para categorizar |
-| @ (Arroba) | `onOpenAssign()` | Asignar/mencionar otra cuenta |
+| @ (Arroba) | `onOpenAssign()` | Asignar y notificar a miembro del workspace |
 | ⋮ (Options) | `onOpenOptions()` | Menú desplegable de opciones |
 
 **Colores**:
-- **Fondo**: `bg-elevated` (`#2C2C2C`)
-- **Iconos**: `text-muted` (`#B0AFBD`)
+- **Fondo**: `bg-elevated`
+- **Iconos**: `text-muted`
 - **Texto nombre**: `text-primary`
 - **Texto teléfono**: `text-secondary`
+
+**Interacciones UI (Wireframe) - # / @ / /buscar**
+
+##### `TagSelectorPopover` (#)
+**Descripción**: Popover inline para filtrar/crear etiquetas de conversación.
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `isOpen` | `boolean` | Popover visible |
+| `query` | `string` | Texto con prefijo `#` (ej: `#Int`) |
+| `selectedTagIds` | `string[]` | Tags aplicadas a la conversación |
+| `onToggleTag` | `(tagId: string) => void` | Aplicar/quitar tag |
+| `onCreateTag` | `(name: string) => void` | Crear nueva etiqueta |
+| `onClose` | `() => void` | Cerrar popover |
+
+**Wireframe sugiere**:
+- Input inline con prefijo `#`.
+- Dropdown con tags existentes + acción `Nueva etiqueta`.
+- Render de chips/pills (ej: `Interesado`) en el header.
+- Fuente de tags: **tags del workspace + tags de la cuenta** (herencia). En conflictos de nombre, prevalece workspace.
+
+##### `AssignmentAccessPopover` (@)
+**Descripción**: Popover inline para **asignación + notificación** relacionado a la conversación (**no otorga permisos**).
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `isOpen` | `boolean` | Popover visible |
+| `query` | `string` | Texto con prefijo `@` (ej: `@marimar`) |
+| `scope` | `'full' \| 'selected'` | Alcance wireframe: `acceso completo` vs `acceso a seleccionados` (workflow) |
+| `onSelectAssignee` | `(userId: string) => void` | Elegir miembro del workspace (`workspace_members.user_id`) |
+| `onChangeScope` | `(scope: 'full' | 'selected') => void` | Cambiar alcance |
+| `onClose` | `() => void` | Cerrar popover |
+
+**Wireframe sugiere**:
+- Input inline con `@usuario` + sufijo tipo comando (ej: `/ac`).
+- Dropdown con opciones de alcance: `acceso completo` / `acceso a seleccionados`.
+- Semántica adoptada:
+  - `full`: asigna la conversación completa al miembro + notifica.
+  - `selected`: notifica/dirige a **mensajes seleccionados** (PC-10) sin cambios de permisos.
+
+##### `ConversationSearchBar` (/buscar)
+**Descripción**: Barra inline para búsqueda dentro de la conversación, con sintaxis tipo comando.
+
+| Propiedad | Tipo | Descripción |
+|-----------|------|-------------|
+| `isOpen` | `boolean` | Búsqueda visible |
+| `query` | `string` | Texto con prefijo `/buscar` (ej: `/buscar precio`) |
+| `activeMatchIndex` | `number` | Match activo (0-based) |
+| `matchesCount` | `number` | Total de matches |
+| `onPrevMatch` | `() => void` | Ir al match anterior |
+| `onNextMatch` | `() => void` | Ir al match siguiente |
+| `onClose` | `() => void` | Cerrar búsqueda |
+
+**Wireframe sugiere**:
+- Contador `1/2` + controles navegación (prev/next).
+- Dropdown de sugerencias/recientes (por definir fuente).
 
 ---
 
@@ -104,7 +211,7 @@
 | 🗑️ Eliminar | `delete` | Eliminar conversación |
 
 **Estilos**:
-- **Fondo panel**: `bg-elevated` (`#2C2C2C`)
+- **Fondo panel**: `bg-elevated`
 - **Items hover**: `bg-hover`
 - **Iconos**: `text-muted`
 - **Texto**: `text-primary`
@@ -130,9 +237,9 @@
 
 | Tipo | Fondo | Borde | Alineación |
 |------|-------|-------|------------|
-| Recibido (otro) | `bg-elevated` (`#2C2C2C`) | Ninguno | Izquierda |
-| Enviado (self, humano) | `bg-elevated` (`#2C2C2C`) | Ninguno | Derecha |
-| Enviado (self, IA) | `bg-surface` (`#2F4053`) | `border-accent` (`#3B82F6`) 2px | Derecha |
+| Recibido (otro) | `bg-elevated` | Ninguno | Izquierda |
+| Enviado (self, humano) | `bg-elevated` | Ninguno | Derecha |
+| Enviado (self, IA) | `bg-surface` | `border-accent` 2px | Derecha |
 
 ---
 
@@ -218,7 +325,7 @@
 
 **Posición**: Izquierda del mensaje (mensajes recibidos) o derecha (mensajes enviados)
 **Icono**: Cuadrado con check cuando seleccionado
-**Color seleccionado**: `text-accent` (`#3B82F6`)
+**Color seleccionado**: `text-accent`
 
 ---
 
@@ -256,8 +363,8 @@
 | `onClick` | `() => void` | Toggle panel emojis |
 
 **Icono**: Cara sonriente con signo (posición: izquierda del input)
-**Color inactivo**: `text-muted` (hereda del tema)
-**Color activo**: `text-accent` (azul principal)
+**Color inactivo**: `text-muted`
+**Color activo**: `text-accent`
 
 ---
 
@@ -268,7 +375,7 @@
 | `onClick` | `() => void` | Toggle panel adjuntos |
 
 **Icono**: Clip de papel (paperclip)
-**Color inactivo**: `text-muted` (hereda del tema)
+**Color inactivo**: `text-muted`
 **Posición**: Derecha del campo de texto
 
 ---
@@ -281,8 +388,8 @@
 | `onClick` | `() => void` | Iniciar/pausar grabación |
 
 **Icono**: Micrófono
-**Color inactivo**: `text-muted` (hereda del tema)
-**Color grabando**: `text-error` (rojo semántico)
+**Color inactivo**: `text-muted`
+**Color grabando**: `text-error`
 **Posición**: Derecha del botón de adjuntos
 
 ---
@@ -295,8 +402,8 @@
 
 **Iconos por modo**:
 - **Off**: Robot tachado (`text-muted`)
-- **Automático**: Robot con check (`text-success` verde semántico)
-- **Supervisión**: Burbuja de chat con puntos (`text-warning` amarillo semántico)
+- **Automático**: Robot con check (`text-success`)
+- **Supervisión**: Burbuja de chat con puntos (`text-warning`)
 
 **Posición**: Extremo derecho, antes del botón enviar
 
@@ -309,8 +416,8 @@
 | `onClick` | `() => void` | Enviar mensaje |
 
 **Icono**: Flecha hacia arriba
-**Color activo**: `bg-accent` (azul principal, fondo circular)
-**Color inactivo**: `text-muted` (gris semántico)
+**Color activo**: `bg-accent`
+**Color inactivo**: `text-muted`
 **Posición**: Extremo derecho
 
 ---
@@ -367,14 +474,14 @@
 
 | Icono | Tipo | Color | Descripción |
 |-------|------|-------|-------------|
-| Documento | `document` | `text-info` (azul información) | Archivos/documentos |
-| Cámara | `camera` | `text-accent` (azul principal) | Tomar foto |
-| Galería | `gallery` | `text-error` (rosa/error) | Imágenes existentes |
-| Audio | `audio` | `text-error` (rosa semántico) | Notas de voz/audio |
-| Recibo | `receipt` | `text-error` (rojo semántico) | Recibos/facturas |
-| Ubicación | `location` | `text-success` (verde semántico) | Compartir ubicación |
-| Quick reply | `quick` | `text-warning` (amarillo semántico) | Respuestas rápidas |
-| Contacto | `contact` | `text-info` (azul información) | Compartir contacto |
+| Documento | `document` | `text-info` | Archivos/documentos |
+| Cámara | `camera` | `text-accent` | Tomar foto |
+| Galería | `gallery` | `text-error` | Imágenes existentes |
+| Audio | `audio` | `text-error` | Notas de voz/audio |
+| Recibo | `receipt` | `text-error` | Recibos/facturas |
+| Ubicación | `location` | `text-success` | Compartir ubicación |
+| Quick reply | `quick` | `text-warning` | Respuestas rápidas |
+| Contacto | `contact` | `text-info` | Compartir contacto |
 
 **Estructura**: 
 - 8 botones en grid 4x2
@@ -400,7 +507,7 @@
 | Automático | Robot calendario | `text-success` | "FluxCore Automático" |
 | Desactivado | Robot tachado | `text-muted` | "Desactivado" |
 
-**Indicador superior**: Barra `bg-accent` (azul principal)
+**Indicador superior**: Barra `bg-accent`
 
 ---
 
@@ -420,11 +527,11 @@
 **Elementos visuales**:
 - **Waveform**: Visualización de ondas de audio (barras verticales)
 - **Timer**: Contador de tiempo (`0:32` format)
-- **Indicador grabando**: Punto `text-success` (verde semántico)
-- **Botón pausa**: Dos barras verticales `text-error` (rojo semántico)
+- **Indicador grabando**: Punto `text-success`
+- **Botón pausa**: Dos barras verticales `text-error`
 - **Botón play** (cuando pausado): Triángulo `text-inverse`
 - **Botón papelera**: Icono trash `text-muted`
-- **Botón enviar**: Flecha `bg-accent` (azul principal)
+- **Botón enviar**: Flecha `bg-accent`
 
 ---
 

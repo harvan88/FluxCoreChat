@@ -5,10 +5,46 @@
 
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { automationController } from '../services/automation-controller.service';
+import {
+  automationController,
+  AutomationTriggerError,
+} from '../services/automation-controller.service';
 import type { AutomationMode, AutomationConfig, AutomationTrigger } from '@fluxcore/db';
 
 export const automationRoutes = new Elysia({ prefix: '/automation' })
+  // Endpoint público para webhooks entrantes (sin autenticación)
+  .post('/webhook/:token', async ({ params, body, set }) => {
+    try {
+      const result = await automationController.triggerWebhook(params.token, body ?? null);
+
+      if (!result.success) {
+        set.status = 404;
+        return {
+          success: false,
+          message: result.reason ?? 'Webhook token not found',
+        };
+      }
+
+      if (!result.processed) {
+        set.status = 202;
+      }
+
+      return {
+        success: true,
+        processed: result.processed,
+        reason: result.reason,
+        actions: result.actions ?? [],
+      };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error?.message ?? 'Webhook trigger failed' };
+    }
+  }, {
+    params: t.Object({
+      token: t.String(),
+    }),
+    body: t.Optional(t.Any()),
+  })
   .use(authMiddleware)
 
   // GET /automation/rules/:accountId - Obtener todas las reglas de una cuenta
@@ -25,8 +61,13 @@ export const automationRoutes = new Elysia({ prefix: '/automation' })
         data: rules,
       };
     } catch (error: any) {
+      if (error instanceof AutomationTriggerError) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+
       set.status = 500;
-      return { success: false, message: error.message };
+      return { success: false, message: error?.message ?? 'Failed to register trigger' };
     }
   }, {
     params: t.Object({
@@ -134,14 +175,17 @@ export const automationRoutes = new Elysia({ prefix: '/automation' })
         return { success: false, message: 'Invalid trigger type' };
       }
 
-      const rule = await automationController.registerTrigger(accountId, trigger, {
+      const { rule, trigger: registeredTrigger } = await automationController.registerTrigger(accountId, trigger, {
         relationshipId,
         mode,
       });
 
       return {
         success: true,
-        data: rule,
+        data: {
+          rule,
+          trigger: registeredTrigger,
+        },
       };
     } catch (error: any) {
       set.status = 500;
@@ -153,6 +197,7 @@ export const automationRoutes = new Elysia({ prefix: '/automation' })
       trigger: t.Object({
         type: t.String(),
         value: t.Optional(t.String()),
+        metadata: t.Optional(t.Any()),
       }),
       relationshipId: t.Optional(t.String()),
       mode: t.Optional(t.String()),

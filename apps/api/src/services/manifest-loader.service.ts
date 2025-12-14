@@ -48,7 +48,8 @@ const coreAiManifest: ExtensionManifest = {
   },
 };
 
-// Registrar extensiones built-in
+// Registrar extensiones built-in (solo core-ai es preinstalada)
+// Nota: Karen (@fluxcore/website-builder) se carga desde extensions/Karen/manifest.json
 builtInExtensions.set(coreAiManifest.id, coreAiManifest);
 
 class ManifestLoaderService {
@@ -111,6 +112,9 @@ class ManifestLoaderService {
         'read:messages',
         'write:enrichments',
         'tools:register',
+        'read:website',
+        'write:website',
+        'public:website',
       ];
       for (const perm of manifest.permissions) {
         if (!validPermissions.includes(perm as ContextPermission)) {

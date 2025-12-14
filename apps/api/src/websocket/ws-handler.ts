@@ -10,7 +10,7 @@ import { automationController } from '../services/automation-controller.service'
 import { aiService } from '../services/ai.service';
 
 interface WSMessage {
-  type: 'subscribe' | 'unsubscribe' | 'message' | 'ping' | 'request_suggestion' | 'approve_suggestion' | 'discard_suggestion';
+  type: 'subscribe' | 'unsubscribe' | 'message' | 'ping' | 'request_suggestion' | 'approve_suggestion' | 'discard_suggestion' | 'widget:connect' | 'widget:message';
   relationshipId?: string;
   conversationId?: string;
   content?: any;
@@ -18,6 +18,9 @@ interface WSMessage {
   accountId?: string;
   suggestionId?: string;
   suggestedText?: string;
+  // Widget specific
+  alias?: string;
+  visitorId?: string;
 }
 
 // Store de conexiones activas por relationshipId
@@ -140,6 +143,30 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
           type: 'suggestion:discarded', 
           suggestionId: data.suggestionId 
         }));
+        break;
+
+      case 'widget:connect':
+        // Widget público: establecer conexión
+        if (data.alias && data.visitorId) {
+          handleWidgetConnect(ws, data);
+        } else {
+          ws.send(JSON.stringify({ 
+            type: 'error', 
+            message: 'alias and visitorId required for widget connection' 
+          }));
+        }
+        break;
+
+      case 'widget:message':
+        // Widget público: enviar mensaje
+        if (data.alias && data.visitorId && data.content) {
+          handleWidgetMessage(ws, data);
+        } else {
+          ws.send(JSON.stringify({ 
+            type: 'error', 
+            message: 'alias, visitorId and content required for widget message' 
+          }));
+        }
         break;
 
       default:
@@ -283,6 +310,99 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
     ws.send(JSON.stringify({
       type: 'error',
       message: `Failed to generate suggestion: ${error.message}`,
+    }));
+  }
+}
+
+/**
+ * KAREN WIDGET: Manejar conexión de widget público
+ */
+async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
+  const { alias, visitorId } = data;
+  
+  try {
+    // Buscar cuenta por alias
+    const { db, accounts } = await import('@fluxcore/db');
+    const { eq, or } = await import('drizzle-orm');
+    
+    const [account] = await db
+      .select()
+      .from(accounts)
+      .where(or(eq(accounts.alias, alias!), eq(accounts.username, alias!)))
+      .limit(1);
+    
+    if (!account) {
+      ws.send(JSON.stringify({
+        type: 'widget:error',
+        message: `Account not found for alias: ${alias}`,
+      }));
+      return;
+    }
+
+    // Por ahora, solo confirmar conexión
+    // En una implementación completa, crearíamos o buscaríamos una relationship
+    ws.send(JSON.stringify({
+      type: 'widget:connected',
+      accountId: account.id,
+      accountName: account.displayName,
+      visitorId,
+    }));
+
+    console.log(`[Widget] Visitor ${visitorId} connected to ${alias}`);
+    
+  } catch (error: any) {
+    ws.send(JSON.stringify({
+      type: 'widget:error',
+      message: error.message,
+    }));
+  }
+}
+
+/**
+ * KAREN WIDGET: Manejar mensaje de widget público
+ */
+async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
+  const { alias, visitorId, content, relationshipId } = data;
+  
+  try {
+    // Buscar cuenta por alias
+    const { db, accounts } = await import('@fluxcore/db');
+    const { eq, or } = await import('drizzle-orm');
+    
+    const [account] = await db
+      .select()
+      .from(accounts)
+      .where(or(eq(accounts.alias, alias!), eq(accounts.username, alias!)))
+      .limit(1);
+    
+    if (!account) {
+      ws.send(JSON.stringify({
+        type: 'widget:error',
+        message: `Account not found for alias: ${alias}`,
+      }));
+      return;
+    }
+
+    // Log del mensaje (en implementación completa, persistiríamos y notificaríamos)
+    console.log(`[Widget] Message from ${visitorId} to ${alias}: ${content?.text}`);
+
+    // Confirmar recepción
+    ws.send(JSON.stringify({
+      type: 'widget:message_received',
+      messageId: `widget_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    }));
+
+    // TODO: En implementación completa:
+    // 1. Crear o buscar relationship anónima
+    // 2. Persistir mensaje en conversación
+    // 3. Notificar al owner de la cuenta
+    // 4. Generar respuesta de IA si está configurado
+    
+  } catch (error: any) {
+    ws.send(JSON.stringify({
+      type: 'widget:error',
+      message: error.message,
     }));
   }
 }

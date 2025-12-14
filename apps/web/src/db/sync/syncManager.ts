@@ -463,6 +463,7 @@ class SyncManager {
 
   /**
    * Fetch and cache messages from backend
+   * FIX: Deduplicación mejorada para evitar mensajes duplicados
    */
   async fetchMessages(conversationId: string): Promise<LocalMessage[]> {
     console.log(`[SyncManager] fetchMessages called for ${conversationId}, token: ${this.authToken ? 'present' : 'MISSING'}, status: ${this.status}`);
@@ -492,18 +493,56 @@ class SyncManager {
       
       console.log(`[SyncManager] Fetched ${serverMessages.length} messages for conversation ${conversationId}`);
 
+      // FIX: Obtener todos los mensajes locales para deduplicación por contenido
+      const localMessages = await db.messages
+        .where('conversationId')
+        .equals(conversationId)
+        .toArray();
+      
+      // Crear índice de mensajes locales por contenido+sender para detectar duplicados
+      const localContentIndex = new Map<string, LocalMessage>();
+      for (const msg of localMessages) {
+        const key = `${msg.senderAccountId}:${msg.content?.text || ''}:${msg.type}`;
+        localContentIndex.set(key, msg);
+      }
+
       // Merge with local messages
       for (const serverMsg of serverMessages) {
         const existing = await db.messages.get(serverMsg.id);
         
         if (!existing) {
-          // New message from server
-          await db.messages.add({
-            ...serverMsg,
-            syncState: 'synced',
-            localCreatedAt: new Date(serverMsg.createdAt),
-            serverCreatedAt: new Date(serverMsg.createdAt),
-          });
+          // FIX: Verificar si existe un mensaje local con el mismo contenido (duplicado por sync)
+          const contentKey = `${serverMsg.senderAccountId}:${serverMsg.content?.text || ''}:${serverMsg.type}`;
+          const duplicateByContent = localContentIndex.get(contentKey);
+          
+          if (duplicateByContent && duplicateByContent.syncState !== 'synced') {
+            // Es un duplicado local - actualizar el mensaje local con el ID del servidor
+            console.log(`[SyncManager] Merging duplicate message: local ${duplicateByContent.id} -> server ${serverMsg.id}`);
+            
+            // Eliminar el mensaje local con ID diferente
+            await db.messages.delete(duplicateByContent.id);
+            
+            // Agregar el mensaje del servidor (usar put para evitar ConstraintError)
+            await db.messages.put({
+              ...serverMsg,
+              syncState: 'synced',
+              localCreatedAt: new Date(serverMsg.createdAt),
+              serverCreatedAt: new Date(serverMsg.createdAt),
+            });
+            
+            // Limpiar sync queue del mensaje local
+            await db.syncQueue
+              .where({ entityType: 'message', entityId: duplicateByContent.id })
+              .delete();
+          } else {
+            // New message from server - usar put para evitar ConstraintError si ya existe
+            await db.messages.put({
+              ...serverMsg,
+              syncState: 'synced',
+              localCreatedAt: new Date(serverMsg.createdAt),
+              serverCreatedAt: new Date(serverMsg.createdAt),
+            });
+          }
         } else if (existing.syncState !== 'synced') {
           // FC-521: Conflict resolution - Backend prevalece (Dual Source of Truth)
           console.log(`[SyncManager] Resolving conflict for message ${serverMsg.id} - Backend wins`);
@@ -550,6 +589,56 @@ class SyncManager {
     await db.relationships.clear();
     await db.syncQueue.clear();
     console.log('[SyncManager] Local data cleared');
+  }
+
+  /**
+   * FIX: Limpiar mensajes duplicados existentes en una conversación
+   * Mantiene el mensaje más reciente (synced > local_only) y elimina duplicados
+   */
+  async cleanDuplicateMessages(conversationId: string): Promise<number> {
+    const messages = await db.messages
+      .where('conversationId')
+      .equals(conversationId)
+      .toArray();
+    
+    // Agrupar por contenido+sender+type
+    const groups = new Map<string, LocalMessage[]>();
+    for (const msg of messages) {
+      const key = `${msg.senderAccountId}:${msg.content?.text || ''}:${msg.type}`;
+      const group = groups.get(key) || [];
+      group.push(msg);
+      groups.set(key, group);
+    }
+    
+    let deletedCount = 0;
+    
+    // Para cada grupo con más de un mensaje, mantener solo el mejor
+    for (const [, group] of groups) {
+      if (group.length <= 1) continue;
+      
+      // Ordenar: synced primero, luego por fecha más reciente
+      group.sort((a, b) => {
+        if (a.syncState === 'synced' && b.syncState !== 'synced') return -1;
+        if (b.syncState === 'synced' && a.syncState !== 'synced') return 1;
+        return b.localCreatedAt.getTime() - a.localCreatedAt.getTime();
+      });
+      
+      // Mantener el primero (mejor), eliminar el resto
+      const toDelete = group.slice(1);
+      for (const msg of toDelete) {
+        await db.messages.delete(msg.id);
+        await db.syncQueue
+          .where({ entityType: 'message', entityId: msg.id })
+          .delete();
+        deletedCount++;
+      }
+    }
+    
+    if (deletedCount > 0) {
+      console.log(`[SyncManager] Cleaned ${deletedCount} duplicate messages from conversation ${conversationId}`);
+    }
+    
+    return deletedCount;
   }
 }
 

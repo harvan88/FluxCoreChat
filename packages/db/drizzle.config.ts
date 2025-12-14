@@ -5,6 +5,10 @@ export default {
   out: './migrations',
   driver: 'pg',
   dbCredentials: {
-    connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/fluxcore',
+    host: 'localhost',
+    port: 5432,
+    user: 'postgres',
+    password: 'postgres',
+    database: 'fluxcore'
   },
 } satisfies Config;

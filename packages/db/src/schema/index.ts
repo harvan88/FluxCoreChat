@@ -18,3 +18,9 @@ export * from './automation-rules';
 
 // Appointments System (migrate-all.ts)
 export * from './appointments';
+
+// Hito PC-2: Password Reset
+export * from './password-reset-tokens';
+
+// Extension Karen: Website Builder
+export * from './website-configs';

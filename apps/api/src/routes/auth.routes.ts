@@ -118,15 +118,17 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     '/forgot-password',
     async ({ body, set }) => {
       try {
-        // Verificar que el email existe
-        const exists = await authService.checkEmailExists(body.email);
+        const token = await authService.requestPasswordReset(body.email);
         
         // Siempre devolver éxito para no revelar si el email existe
-        // En producción, aquí se enviaría un email con link de reset
-        if (exists) {
-          console.log(`[Auth] Password reset requested for: ${body.email}`);
-          // TODO: Implementar envío de email con token de reset
-          // Por ahora solo logueamos la solicitud
+        if (token) {
+          console.log(`[Auth] Password reset token generated for: ${body.email}`);
+          console.log(`[Auth] Token: ${token}`);
+          
+          const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+          console.log(`[Auth] Reset link (DEV ONLY): ${resetLink}`);
+          
+          // TODO: Implement email service
         }
         
         return {
@@ -134,6 +136,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           message: 'Si el email existe, recibirás instrucciones para restablecer tu contraseña.',
         };
       } catch (error: any) {
+        console.error('[Auth] Forgot password error:', error);
         set.status = 500;
         return {
           success: false,
@@ -148,6 +151,44 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       detail: {
         tags: ['Auth'],
         summary: 'Request password reset',
+      },
+    }
+  )
+  .post(
+    '/reset-password',
+    async ({ body, set }) => {
+      try {
+        const success = await authService.resetPassword(body.token, body.password);
+        
+        if (!success) {
+          set.status = 400;
+          return {
+            success: false,
+            message: 'Invalid or expired token',
+          };
+        }
+        
+        return {
+          success: true,
+          message: 'Password reset successfully',
+        };
+      } catch (error: any) {
+        console.error('[Auth] Reset password error:', error);
+        set.status = 500;
+        return {
+          success: false,
+          message: 'Error processing request',
+        };
+      }
+    },
+    {
+      body: t.Object({
+        token: t.String(),
+        password: t.String({ minLength: 6 }),
+      }),
+      detail: {
+        tags: ['Auth'],
+        summary: 'Reset password with token',
       },
     }
   );
