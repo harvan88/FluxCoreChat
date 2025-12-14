@@ -51,6 +51,13 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
     }
 
     try {
+      // Verificar que el relationship existe primero
+      const existingContext = await relationshipContextService.getContext(params.relationshipId);
+      if (!existingContext) {
+        set.status = 404;
+        return { success: false, message: 'Relationship not found' };
+      }
+
       const { authorAccountId, content, type } = body as any;
 
       const result = await relationshipContextService.addEntry({
@@ -92,6 +99,13 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
     }
 
     try {
+      // Verificar que el relationship existe primero
+      const existingContext = await relationshipContextService.getContext(params.relationshipId);
+      if (!existingContext) {
+        set.status = 404;
+        return { success: false, message: 'Relationship not found' };
+      }
+
       const { content, type } = body as any;
       const entryIndex = parseInt(params.index);
 
@@ -139,6 +153,13 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
     }
 
     try {
+      // Verificar que el relationship existe primero
+      const existingContext = await relationshipContextService.getContext(params.relationshipId);
+      if (!existingContext) {
+        set.status = 404;
+        return { success: false, message: 'Relationship not found' };
+      }
+
       const entryIndex = parseInt(params.index);
 
       if (isNaN(entryIndex)) {
@@ -212,6 +233,13 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
     }
 
     try {
+      // Verificar que el relationship existe primero
+      const existingContext = await relationshipContextService.getContext(params.relationshipId);
+      if (!existingContext) {
+        set.status = 404;
+        return { success: false, message: 'Relationship not found' };
+      }
+
       const { savedName, tags, status } = body as any;
 
       const result = await relationshipContextService.updatePerspective({

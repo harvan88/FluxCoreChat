@@ -3,7 +3,7 @@
  * TOTEM PARTE 11: Panel & Tab System
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { usePanelStore, useContainers } from '../../store/panelStore';
 import { DynamicContainer } from '../panels';
@@ -13,10 +13,19 @@ export function ViewPort() {
   const { selectedConversationId, activeActivity, setSelectedConversation } = useUIStore();
   const containers = useContainers();
   const { layout, openTab, activateTab, focusContainer } = usePanelStore();
+  
+  // FIX: Ref para evitar race condition con tabs duplicados
+  const processingRef = useRef<string | null>(null);
 
   // Efecto para abrir chat cuando se selecciona una conversación
   useEffect(() => {
     if (selectedConversationId && activeActivity === 'conversations') {
+      // FIX: Evitar procesar la misma conversación múltiples veces
+      if (processingRef.current === selectedConversationId) {
+        return;
+      }
+      processingRef.current = selectedConversationId;
+      
       // FC-401: Verificar si ya existe un tab para este chat
       const existingTab = containers
         .flatMap(c => c.tabs.map(t => ({ tab: t, containerId: c.id })))
@@ -38,6 +47,11 @@ export function ViewPort() {
 
       // Evitar loops de render: limpiamos la selección una vez manejada
       setSelectedConversation(null);
+      
+      // FIX: Limpiar ref después de un pequeño delay para permitir re-selección
+      setTimeout(() => {
+        processingRef.current = null;
+      }, 100);
     }
   }, [selectedConversationId, activeActivity, openTab, containers, activateTab, focusContainer, setSelectedConversation]);
 

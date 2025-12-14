@@ -6,6 +6,9 @@
  * - Cerrado/Oculto: No visible
  * - Abierto/Expandido: Visible con contenido
  * - Fijado/Pinned: Permanece visible (candado activado)
+ * 
+ * Extensiones con UI:
+ * - Actividades con prefijo 'ext:' renderizan el panel de la extensión
  */
 
 import { Lock, LockOpen } from 'lucide-react';
@@ -15,6 +18,13 @@ import { ConversationsList } from '../conversations/ConversationsList';
 import { ContactsList } from '../contacts/ContactsList';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { ExtensionsPanel } from '../extensions';
+import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
+import { useExtensions } from '../../hooks/useExtensions';
+
+// Mapeo de componentes de extensión por nombre
+const extensionComponents: Record<string, React.ComponentType> = {
+  WebsiteBuilderPanel: WebsiteBuilderPanel,
+};
 
 export function Sidebar() {
   const { 
@@ -25,8 +35,31 @@ export function Sidebar() {
     toggleSidebarPinned,
     isMobile,
   } = useUIStore();
+  
+  const { installations } = useExtensions(selectedAccountId);
 
   const renderContent = () => {
+    // Verificar si es una actividad de extensión
+    if (activeActivity.startsWith('ext:')) {
+      const extensionId = activeActivity.replace('ext:', '');
+      const installation = installations.find(i => i.extensionId === extensionId);
+      
+      if (installation?.manifest?.ui?.panel?.component) {
+        const componentName = installation.manifest.ui.panel.component;
+        const ExtensionComponent = extensionComponents[componentName];
+        
+        if (ExtensionComponent) {
+          return <ExtensionComponent />;
+        }
+      }
+      
+      return (
+        <div className="p-4 text-center text-secondary">
+          <p>Panel de extensión no disponible</p>
+        </div>
+      );
+    }
+
     switch (activeActivity) {
       case 'conversations':
         return <ConversationsList />;
@@ -42,6 +75,13 @@ export function Sidebar() {
   };
 
   const getTitle = () => {
+    // Título para extensiones dinámicas
+    if (activeActivity.startsWith('ext:')) {
+      const extensionId = activeActivity.replace('ext:', '');
+      const installation = installations.find(i => i.extensionId === extensionId);
+      return installation?.manifest?.ui?.panel?.title || installation?.manifest?.name || 'Extensión';
+    }
+
     switch (activeActivity) {
       case 'conversations':
         return 'Conversaciones';

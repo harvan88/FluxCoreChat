@@ -90,12 +90,12 @@ export function TabBar({ container }: TabBarProps) {
 
   return (
     <div 
-      className="flex items-center bg-elevated border-b border-subtle h-9"
+      className="flex items-center bg-elevated border-b border-subtle h-9 min-h-[36px] max-h-[36px]"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      {/* Tabs */}
-      <div className="flex-1 flex items-center overflow-x-auto scrollbar-hide">
+      {/* Tabs - Bug 2 Fix: Mostrar scrollbar cuando hay overflow */}
+      <div className="flex-1 flex items-center overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-subtle scrollbar-track-transparent">
         {container.tabs.map((tab) => (
           <TabItem
             key={tab.id}

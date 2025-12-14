@@ -65,19 +65,45 @@ export const accountsApi = {
 
   /**
    * Buscar usuarios por alias/username
+   * Usa el endpoint backend /accounts/search para búsqueda eficiente
    */
   async searchUsers(query: string): Promise<ApiResponse<Account[]>> {
-    // Note: This endpoint might need to be implemented in the backend
-    // For now, we filter from getAccounts
-    const response = await api.getAccounts();
-    if (response.success && response.data) {
-      const filtered = response.data.filter(
-        (account) =>
-          account.username?.toLowerCase().includes(query.toLowerCase()) ||
-          account.displayName?.toLowerCase().includes(query.toLowerCase())
-      );
-      return { success: true, data: filtered };
+    if (!query || query.trim().length < 2) {
+      return { success: true, data: [] };
     }
-    return response;
+
+    try {
+      const token = localStorage.getItem('fluxcore_token');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      
+      const response = await fetch(
+        `${API_URL}/accounts/search?q=${encodeURIComponent(query.trim())}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        // Fallback a búsqueda local si el endpoint falla
+        console.warn('[accountsApi] Search endpoint failed, falling back to local filter');
+        const localResponse = await api.getAccounts();
+        if (localResponse.success && localResponse.data) {
+          const filtered = localResponse.data.filter(
+            (account) =>
+              account.username?.toLowerCase().includes(query.toLowerCase()) ||
+              account.displayName?.toLowerCase().includes(query.toLowerCase())
+          );
+          return { success: true, data: filtered };
+        }
+        return localResponse;
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[accountsApi] Search error:', error);
+      return { success: false, error: error.message };
+    }
   },
 };

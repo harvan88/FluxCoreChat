@@ -44,6 +44,7 @@ Estas migraciones se ejecutaron manualmente y NO están en el journal de Drizzle
 | `run-migration-010-automation-rules.ts` | automation_rules | ✅ Aplicada | Tabla completa |
 | `migrate-extensions.ts` | extension_installations, extension_contexts | ✅ Aplicada | Sistema de extensiones |
 | `migrate-workspaces.ts` | workspaces, workspace_members, workspace_invitations | ✅ Aplicada | Workspaces colaborativos |
+| `migrate-website-configs.ts` / `007_website_configs.sql` | website_configs | ✅ Aplicada | Website builder (Karen) |
 | `migrate-all.ts` | appointments*, extensions (legacy) | ✅ Aplicada | **DEPRECATED** |
 
 ### 📋 Schemas Actualizados (HITO 16)
@@ -59,7 +60,7 @@ Los schemas de Drizzle fueron actualizados para reflejar las migraciones manuale
 
 ---
 
-## Tablas en PostgreSQL (17 total)
+## Tablas en PostgreSQL (18 total)
 
 ### Core (Drizzle 0000, 0001)
 1. `users`
@@ -69,22 +70,37 @@ Los schemas de Drizzle fueron actualizados para reflejar las migraciones manuale
 5. `conversations`
 6. `messages`
 7. `message_enrichments`
+8. `password_reset_tokens`
 
 ### Extensiones y Automatización (Scripts manuales)
-8. `automation_rules` (migration-010)
-9. `extension_installations` (migrate-extensions)
-10. `extension_contexts` (migrate-extensions)
-11. `extensions` (migrate-all - legacy)
+9. `automation_rules` (migration-010)
+10. `extension_installations` (migrate-extensions)
+11. `extension_contexts` (migrate-extensions)
 
 ### Workspaces (migrate-workspaces)
 12. `workspaces`
 13. `workspace_members`
 14. `workspace_invitations`
 
+### Website Builder (migrate-website-configs)
+15. `website_configs`
+
 ### Appointments (migrate-all)
-15. `appointments`
-16. `appointment_services`
-17. `appointment_staff`
+16. `appointments`
+17. `appointment_services`
+18. `appointment_staff`
+
+---
+
+## Nota sobre tabla legacy `extensions`
+
+La tabla `extensions` (legacy) pertenece al script **deprecated** `migrate-all.ts` y no forma parte del sistema actual de extensiones.
+
+El sistema vigente usa:
+- `extension_installations`
+- `extension_contexts`
+
+Si `extensions` aparece en algún documento/expectativa como “tabla requerida”, debe considerarse **legacy** y eliminarse de la lista de tablas esperadas.
 
 ---
 

@@ -7,7 +7,9 @@ import { persist } from 'zustand/middleware';
 import type { User, LoginCredentials, RegisterData } from '../types';
 import { api } from '../services/api';
 import { useUIStore } from './uiStore';
+import { useAccountStore } from './accountStore';
 import { syncManager } from '../db/sync';
+import { setCurrentAccountDB } from '../db';
 
 interface AuthStore {
   user: User | null;
@@ -53,8 +55,30 @@ export const useAuthStore = create<AuthStore>()(
           const accounts = response.data.accounts || [];
           if (accounts.length > 0) {
             useUIStore.getState().setAccounts(accounts);
-            useUIStore.getState().setSelectedAccount(accounts[0].id);
+
+            const isValid = (id: string | null) => !!id && accounts.some(a => a.id === id);
+            const uiSelectedId = useUIStore.getState().selectedAccountId;
+            const storeSelectedId = useAccountStore.getState().activeAccountId;
+
+            const personalAccount = accounts.find(a => a.accountType === 'personal');
+            const resolvedAccountId =
+              (personalAccount?.id) ||
+              (isValid(uiSelectedId) && uiSelectedId) ||
+              (isValid(storeSelectedId) && storeSelectedId) ||
+              accounts[0].id;
+
+            useUIStore.getState().setSelectedAccount(resolvedAccountId);
+            useAccountStore.setState({
+              accounts,
+              activeAccountId: resolvedAccountId,
+              isLoading: false,
+              error: null,
+            });
+            setCurrentAccountDB(resolvedAccountId);
           }
+          
+          // EXT-1: También cargar en accountStore para sincronización
+          useAccountStore.getState().loadAccounts();
           
           return true;
         } else {
@@ -85,8 +109,30 @@ export const useAuthStore = create<AuthStore>()(
           const accounts = response.data.accounts || [];
           if (accounts.length > 0) {
             useUIStore.getState().setAccounts(accounts);
-            useUIStore.getState().setSelectedAccount(accounts[0].id);
+
+            const isValid = (id: string | null) => !!id && accounts.some(a => a.id === id);
+            const uiSelectedId = useUIStore.getState().selectedAccountId;
+            const storeSelectedId = useAccountStore.getState().activeAccountId;
+
+            const personalAccount = accounts.find(a => a.accountType === 'personal');
+            const resolvedAccountId =
+              (personalAccount?.id) ||
+              (isValid(uiSelectedId) && uiSelectedId) ||
+              (isValid(storeSelectedId) && storeSelectedId) ||
+              accounts[0].id;
+
+            useUIStore.getState().setSelectedAccount(resolvedAccountId);
+            useAccountStore.setState({
+              accounts,
+              activeAccountId: resolvedAccountId,
+              isLoading: false,
+              error: null,
+            });
+            setCurrentAccountDB(resolvedAccountId);
           }
+          
+          // EXT-1: También cargar en accountStore para sincronización
+          useAccountStore.getState().loadAccounts();
           
           return true;
         } else {
@@ -112,7 +158,10 @@ export const useAuthStore = create<AuthStore>()(
       clearError: () => set({ error: null }),
 
       initFromStorage: async () => {
+        console.log('[AuthStore] initFromStorage called');
         const token = api.getToken();
+        console.log('[AuthStore] Token exists:', !!token);
+        
         if (token) {
           set({ token, isAuthenticated: true });
           
@@ -121,14 +170,40 @@ export const useAuthStore = create<AuthStore>()(
           
           // Cargar cuentas del usuario si hay token
           try {
+            console.log('[AuthStore] Loading accounts...');
             const response = await api.getAccounts();
+            console.log('[AuthStore] Accounts response:', response);
+            
             if (response.success && response.data && response.data.length > 0) {
-              useUIStore.getState().setAccounts(response.data);
-              // Solo setear si no hay uno seleccionado
-              if (!useUIStore.getState().selectedAccountId) {
-                useUIStore.getState().setSelectedAccount(response.data[0].id);
-              }
+              console.log('[AuthStore] Setting accounts in uiStore:', response.data.length);
+              const accounts = response.data;
+              useUIStore.getState().setAccounts(accounts);
+
+              const isValid = (id: string | null) => !!id && accounts.some(a => a.id === id);
+              const uiSelectedId = useUIStore.getState().selectedAccountId;
+              const storeSelectedId = useAccountStore.getState().activeAccountId;
+
+              const personalAccount = accounts.find(a => a.accountType === 'personal');
+              const resolvedAccountId =
+                (personalAccount?.id) ||
+                (isValid(uiSelectedId) && uiSelectedId) ||
+                (isValid(storeSelectedId) && storeSelectedId) ||
+                accounts[0].id;
+
+              console.log('[AuthStore] Resolved accountId on init:', resolvedAccountId);
+              useUIStore.getState().setSelectedAccount(resolvedAccountId);
+              useAccountStore.setState({
+                accounts,
+                activeAccountId: resolvedAccountId,
+                isLoading: false,
+                error: null,
+              });
+              setCurrentAccountDB(resolvedAccountId);
             }
+            
+            // EXT-1: También cargar en accountStore
+            console.log('[AuthStore] Loading accounts in accountStore...');
+            await useAccountStore.getState().loadAccounts();
           } catch (err) {
             console.error('[AuthStore] Error loading accounts on init:', err);
           }

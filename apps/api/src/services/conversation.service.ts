@@ -1,5 +1,5 @@
 import { db } from '@fluxcore/db';
-import { conversations, relationships, accounts } from '@fluxcore/db';
+import { conversations, relationships, accounts, messages } from '@fluxcore/db';
 import { eq, and, or, inArray } from 'drizzle-orm';
 
 export class ConversationService {
@@ -95,8 +95,68 @@ export class ConversationService {
   }
 
   /**
+   * MA-101: Get conversations for a SPECIFIC account (not all user accounts)
+   * This ensures proper isolation between accounts owned by the same user
+   */
+  async getConversationsByAccountId(accountId: string) {
+    // 1. Get relationships where this specific account is involved
+    const accountRelationships = await db
+      .select()
+      .from(relationships)
+      .where(
+        or(
+          eq(relationships.accountAId, accountId),
+          eq(relationships.accountBId, accountId)
+        )
+      );
+
+    if (accountRelationships.length === 0) {
+      return [];
+    }
+
+    // 2. Get conversations for those relationships
+    const relationshipIds = accountRelationships.map((r) => r.id);
+    
+    const accountConversations = await db
+      .select()
+      .from(conversations)
+      .where(inArray(conversations.relationshipId, relationshipIds));
+
+    // 3. Enrich with contact name (the OTHER account in the relationship)
+    const enrichedConversations = await Promise.all(
+      accountConversations.map(async (conv) => {
+        const rel = accountRelationships.find(r => r.id === conv.relationshipId);
+        if (!rel) return { ...conv, contactName: 'Desconocido' };
+        
+        // Find the OTHER account (not the current one)
+        const otherAccountId = rel.accountAId === accountId 
+          ? rel.accountBId 
+          : rel.accountAId;
+        
+        const [otherAccount] = await db
+          .select()
+          .from(accounts)
+          .where(eq(accounts.id, otherAccountId))
+          .limit(1);
+        
+        const profile = otherAccount?.profile as { avatarUrl?: string } | null;
+
+        return {
+          ...conv,
+          contactName: otherAccount?.displayName || 'Desconocido',
+          contactAccountId: otherAccountId,
+          contactAvatar: profile?.avatarUrl,
+        };
+      })
+    );
+
+    return enrichedConversations;
+  }
+
+  /**
    * Get all conversations for a user (via their accounts and relationships)
    * Returns conversations enriched with contact name
+   * @deprecated Use getConversationsByAccountId for proper account isolation
    */
   async getConversationsByUserId(userId: string) {
     // 1. Get all accounts owned by this user
@@ -151,15 +211,65 @@ export class ConversationService {
           .where(eq(accounts.id, otherAccountId))
           .limit(1);
         
+        const profile = otherAccount?.profile as { avatarUrl?: string } | null;
+
         return {
           ...conv,
           contactName: otherAccount?.displayName || 'Desconocido',
           contactAccountId: otherAccountId,
+          contactAvatar: profile?.avatarUrl,
         };
       })
     );
 
     return enrichedConversations;
+  }
+
+  /**
+   * Delete a conversation and all its messages
+   */
+  async deleteConversation(conversationId: string, userId: string) {
+    // Get conversation
+    const conversation = await this.getConversationById(conversationId);
+    if (!conversation) {
+      throw new Error('Conversation not found');
+    }
+
+    // Get the relationship to verify ownership
+    const [rel] = await db
+      .select()
+      .from(relationships)
+      .where(eq(relationships.id, conversation.relationshipId))
+      .limit(1);
+
+    if (!rel) {
+      throw new Error('Relationship not found');
+    }
+
+    // Verify user owns one of the accounts in the relationship
+    const userAccounts = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.ownerUserId, userId));
+
+    const userAccountIds = userAccounts.map(a => a.id);
+    const isOwner = userAccountIds.includes(rel.accountAId) || userAccountIds.includes(rel.accountBId);
+
+    if (!isOwner) {
+      throw new Error('Not authorized to delete this conversation');
+    }
+
+    // Delete all messages in the conversation
+    await db
+      .delete(messages)
+      .where(eq(messages.conversationId, conversationId));
+
+    // Delete the conversation
+    await db
+      .delete(conversations)
+      .where(eq(conversations.id, conversationId));
+
+    console.log(`[ConversationService] Deleted conversation ${conversationId} and all messages`);
   }
 }
 

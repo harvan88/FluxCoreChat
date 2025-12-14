@@ -127,7 +127,6 @@ async function auditDatabase() {
 
     const checks = [
       { table: 'accounts', column: 'owner_user_id', desc: 'FK a users (Drizzle)' },
-      { table: 'accounts', column: 'user_id', desc: 'FK a users (migrate-all)' },
       { table: 'accounts', column: 'profile', desc: 'JSONB perfil' },
       { table: 'accounts', column: 'alias', desc: 'Alias (migration-009)' },
       { table: 'actors', column: 'actor_type', desc: 'Tipo actor (migration-008)' },
@@ -136,12 +135,9 @@ async function auditDatabase() {
       { table: 'messages', column: 'from_actor_id', desc: 'Actor origen (migration-008)' },
       { table: 'messages', column: 'to_actor_id', desc: 'Actor destino (migration-008)' },
       { table: 'messages', column: 'generated_by', desc: 'Generado por (Drizzle)' },
-      { table: 'messages', column: 'metadata', desc: 'Metadata (migrate-all)' },
       { table: 'relationships', column: 'perspective_a', desc: 'Perspectiva A (Drizzle)' },
       { table: 'relationships', column: 'perspective_b', desc: 'Perspectiva B (Drizzle)' },
-      { table: 'relationships', column: 'status', desc: 'Status (migrate-all)' },
       { table: 'conversations', column: 'status', desc: 'Status (Drizzle)' },
-      { table: 'conversations', column: 'metadata', desc: 'Metadata (migrate-all)' },
       { table: 'conversations', column: 'last_message_at', desc: 'Last message (Drizzle)' },
     ];
 
@@ -183,6 +179,7 @@ async function auditDatabase() {
       { name: 'conversations', source: 'Drizzle 0001' },
       { name: 'messages', source: 'Drizzle 0001' },
       { name: 'message_enrichments', source: 'Drizzle 0001' },
+      { name: 'password_reset_tokens', source: 'Hito PC-2 (schema)' },
       // Scripts manuales
       { name: 'automation_rules', source: 'migration-010' },
       { name: 'extension_installations', source: 'migrate-extensions' },
@@ -190,8 +187,7 @@ async function auditDatabase() {
       { name: 'workspaces', source: 'migrate-workspaces' },
       { name: 'workspace_members', source: 'migrate-workspaces' },
       { name: 'workspace_invitations', source: 'migrate-workspaces' },
-      // migrate-all.ts (puede conflictuar)
-      { name: 'extensions', source: 'migrate-all (conflicto!)' },
+      { name: 'website_configs', source: 'migrate-website-configs / 007_website_configs.sql' },
       { name: 'appointment_services', source: 'migrate-all' },
       { name: 'appointment_staff', source: 'migrate-all' },
       { name: 'appointments', source: 'migrate-all' },

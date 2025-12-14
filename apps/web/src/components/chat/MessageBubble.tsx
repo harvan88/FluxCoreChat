@@ -115,11 +115,9 @@ export function MessageBubble({
       <div
         className={clsx(
           'max-w-[70%] rounded-2xl px-4 py-2 relative',
-          isOwn
-            ? message.status === 'failed'
-              ? 'bg-error/50 text-primary rounded-br-md'
-              : 'bg-accent text-inverse rounded-br-md'
-            : 'bg-elevated text-primary rounded-bl-md'
+          isOwn 
+            ? 'ml-auto bg-accent text-inverse rounded-br-md' 
+            : 'mr-auto bg-elevated text-primary rounded-bl-md'
         )}
       >
         {/* Reply-to preview */}

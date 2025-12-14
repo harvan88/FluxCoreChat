@@ -12,6 +12,8 @@ export interface InstallExtensionParams {
   version: string;
   config?: Record<string, any>;
   grantedPermissions?: string[];
+  grantedBy?: string;
+  canSharePermissions?: boolean;
 }
 
 export interface UpdateExtensionParams {
@@ -25,7 +27,15 @@ class ExtensionService {
    * Instalar una extensión para una cuenta
    */
   async install(params: InstallExtensionParams) {
-    const { accountId, extensionId, version, config = {}, grantedPermissions = [] } = params;
+    const { 
+      accountId, 
+      extensionId, 
+      version, 
+      config = {}, 
+      grantedPermissions = [],
+      grantedBy,
+      canSharePermissions = true,
+    } = params;
 
     // Verificar si ya está instalada
     const existing = await db
@@ -43,7 +53,7 @@ class ExtensionService {
       throw new Error(`Extension ${extensionId} is already installed for this account`);
     }
 
-    // Crear instalación
+    // Crear instalación con permisos auto-concedidos al propietario
     const [installation] = await db
       .insert(extensionInstallations)
       .values({
@@ -53,6 +63,9 @@ class ExtensionService {
         enabled: true,
         config,
         grantedPermissions,
+        grantedBy: grantedBy || null, // null = auto-concedido (propietario)
+        canSharePermissions,
+        permissionsGrantedAt: new Date(),
       })
       .returning();
 

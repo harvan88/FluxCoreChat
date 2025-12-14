@@ -9,4 +9,5 @@ export { useExtensions, type Extension, type ExtensionInstallation } from './use
 export { useIsMobile, useMediaQuery } from './useMediaQuery';
 export { useConnectionStatus, useSync, useSyncQueueStats } from './useOfflineFirst';
 export { useProfile, type ProfileData, type UseProfileReturn } from './useProfile';
+export { useScroll } from './useScroll';
 export { useWebSocket } from './useWebSocket';

@@ -24,6 +24,9 @@ export function useOfflineMessages(conversationId: string | null) {
     }
 
     try {
+      // FIX: Limpiar duplicados antes de cargar
+      await syncManager.cleanDuplicateMessages(conversationId);
+      
       const localMessages = await db.messages
         .where('conversationId')
         .equals(conversationId)

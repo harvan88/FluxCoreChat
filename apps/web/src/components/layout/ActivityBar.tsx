@@ -5,12 +5,19 @@
  * Estados:
  * - Colapsada (panel-left-close): Solo íconos
  * - Expandida (panel-left-open): Íconos + texto
+ * 
+ * Extensiones con UI:
+ * - Se muestran dinámicamente basadas en manifest.ui.sidebar
+ * - Solo extensiones instaladas y habilitadas con permisos
  */
 
-import { MessageSquare, Users, Settings, LogOut, Puzzle, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+import { MessageSquare, Users, Settings, LogOut, Puzzle, PanelLeftOpen, PanelLeftClose, Globe, Calendar, ShoppingCart, FileText, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
+import { useExtensions } from '../../hooks/useExtensions';
+import { AccountSwitcher } from '../accounts';
 
 import type { ActivityType } from '../../types';
 
@@ -20,12 +27,23 @@ interface ActivityItem {
   label: string;
 }
 
-const activities: ActivityItem[] = [
+// Actividades base del sistema
+const baseActivities: ActivityItem[] = [
   { id: 'conversations', icon: <MessageSquare size={22} />, label: 'Mensajes' },
   { id: 'contacts', icon: <Users size={22} />, label: 'Contactos' },
   { id: 'extensions', icon: <Puzzle size={22} />, label: 'Extensiones' },
   { id: 'settings', icon: <Settings size={22} />, label: 'Configuración' },
 ];
+
+// Mapeo de nombres de iconos a componentes Lucide
+const iconMap: Record<string, React.ReactNode> = {
+  globe: <Globe size={22} />,
+  calendar: <Calendar size={22} />,
+  'shopping-cart': <ShoppingCart size={22} />,
+  'file-text': <FileText size={22} />,
+  zap: <Zap size={22} />,
+  puzzle: <Puzzle size={22} />,
+};
 
 export function ActivityBar() {
   const { 
@@ -33,8 +51,37 @@ export function ActivityBar() {
     setActiveActivity,
     activityBarExpanded,
     toggleActivityBar,
+    selectedAccountId: uiSelectedAccountId,
   } = useUIStore();
   const { logout } = useAuthStore();
+  const { activeAccount } = useAccountStore();
+  
+  // VER-002: Usar selectedAccountId de uiStore (sincronizado por AccountSwitcher)
+  const selectedAccountId = uiSelectedAccountId || activeAccount?.id || null;
+  const { installations } = useExtensions(selectedAccountId);
+  
+  // VER-004: Debug logs para verificar carga de extensiones
+  console.log('[ActivityBar] selectedAccountId:', selectedAccountId);
+  console.log('[ActivityBar] installations:', installations);
+
+  // Generar actividades dinámicas de extensiones con UI
+  const extensionActivities: ActivityItem[] = installations
+    .filter(inst => inst.enabled && inst.manifest?.ui?.sidebar)
+    .map(inst => ({
+      id: `ext:${inst.extensionId}` as ActivityType,
+      icon: iconMap[inst.manifest?.ui?.sidebar?.icon || 'puzzle'] || <Puzzle size={22} />,
+      label: inst.manifest?.ui?.sidebar?.title || inst.manifest?.name || 'Extension',
+    }));
+  
+  // VER-004: Log extensiones con UI
+  console.log('[ActivityBar] extensionActivities:', extensionActivities);
+
+  // Combinar actividades base con extensiones (extensiones después de contacts, antes de extensions)
+  const activities: ActivityItem[] = [
+    ...baseActivities.slice(0, 2), // conversations, contacts
+    ...extensionActivities,        // extensiones con UI
+    ...baseActivities.slice(2),    // extensions, settings
+  ];
 
   return (
     <div 
@@ -43,28 +90,24 @@ export function ActivityBar() {
         activityBarExpanded ? 'w-52' : 'w-14'
       )}
     >
-      {/* Header: Logo + Toggle */}
-      <div className={clsx(
-        'flex items-center gap-3 mb-6 px-3',
-        activityBarExpanded ? 'justify-between' : 'justify-center'
-      )}>
-        {/* Logo */}
-        <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center flex-shrink-0">
-          <span className="text-inverse font-bold text-lg">F</span>
-        </div>
-        
-        {/* Brand name - solo visible cuando expandido */}
-        {activityBarExpanded && (
-          <span className="text-primary font-semibold text-sm flex-1 truncate">
-            FluxCore
-          </span>
+      {/* Header: AccountSwitcher + Toggle */}
+      <div
+        className={clsx(
+          'mb-4 px-3',
+          activityBarExpanded
+            ? 'flex items-center gap-2 justify-between'
+            : 'flex flex-col items-center gap-2'
         )}
+      >
+        <div className={clsx(activityBarExpanded ? 'flex-1 min-w-0' : '')}>
+          <AccountSwitcher compact={!activityBarExpanded} />
+        </div>
         
         {/* Toggle button */}
         <button
           onClick={toggleActivityBar}
           className={clsx(
-            'w-8 h-8 flex items-center justify-center rounded-lg transition-colors',
+            'w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0',
             'text-secondary hover:text-primary hover:bg-hover'
           )}
           title={activityBarExpanded ? 'Colapsar barra' : 'Expandir barra'}
@@ -76,7 +119,7 @@ export function ActivityBar() {
           )}
         </button>
       </div>
-
+      
       {/* Activities */}
       <div className="flex-1 space-y-1 px-2">
         {activities.map((activity) => (

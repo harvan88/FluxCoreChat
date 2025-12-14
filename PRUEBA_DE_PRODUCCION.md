@@ -1,7 +1,7 @@
 # PRUEBA DE PRODUCCIÓN - ESTADO CRÍTICO
 
-> **Última actualización:** 2024-12-09 06:25 UTC-3
-> **Estado:** 🟢 LISTO PARA PRUEBA - BD reiniciada, Fluxi creado
+> **Última actualización:** 2024-12-10 01:25 UTC-3
+> **Estado:** 🟢 PRODUCTION-READY - Hitos 0-20 completados
 
 ---
 
@@ -164,13 +164,13 @@ Carlos, dueño de la "Panadería de la Esquina", quiere registrar su cuenta y co
    - Daniel: solo acceso a extensión Flux Core
 
 #### Estado Actual del Flujo:
-- [x] Registro funciona
+- [x] Registro funciona (+ crea account automáticamente)
 - [x] Login funciona  
-- [ ] Perfil NO carga datos reales
-- [ ] Formularios NO guardan
-- [ ] Foto NO sube
-- [ ] Cuentas NO funciona
-- [ ] Colaboradores NO implementado
+- [x] Perfil carga datos reales (useProfile + API)
+- [x] Formularios guardan (updateProfile → PATCH /accounts/:id)
+- [ ] Foto NO sube (pendiente endpoint POST /upload/avatar)
+- [x] Cuentas funciona (AccountsSection, convertToBusiness)
+- [x] Colaboradores implementado (CollaboratorsList, InviteCollaborator)
 
 ---
 
@@ -200,10 +200,33 @@ Carlos, dueño de la "Panadería de la Esquina", quiere registrar su cuenta y co
 
 ## 📊 MÉTRICAS DE ÉXITO
 
-Al completar la estabilización:
-1. [ ] WebSocket conecta UNA vez y permanece estable
-2. [ ] Cada endpoint se llama UNA vez por acción
-3. [ ] Perfil muestra datos reales del usuario
-4. [ ] Formulario Perfil guarda cambios en BD
-5. [ ] No hay banner "No se encontraron cuentas"
-6. [ ] Contenido tiene scroll cuando es necesario
+### Estado de Verificación (2024-12-10):
+
+1. [x] **WebSocket conecta UNA vez y permanece estable**
+   - ✅ Max 5 intentos de reconexión
+   - ✅ Exponential backoff implementado
+   - ✅ `mountedRef` evita updates en componentes desmontados
+
+2. [x] **Cada endpoint se llama UNA vez por acción**
+   - ✅ `hasLoaded` flags en useProfile.ts
+   - ✅ Guards en ContactsList.tsx
+
+3. [x] **Perfil muestra datos reales del usuario**
+   - ✅ useProfile carga desde API real (`api.getAccounts()`)
+   - ✅ ProfileSection sincroniza estado local con perfil
+
+4. [x] **Formulario Perfil guarda cambios en BD**
+   - ✅ `updateProfile()` llama `api.updateAccount()`
+   - ✅ Feedback visual (loading, success, error)
+
+5. [x] **No hay banner "No se encontraron cuentas"**
+   - ✅ auth.service.ts crea account automáticamente al registrar
+
+6. [x] **Contenido tiene scroll cuando es necesario**
+   - ✅ DynamicContainer con overflow-auto
+
+### Componentes Implementados:
+- ✅ AccountStore, AccountSwitcher, AccountsSection (Hito 17)
+- ✅ CollaboratorsList, InviteCollaborator, InvitationsList (Hito 18)
+- ✅ WelcomeMessage, FluxiAvatar, FirstTimeExperience (Hito 19)
+- ✅ PWA Support (Hito 20)

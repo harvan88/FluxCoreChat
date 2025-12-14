@@ -261,6 +261,8 @@ apps/web/src/components/chat/
 - Sin soporte para media en mensajes
 - Sin indicadores de estado en tiempo real (typing, presence)
 - Sin acciones batch sobre mensajes
+- Sin sistema de tags (#), asignación (@) ni búsqueda en conversación (UI tipo `/buscar`) en el header
+- Sin acciones avanzadas del header (bloqueo de contactos, export)
 
 ### 📋 Siguiente Paso Recomendado
 Implementar **G-01 (Upload genérico)** ya que desbloquea la mayor cantidad de funcionalidad del wireframe con el menor esfuerzo.

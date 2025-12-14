@@ -172,6 +172,38 @@ export class RelationshipService {
       })
       .where(eq(relationships.id, relationshipId));
   }
+
+  async deleteRelationship(relationshipId: string, userId: string) {
+    // Verificar que la relación existe
+    const relationship = await this.getRelationshipById(relationshipId);
+    if (!relationship) {
+      throw new Error('Relationship not found');
+    }
+
+    // Verificar que el usuario es dueño de alguna de las cuentas en la relación
+    const { accountService } = await import('./account.service');
+    const userAccounts = await accountService.getAccountsByUserId(userId);
+    const userAccountIds = userAccounts.map(a => a.id);
+
+    const isOwner = userAccountIds.includes(relationship.accountAId) || 
+                    userAccountIds.includes(relationship.accountBId);
+    
+    if (!isOwner) {
+      throw new Error('Not authorized to delete this relationship');
+    }
+
+    // Eliminar conversaciones asociadas primero
+    await db
+      .delete(conversations)
+      .where(eq(conversations.relationshipId, relationshipId));
+
+    // Eliminar la relación
+    await db
+      .delete(relationships)
+      .where(eq(relationships.id, relationshipId));
+
+    console.log(`[RelationshipService] Deleted relationship ${relationshipId} and associated conversations`);
+  }
 }
 
 export const relationshipService = new RelationshipService();

@@ -3,11 +3,13 @@
  * Conectada a API real - SIN DATOS MOCK
  */
 
-import { useState, useEffect } from 'react';
-import { Search, Plus, Loader2, MessageSquare } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Loader2, MessageSquare, Trash2, Check, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
+import { Avatar } from '../ui/Avatar';
+import { useScroll } from '../../hooks/useScroll';
 
 export function ConversationsList() {
   const {
@@ -15,32 +17,69 @@ export function ConversationsList() {
     setConversations,
     selectedConversationId,
     setSelectedConversation,
+    selectedAccountId,
   } = useUIStore();
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const lastLoadedAccountIdRef = useRef<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletingConvId, setDeletingConvId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  
+  // UI-201: Dynamic scroll height
+  const { maxHeight } = useScroll({ offset: 160 }); // Search (56) + Button (48) + Padding (56)
 
   // Cargar conversaciones desde API real
   useEffect(() => {
     async function loadConversations() {
+      if (!selectedAccountId) {
+        console.log('[ConversationsList] No account selected, skipping load');
+        setConversations([]);
+        setIsLoading(false);
+        lastLoadedAccountIdRef.current = null;
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
       
-      const response = await api.getConversations();
-      
-      if (response.success && response.data) {
-        setConversations(response.data);
-      } else {
-        setError(response.error || 'Error al cargar conversaciones');
-        setConversations([]); // Limpiar cualquier dato previo
+      try {
+        console.log('[ConversationsList] Loading conversations for account:', selectedAccountId);
+        // MA-203: Pasar accountId para filtrar por cuenta específica
+        const response = await api.getConversations(selectedAccountId);
+        
+        if (response.success && response.data) {
+          console.log('[ConversationsList] Loaded conversations:', response.data.length);
+          setConversations(response.data);
+        } else {
+          console.error('[ConversationsList] API error:', response.error);
+          setError(response.error || 'Error al cargar conversaciones');
+          setConversations([]); // Limpiar cualquier dato previo
+        }
+      } catch (error) {
+        console.error('[ConversationsList] Exception:', error);
+        setError('Error al cargar conversaciones');
+        setConversations([]);
+      } finally {
+        setIsLoading(false);
       }
-      
-      setIsLoading(false);
     }
     
     loadConversations();
-  }, [setConversations]);
+  }, [selectedAccountId, setConversations]);
+
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    if (isLoading) return;
+
+    if (lastLoadedAccountIdRef.current !== selectedAccountId) {
+      listRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+      lastLoadedAccountIdRef.current = selectedAccountId;
+    }
+  }, [selectedAccountId, isLoading]);
 
   // Filtrar conversaciones por búsqueda
   const filteredConversations = conversations.filter((conv) => {
@@ -83,6 +122,29 @@ export function ConversationsList() {
     setActiveActivity('contacts');
   };
 
+  // Eliminar conversación
+  const handleDeleteConversation = async (conversationId: string) => {
+    setDeletingConvId(conversationId);
+    try {
+      const response = await api.deleteConversation(conversationId);
+      if (response.success) {
+        // Actualizar lista local
+        setConversations(conversations.filter(c => c.id !== conversationId));
+        // Limpiar selección si era esta conversación
+        if (selectedConversationId === conversationId) {
+          setSelectedConversation(null);
+        }
+        setConfirmDeleteId(null);
+      } else {
+        setError(response.error || 'Error al eliminar conversación');
+      }
+    } catch (err) {
+      setError('Error al eliminar conversación');
+    } finally {
+      setDeletingConvId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Search */}
@@ -118,7 +180,7 @@ export function ConversationsList() {
       )}
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={listRef} className="flex-1 overflow-y-auto" style={{ maxHeight }}>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-accent" />
@@ -135,21 +197,31 @@ export function ConversationsList() {
           </div>
         ) : (
           filteredConversations.map((conversation) => (
-            <button
+            <div
               key={conversation.id}
               onClick={() => setSelectedConversation(conversation.id)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedConversation(conversation.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir conversación ${(conversation as any).contactName || conversation.id}`}
               className={clsx(
-                'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left',
+                'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left group',
                 selectedConversationId === conversation.id && 'bg-active'
               )}
             >
               {/* Avatar */}
               <div className="relative">
-                <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
-                  <span className="text-inverse font-semibold text-sm">
-                    {(conversation as any).contactName?.charAt(0).toUpperCase() || '?'}
-                  </span>
-                </div>
+                <Avatar 
+                  src={(conversation as any).contactAvatar}
+                  name={(conversation as any).contactName}
+                  size="lg"
+                />
                 <div
                   className={clsx(
                     'absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-surface',
@@ -179,7 +251,49 @@ export function ConversationsList() {
                   )}
                 </div>
               </div>
-            </button>
+
+              {/* Delete button */}
+              {confirmDeleteId === conversation.id ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteConversation(conversation.id);
+                    }}
+                    disabled={deletingConvId === conversation.id}
+                    className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                    title="Confirmar eliminación"
+                  >
+                    {deletingConvId === conversation.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Check size={14} />
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteId(null);
+                    }}
+                    className="p-1.5 bg-elevated hover:bg-hover text-muted rounded transition-colors"
+                    title="Cancelar"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteId(conversation.id);
+                  }}
+                  className="p-1.5 text-muted hover:text-red-500 hover:bg-hover rounded transition-colors opacity-0 group-hover:opacity-100"
+                  title="Eliminar conversación"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>

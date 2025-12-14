@@ -59,24 +59,30 @@ export const useAccountStore = create<AccountState>()(
 
       // Actions
       loadAccounts: async () => {
+        console.log('[AccountStore] loadAccounts called');
         set({ isLoading: true, error: null });
 
         try {
           const response = await accountsApi.getAll();
+          console.log('[AccountStore] API response:', response);
 
           if (response.success && response.data) {
             const accounts = response.data;
+            console.log('[AccountStore] Loaded accounts:', accounts.length);
             set({ accounts, isLoading: false });
 
             // Auto-select first account if none selected
             const state = get();
             if (!state.activeAccountId && accounts.length > 0) {
+              console.log('[AccountStore] Auto-selecting first account:', accounts[0].id);
               set({ activeAccountId: accounts[0].id });
             }
           } else {
+            console.error('[AccountStore] Error:', response.error);
             set({ error: response.error || 'Error al cargar cuentas', isLoading: false });
           }
         } catch (err: any) {
+          console.error('[AccountStore] Exception:', err);
           set({ error: err.message || 'Error al cargar cuentas', isLoading: false });
         }
       },

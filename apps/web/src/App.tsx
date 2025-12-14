@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { useThemeStore } from './store/themeStore';
 import { Layout } from './components/layout/Layout';
 import { AuthPage } from './components/auth/AuthPage';
+import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
+import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SystemMonitor } from './components/monitor';
 
 function App() {
@@ -10,9 +13,6 @@ function App() {
   const { resolvedTheme } = useThemeStore();
   const [isInitializing, setIsInitializing] = useState(true);
   
-  // Check if we're on /monitor route
-  const isMonitorRoute = window.location.pathname === '/monitor';
-
   useEffect(() => {
     initFromStorage();
     // Pequeño delay para evitar flash de contenido
@@ -39,16 +39,21 @@ function App() {
     );
   }
 
-  // Monitor route is always accessible (for debugging)
-  if (isMonitorRoute) {
-    return <SystemMonitor />;
-  }
-
-  if (!isAuthenticated) {
-    return <AuthPage />;
-  }
-
-  return <Layout />;
+  return (
+    <Routes>
+      <Route path="/design-system" element={<DesignSystemPage />} />
+      <Route path="/monitor" element={<SystemMonitor />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route 
+        path="/login" 
+        element={!isAuthenticated ? <AuthPage /> : <Navigate to="/" />} 
+      />
+      <Route 
+        path="/*" 
+        element={isAuthenticated ? <Layout /> : <Navigate to="/login" />} 
+      />
+    </Routes>
+  );
 }
 
 export default App;

@@ -77,9 +77,11 @@ export class MessageCore {
 
         // 4. Notificar via WebSocket
         this.broadcast(conversation.relationshipId, {
-          event: 'message:new',
+          type: 'message:new',
           data: {
             ...message,
+            conversationId: envelope.conversationId,
+            senderAccountId: envelope.senderAccountId,
             content: envelope.content,
           },
         });

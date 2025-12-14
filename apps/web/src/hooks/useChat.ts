@@ -123,12 +123,21 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
       createdAt: new Date().toISOString(),
     };
 
+    // Verificar token ANTES de añadir mensaje optimista
+    const token = getAuthToken();
+    if (!token) {
+      // En producción, no permitir envío sin token
+      if (!import.meta.env.DEV) {
+        setError('Sesión expirada. Por favor, inicia sesión de nuevo.');
+        setIsSending(false);
+        return null;
+      }
+    }
+
     // Añadir mensaje optimista
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      const token = getAuthToken();
-      
       // Modo demo sin token: simular envío local
       if (!token && import.meta.env.DEV) {
         // Simular delay de red

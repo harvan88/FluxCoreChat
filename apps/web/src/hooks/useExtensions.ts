@@ -25,6 +25,36 @@ export interface Extension {
 /**
  * Instalación de extensión
  */
+/**
+ * Manifest UI configuration
+ */
+export interface ExtensionManifestUI {
+  sidebar?: {
+    icon: string;
+    title: string;
+  };
+  panel?: {
+    title: string;
+    component: string;
+  };
+}
+
+/**
+ * Extension manifest from API
+ */
+export interface ExtensionManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  permissions: string[];
+  ui?: ExtensionManifestUI;
+}
+
+/**
+ * Instalación de extensión
+ */
 export interface ExtensionInstallation {
   id: string;
   extensionId: string;
@@ -33,6 +63,7 @@ export interface ExtensionInstallation {
   grantedPermissions: string[];
   config: Record<string, unknown>;
   installedAt: string;
+  manifest?: ExtensionManifest;
 }
 
 /**
@@ -89,7 +120,12 @@ export function useExtensions(accountId: string | null) {
 
   // Cargar extensiones instaladas
   const loadInstalled = useCallback(async () => {
-    if (!accountId) return;
+    if (!accountId) {
+      console.log('[useExtensions] No accountId, skipping load');
+      return;
+    }
+
+    console.log('[useExtensions] Loading installations for account:', accountId);
 
     try {
       const response = await fetch(`${API_URL}/extensions/installed/${accountId}`, {
@@ -103,8 +139,10 @@ export function useExtensions(accountId: string | null) {
       }
 
       const result = await response.json();
+      console.log('[useExtensions] API response:', result);
+      
       if (result.success && result.data) {
-        setInstallations(result.data.map((inst: any) => ({
+        const mapped = result.data.map((inst: any) => ({
           id: inst.id,
           extensionId: inst.extensionId,
           accountId: inst.accountId,
@@ -112,7 +150,11 @@ export function useExtensions(accountId: string | null) {
           grantedPermissions: inst.grantedPermissions || [],
           config: inst.config || {},
           installedAt: inst.installedAt,
-        })));
+          manifest: inst.manifest || undefined,
+        }));
+        console.log('[useExtensions] Mapped installations:', mapped);
+        console.log('[useExtensions] Extensions with UI:', mapped.filter((i: any) => i.manifest?.ui?.sidebar));
+        setInstallations(mapped);
       }
     } catch (err: any) {
       console.warn('[useExtensions] Could not load installations:', err.message);
