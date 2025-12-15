@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { Check, CheckCheck, Clock, AlertCircle, RotateCcw, Reply, Pencil, Trash2, Bot } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, RotateCcw, Reply, Pencil, Trash2, Bot, File } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message, MessageStatus } from '../../types';
 
@@ -60,7 +60,7 @@ export function MessageBubble({
           return (
             <div
               key={i}
-              className={clsx('w-1 rounded-sm', isOwn ? 'bg-inverse/60' : 'bg-muted')}
+              className={clsx('w-1 rounded-sm', isOwn ? 'bg-muted opacity-60' : 'bg-muted')}
               style={{ height: `${h}px` }}
             />
           );
@@ -152,7 +152,7 @@ export function MessageBubble({
         className={clsx(
           'max-w-[70%] rounded-2xl px-4 py-2 relative',
           isOwn 
-            ? 'ml-auto bg-accent text-inverse rounded-br-md' 
+            ? 'ml-auto bg-accent text-primary rounded-br-md' 
             : 'mr-auto bg-elevated text-primary rounded-bl-md'
         )}
       >
@@ -190,11 +190,11 @@ export function MessageBubble({
                   );
                 case 'audio':
                   return (
-                    <div key={`${m.type}-${idx}`} className="bg-surface/40 rounded-lg p-2 border border-subtle">
+                    <div key={`${m.type}-${idx}`} className="bg-elevated rounded-lg p-2 border border-subtle">
                       <audio controls src={url} className="w-full" />
                       {renderWaveform((m as any)?.waveformData?.samples)}
                       {m.filename && (
-                        <div className={clsx('mt-1 text-xs', isOwn ? 'text-inverse/70' : 'text-muted')}>
+                        <div className={clsx('mt-1 text-xs', isOwn ? 'text-secondary' : 'text-muted')}>
                           {m.filename}
                         </div>
                       )}
@@ -210,16 +210,16 @@ export function MessageBubble({
                       rel="noreferrer"
                       className={clsx(
                         'flex items-center gap-2 rounded-lg p-2 border border-subtle',
-                        isOwn ? 'bg-surface/40' : 'bg-active'
+                        isOwn ? 'bg-elevated' : 'bg-active'
                       )}
                     >
-                      <span className="text-lg">📎</span>
+                      <File size={18} className="text-info flex-shrink-0" />
                       <div className="min-w-0">
-                        <div className={clsx('text-sm truncate', isOwn ? 'text-inverse' : 'text-primary')}>
+                        <div className={clsx('text-sm truncate', isOwn ? 'text-primary' : 'text-primary')}>
                           {m.filename || 'Documento'}
                         </div>
                         {(m.mimeType || m.size) && (
-                          <div className={clsx('text-xs truncate', isOwn ? 'text-inverse/70' : 'text-muted')}>
+                          <div className={clsx('text-xs truncate', isOwn ? 'text-secondary' : 'text-muted')}>
                             {m.mimeType || ''}{m.mimeType && m.size ? ' · ' : ''}{formatBytes(m.size)}
                           </div>
                         )}
@@ -240,7 +240,7 @@ export function MessageBubble({
         <div
           className={clsx(
             'flex items-center gap-1.5 mt-1 text-xs',
-            isOwn ? 'text-inverse/70 justify-end' : 'text-muted'
+            isOwn ? 'text-secondary opacity-70 justify-end' : 'text-muted'
           )}
         >
           {message.updatedAt && message.updatedAt !== message.createdAt && (
@@ -248,7 +248,7 @@ export function MessageBubble({
           )}
           <span>{formatTime(message.createdAt)}</span>
           {message.generatedBy === 'ai' && (
-            <span className="flex items-center gap-0.5 bg-accent/30 px-1.5 py-0.5 rounded text-accent">
+            <span className="flex items-center gap-0.5 bg-accent-muted px-1.5 py-0.5 rounded text-accent">
               <Bot size={10} />
               IA
             </span>

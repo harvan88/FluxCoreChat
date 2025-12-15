@@ -1,4 +1,14 @@
 import clsx from 'clsx';
+import {
+  AudioLines,
+  Camera,
+  File,
+  Images,
+  MapPin,
+  ReceiptText,
+  UserRound,
+  Zap,
+} from 'lucide-react';
 
 export type AttachmentAction =
   | 'document'
@@ -10,15 +20,21 @@ export type AttachmentAction =
   | 'quick_reply'
   | 'contact';
 
-const items: Array<{ id: AttachmentAction; label: string; icon: string; enabled: boolean }> = [
-  { id: 'document', label: 'Documento', icon: '📄', enabled: true },
-  { id: 'camera', label: 'Cámara', icon: '📷', enabled: true },
-  { id: 'gallery', label: 'Galería', icon: '🖼️', enabled: true },
-  { id: 'audio', label: 'Audio', icon: '🎤', enabled: true },
-  { id: 'receipt', label: 'Recibo', icon: '🧾', enabled: true },
-  { id: 'location', label: 'Ubicación', icon: '📍', enabled: false },
-  { id: 'quick_reply', label: 'Quick Reply', icon: '⚡', enabled: false },
-  { id: 'contact', label: 'Contacto', icon: '👤', enabled: false },
+const items: Array<{
+  id: AttachmentAction;
+  label: string;
+  Icon: typeof File;
+  colorClassName: string;
+  enabled: boolean;
+}> = [
+  { id: 'document', label: 'Documento', Icon: File, colorClassName: 'text-info', enabled: true },
+  { id: 'camera', label: 'Cámara', Icon: Camera, colorClassName: 'text-accent', enabled: true },
+  { id: 'gallery', label: 'Galería', Icon: Images, colorClassName: 'text-error', enabled: true },
+  { id: 'audio', label: 'Audio', Icon: AudioLines, colorClassName: 'text-error', enabled: true },
+  { id: 'receipt', label: 'Recibo', Icon: ReceiptText, colorClassName: 'text-error', enabled: true },
+  { id: 'location', label: 'Ubicación', Icon: MapPin, colorClassName: 'text-success', enabled: false },
+  { id: 'quick_reply', label: 'Quick Reply', Icon: Zap, colorClassName: 'text-warning', enabled: false },
+  { id: 'contact', label: 'Contacto', Icon: UserRound, colorClassName: 'text-info', enabled: false },
 ];
 
 export function AttachmentPanel(props: {
@@ -29,8 +45,8 @@ export function AttachmentPanel(props: {
   if (!props.open) return null;
 
   return (
-    <div className="absolute left-4 right-4 bottom-[88px]">
-      <div className="bg-surface border border-subtle rounded-xl p-3 shadow-lg">
+    <div className="absolute left-0 right-0 bottom-full mb-2">
+      <div className="bg-base border border-default rounded-xl p-3">
         <div className="grid grid-cols-4 gap-2">
           {items.map((item) => (
             <button
@@ -46,7 +62,7 @@ export function AttachmentPanel(props: {
               )}
               title={item.label}
             >
-              <span className="text-lg">{item.icon}</span>
+              <item.Icon className={clsx('w-5 h-5', item.enabled ? item.colorClassName : 'text-muted')} />
               <span className="text-xs text-secondary truncate w-full text-center">{item.label}</span>
             </button>
           ))}

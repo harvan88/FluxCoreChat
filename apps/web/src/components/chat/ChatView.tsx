@@ -4,12 +4,12 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Smile, MoreVertical, Phone, Video, Loader2, X } from 'lucide-react';
+import { AlertTriangle, MessageCircle, MoreVertical, Phone, Video, Loader2, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
 import { MessageBubble } from './MessageBubble';
-import { AttachmentPanel, type AttachmentAction } from './AttachmentPanel';
+import { ChatComposer } from './ChatComposer';
 import { useConnectionStatus, useOfflineMessages } from '../../hooks/useOfflineFirst';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -27,23 +27,18 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const pendingConversationScrollRef = useRef(false);
-
-  const openCameraRef = useRef<(() => void) | null>(null);
-  const openGalleryRef = useRef<(() => void) | null>(null);
-  const openDocumentRef = useRef<(() => void) | null>(null);
-  const openAudioRef = useRef<(() => void) | null>(null);
   
   // Obtener nombre del contacto desde las conversaciones cargadas
   const conversations = useUIStore((state) => state.conversations);
   const currentConversation = conversations.find(c => c.id === conversationId);
   const contactName = (currentConversation as any)?.contactName || `Chat ${conversationId?.slice(0, 8)}`;
   const contactAvatar = (currentConversation as any)?.contactAvatar;
+  const activeRelationshipId = (currentConversation as any)?.relationshipId || relationshipId;
   
   // V2-1: useOfflineMessages para persistencia local + sync
   const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
@@ -89,14 +84,13 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
   // Suscribirse a cambios en la relación
   useEffect(() => {
-    const activeRelationshipId = (currentConversation as any)?.relationshipId || relationshipId;
     if (activeRelationshipId) {
       subscribe(activeRelationshipId);
       return () => {
         unsubscribe(activeRelationshipId);
       };
     }
-  }, [conversationId, relationshipId, currentConversation, subscribe, unsubscribe]);
+  }, [conversationId, activeRelationshipId, subscribe, unsubscribe]);
 
   useEffect(() => {
     pendingConversationScrollRef.current = true;
@@ -195,41 +189,6 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
   // NOTA: Simulación de IA removida - conectar a API real
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleSelectAttachment = (action: AttachmentAction) => {
-    setIsAttachmentOpen(false);
-    clearUploadError();
-
-    switch (action) {
-      case 'camera':
-        openCameraRef.current?.();
-        break;
-      case 'gallery':
-      case 'receipt':
-        openGalleryRef.current?.();
-        break;
-      case 'document':
-        openDocumentRef.current?.();
-        break;
-      case 'audio':
-        openAudioRef.current?.();
-        break;
-      default:
-        break;
-    }
-  };
-
-  const handleUploadedMediaSend = async (mediaItem: any) => {
-    const caption = message;
-    await handleSend({ text: caption || '', media: [mediaItem] });
-  };
-
   // Scroll a mensaje específico
   const scrollToMessage = (messageId: string) => {
     const element = document.getElementById(`msg-${messageId}`);
@@ -291,7 +250,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
       {/* Upload error */}
       {uploadError && (
-        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm flex items-start justify-between gap-3">
+        <div className="mx-4 mt-3 p-3 bg-error-muted border border-error-muted rounded-lg text-error text-sm flex items-start justify-between gap-3">
           <div className="min-w-0">{uploadError}</div>
           <button
             onClick={() => clearUploadError()}
@@ -328,14 +287,14 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
       {/* Error */}
       {error && (
-        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
+        <div className="mx-4 mt-3 p-3 bg-error-muted border border-error-muted rounded-lg text-error text-sm">
           {error}
         </div>
       )}
 
       {/* Send error (feedback visual mínimo) */}
       {sendError && (
-        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm flex items-start justify-between gap-3">
+        <div className="mx-4 mt-3 p-3 bg-error-muted border border-error-muted rounded-lg text-error text-sm flex items-start justify-between gap-3">
           <div className="min-w-0">{sendError}</div>
           <button
             onClick={() => setSendError(null)}
@@ -349,8 +308,9 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       
       {/* No account warning */}
       {!accountId && !isLoading && (
-        <div className="mx-4 mt-3 p-3 bg-warning/10 border border-warning/30 rounded-lg text-warning text-sm">
-          ⚠️ No se ha seleccionado una cuenta. Por favor recarga la página o inicia sesión de nuevo.
+        <div className="mx-4 mt-3 p-3 bg-warning-muted border border-warning-muted rounded-lg text-warning text-sm flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+          <div className="min-w-0">No se ha seleccionado una cuenta. Por favor recarga la página o inicia sesión de nuevo.</div>
         </div>
       )}
 
@@ -362,7 +322,9 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       >
         {!isLoading && messages.length === 0 && !isGenerating && suggestions.length === 0 ? (
           <div className="min-h-full flex flex-col items-center justify-center text-center">
-            <div className="text-6xl mb-4">💬</div>
+            <div className="w-14 h-14 mb-4 bg-elevated border border-subtle rounded-2xl flex items-center justify-center">
+              <MessageCircle className="text-muted" size={28} />
+            </div>
             <h3 className="text-lg font-medium text-primary mb-2">No hay mensajes aún</h3>
             <p className="text-sm text-secondary">Envía el primer mensaje para iniciar la conversación</p>
           </div>
@@ -431,177 +393,28 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
           <button
             onClick={() => setReplyingTo(null)}
             className="p-1 text-muted hover:text-primary transition-colors"
+            aria-label="Cancelar respuesta"
           >
-            ×
+            <X size={16} />
           </button>
         </div>
       )}
 
       {/* Input */}
-      <div className="p-4 bg-surface border-t border-subtle flex-shrink-0 relative">
-        <AttachmentPanel
-          open={isAttachmentOpen}
-          onClose={() => setIsAttachmentOpen(false)}
-          onSelect={handleSelectAttachment}
-        />
-
-        {/* Hidden file inputs */}
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          ref={(el) => {
-            openCameraRef.current = () => el?.click();
-          }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            e.target.value = '';
-            const res = await uploadFile({ file, type: 'image' });
-            if (res.success && res.data?.attachment) {
-              await handleUploadedMediaSend({
-                type: 'image',
-                url: res.data.attachment.url,
-                attachmentId: res.data.attachment.id,
-                filename: res.data.attachment.filename,
-                mimeType: res.data.attachment.mimeType,
-                size: res.data.attachment.sizeBytes,
-              });
-            }
-          }}
-        />
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          ref={(el) => {
-            openGalleryRef.current = () => el?.click();
-          }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            e.target.value = '';
-            const res = await uploadFile({ file, type: 'image' });
-            if (res.success && res.data?.attachment) {
-              await handleUploadedMediaSend({
-                type: 'image',
-                url: res.data.attachment.url,
-                attachmentId: res.data.attachment.id,
-                filename: res.data.attachment.filename,
-                mimeType: res.data.attachment.mimeType,
-                size: res.data.attachment.sizeBytes,
-              });
-            }
-          }}
-        />
-        <input
-          type="file"
-          accept="application/pdf,text/plain,application/msword"
-          className="hidden"
-          ref={(el) => {
-            openDocumentRef.current = () => el?.click();
-          }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            e.target.value = '';
-            const res = await uploadFile({ file, type: 'document' });
-            if (res.success && res.data?.attachment) {
-              await handleUploadedMediaSend({
-                type: 'document',
-                url: res.data.attachment.url,
-                attachmentId: res.data.attachment.id,
-                filename: res.data.attachment.filename,
-                mimeType: res.data.attachment.mimeType,
-                size: res.data.attachment.sizeBytes,
-              });
-            }
-          }}
-        />
-        <input
-          type="file"
-          accept="audio/*"
-          className="hidden"
-          ref={(el) => {
-            openAudioRef.current = () => el?.click();
-          }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            e.target.value = '';
-            const res = await uploadAudio({ file });
-            if (res.success && res.data?.attachment) {
-              await handleUploadedMediaSend({
-                type: 'audio',
-                url: res.data.attachment.url,
-                attachmentId: res.data.attachment.id,
-                filename: res.data.attachment.filename,
-                mimeType: res.data.attachment.mimeType,
-                size: res.data.attachment.sizeBytes,
-                waveformData: res.data.waveformData,
-              });
-            }
-          }}
-        />
-
-        {isUploadingAttachment && (
-          <div className="mb-2">
-            <div className="h-1 w-full bg-elevated rounded-full overflow-hidden border border-subtle">
-              <div
-                className="h-full bg-accent"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-            <div className="mt-1 text-xs text-muted">Subiendo... {uploadProgress}%</div>
-          </div>
-        )}
-
-        <div className="flex items-end gap-3">
-          <button
-            onClick={() => {
-              if (isUploadingAttachment) return;
-              setIsAttachmentOpen((v) => !v);
-            }}
-            className={clsx(
-              'p-2 transition-colors',
-              isUploadingAttachment
-                ? 'text-muted cursor-not-allowed opacity-60'
-                : 'text-muted hover:text-primary'
-            )}
-            title="Adjuntar"
-            disabled={isUploadingAttachment}
-          >
-            <Paperclip size={20} />
-          </button>
-          <div className="flex-1 bg-elevated rounded-xl px-4 py-2.5 border border-subtle focus-within:border-accent transition-colors">
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Escribe un mensaje..."
-              disabled={isSending || !accountId}
-              className="w-full bg-transparent text-primary placeholder:text-muted resize-none focus:outline-none text-sm max-h-32"
-              rows={1}
-            />
-          </div>
-          <button className="p-2 text-muted hover:text-primary transition-colors">
-            <Smile size={20} />
-          </button>
-          <button
-            onClick={() => handleSend()}
-            disabled={!accountId || isSending || !message.trim()}
-            className={clsx(
-              'p-3 rounded-full transition-colors',
-              accountId && message.trim() && !isSending
-                ? 'bg-accent text-inverse hover:bg-accent-hover'
-                : 'bg-elevated text-muted cursor-not-allowed'
-            )}
-          >
-            {isSending ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-          </button>
-        </div>
-      </div>
+      <ChatComposer
+        value={message}
+        onChange={setMessage}
+        disabled={!accountId}
+        isSending={isSending}
+        onSend={handleSend}
+        accountId={accountId}
+        relationshipId={activeRelationshipId}
+        uploadFile={uploadFile}
+        uploadAudio={uploadAudio}
+        isUploading={isUploadingAttachment}
+        uploadProgress={uploadProgress}
+        onClearUploadError={clearUploadError}
+      />
     </div>
   );
 }

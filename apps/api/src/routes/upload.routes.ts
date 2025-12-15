@@ -5,6 +5,7 @@ import { mkdir } from 'fs/promises';
 import { accountService } from '../services/account.service';
 import { fileUploadService } from '../services/file-upload.service';
 import { audioProcessingService } from '../services/audio-processing.service';
+import { audioConverterService } from '../services/audio-converter.service';
 
 // Get upload directory path
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'avatars');
@@ -168,13 +169,18 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
       }
 
       try {
-        const file = body.file as File;
+        const rawFile = body.file as File;
         const messageId = body.messageId as string | undefined;
 
-        if (!file) {
+        if (!rawFile) {
           set.status = 400;
           return { success: false, message: 'No file uploaded' };
         }
+
+        const needsConversion = !rawFile.type.includes('mpeg') && !rawFile.type.includes('mp3');
+        const file = needsConversion
+          ? await audioConverterService.convertToMp3(rawFile)
+          : rawFile;
 
         const waveform = await audioProcessingService.generateWaveform(file);
         const result = await fileUploadService.upload({
@@ -193,6 +199,7 @@ export const uploadRoutes = new Elysia({ prefix: '/upload' })
           },
         };
       } catch (error: any) {
+        console.error('[AudioUpload] Error:', error);
         set.status = 400;
         return { success: false, message: error.message || 'Failed to upload audio' };
       }
