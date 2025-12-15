@@ -39,16 +39,30 @@
   --accent-primary: #3b82f6;
   --accent-hover: #2563eb;
   --accent-muted: rgba(59, 130, 246, 0.12);
+  --accent-border-subtle: rgba(59, 130, 246, 0.20);
+  --accent-border-muted: rgba(59, 130, 246, 0.30);
   
   /* Estados semánticos */
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-info: #3b82f6;
+
+  --color-success-muted: rgba(34, 197, 94, 0.12);
+  --color-warning-muted: rgba(245, 158, 11, 0.12);
+  --color-error-muted: rgba(239, 68, 68, 0.12);
+  --color-info-muted: rgba(59, 130, 246, 0.12);
+
+  --color-success-border: rgba(34, 197, 94, 0.30);
+  --color-warning-border: rgba(245, 158, 11, 0.30);
+  --color-error-border: rgba(239, 68, 68, 0.30);
+  --color-info-border: rgba(59, 130, 246, 0.30);
   
   /* Overlays */
   --overlay-light: rgba(255, 255, 255, 0.03);
   --overlay-dark: rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --shadow-accent: 0 10px 30px rgba(59, 130, 246, 0.20);
 }
 
 /* ============================================================================
@@ -79,17 +93,31 @@
   --accent-primary: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-muted: rgba(37, 99, 235, 0.08);
+  --accent-border-subtle: rgba(37, 99, 235, 0.20);
+  --accent-border-muted: rgba(37, 99, 235, 0.30);
   
   /* Estados semánticos */
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-error: #dc2626;
   --color-info: #2563eb;
+
+  --color-success-muted: rgba(22, 163, 74, 0.12);
+  --color-warning-muted: rgba(217, 119, 6, 0.12);
+  --color-error-muted: rgba(220, 38, 38, 0.12);
+  --color-info-muted: rgba(37, 99, 235, 0.12);
+
+  --color-success-border: rgba(22, 163, 74, 0.30);
+  --color-warning-border: rgba(217, 119, 6, 0.30);
+  --color-error-border: rgba(220, 38, 38, 0.30);
+  --color-info-border: rgba(37, 99, 235, 0.30);
   
   /* Overlays */
   --overlay-light: rgba(0, 0, 0, 0.03);
   --overlay-dark: rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 10px 40px rgba(0, 0, 0, 0.20);
+  --shadow-accent: 0 10px 30px rgba(37, 99, 235, 0.20);
 }
 
 /* ============================================================================
@@ -134,20 +162,52 @@ body {
 .text-muted { color: var(--text-muted); }
 .text-inverse { color: var(--text-inverse); }
 
+.bg-muted { background-color: var(--text-muted); }
+.bg-inverse { background-color: var(--text-inverse); }
+
+.bg-overlay-dark { background-color: var(--overlay-dark); }
+.bg-overlay-light { background-color: var(--overlay-light); }
+
+.bg-accent-gradient { background-image: linear-gradient(135deg, var(--accent-primary), var(--accent-hover)); }
+.shadow-accent { box-shadow: var(--shadow-accent); }
+
 /* Accent */
 .bg-accent { background-color: var(--accent-primary); }
 .bg-accent-hover { background-color: var(--accent-hover); }
 .bg-accent-muted { background-color: var(--accent-muted); }
 .text-accent { color: var(--accent-primary); }
 .border-accent { border-color: var(--accent-primary); }
+.border-accent-subtle { border-color: var(--accent-border-subtle); }
+.border-accent-muted { border-color: var(--accent-border-muted); }
 
 /* Estados semánticos */
 .text-success { color: var(--color-success); }
 .text-warning { color: var(--color-warning); }
 .text-error { color: var(--color-error); }
+.text-info { color: var(--color-info); }
 .bg-success { background-color: var(--color-success); }
 .bg-warning { background-color: var(--color-warning); }
 .bg-error { background-color: var(--color-error); }
+
+.bg-success-muted { background-color: var(--color-success-muted); }
+.bg-warning-muted { background-color: var(--color-warning-muted); }
+.bg-error-muted { background-color: var(--color-error-muted); }
+.bg-info-muted { background-color: var(--color-info-muted); }
+
+.border-success { border-color: var(--color-success); }
+.border-warning { border-color: var(--color-warning); }
+.border-error { border-color: var(--color-error); }
+.border-info { border-color: var(--color-info); }
+
+.border-success-muted { border-color: var(--color-success-border); }
+.border-warning-muted { border-color: var(--color-warning-border); }
+.border-error-muted { border-color: var(--color-error-border); }
+.border-info-muted { border-color: var(--color-info-border); }
+
+.bg-color-success-muted { background-color: var(--color-success-muted); }
+.bg-color-warning-muted { background-color: var(--color-warning-muted); }
+.bg-color-error-muted { background-color: var(--color-error-muted); }
+.bg-color-info-muted { background-color: var(--color-info-muted); }
 
 /* ============================================================================
    LEGACY COMPATIBILITY - Mapeo de clases antiguas a nuevas

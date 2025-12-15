@@ -28,7 +28,20 @@ async function uploadFormData<T>(params: {
 
     xhr.onload = () => {
       try {
-        const json = JSON.parse(xhr.responseText);
+        const json = JSON.parse(xhr.responseText) as any;
+
+        if (xhr.status >= 400) {
+          resolve({
+            success: false,
+            error: json?.error || json?.message || `HTTP ${xhr.status}`,
+          });
+          return;
+        }
+
+        if (json && json.success === false && !json.error && json.message) {
+          json.error = json.message;
+        }
+
         resolve(json as ApiResponse<T>);
       } catch {
         resolve({ success: false, error: 'Respuesta inválida del servidor' });
@@ -71,7 +84,7 @@ export function useFileUpload() {
     );
 
     if (!res.success) {
-      setError(res.error || 'Error al subir archivo');
+      setError(res.error || (res as any).message || 'Error al subir archivo');
     }
 
     setIsUploading(false);

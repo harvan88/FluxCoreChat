@@ -11,11 +11,17 @@ const FILE_LIMITS: Record<UploadType, { maxSize: number; mimes: string[] }> = {
   },
   document: {
     maxSize: 50 * 1024 * 1024,
-    mimes: ['application/pdf', 'application/msword', 'text/plain'],
+    mimes: [
+      'application/pdf',
+      'application/x-pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ],
   },
   audio: {
     maxSize: 20 * 1024 * 1024,
-    mimes: ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/ogg'],
+    mimes: ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/ogg', 'video/webm'],
   },
   video: {
     maxSize: 100 * 1024 * 1024,
@@ -44,7 +50,10 @@ function getExtension(file: File) {
     'image/png': 'png',
     'image/webp': 'webp',
     'application/pdf': 'pdf',
+    'application/x-pdf': 'pdf',
     'text/plain': 'txt',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
     'audio/webm': 'webm',
     'audio/ogg': 'ogg',
     'audio/mpeg': 'mp3',
@@ -53,6 +62,17 @@ function getExtension(file: File) {
   };
 
   return map[file.type] || 'bin';
+}
+
+function getLowerExtensionFromName(name: string) {
+  const ext = name.split('.').pop();
+  if (!ext) return '';
+  return ext.toLowerCase();
+}
+
+function isAllowedDocumentFallbackByName(file: File) {
+  const ext = getLowerExtensionFromName(file.name);
+  return ext === 'pdf' || ext === 'doc' || ext === 'docx' || ext === 'txt';
 }
 
 export class FileUploadService {
@@ -69,8 +89,14 @@ export class FileUploadService {
       throw new Error('Tipo de archivo no soportado');
     }
 
-    if (!limits.mimes.includes(file.type)) {
-      throw new Error('Tipo MIME no permitido');
+    const normalizedMime = file.type.split(';')[0].trim();
+    if (!limits.mimes.includes(normalizedMime)) {
+      const isGenericMime = normalizedMime === '' || normalizedMime === 'application/octet-stream';
+      const allowByName = type === 'document' && isGenericMime && isAllowedDocumentFallbackByName(file);
+
+      if (!allowByName) {
+        throw new Error('Tipo MIME no permitido');
+      }
     }
 
     if (file.size > limits.maxSize) {
