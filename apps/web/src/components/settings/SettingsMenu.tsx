@@ -3,7 +3,7 @@
  * Solo muestra opciones, el contenido se abre en tabs del DynamicContainer
  */
 
-import { User, Bell, Shield, Palette, Building2, ChevronRight } from 'lucide-react';
+import { User, Bell, Shield, Palette, Building2, ChevronRight, Zap } from 'lucide-react';
 import { usePanelStore } from '../../store/panelStore';
 import { useAuthStore } from '../../store/authStore';
 
@@ -29,6 +29,13 @@ const settingItems: SettingMenuItem[] = [
     icon: <Building2 size={20} />, 
     label: 'Cuentas', 
     description: 'Gestiona tus cuentas y colaboradores' 
+  },
+  { 
+    id: 'credits', 
+    tabType: 'settings-accounts',
+    icon: <Zap size={20} />, 
+    label: 'Créditos', 
+    description: 'Administra balances y asignaciones (dev)' 
   },
   { 
     id: 'notifications', 

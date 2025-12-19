@@ -114,10 +114,19 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
       case 'approve_suggestion':
         // Aprobar y enviar sugerencia como mensaje
         if (data.conversationId && data.senderAccountId && data.suggestedText) {
+          const decision = aiService.getSuggestionBrandingDecision(data.suggestionId);
+          const finalText = decision.promo
+            ? aiService.appendCoreIABrandingFooter(data.suggestedText)
+            : data.suggestedText;
+
+          const content: any = decision.promo
+            ? { text: finalText, __coreIa: { branding: true } }
+            : { text: finalText };
+
           messageCore.send({
             conversationId: data.conversationId,
             senderAccountId: data.senderAccountId,
-            content: { text: data.suggestedText },
+            content,
             type: 'outgoing',
             generatedBy: 'ai',
           }).then((result) => {
@@ -252,35 +261,39 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
     // V2-2: Generar sugerencia con AI service real
     let suggestion;
     
-    if (aiService.isConfigured()) {
-      // Usar AI service real con Groq
-      const lastMessage = data.content?.text || 'Mensaje del usuario';
-      const aiSuggestion = await aiService.generateResponse(
-        conversationId!,
-        accountId!,
-        lastMessage
-      );
-
-      if (aiSuggestion) {
-        suggestion = {
-          id: aiSuggestion.id,
-          conversationId,
-          extensionId: 'core-ai',
-          suggestedText: aiSuggestion.content,
-          confidence: 0.9,
-          reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage.totalTokens} tokens)`,
-          alternatives: [],
-          createdAt: aiSuggestion.generatedAt.toISOString(),
-          mode: evaluation.mode,
-        };
+    // Usar AI service real con Groq
+    const lastMessage = data.content?.text || 'Mensaje del usuario';
+    const aiSuggestion = await aiService.generateResponse(
+      conversationId!,
+      accountId!,
+      lastMessage,
+      {
+        mode: 'suggest',
+        triggerMessageId: typeof data?.messageId === 'string' ? data.messageId : undefined,
+        triggerMessageCreatedAt: data?.createdAt ? new Date(data.createdAt as any) : undefined,
       }
+    );
+
+    if (aiSuggestion) {
+      const stripped = aiService.stripCoreIAPromoMarker(aiSuggestion.content);
+      suggestion = {
+        id: aiSuggestion.id,
+        conversationId,
+        extensionId: 'core-ai',
+        suggestedText: stripped.text,
+        confidence: 0.9,
+        reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage.totalTokens} tokens)`,
+        alternatives: [],
+        createdAt: aiSuggestion.generatedAt.toISOString(),
+        mode: evaluation.mode,
+      };
     }
 
     // Si no hay sugerencia (API no configurada), notificar al cliente
     if (!suggestion) {
       ws.send(JSON.stringify({
         type: 'suggestion:unavailable',
-        reason: 'AI service not configured. Set GROQ_API_KEY environment variable.',
+        reason: 'AI service not configured. Set GROQ_API_KEY environment variable or configure @fluxcore/core-ai installation.',
         conversationId,
       }));
       return;
@@ -362,7 +375,7 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
  * KAREN WIDGET: Manejar mensaje de widget público
  */
 async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
-  const { alias, visitorId, content, relationshipId } = data;
+  const { alias, visitorId, content } = data;
   
   try {
     // Buscar cuenta por alias

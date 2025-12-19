@@ -5,8 +5,9 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, Save, RotateCcw, Settings, Info } from 'lucide-react';
+import { X, Save, RotateCcw, Settings, Info, Terminal } from 'lucide-react';
 import clsx from 'clsx';
+import { usePanelStore } from '../../store/panelStore';
 
 interface ExtensionConfig {
   [key: string]: any;
@@ -41,6 +42,16 @@ const coreAISchema: ConfigSchema = {
     description: 'Activar o desactivar la extensión de IA',
     default: true,
   },
+  provider: {
+    type: 'select',
+    label: 'Proveedor',
+    description: 'Proveedor de IA a utilizar',
+    default: 'groq',
+    options: [
+      { value: 'groq', label: 'Groq' },
+      { value: 'openai', label: 'OpenAI' },
+    ],
+  },
   mode: {
     type: 'select',
     label: 'Modo de operación',
@@ -57,7 +68,7 @@ const coreAISchema: ConfigSchema = {
     label: 'Delay de respuesta (segundos)',
     description: 'Tiempo de espera antes de responder automáticamente',
     default: 30,
-    min: 5,
+    min: 0,
     max: 300,
   },
   model: {
@@ -69,6 +80,7 @@ const coreAISchema: ConfigSchema = {
       { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (rápido)' },
       { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B (potente)' },
       { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+      { value: 'gpt-4o-mini-2024-07-18', label: 'GPT-4o mini (2024-07-18)' },
     ],
   },
   temperature: {
@@ -93,6 +105,8 @@ export function ExtensionConfigPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  const { openTab } = usePanelStore();
+
   // Usar schema de core-ai si es esa extensión y no hay schema custom
   const activeSchema = schema || (extensionId.includes('core-ai') ? coreAISchema : {});
 
@@ -102,7 +116,27 @@ export function ExtensionConfigPanel({
   }, [config]);
 
   const handleChange = (key: string, value: any) => {
-    setLocalConfig(prev => ({ ...prev, [key]: value }));
+    setLocalConfig((prev) => {
+      const next = { ...prev, [key]: value };
+
+      if (extensionId.includes('core-ai') && key === 'provider') {
+        const provider = value;
+        const currentModel = next.model;
+
+        const groqModels = new Set(['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768']);
+        const openaiModels = new Set(['gpt-4o-mini-2024-07-18']);
+
+        if (provider === 'openai' && !openaiModels.has(currentModel)) {
+          next.model = 'gpt-4o-mini-2024-07-18';
+        }
+
+        if (provider === 'groq' && !groqModels.has(currentModel)) {
+          next.model = 'llama-3.1-8b-instant';
+        }
+      }
+
+      return next;
+    });
     setHasChanges(true);
   };
 
@@ -125,6 +159,20 @@ export function ExtensionConfigPanel({
     });
     setLocalConfig(defaults);
     setHasChanges(true);
+  };
+
+  const handleOpenPromptInspector = () => {
+    openTab('extensions', {
+      type: 'extension',
+      title: 'Prompt Inspector',
+      icon: '🧾',
+      closable: true,
+      context: {
+        extensionId,
+        extensionName,
+        view: 'promptInspector',
+      },
+    });
   };
 
   const renderField = (key: string, field: ConfigSchema[string]) => {
@@ -234,13 +282,25 @@ export function ExtensionConfigPanel({
 
       {/* Footer */}
       <div className="p-4 border-t border-subtle flex items-center justify-between">
-        <button
-          onClick={handleReset}
-          className="flex items-center gap-2 px-3 py-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors"
-        >
-          <RotateCcw size={16} />
-          Restablecer
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-2 px-3 py-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors"
+          >
+            <RotateCcw size={16} />
+            Restablecer
+          </button>
+          {extensionId.includes('core-ai') && (
+            <button
+              onClick={handleOpenPromptInspector}
+              className="flex items-center gap-2 px-3 py-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors"
+              title="Ver el payload exacto enviado a la IA"
+            >
+              <Terminal size={16} />
+              Prompt Inspector
+            </button>
+          )}
+        </div>
         <button
           onClick={handleSave}
           disabled={!hasChanges || isSaving}

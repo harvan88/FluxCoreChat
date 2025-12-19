@@ -193,22 +193,50 @@ class MDXParserService {
   private parseComponent(lines: string[], startIndex: number): { node: ComponentNode; endIndex: number } | null {
     const startLine = lines[startIndex].trim();
     
-    const selfClosingMatch = startLine.match(/^<Component\s+([^>]*)\/?>$/);
+    const selfClosingMatch = startLine.match(/^<Component\s+([^>]*)\/>$/);
     if (selfClosingMatch) {
       const props = this.parseComponentProps(selfClosingMatch[1]);
       return { node: { type: 'component', name: props.name || 'unknown', variant: props.variant, props, children: '' }, endIndex: startIndex };
     }
 
-    const openMatch = startLine.match(/^<Component\s+([^>]*)>$/);
+    const openMatch = startLine.match(/^<Component\s+([^>]*)>(.*)$/);
     if (!openMatch) return null;
 
     const props = this.parseComponentProps(openMatch[1]);
     let endIndex = startIndex + 1;
     const childrenLines: string[] = [];
 
+    const inlineContent = (openMatch[2] || '').trim();
+    if (inlineContent) {
+      const inlineCloseIndex = inlineContent.indexOf('</Component>');
+      if (inlineCloseIndex !== -1) {
+        const beforeClose = inlineContent.slice(0, inlineCloseIndex).trim();
+        return {
+          node: {
+            type: 'component',
+            name: props.name || 'unknown',
+            variant: props.variant,
+            props,
+            children: beforeClose,
+          },
+          endIndex: startIndex,
+        };
+      }
+      childrenLines.push(inlineContent);
+    }
+
     while (endIndex < lines.length) {
       const line = lines[endIndex];
-      if (line.trim() === '</Component>') break;
+
+      const closeIdx = line.indexOf('</Component>');
+      if (closeIdx !== -1) {
+        const beforeClose = line.slice(0, closeIdx).trimEnd();
+        if (beforeClose.trim()) {
+          childrenLines.push(beforeClose);
+        }
+        break;
+      }
+
       childrenLines.push(line);
       endIndex++;
     }

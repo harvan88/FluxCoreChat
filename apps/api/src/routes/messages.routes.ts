@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { messageCore } from '../core/message-core';
+import { aiService } from '../services/ai.service';
 
 export const messagesRoutes = new Elysia({ prefix: '/messages' })
   .use(authMiddleware)
@@ -13,8 +14,9 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       }
 
       try {
+        const typedBody: any = body as any;
         // Asegurar que content es un objeto, no un string
-        let content = body.content;
+        let content: any = typedBody.content;
         if (typeof content === 'string') {
           try {
             content = JSON.parse(content);
@@ -24,11 +26,11 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         }
         
         const result = await messageCore.send({
-          conversationId: body.conversationId,
-          senderAccountId: body.senderAccountId,
+          conversationId: typedBody.conversationId,
+          senderAccountId: typedBody.senderAccountId,
           content,
-          type: body.type || 'outgoing',
-          generatedBy: body.generatedBy || 'human',
+          type: typedBody.type || 'outgoing',
+          generatedBy: typedBody.generatedBy || 'human',
         });
 
         if (!result.success) {
@@ -103,9 +105,22 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
           return { success: false, message: 'Message not found' };
         }
 
+        const existingContent = message.content as any;
+        const isCoreIaBranded = existingContent?.__coreIa?.branding === true;
+
+        const typedBody: any = body as any;
+        let nextContent: any = typedBody.content;
+        if (isCoreIaBranded && typeof nextContent?.text === 'string') {
+          nextContent = {
+            ...nextContent,
+            text: aiService.appendCoreIABrandingFooter(nextContent.text),
+            __coreIa: existingContent.__coreIa,
+          };
+        }
+
         // Actualizar mensaje
         const updated = await messageService.updateMessage(params.id, {
-          content: body.content,
+          content: nextContent,
         });
 
         return { success: true, data: updated };

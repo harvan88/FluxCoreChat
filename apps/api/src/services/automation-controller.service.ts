@@ -79,7 +79,7 @@ class AutomationControllerService {
    */
   async getMode(accountId: string, relationshipId?: string): Promise<AutomationMode> {
     const rule = await this.getEffectiveRule(accountId, relationshipId);
-    return rule?.mode as AutomationMode || 'supervised';
+    return (rule?.mode as AutomationMode) || 'supervised';
   }
 
   /**
@@ -136,10 +136,10 @@ class AutomationControllerService {
       // Table may not exist, use default behavior
       console.warn('[AutomationController] Could not fetch rules:', error.message);
       return {
-        shouldProcess: true,
-        mode: 'supervised',
+        shouldProcess: false,
+        mode: 'disabled',
         rule: null,
-        reason: 'Rules unavailable, using default supervised mode',
+        reason: 'Rules unavailable, using default disabled mode',
       };
     }
     

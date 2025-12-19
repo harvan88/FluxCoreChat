@@ -9,20 +9,21 @@ import { Search, RefreshCw, Package, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { ExtensionCard } from './ExtensionCard';
 import { useExtensions } from '../../hooks/useExtensions';
+import { usePanelStore } from '../../store/panelStore';
 
 type TabType = 'all' | 'installed' | 'available';
 
 interface ExtensionsPanelProps {
   accountId: string;
-  onConfigureExtension?: (extensionId: string) => void;
 }
 
 export function ExtensionsPanel({ 
-  accountId, 
-  onConfigureExtension 
+  accountId
 }: ExtensionsPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const { openTab } = usePanelStore();
 
   const {
     extensions,
@@ -33,6 +34,35 @@ export function ExtensionsPanel({
     toggle,
     refresh,
   } = useExtensions(accountId);
+
+  const handleOpenConfigure = (extensionId: string, extensionName: string) => {
+    openTab('extensions', {
+      type: 'extension',
+      title: extensionName,
+      icon: '⚙️',
+      closable: true,
+      context: {
+        extensionId,
+        extensionName,
+      },
+    });
+  };
+
+  if (!accountId) {
+    return (
+      <div className="h-full flex flex-col bg-surface">
+        <div className="p-4 border-b border-subtle">
+          <div className="flex items-center gap-2">
+            <Package className="text-accent" size={24} />
+            <h2 className="text-lg font-semibold text-primary">Extensiones</h2>
+          </div>
+        </div>
+        <div className="flex-1 p-6 text-secondary">
+          Selecciona una cuenta para ver y configurar extensiones.
+        </div>
+      </div>
+    );
+  }
 
   // Filtrar extensiones
   const filteredExtensions = extensions.filter(ext => {
@@ -146,7 +176,11 @@ export function ExtensionsPanel({
               onInstall={() => install(extension.id)}
               onUninstall={() => uninstall(extension.id)}
               onToggle={(enabled) => toggle(extension.id, enabled)}
-              onConfigure={onConfigureExtension ? () => onConfigureExtension(extension.id) : undefined}
+              onConfigure={
+                extension.status !== 'available'
+                  ? () => handleOpenConfigure(extension.id, extension.name)
+                  : undefined
+              }
               isLoading={isLoading}
             />
           ))

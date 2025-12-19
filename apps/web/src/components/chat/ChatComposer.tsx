@@ -268,7 +268,8 @@ export function ChatComposer(props: {
               ? 'bg-elevated border-strong text-primary'
               : 'bg-elevated border-subtle text-secondary hover:bg-hover hover:text-primary'
           )}
-          disabled={!props.accountId || isAutomationLoading}
+          disabled
+          title="Solo Premium"
         >
           <BotMessageSquare className="w-6 h-6 text-warning" />
           <span className="text-xs">Supervisado</span>

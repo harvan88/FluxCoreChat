@@ -7,6 +7,8 @@
  * - Perspectivas bilaterales
  */
 
+export {};
+
 const API_URL = 'http://localhost:3000';
 
 interface TestResult {

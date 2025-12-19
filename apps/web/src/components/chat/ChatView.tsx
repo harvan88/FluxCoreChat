@@ -70,7 +70,8 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
         // Solo refresh si el mensaje NO es nuestro (evitar duplicados)
         const incomingAccountId = msg.data?.senderAccountId;
-        if (incomingAccountId !== accountId) {
+        const generatedBy = msg.data?.generatedBy;
+        if (incomingAccountId !== accountId || generatedBy === 'ai') {
           refresh();
         }
       }

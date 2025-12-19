@@ -9,6 +9,7 @@ import { extensionService } from '../services/extension.service';
 import { extensionHost } from '../services/extension-host.service';
 import { manifestLoader } from '../services/manifest-loader.service';
 import { extensionPermissionsService } from '../services/extension-permissions.service';
+import { accountService } from '../services/account.service';
 
 export const extensionRoutes = new Elysia({ prefix: '/extensions' })
   .use(authMiddleware)
@@ -40,6 +41,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const installations = await extensionService.getInstalled(params.accountId);
       
       // Enriquecer con información del manifest
@@ -71,6 +79,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
     try {
       const { accountId, extensionId, grantPermissions } = body as any;
+
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
 
       // Verificar que la extensión existe
       const manifest = manifestLoader.getManifest(extensionId);
@@ -143,6 +158,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const deleted = await extensionService.uninstall(params.accountId, extensionId);
       
@@ -174,6 +196,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const { config, enabled } = body as any;
 
       const extensionId = decodeURIComponent(params.extensionId);
@@ -224,6 +253,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const updated = await extensionService.setEnabled(params.accountId, extensionId, true);
       return { success: true, data: updated };
@@ -246,6 +282,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const updated = await extensionService.setEnabled(params.accountId, extensionId, false);
       return { success: true, data: updated };
@@ -261,7 +304,12 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
   })
 
   // GET /extensions/manifest/:extensionId - Obtener manifest de una extensión
-  .get('/manifest/:extensionId', async ({ params, set }) => {
+  .get('/manifest/:extensionId', async ({ user, params, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
     try {
       // Decodificar el ID de la extensión (puede contener @)
       const extensionId = decodeURIComponent(params.extensionId);
@@ -298,6 +346,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const permissions = await extensionPermissionsService.getPermissions(
         params.accountId,
@@ -332,6 +387,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const { permissions, grantedBy, canShare } = body as any;
 
@@ -371,6 +433,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const { permissions } = body as any;
 
@@ -406,6 +475,13 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === params.accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
       const extensionId = decodeURIComponent(params.extensionId);
       const result = await extensionPermissionsService.canGrantPermissions(
         params.accountId,

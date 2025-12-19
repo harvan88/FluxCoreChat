@@ -6,6 +6,8 @@ export * from './relationships';
 export * from './conversations';
 export * from './messages';
 export * from './media-attachments';
+export * from './account-ai-entitlements';
+export * from './credits';
 
 // Hito 4: Sistema de Extensiones
 export * from './extensions';

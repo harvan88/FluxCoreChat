@@ -9,11 +9,23 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { websiteService } from '../services/website.service';
 import { staticGenerator } from '../services/static-generator.service';
 
+function getPublicSiteBaseUrl(request: Request): string {
+  const explicit = (process.env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+  if (explicit) return explicit;
+
+  const url = new URL(request.url);
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const host = forwardedHost || request.headers.get('host') || url.host;
+  const proto = forwardedProto || url.protocol.replace(':', '') || 'http';
+  return `${proto}://${host}`;
+}
+
 export const websiteRoutes = new Elysia({ prefix: '/websites' })
   .use(authMiddleware)
 
   // GET /websites/:accountId - Obtener configuración del sitio
-  .get('/:accountId', async ({ user, params, set }) => {
+  .get('/:accountId', async ({ user, params, set, request }) => {
     if (!user) {
       set.status = 401;
       return { success: false, message: 'Unauthorized' };
@@ -30,11 +42,13 @@ export const websiteRoutes = new Elysia({ prefix: '/websites' })
       // Obtener alias para URL pública
       const alias = await websiteService.getPublicAlias(params.accountId);
 
+      const baseUrl = getPublicSiteBaseUrl(request);
+
       return {
         success: true,
         data: {
           ...config,
-          publicUrl: alias ? `/${alias}` : null,
+          publicUrl: alias ? `${baseUrl}/${alias}` : null,
         },
       };
     } catch (error: any) {
@@ -200,6 +214,46 @@ export const websiteRoutes = new Elysia({ prefix: '/websites' })
   })
 
   // PATCH /websites/:accountId/pages/:path - Actualizar página
+  // Nota: La home ("/") requiere endpoint explícito porque /pages/* no matchea /pages
+  .patch('/:accountId/pages', async ({ user, params, body, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const { title, description, content, frontmatter } = body as any;
+      const updated = await websiteService.updatePage(params.accountId, '/', {
+        title,
+        description,
+        content,
+        frontmatter,
+      });
+
+      return {
+        success: true,
+        data: updated,
+      };
+    } catch (error: any) {
+      if (error.message.includes('not found')) {
+        set.status = 404;
+      } else {
+        set.status = 500;
+      }
+      return { success: false, message: error.message };
+    }
+  }, {
+    params: t.Object({
+      accountId: t.String(),
+    }),
+    body: t.Object({
+      title: t.Optional(t.String()),
+      description: t.Optional(t.String()),
+      content: t.Optional(t.String()),
+      frontmatter: t.Optional(t.Any()),
+    }),
+  })
+
   .patch('/:accountId/pages/*', async ({ user, params, body, set }) => {
     if (!user) {
       set.status = 401;

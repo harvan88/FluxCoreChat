@@ -12,10 +12,12 @@ import { conversationsRoutes } from './routes/conversations.routes';
 import { messagesRoutes } from './routes/messages.routes';
 import { extensionRoutes } from './routes/extensions.routes';
 import { aiRoutes } from './routes/ai.routes';
+import { internalAiRoutes } from './routes/internal-ai.routes';
 import { contextRoutes } from './routes/context.routes';
 import { appointmentsRoutes } from './routes/appointments.routes';
 import { adaptersRoutes } from './routes/adapters.routes';
 import { workspacesRoutes } from './routes/workspaces.routes';
+import { automationRoutes } from './routes/automation.routes';
 
 const PORT = process.env.PORT || 3000;
 
@@ -75,10 +77,12 @@ const app = new Elysia()
   .use(messagesRoutes)
   .use(extensionRoutes)
   .use(aiRoutes)
+  .use(internalAiRoutes)
   .use(contextRoutes)
   .use(appointmentsRoutes)
   .use(adaptersRoutes)
   .use(workspacesRoutes)
+  .use(automationRoutes)
   .listen(PORT);
 
 logger.info('FluxCore API started', {

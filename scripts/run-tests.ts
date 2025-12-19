@@ -95,7 +95,7 @@ async function main() {
   
   if (!serverUp) {
     console.log('❌ El servidor no está corriendo en', API_URL);
-    console.log('   Ejecuta: cd apps/api && bun run src/index.ts');
+    console.log('   Ejecuta: cd apps/api && bun run src/server.ts');
     process.exit(1);
   }
   console.log('✅ Servidor activo\n');

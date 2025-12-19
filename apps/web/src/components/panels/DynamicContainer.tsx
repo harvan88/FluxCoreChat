@@ -3,7 +3,7 @@
  * TOTEM PARTE 11: Dynamic Container
  */
 
-import { useMemo, Component, type ReactNode } from 'react';
+import { useMemo, Component, type ReactNode, type ComponentType } from 'react';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
 import { TabBar } from './TabBar';
@@ -14,6 +14,11 @@ import { ProfileSection } from '../settings/ProfileSection';
 import { AccountsSection } from '../accounts';
 import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
+import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
+import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
+import { CoreAIPromptInspectorPanel } from '../extensions/CoreAIPromptInspectorPanel';
+import { CreditsSection } from '../settings/CreditsSection';
+import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
 
 interface DynamicContainerProps {
@@ -64,7 +69,7 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
       {/* Content Area - sin scroll propio, el hijo maneja su scroll */}
       <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab ? (
-          <TabContent tab={activeTab} />
+          <TabContent tab={activeTab} containerId={container.id} />
         ) : (
           <EmptyContainer type={container.type} />
         )}
@@ -79,6 +84,7 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
 
 interface TabContentProps {
   tab: Tab;
+  containerId: string;
 }
 
 class ChatViewErrorBoundary extends Component<
@@ -122,7 +128,102 @@ class ChatViewErrorBoundary extends Component<
   }
 }
 
-function TabContent({ tab }: TabContentProps) {
+// ============================================================================
+// Extension Tab Content
+// ============================================================================
+
+interface ExtensionTabContentProps {
+  tab: Tab;
+  containerId: string;
+}
+
+function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
+  const { selectedAccountId } = useUIStore();
+  const { closeTab } = usePanelStore();
+  const { installations, updateConfig } = useExtensions(selectedAccountId || null);
+
+  const extensionId = typeof tab.context.extensionId === 'string' ? tab.context.extensionId : '';
+  const extensionName = typeof tab.context.extensionName === 'string' ? tab.context.extensionName : extensionId;
+
+  const installation = useMemo(() => {
+    if (!extensionId) return null;
+    return installations.find((i) => i.extensionId === extensionId) || null;
+  }, [installations, extensionId]);
+
+  if (!selectedAccountId) {
+    return (
+      <div className="h-full flex items-center justify-center text-muted">
+        Selecciona una cuenta para configurar extensiones.
+      </div>
+    );
+  }
+
+  if (!extensionId) {
+    return (
+      <div className="h-full flex items-center justify-center text-muted">
+        No se especificó una extensión.
+      </div>
+    );
+  }
+
+  if (!installation) {
+    return (
+      <div className="h-full flex items-center justify-center text-muted">
+        La extensión no está instalada en esta cuenta.
+      </div>
+    );
+  }
+
+  const view = tab.context.view === 'panel'
+    ? 'panel'
+    : tab.context.view === 'promptInspector'
+      ? 'promptInspector'
+      : 'config';
+
+  if (view === 'panel') {
+    const panelComponentName = installation.manifest?.ui?.panel?.component;
+    const panelComponents: Record<string, ComponentType> = {
+      WebsiteBuilderPanel,
+    };
+    const PanelComponent = panelComponentName ? panelComponents[panelComponentName] : undefined;
+
+    if (!PanelComponent) {
+      return (
+        <div className="h-full flex items-center justify-center text-muted">
+          Panel de extensión no disponible.
+        </div>
+      );
+    }
+
+    return <PanelComponent />;
+  }
+
+  if (view === 'promptInspector') {
+    if (extensionId.includes('core-ai')) {
+      return <CoreAIPromptInspectorPanel />;
+    }
+
+    return (
+      <div className="h-full flex items-center justify-center text-muted">
+        Prompt Inspector no disponible para esta extensión.
+      </div>
+    );
+  }
+
+  return (
+    <ExtensionConfigPanel
+      extensionId={extensionId}
+      extensionName={extensionName || installation.manifest?.name || extensionId}
+      config={(installation.config || {}) as Record<string, unknown>}
+      onSave={async (config) => {
+        await updateConfig(extensionId, config as Record<string, unknown>);
+      }}
+      onClose={() => closeTab(containerId, tab.id)}
+    />
+  );
+}
+
+function TabContent({ tab, containerId }: TabContentProps) {
   const { selectedAccountId } = useUIStore();
   
   switch (tab.type) {
@@ -151,14 +252,7 @@ function TabContent({ tab }: TabContentProps) {
       return <SettingsTabContent section={tab.context.settingsSection} />;
 
     case 'extension':
-      return (
-        <div className="p-4">
-          <h2 className="text-lg font-semibold text-primary">
-            Extensión: {tab.context.extensionName || 'Desconocida'}
-          </h2>
-          {/* TODO: Cargar UI de extensión */}
-        </div>
-      );
+      return <ExtensionTabContent tab={tab} containerId={containerId} />;
 
     case 'editor':
       return (
@@ -251,6 +345,9 @@ function SettingsTabContent({ section }: SettingsTabContentProps) {
 
     case 'accounts':
       return <AccountsSection onBack={handleBack} />;
+
+    case 'credits':
+      return <CreditsSection onBack={handleBack} />;
 
     case 'appearance':
       return (
