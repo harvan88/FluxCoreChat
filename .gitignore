@@ -19,6 +19,10 @@ out/
 
 # Environment variables
 
+.env
+.env.*
+!.env.example
+
 
 # Logs
 logs/
@@ -63,3 +67,5 @@ FluxCoreChat.code-workspace
 apps/api/uploads/
 apps/api/public/sites/
 apps/web/vite.config.ts.timestamp-*.mjs
+
+# API KEYS

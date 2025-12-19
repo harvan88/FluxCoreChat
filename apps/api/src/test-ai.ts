@@ -7,7 +7,7 @@
  * - Gestión de sugerencias (aprobar/rechazar/editar)
  */
 
-const API_URL = 'http://localhost:3000';
+const API_URL = process.env.API_URL || 'http://localhost:3000';
 
 interface TestResult {
   name: string;
@@ -34,6 +34,34 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
   }
 }
 
+function getEnv(name: string): string | undefined {
+  const v = (process.env as any)?.[name];
+  if (typeof v !== 'string') return undefined;
+  const trimmed = v.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function upsertAiEntitlements(targetAccountId: string, payload: any) {
+  const internalKey = getEnv('INTERNAL_API_KEY');
+  if (!internalKey) {
+    return null;
+  }
+
+  const res = await request(`/internal/ai/entitlements/${targetAccountId}`, {
+    method: 'PATCH',
+    headers: {
+      'x-internal-key': internalKey,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.success) {
+    throw new Error(res.message || 'Failed to upsert AI entitlements');
+  }
+
+  return res.data;
+}
+
 async function test(name: string, fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
@@ -53,6 +81,12 @@ let accountId = '';
 let accountId2 = '';
 let relationshipId = '';
 let conversationId = '';
+let aiConfigured = false;
+let aiConnected: boolean | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function runTests() {
   console.log('🧪 Starting AI System Tests...\n');
@@ -60,7 +94,7 @@ async function runTests() {
   // Check if API is running
   try {
     const health = await request('/health');
-    if (health.status !== 'ok') throw new Error('API not healthy');
+    if (health.status !== 'healthy' && health.status !== 'ok') throw new Error('API not healthy');
     console.log('✅ API is running\n');
   } catch (e) {
     console.log('❌ API is not running. Please start the server first.');
@@ -141,15 +175,39 @@ async function runTests() {
     conversationId = res.data.id;
   });
 
+  await test('Upsert AI entitlements for test accounts', async () => {
+    if (!getEnv('INTERNAL_API_KEY')) {
+      console.log('   Skipping: INTERNAL_API_KEY not set (entitlements upsert)');
+      return;
+    }
+
+    await upsertAiEntitlements(accountId, {
+      enabled: true,
+      allowedProviders: ['groq', 'openai'],
+      defaultProvider: 'groq',
+    });
+
+    await upsertAiEntitlements(accountId2, {
+      enabled: true,
+      allowedProviders: ['groq', 'openai'],
+      defaultProvider: 'groq',
+    });
+  });
+
   // Test 6: Check AI status
   await test('Check AI Status', async () => {
-    const res = await request('/ai/status', {
+    const res = await request(`/ai/status?accountId=${accountId2}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
     if (!res.success) throw new Error(res.message || 'Status check failed');
+    aiConfigured = Boolean(res.data?.configured);
+    aiConnected = typeof res.data?.connected === 'boolean' ? res.data.connected : null;
+    console.log(`   Entitled: ${res.data.entitled}`);
+    console.log(`   Enabled: ${res.data.enabled}`);
     console.log(`   Provider: ${res.data.provider}`);
     console.log(`   Model: ${res.data.model}`);
     console.log(`   Configured: ${res.data.configured}`);
+    console.log(`   Connected: ${res.data.connected}`);
   });
 
   // Test 7: Get pending suggestions (should be empty)
@@ -164,6 +222,11 @@ async function runTests() {
 
   // Test 8: Generate suggestion (may fail without API key)
   await test('Generate Suggestion Request', async () => {
+    if (!aiConfigured) {
+      console.log('   Skipping: no provider API keys configured (GROQ_API_KEY/OPENAI_API_KEY)');
+      return;
+    }
+
     const res = await request('/ai/generate', {
       method: 'POST',
       headers: { Authorization: `Bearer ${authToken}` },
@@ -181,6 +244,81 @@ async function runTests() {
     } else {
       console.log(`   Note: ${res.message || 'No suggestion generated (API not configured)'}`);
     }
+  });
+
+  await test('Configure Account 2 Automation: automatic', async () => {
+    const res = await request('/automation/rules', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({
+        accountId: accountId2,
+        mode: 'automatic',
+      }),
+    });
+
+    if (!res.success) throw new Error(res.message || 'Failed to set automation rule');
+  });
+
+  await test('Set core-ai responseDelay=0 for Account 2', async () => {
+    const encodedExtId = encodeURIComponent('@fluxcore/core-ai');
+    const res = await request(`/extensions/${accountId2}/${encodedExtId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({
+        config: {
+          responseDelay: 0,
+        },
+      }),
+    });
+
+    if (!res.success) throw new Error(res.message || 'Failed to update core-ai config');
+  });
+
+  await test('Auto-Reply: send message from Account 1 and wait AI reply from Account 2', async () => {
+    if (!aiConfigured || aiConnected !== true) {
+      console.log('   Skipping: AI not configured/connected. Set GROQ_API_KEY/OPENAI_API_KEY and ensure /ai/status connected=true');
+      return;
+    }
+
+    const sendRes = await request('/messages', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({
+        conversationId,
+        senderAccountId: accountId,
+        content: { text: 'Ping auto-reply test' },
+        type: 'outgoing',
+      }),
+    });
+
+    if (!sendRes.success) throw new Error(sendRes.message || 'Failed to send message');
+
+    const startedAt = Date.now();
+    const timeoutMs = 15000;
+    const pollEveryMs = 750;
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const msgsRes = await request(`/conversations/${conversationId}/messages`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+
+      if (!msgsRes.success) {
+        throw new Error(msgsRes.message || 'Failed to fetch messages');
+      }
+
+      const list = msgsRes.data as any[];
+      const hasAiReply = Array.isArray(list)
+        ? list.some((m) => m?.senderAccountId === accountId2 && m?.generatedBy === 'ai')
+        : false;
+
+      if (hasAiReply) {
+        return;
+      }
+
+      await sleep(pollEveryMs);
+    }
+
+    throw new Error('Timed out waiting for AI auto-reply. Check: GROQ_API_KEY validity, /ai/status connected=true, and automation rule for Account 2.');
   });
 
   // Test 9: Get suggestion (may not exist)
@@ -255,7 +393,7 @@ async function runTests() {
   console.log(`- Conversation ID: ${conversationId}`);
   console.log(`- Auth Token: ${authToken.substring(0, 30)}...`);
 
-  console.log('\n💡 Note: Full AI generation requires GROQ_API_KEY environment variable.');
+  console.log('\n💡 Note: AI tests require INTERNAL_API_KEY (for entitlements) and GROQ_API_KEY and/or OPENAI_API_KEY (for provider calls).');
 }
 
 runTests();

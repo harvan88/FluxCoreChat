@@ -197,6 +197,35 @@ export const usePanelStore = create<PanelStore>()(
           }
         }
 
+        // Reusar tab de Prompt Inspector para la misma extensión (evitar duplicados)
+        if (
+          tabContext.type === 'extension' &&
+          tabContext.context?.extensionId &&
+          tabContext.context?.view === 'promptInspector'
+        ) {
+          for (const container of layout.containers) {
+            const existingTab = container.tabs.find(
+              (t) =>
+                t.type === 'extension' &&
+                t.context?.extensionId === tabContext.context?.extensionId &&
+                t.context?.view === 'promptInspector'
+            );
+            if (existingTab) {
+              set((state) => ({
+                layout: {
+                  ...state.layout,
+                  containers: state.layout.containers.map((c) =>
+                    c.id === container.id ? { ...c, activeTabId: existingTab.id } : c
+                  ),
+                  focusedContainerId: container.id,
+                },
+              }));
+              emit('tab.activated', { containerId: container.id, tabId: existingTab.id });
+              return { containerId: container.id, tabId: existingTab.id, isNewContainer: false };
+            }
+          }
+        }
+
         // Smart Priority: Si no hay container del tipo o forzamos nuevo
         if (!targetContainer || forceNewContainer) {
           // Verificar si podemos abrir nuevo container
@@ -317,6 +346,13 @@ export const usePanelStore = create<PanelStore>()(
 
       activateTab: (containerId, tabId) => {
         const { emit } = get();
+
+        const { layout } = get();
+        const container = layout.containers.find(c => c.id === containerId);
+        const isAlreadyActive = container?.activeTabId === tabId;
+        const isAlreadyFocused = layout.focusedContainerId === containerId;
+
+        if (isAlreadyActive && isAlreadyFocused) return;
 
         set((state) => ({
           layout: {

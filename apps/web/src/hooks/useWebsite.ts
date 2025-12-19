@@ -59,7 +59,7 @@ export function useWebsite(): UseWebsiteResult {
   const [error, setError] = useState<string | null>(null);
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('fluxcore_token');
     return {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',

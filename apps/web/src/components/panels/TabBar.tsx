@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Pin, PinOff, Maximize2, Minimize2, X } from 'lucide-react';
 import clsx from 'clsx';
 import { usePanelStore, useContainers } from '../../store/panelStore';
+import { useUIStore } from '../../store/uiStore';
 
 import type { Tab, DynamicContainer } from '../../types/panels';
 
@@ -29,10 +30,16 @@ export function TabBar({ container }: TabBarProps) {
     minimizeContainer,
   } = usePanelStore();
   const containers = useContainers();
+  const { setActiveConversation } = useUIStore();
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
 
   const handleTabClick = (tabId: string) => {
     activateTab(container.id, tabId);
+
+    const tab = container.tabs.find((t) => t.id === tabId);
+    if (tab?.type === 'chat' && typeof tab.context?.chatId === 'string') {
+      setActiveConversation(tab.context.chatId);
+    }
   };
 
   const handleCloseTab = (e: React.MouseEvent, tabId: string) => {

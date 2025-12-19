@@ -105,7 +105,7 @@ export function AISuggestionCard({
           )}
         </div>
         <span className="text-xs text-muted">
-          {suggestion.extensionId === 'core-ai' ? 'FluxCore AI' : suggestion.extensionId}
+          {suggestion.extensionId === 'core-ai' ? 'Core IA' : suggestion.extensionId}
         </span>
       </div>
 

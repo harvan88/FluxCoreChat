@@ -25,6 +25,7 @@ interface UIStore {
   // Selection state
   selectedAccountId: string | null;
   selectedConversationId: string | null;
+  activeConversationId: string | null;
   
   // Data cache
   accounts: Account[];
@@ -49,6 +50,7 @@ interface UIStore {
   // Selection Actions
   setSelectedAccount: (id: string | null) => void;
   setSelectedConversation: (id: string | null) => void;
+  setActiveConversation: (id: string | null) => void;
   
   // Data Actions
   setAccounts: (accounts: Account[]) => void;
@@ -72,6 +74,7 @@ export const useUIStore = create<UIStore>()(
       mobileMenuOpen: false,
       selectedAccountId: null,
       selectedConversationId: null,
+      activeConversationId: null,
       accounts: [],
       conversations: [],
 
@@ -128,6 +131,8 @@ export const useUIStore = create<UIStore>()(
       setSelectedAccount: (id) => set({ selectedAccountId: id }),
       
       setSelectedConversation: (id) => set({ selectedConversationId: id }),
+
+      setActiveConversation: (id) => set({ activeConversationId: id }),
       
       // Data Actions
       setAccounts: (accounts) => set({ accounts }),

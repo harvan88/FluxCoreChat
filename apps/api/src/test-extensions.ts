@@ -2,6 +2,8 @@
  * Test Script para el Sistema de Extensiones (Hito 4)
  */
 
+export {};
+
 const API_URL = 'http://localhost:3000';
 
 interface TestResult {
@@ -25,7 +27,7 @@ async function test(name: string, fn: () => Promise<void>) {
   }
 }
 
-async function request(endpoint: string, options: RequestInit = {}) {
+async function request(endpoint: string, options: RequestInit = {}): Promise<any> {
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers: {
@@ -33,7 +35,7 @@ async function request(endpoint: string, options: RequestInit = {}) {
       ...options.headers,
     },
   });
-  return response.json();
+  return (await response.json()) as any;
 }
 
 // Test data
@@ -53,7 +55,7 @@ async function runTests() {
       throw new Error('API not healthy');
     }
     console.log('✅ API is running\n');
-  } catch (error) {
+  } catch (error: any) {
     console.log('❌ API is not running. Please start the server first.');
     process.exit(1);
   }

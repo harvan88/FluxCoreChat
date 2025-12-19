@@ -13,7 +13,7 @@ const builtInExtensions: Map<string, ExtensionManifest> = new Map();
 // Manifest de @fluxcore/core-ai (preinstalada)
 const coreAiManifest: ExtensionManifest = {
   id: '@fluxcore/core-ai',
-  name: 'FluxCore AI',
+  name: 'Core IA',
   version: '1.0.0',
   description: 'IA contextual por defecto para respuestas automáticas',
   author: 'FluxCore',
@@ -29,6 +29,12 @@ const coreAiManifest: ExtensionManifest = {
   ],
   configSchema: {
     enabled: { type: 'boolean', default: true, description: 'Habilitar IA' },
+    provider: {
+      type: 'string',
+      default: 'groq',
+      enum: ['groq', 'openai'],
+      description: 'Proveedor de IA a utilizar (controlado por entitlements)',
+    },
     mode: { 
       type: 'string', 
       default: 'suggest',
@@ -40,10 +46,21 @@ const coreAiManifest: ExtensionManifest = {
       default: 30,
       description: 'Segundos de espera antes de responder automáticamente'
     },
-    apiKey: {
+    model: {
       type: 'string',
-      default: '',
-      description: 'API Key para el proveedor de IA (Groq)'
+      default: 'llama-3.1-8b-instant',
+      enum: ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gpt-4o-mini-2024-07-18'],
+      description: 'Modelo de IA a utilizar',
+    },
+    maxTokens: {
+      type: 'number',
+      default: 256,
+      description: 'Máximo de tokens en la respuesta',
+    },
+    temperature: {
+      type: 'number',
+      default: 0.7,
+      description: 'Creatividad de las respuestas (0=conservador, 1=creativo)',
     },
   },
 };

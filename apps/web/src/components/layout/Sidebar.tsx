@@ -11,18 +11,21 @@
  * - Actividades con prefijo 'ext:' renderizan el panel de la extensión
  */
 
+import { useEffect, type ComponentType } from 'react';
 import { Lock, LockOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
+import { usePanelStore } from '../../store/panelStore';
 import { ConversationsList } from '../conversations/ConversationsList';
 import { ContactsList } from '../contacts/ContactsList';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { ExtensionsPanel } from '../extensions';
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
+import { WebsiteBuilderSidebar } from '../extensions/WebsiteBuilderSidebar';
 import { useExtensions } from '../../hooks/useExtensions';
 
-// Mapeo de componentes de extensión por nombre
-const extensionComponents: Record<string, React.ComponentType> = {
+// Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
+const extensionComponents: Record<string, ComponentType> = {
   WebsiteBuilderPanel: WebsiteBuilderPanel,
 };
 
@@ -38,21 +41,74 @@ export function Sidebar() {
   
   const { installations } = useExtensions(selectedAccountId);
 
+  useEffect(() => {
+    if (!activeActivity.startsWith('ext:')) return;
+
+    const extensionId = activeActivity.replace('ext:', '');
+    if (extensionId !== '@fluxcore/website-builder') return;
+
+    const installation = installations.find((i) => i.extensionId === extensionId);
+
+    if (!installation) return;
+
+    const title = installation.manifest?.ui?.sidebar?.title || installation.manifest?.name || 'Extensión';
+
+    const { layout, openTab, activateTab } = usePanelStore.getState();
+
+    const existing = layout.containers
+      .flatMap((c) => c.tabs.map((t) => ({ containerId: c.id, tab: t })))
+      .find(
+        ({ tab }) =>
+          tab.type === 'extension' &&
+          tab.context?.extensionId === extensionId &&
+          tab.context?.view === 'panel'
+      );
+
+    if (existing) {
+      const container = layout.containers.find((c) => c.id === existing.containerId);
+      const isAlreadyActive = container?.activeTabId === existing.tab.id;
+      const isAlreadyFocused = layout.focusedContainerId === existing.containerId;
+
+      if (isAlreadyActive && isAlreadyFocused) return;
+      activateTab(existing.containerId, existing.tab.id);
+      return;
+    }
+
+    openTab('extensions', {
+      type: 'extension',
+      title,
+      icon: '🌐',
+      closable: true,
+      context: {
+        extensionId,
+        extensionName: installation.manifest?.name || title,
+        view: 'panel',
+      },
+    });
+  }, [activeActivity, installations]);
+
   const renderContent = () => {
     // Verificar si es una actividad de extensión
     if (activeActivity.startsWith('ext:')) {
       const extensionId = activeActivity.replace('ext:', '');
+
+      // Karen (Website Builder) migra a tab
+      if (extensionId === '@fluxcore/website-builder') {
+        return <WebsiteBuilderSidebar />;
+      }
+
+      // Fallback legacy para otras extensiones (si existen)
       const installation = installations.find(i => i.extensionId === extensionId);
-      
+
       if (installation?.manifest?.ui?.panel?.component) {
         const componentName = installation.manifest.ui.panel.component;
         const ExtensionComponent = extensionComponents[componentName];
-        
+
         if (ExtensionComponent) {
           return <ExtensionComponent />;
         }
       }
-      
+
       return (
         <div className="p-4 text-center text-secondary">
           <p>Panel de extensión no disponible</p>

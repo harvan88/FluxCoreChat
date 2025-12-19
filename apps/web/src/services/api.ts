@@ -212,6 +212,101 @@ class ApiService {
     return this.request<{ status: string }>('/health');
   }
 
+  // AI traces (Prompt Inspector)
+  async getAITraces(params: {
+    accountId: string;
+    conversationId?: string;
+    limit?: number;
+  }): Promise<ApiResponse<any[]>> {
+    const query = new URLSearchParams();
+    query.set('accountId', params.accountId);
+    if (params.conversationId) query.set('conversationId', params.conversationId);
+    if (typeof params.limit === 'number') query.set('limit', String(params.limit));
+    return this.request<any[]>(`/ai/traces?${query.toString()}`);
+  }
+
+  async getAITrace(params: { accountId: string; traceId: string }): Promise<ApiResponse<any>> {
+    const query = new URLSearchParams();
+    query.set('accountId', params.accountId);
+    return this.request<any>(`/ai/traces/${encodeURIComponent(params.traceId)}?${query.toString()}`);
+  }
+
+  async getCreditsBalance(accountId: string): Promise<ApiResponse<{ balance: number }>> {
+    const query = new URLSearchParams();
+    query.set('accountId', accountId);
+    return this.request<{ balance: number }>(`/credits/balance?${query.toString()}`);
+  }
+
+  async getCreditsSession(params: {
+    accountId: string;
+    conversationId: string;
+    featureKey?: string;
+  }): Promise<
+    ApiResponse<
+      | {
+          id: string;
+          featureKey: string;
+          engine: string;
+          model: string;
+          tokenBudget: number;
+          tokensUsed: number;
+          tokensRemaining: number;
+          expiresAt: string;
+        }
+      | null
+    >
+  > {
+    const query = new URLSearchParams();
+    query.set('accountId', params.accountId);
+    query.set('conversationId', params.conversationId);
+    if (typeof params.featureKey === 'string' && params.featureKey.trim().length > 0) {
+      query.set('featureKey', params.featureKey);
+    }
+    return this.request(
+      `/credits/session?${query.toString()}`
+    ) as any;
+  }
+
+  async creditsAdminSearch(q: string): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        username: string;
+        displayName: string;
+        accountType: 'personal' | 'business';
+        balance: number;
+      }>
+    >
+  > {
+    return this.request(
+      `/credits/admin/search?q=${encodeURIComponent(q)}`
+    ) as any;
+  }
+
+  async creditsAdminGrant(params: {
+    accountId?: string;
+    query?: string;
+    amount: number;
+    featureKey?: string;
+    metadata?: Record<string, any>;
+  }): Promise<ApiResponse<{ accountId: string; balance: number }>> {
+    return this.request<{ accountId: string; balance: number }>(
+      '/credits/admin/grant',
+      {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }
+    );
+  }
+
+  async clearAITraces(accountId: string): Promise<ApiResponse<{ cleared: number }>> {
+    const query = new URLSearchParams();
+    query.set('accountId', accountId);
+    return this.request<{ cleared: number }>(`/ai/traces?${query.toString()}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Search accounts by @alias, email, or name
   async searchAccounts(query: string): Promise<ApiResponse<Account[]>> {
     return this.request<Account[]>(`/accounts/search?q=${encodeURIComponent(query)}`);

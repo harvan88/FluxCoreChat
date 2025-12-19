@@ -100,14 +100,46 @@ export class GroqClient {
       temperature,
     };
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(request),
-    });
+    const url = `${this.baseUrl}/chat/completions`;
+    const maxAttempts = 3;
+
+    let response: Response | null = null;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(request),
+        });
+
+        if (response.ok) {
+          lastError = null;
+          break;
+        }
+
+        if (response.status >= 500 && attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * Math.pow(2, attempt - 1)));
+          continue;
+        }
+
+        break;
+      } catch (error: any) {
+        lastError = error;
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * Math.pow(2, attempt - 1)));
+          continue;
+        }
+      }
+    }
+
+    if (!response) {
+      throw new Error(lastError?.message || 'Groq request failed');
+    }
 
     if (!response.ok) {
       const error: GroqError = await response.json();

@@ -40,10 +40,19 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           },
         };
       } catch (error: any) {
+        console.error('[Auth] Register error:', error);
         set.status = 400;
+
+        const message =
+          typeof error?.message === 'string' && error.message.trim().length > 0
+            ? error.message
+            : typeof error === 'string' && error.trim().length > 0
+              ? error
+              : 'Registration failed';
+
         return {
           success: false,
-          message: error.message || 'Registration failed',
+          message,
         };
       }
     },

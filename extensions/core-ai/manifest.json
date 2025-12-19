@@ -1,6 +1,6 @@
 {
   "id": "@fluxcore/core-ai",
-  "name": "FluxCore AI",
+  "name": "Core IA",
   "version": "1.0.0",
   "description": "IA contextual por defecto para respuestas inteligentes basadas en el contexto de la relación",
   "author": "FluxCore",
@@ -26,6 +26,12 @@
       "default": true,
       "description": "Activar o desactivar la IA"
     },
+    "provider": {
+      "type": "string",
+      "enum": ["groq", "openai"],
+      "default": "groq",
+      "description": "Proveedor de IA a utilizar (controlado por entitlements)"
+    },
     "mode": {
       "type": "string",
       "enum": ["suggest", "auto", "off"],
@@ -35,14 +41,14 @@
     "responseDelay": {
       "type": "number",
       "default": 30,
-      "min": 5,
+      "min": 0,
       "max": 300,
       "description": "Segundos de espera antes de generar respuesta automática"
     },
     "model": {
       "type": "string",
       "default": "llama-3.1-8b-instant",
-      "enum": ["llama-3.1-8b-instant", "llama-3.1-70b-versatile", "mixtral-8x7b-32768"],
+      "enum": ["llama-3.1-8b-instant", "llama-3.1-70b-versatile", "mixtral-8x7b-32768", "gpt-4o-mini-2024-07-18"],
       "description": "Modelo de IA a utilizar"
     },
     "maxTokens": {

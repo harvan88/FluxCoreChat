@@ -4,12 +4,13 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Loader2, MessageSquare, Trash2, Check, X } from 'lucide-react';
+import { Search, Plus, Loader2, MessageSquare, Trash2, Check, X, Bot, BotMessageSquare, BotOff } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import { Avatar } from '../ui/Avatar';
 import { useScroll } from '../../hooks/useScroll';
+import { useAutomation, type AutomationMode } from '../../hooks/useAutomation';
 
 export function ConversationsList() {
   const {
@@ -19,6 +20,13 @@ export function ConversationsList() {
     setSelectedConversation,
     selectedAccountId,
   } = useUIStore();
+
+  const {
+    globalRule,
+    relationshipRules,
+    setRule,
+    isLoading: isAutomationLoading,
+  } = useAutomation(selectedAccountId);
 
   const listRef = useRef<HTMLDivElement>(null);
   const lastLoadedAccountIdRef = useRef<string | null>(null);
@@ -88,6 +96,30 @@ export function ConversationsList() {
     return conv.lastMessageText?.toLowerCase().includes(search) ||
            conv.channel.toLowerCase().includes(search);
   });
+
+  const globalAIMode: AutomationMode = (globalRule?.mode as AutomationMode) || 'disabled';
+
+  const getEffectiveAIMode = (relationshipId: string): AutomationMode => {
+    const relationshipRule = relationshipRules.find((r) => r.relationshipId === relationshipId);
+    return (relationshipRule?.mode as AutomationMode) || globalAIMode;
+  };
+
+  const getAIModePresentation = (mode: AutomationMode) => {
+    if (mode === 'automatic') {
+      return { Icon: Bot, colorClassName: 'text-success', label: 'Automático' };
+    }
+
+    if (mode === 'supervised') {
+      return { Icon: BotMessageSquare, colorClassName: 'text-warning', label: 'Supervisado' };
+    }
+
+    return { Icon: BotOff, colorClassName: 'text-muted', label: 'Apagado' };
+  };
+
+  const toggleConversationAIMode = async (relationshipId: string, currentMode: AutomationMode) => {
+    const nextMode: AutomationMode = currentMode === 'automatic' ? 'disabled' : 'automatic';
+    await setRule(nextMode, { relationshipId });
+  };
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
@@ -172,6 +204,56 @@ export function ConversationsList() {
         </button>
       </div>
 
+      {selectedAccountId && (
+        <div className="px-3 pb-3">
+          <div className="bg-elevated border border-subtle rounded-lg p-3">
+            <div className="text-xs text-secondary">Respuesta IA</div>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => void setRule('automatic')}
+                disabled={isAutomationLoading}
+                className={clsx(
+                  'rounded-lg px-3 py-2 text-xs border transition-colors',
+                  globalAIMode === 'automatic'
+                    ? 'bg-active border-strong text-primary'
+                    : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
+                )}
+              >
+                Automático
+              </button>
+              <button
+                type="button"
+                onClick={() => void setRule('supervised')}
+                disabled
+                className={clsx(
+                  'rounded-lg px-3 py-2 text-xs border transition-colors opacity-50 cursor-not-allowed',
+                  globalAIMode === 'supervised'
+                    ? 'bg-active border-strong text-primary'
+                    : 'bg-surface border-subtle text-secondary'
+                )}
+                title="Solo Premium"
+              >
+                Supervisado
+              </button>
+              <button
+                type="button"
+                onClick={() => void setRule('disabled')}
+                disabled={isAutomationLoading}
+                className={clsx(
+                  'rounded-lg px-3 py-2 text-xs border transition-colors',
+                  globalAIMode === 'disabled'
+                    ? 'bg-active border-strong text-primary'
+                    : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
+                )}
+              >
+                Apagado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error state */}
       {error && (
         <div className="mx-3 mb-3 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm">
@@ -196,9 +278,14 @@ export function ConversationsList() {
             </p>
           </div>
         ) : (
-          filteredConversations.map((conversation) => (
-            <div
-              key={conversation.id}
+          filteredConversations.map((conversation) => {
+            const aiMode = getEffectiveAIMode(conversation.relationshipId);
+            const { Icon: AIIcon, colorClassName: aiColorClassName, label: aiLabel } =
+              getAIModePresentation(aiMode);
+
+            return (
+              <div
+                key={conversation.id}
               onClick={() => setSelectedConversation(conversation.id)}
               onKeyDown={(e) => {
                 if (e.target !== e.currentTarget) return;
@@ -240,10 +327,28 @@ export function ConversationsList() {
                     {formatTime(conversation.lastMessageAt)}
                   </span>
                 </div>
-                <div className="flex justify-between items-center mt-1">
-                  <span className="text-sm text-secondary truncate">
-                    {conversation.lastMessageText || 'Sin mensajes'}
-                  </span>
+                <div className="mt-1 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-secondary truncate">
+                      {conversation.lastMessageText || 'Sin mensajes'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleConversationAIMode(conversation.relationshipId, aiMode);
+                      }}
+                      disabled={isAutomationLoading}
+                      className={clsx(
+                        'mt-1 inline-flex items-center gap-1 text-xs transition-colors',
+                        'hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed'
+                      )}
+                      title="Cambiar modo de IA para este chat"
+                    >
+                      <AIIcon size={14} className={aiColorClassName} />
+                      <span className={clsx('text-xs', aiColorClassName)}>{`IA: ${aiLabel}`}</span>
+                    </button>
+                  </div>
                   {conversation.unreadCountA > 0 && (
                     <span className="ml-2 bg-accent text-inverse text-xs px-2 py-0.5 rounded-full">
                       {conversation.unreadCountA}
@@ -293,8 +398,9 @@ export function ConversationsList() {
                   <Trash2 size={16} />
                 </button>
               )}
-            </div>
-          ))
+              </div>
+            );
+          })
         )}
       </div>
     </div>

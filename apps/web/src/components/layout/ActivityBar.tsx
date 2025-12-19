@@ -11,6 +11,7 @@
  * - Solo extensiones instaladas y habilitadas con permisos
  */
 
+import { useEffect, useState } from 'react';
 import { MessageSquare, Users, Settings, LogOut, Puzzle, PanelLeftOpen, PanelLeftClose, Globe, Calendar, ShoppingCart, FileText, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
@@ -18,6 +19,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { useExtensions } from '../../hooks/useExtensions';
 import { AccountSwitcher } from '../accounts';
+import { api } from '../../services/api';
 
 import type { ActivityType } from '../../types';
 
@@ -52,6 +54,7 @@ export function ActivityBar() {
     activityBarExpanded,
     toggleActivityBar,
     selectedAccountId: uiSelectedAccountId,
+    activeConversationId,
   } = useUIStore();
   const { logout } = useAuthStore();
   const { activeAccount } = useAccountStore();
@@ -59,10 +62,68 @@ export function ActivityBar() {
   // VER-002: Usar selectedAccountId de uiStore (sincronizado por AccountSwitcher)
   const selectedAccountId = uiSelectedAccountId || activeAccount?.id || null;
   const { installations } = useExtensions(selectedAccountId);
-  
+
+  const [creditsBalance, setCreditsBalance] = useState<number | null>(null);
+  const [premiumSession, setPremiumSession] = useState<{
+    engine: string;
+    tokensUsed: number;
+    tokenBudget: number;
+  } | null>(null);
+
   // VER-004: Debug logs para verificar carga de extensiones
   console.log('[ActivityBar] selectedAccountId:', selectedAccountId);
   console.log('[ActivityBar] installations:', installations);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refresh = async () => {
+      if (!selectedAccountId) {
+        if (!cancelled) {
+          setCreditsBalance(null);
+          setPremiumSession(null);
+        }
+        return;
+      }
+
+      const balanceRes = await api.getCreditsBalance(selectedAccountId);
+      if (!cancelled) {
+        setCreditsBalance(balanceRes.success ? balanceRes.data?.balance ?? 0 : null);
+      }
+
+      if (activeConversationId) {
+        const sessionRes = await api.getCreditsSession({
+          accountId: selectedAccountId,
+          conversationId: activeConversationId,
+        });
+        if (!cancelled) {
+          const session = sessionRes.success ? (sessionRes.data as any) : null;
+          setPremiumSession(
+            session && typeof session === 'object'
+              ? {
+                  engine: session.engine,
+                  tokensUsed: Number(session.tokensUsed) || 0,
+                  tokenBudget: Number(session.tokenBudget) || 0,
+                }
+              : null
+          );
+        }
+      } else if (!cancelled) {
+        setPremiumSession(null);
+      }
+    };
+
+    void refresh();
+
+    const interval = setInterval(() => {
+      void refresh();
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [selectedAccountId, activeConversationId]);
 
   // Generar actividades dinámicas de extensiones con UI
   const extensionActivities: ActivityItem[] = installations
@@ -147,6 +208,32 @@ export function ActivityBar() {
 
       {/* Bottom actions */}
       <div className="space-y-1 px-2 pt-2 border-t border-subtle mt-2">
+        {selectedAccountId && (
+          <div
+            className={clsx(
+              'w-full flex items-center rounded-lg transition-all duration-200 text-secondary',
+              activityBarExpanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'
+            )}
+            title={!activityBarExpanded ? `Créditos: ${creditsBalance ?? '-'}` : undefined}
+          >
+            <span className="flex-shrink-0">
+              <Zap size={18} className={premiumSession ? 'text-accent' : undefined} />
+            </span>
+            {activityBarExpanded && (
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium text-primary truncate">
+                  Créditos: {creditsBalance ?? '-'}
+                </div>
+                <div className="text-[11px] text-muted truncate">
+                  {premiumSession
+                    ? `Premium (${premiumSession.engine}) ${premiumSession.tokensUsed}/${premiumSession.tokenBudget}`
+                    : 'Premium: inactivo'}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={logout}
           className={clsx(

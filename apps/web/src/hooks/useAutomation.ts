@@ -71,7 +71,7 @@ export interface TriggerEvaluation {
  */
 export function useAutomation(accountId: string | null) {
   const [rules, setRules] = useState<AutomationRule[]>([]);
-  const [currentMode, setCurrentMode] = useState<AutomationMode>('supervised');
+  const [currentMode, setCurrentMode] = useState<AutomationMode>('disabled');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,7 +164,7 @@ export function useAutomation(accountId: string | null) {
       }
     } catch (err: any) {
       console.warn('[useAutomation] Could not load mode:', err.message);
-      return { mode: 'supervised', rule: null, source: 'default' };
+      return { mode: 'disabled', rule: null, source: 'default' };
     }
   }, [accountId]);
 

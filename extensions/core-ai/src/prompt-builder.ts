@@ -16,7 +16,7 @@ export interface ContextData {
     displayName: string;
     bio?: string;
     publicContext?: Record<string, any>;
-    privateContext?: Record<string, any>;
+    privateContext?: string;
   };
   relationship?: {
     id: string;
@@ -59,6 +59,7 @@ export interface BuiltPrompt {
 export class PromptBuilder {
   private readonly MAX_HISTORY_MESSAGES = 10;
   private readonly MAX_CONTEXT_LENGTH = 500;
+  private readonly MAX_PRIVATE_CONTEXT_LENGTH = 5000;
 
   constructor(private config: PromptConfig) {}
 
@@ -79,11 +80,44 @@ export class PromptBuilder {
   /**
    * Construye el system prompt con todo el contexto
    */
-  private buildSystemPrompt(context: ContextData, recipientAccountId: string): string {
+  private buildSystemPrompt(context: ContextData, _recipientAccountId: string): string {
     const sections: string[] = [];
 
     // Instrucciones base
-    sections.push(`Eres un asistente de comunicación que ayuda a ${context.account?.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
+    sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${context.account?.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
+
+    const now = new Date();
+    const nowUtc = now.toISOString();
+    let nowArgentina: string;
+    try {
+      nowArgentina = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(now);
+    } catch (_err) {
+      nowArgentina = nowUtc;
+    }
+
+    sections.push('\n### Tiempo actual (momento de generar esta respuesta):');
+    sections.push(`- UTC: ${nowUtc}`);
+    sections.push(`- America/Argentina/Buenos_Aires: ${nowArgentina} (UTC-03:00)`);
+    sections.push('Los timestamps del historial entre corchetes (ej: [2025-12-18T15:50:59.683Z]) están en UTC.');
+
+    const privateContext = typeof context.account?.privateContext === 'string'
+      ? context.account.privateContext.trim()
+      : '';
+
+    if (privateContext.length > 0) {
+      sections.push('\n### Contexto para la IA:');
+      sections.push(this.truncate(privateContext, this.MAX_PRIVATE_CONTEXT_LENGTH));
+    }
+
     sections.push('Tu objetivo es generar respuestas que mantengan la voz y estilo del usuario.');
     sections.push('Responde de forma concisa y natural, como lo haría el usuario.');
 
@@ -120,6 +154,7 @@ export class PromptBuilder {
     sections.push('- No uses emojis a menos que el usuario los use frecuentemente.');
     sections.push('- Responde en el mismo idioma del mensaje recibido.');
     sections.push('- Sé breve pero útil.');
+    sections.push('- No incluyas timestamps ni prefijos tipo [2025-...Z] en tu respuesta.');
 
     if (this.config.mode === 'suggest') {
       sections.push('- Esta es una SUGERENCIA. El usuario la revisará antes de enviar.');
@@ -144,13 +179,6 @@ export class PromptBuilder {
       const publicKeys = Object.keys(account.publicContext);
       if (publicKeys.length > 0) {
         parts.push(`Información pública: ${JSON.stringify(account.publicContext)}`);
-      }
-    }
-
-    if (account.privateContext) {
-      const privateKeys = Object.keys(account.privateContext);
-      if (privateKeys.length > 0) {
-        parts.push(`Preferencias: ${JSON.stringify(account.privateContext)}`);
       }
     }
 
@@ -212,13 +240,22 @@ export class PromptBuilder {
       .slice(-this.MAX_HISTORY_MESSAGES)
       .filter(m => m.messageType === 'text');
 
-    return recentMessages.map(msg => ({
+    return recentMessages.map(msg => {
+      const ts = msg.createdAt instanceof Date
+        ? msg.createdAt.toISOString()
+        : new Date(msg.createdAt as any).toISOString();
+
+      const content = typeof msg.content === 'string' ? msg.content : String(msg.content);
+      const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(content);
+
+      return {
       // Desde la perspectiva del usuario que va a responder:
       // - Mensajes del otro usuario son "user" (el que pregunta)
       // - Mensajes propios son "assistant" (las respuestas)
       role: msg.senderAccountId === recipientAccountId ? 'assistant' : 'user' as 'user' | 'assistant',
-      content: msg.content,
-    }));
+      content: alreadyPrefixed ? content : `[${ts}] ${content}`,
+      };
+    });
   }
 
   /**
