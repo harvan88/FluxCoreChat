@@ -8,9 +8,20 @@
 import { messageCore } from '../core/message-core';
 import { automationController } from '../services/automation-controller.service';
 import { aiService } from '../services/ai.service';
+import { smartDelayService } from '../services/smart-delay.service';
 
 interface WSMessage {
-  type: 'subscribe' | 'unsubscribe' | 'message' | 'ping' | 'request_suggestion' | 'approve_suggestion' | 'discard_suggestion' | 'widget:connect' | 'widget:message';
+  type:
+    | 'subscribe'
+    | 'unsubscribe'
+    | 'message'
+    | 'ping'
+    | 'request_suggestion'
+    | 'approve_suggestion'
+    | 'discard_suggestion'
+    | 'user_activity'
+    | 'widget:connect'
+    | 'widget:message';
   relationshipId?: string;
   conversationId?: string;
   content?: any;
@@ -18,6 +29,9 @@ interface WSMessage {
   accountId?: string;
   suggestionId?: string;
   suggestedText?: string;
+  messageId?: string;
+  createdAt?: string;
+  activity?: 'typing' | 'recording' | 'idle' | 'cancel';
   // Widget specific
   alias?: string;
   visitorId?: string;
@@ -116,11 +130,11 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
         if (data.conversationId && data.senderAccountId && data.suggestedText) {
           const decision = aiService.getSuggestionBrandingDecision(data.suggestionId);
           const finalText = decision.promo
-            ? aiService.appendCoreIABrandingFooter(data.suggestedText)
+            ? aiService.appendFluxCoreBrandingFooter(data.suggestedText)
             : data.suggestedText;
 
           const content: any = decision.promo
-            ? { text: finalText, __coreIa: { branding: true } }
+            ? { text: finalText, __fluxcore: { branding: true } }
             : { text: finalText };
 
           messageCore.send({
@@ -152,6 +166,35 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
           type: 'suggestion:discarded', 
           suggestionId: data.suggestionId 
         }));
+        break;
+
+      case 'user_activity':
+        if (data.accountId && data.conversationId && data.activity) {
+          // Existente: Lógica SmartDelay
+          const result = smartDelayService.touchActivity({
+            accountId: data.accountId,
+            conversationId: data.conversationId,
+            activity: data.activity,
+          });
+          
+          // Nuevo: Broadcast universal de actividad
+          messageCore.broadcastActivity(data.conversationId, {
+            accountId: data.accountId,
+            activity: data.activity
+          });
+          
+          if (result.result === 'cancelled' && result.suggestionId) {
+            ws.send(JSON.stringify({
+              type: 'suggestion:auto_cancelled',
+              suggestionId: result.suggestionId,
+            }));
+          }
+        } else {
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: 'accountId, conversationId and activity required for user activity events',
+          }));
+        }
         break;
 
       case 'widget:connect':
@@ -275,7 +318,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
     );
 
     if (aiSuggestion) {
-      const stripped = aiService.stripCoreIAPromoMarker(aiSuggestion.content);
+      const stripped = aiService.stripFluxCorePromoMarker(aiSuggestion.content);
       suggestion = {
         id: aiSuggestion.id,
         conversationId,
@@ -299,24 +342,87 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       return;
     }
 
-    // Enviar sugerencia
+    // Enviar sugerencia al cliente
     ws.send(JSON.stringify({
       type: 'suggestion:ready',
       data: suggestion,
     }));
 
-    // Si modo es automatic, enviar automáticamente después de delay
     if (evaluation.mode === 'automatic') {
-      const config = evaluation.rule?.config as any;
-      const delayMs = config?.delayMs || 2000;
-      
-      setTimeout(() => {
+      const aiConfig = await aiService.getAccountConfig(accountId!);
+
+      if (aiConfig.smartDelayEnabled) {
+        smartDelayService.scheduleResponse({
+          conversationId: conversationId!,
+          accountId: accountId!,
+          suggestionId: suggestion.id,
+          lastMessageText: data.content?.text || '',
+          onTypingStart: () => {
+            ws.send(JSON.stringify({
+              type: 'suggestion:auto_typing',
+              suggestionId: suggestion.id,
+            }));
+          },
+          onProcess: async () => {
+            ws.send(JSON.stringify({
+              type: 'suggestion:auto_sending',
+              suggestionId: suggestion.id,
+            }));
+
+            const decision = aiService.getSuggestionBrandingDecision(suggestion.id);
+            const finalText = decision.promo
+              ? aiService.appendFluxCoreBrandingFooter(suggestion.suggestedText)
+              : suggestion.suggestedText;
+
+            await messageCore.send({
+              conversationId: conversationId!,
+              senderAccountId: accountId!,
+              content: { text: finalText } as any,
+              type: 'outgoing',
+              generatedBy: 'ai',
+            });
+          },
+        });
+      } else {
+        const delayMs = (aiConfig.responseDelay || 30) * 1000;
+
         ws.send(JSON.stringify({
-          type: 'suggestion:auto_sending',
+          type: 'suggestion:auto_waiting',
           suggestionId: suggestion.id,
           delayMs,
         }));
-      }, delayMs);
+
+        setTimeout(async () => {
+          try {
+            ws.send(JSON.stringify({
+              type: 'suggestion:auto_typing',
+              suggestionId: suggestion.id,
+            }));
+
+            setTimeout(async () => {
+              ws.send(JSON.stringify({
+                type: 'suggestion:auto_sending',
+                suggestionId: suggestion.id,
+              }));
+
+              const decision = aiService.getSuggestionBrandingDecision(suggestion.id);
+              const finalText = decision.promo
+                ? aiService.appendFluxCoreBrandingFooter(suggestion.suggestedText)
+                : suggestion.suggestedText;
+
+              await messageCore.send({
+                conversationId: conversationId!,
+                senderAccountId: accountId!,
+                content: { text: finalText } as any,
+                type: 'outgoing',
+                generatedBy: 'ai',
+              });
+            }, 2000);
+          } catch (error) {
+            console.error('[ws-handler] Error in fixed delay auto-send:', error);
+          }
+        }, delayMs);
+      }
     }
 
   } catch (error: any) {
@@ -368,6 +474,42 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
       type: 'widget:error',
       message: error.message,
     }));
+  }
+}
+
+/**
+ * Procesar la sugerencia de IA
+ */
+async function processSuggestion(ws: any, params: {
+  conversationId: string;
+  accountId: string;
+  suggestion: any;
+  lastMessageText: string;
+}): Promise<void> {
+  try {
+    // Notificar que está enviando
+    ws.send(JSON.stringify({
+      type: 'suggestion:auto_sending',
+      suggestionId: params.suggestion.id,
+    }));
+    
+    // Send the message
+    const decision = aiService.getSuggestionBrandingDecision(params.suggestion.id);
+    const finalText = decision.promo
+      ? aiService.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
+      : params.suggestion.suggestedText;
+    
+    await messageCore.send({
+      conversationId: params.conversationId,
+      senderAccountId: params.accountId,
+      content: { text: finalText } as any,
+      type: 'outgoing',
+      generatedBy: 'ai',
+    });
+    
+    console.log(`[ActivityWatcher] Mensaje enviado exitosamente para ${params.accountId}:${params.conversationId}`);
+  } catch (error) {
+    console.error('[ActivityWatcher] Error procesando sugerencia:', error);
   }
 }
 

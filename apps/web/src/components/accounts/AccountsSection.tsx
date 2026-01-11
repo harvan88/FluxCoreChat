@@ -13,6 +13,7 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  X,
 } from 'lucide-react';
 import { useAccounts } from '../../store/accountStore';
 import { Button, Input, Card } from '../ui';
@@ -56,7 +57,7 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
           <AlertCircle size={16} />
           <span>{error}</span>
           <button onClick={clearError} className="ml-auto text-error/70 hover:text-error">
-            ×
+            <X size={14} />
           </button>
         </div>
       )}

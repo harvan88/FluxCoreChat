@@ -18,6 +18,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "typecheck": "turbo run typecheck",
     "db:migrate": "bun run packages/db/src/migrate-all.ts",
+    "admin:roles": "bun run packages/db/src/system-admins-cli.ts",
     "api:start": "bun run apps/api/src/server.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"

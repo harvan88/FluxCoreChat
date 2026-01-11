@@ -1,13 +1,13 @@
 /**
  * WelcomeView - Vista de bienvenida cuando no hay conversación seleccionada
  * TOTEM: Estado "Vacío" del ViewPort
- * Incluye mensaje de Fluxi (FC-840)
+ * Incluye mensaje de FluxCore (FC-840)
  */
 
 import { MessageSquare, Users, Puzzle, ArrowLeft } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
-import { FluxiAvatar } from '../onboarding';
+import { FluxCoreAvatar } from '../onboarding';
 
 export function WelcomeView() {
   const { setActiveActivity, setSidebarOpen } = useUIStore();
@@ -31,9 +31,9 @@ export function WelcomeView() {
   return (
     <div className="flex-1 bg-base flex items-center justify-center p-8">
       <div className="text-center max-w-lg">
-        {/* Fluxi Avatar */}
+        {/* FluxCore Avatar */}
         <div className="mb-6 flex justify-center">
-          <FluxiAvatar size="xl" />
+          <FluxCoreAvatar size="xl" />
         </div>
 
         {/* Welcome Text */}
@@ -41,7 +41,7 @@ export function WelcomeView() {
           ¡Hola{user?.name ? `, ${user.name}` : ''}! 👋
         </h1>
         <p className="text-secondary mb-2 leading-relaxed">
-          Soy <strong className="text-accent">Fluxi</strong>, tu asistente en FluxCore.
+          Soy <strong className="text-accent">FluxCore</strong>, tu asistente.
         </p>
         <p className="text-muted mb-8 leading-relaxed">
           Selecciona una conversación o contacto para comenzar.

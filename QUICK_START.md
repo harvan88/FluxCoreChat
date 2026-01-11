@@ -1,6 +1,6 @@
 # FluxCore - Guía de Inicio Rápido
 
-> **Última actualización:** 2025-12-10
+> **Última actualización:** 2026-01-09
 
 ---
 
@@ -8,46 +8,114 @@
 
 ### OPCIÓN A: Inicio Rápido (día a día)
 ```powershell
-# 1. Levantar base de datos
+# 1. Levantar base de datos (si no está corriendo)
 docker-compose up -d postgres redis
 
-# 2. Iniciar API + Web
+# 2. Aplicar migraciones pendientes (si hubo cambios de schema)
+# IMPORTANTE: Ejecutar si el servidor falla por errores de base de datos
+cd packages/db
+bun run db:push
+cd ../..
+
+# 3. Iniciar API + Web
 bun run dev
 ```
 
 ### OPCIÓN B: Primera vez / Setup completo
 ```powershell
-# 1. Levantar servicios
+# 1. Instalar dependencias
+bun install
+
+# 2. Levantar servicios base
 docker-compose up -d postgres redis
 
-# 2. Esperar 5 segundos a que PostgreSQL inicie
+# 3. Esperar a que PostgreSQL esté healthy (≈5s)
 
-# 3. Sincronizar schema de base de datos
+# 4. Sincronizar schema (Drizzle + build @fluxcore/db)
 cd packages/db
-bun run db:push
+bunx drizzle-kit push:pg
+
+# 5. Crear cuenta de sistema FluxCore
+bun run src/seed-fluxi.ts
 cd ../..
 
-# 4. Iniciar API + Web
+# 6. Iniciar API + Web
 bun run dev
 ```
 
 ### Verificación
 - **API:** http://localhost:3000/health → `{"status":"ok"}`
 - **Web:** http://localhost:5173
-- **Extensiones:** Verificar en logs "Loaded X extensions" (debe incluir @fluxcore/website-builder)
+- **Extensión FluxCore:** Verificar en logs `Loaded extension: @fluxcore/core-ai`
 
 ---
 
-## ⚠️ Cuándo usar cada comando
+## 📦 Arquitectura
 
-| Situación | Comando |
-|-----------|---------|
-| **Inicio diario** | `docker-compose up -d postgres redis` + `bun run dev` |
-| **Primera vez** | Agregar `bun run db:push` antes de `bun run dev` |
-| **Cambié el schema** | `cd packages/db && bun run db:push` |
-| **Error de conexión DB** | Verificar con `docker ps` que `fluxcore-db` esté corriendo |
-| **Extensiones no cargan** | Verificar `extensions/Karen/manifest.json` existe |
-| **Limpiar y reiniciar** | `docker-compose down` + `docker-compose up -d postgres redis` |
+### Estructura de Layout
+```
+┌─────────────────────────────────────────────────────────────┐
+│ App (bg-base)                                                │
+├────────┬─────────────────┬──────────────────────────────────┤
+│Activity│    Sidebar      │        DynamicContainer          │
+│  Bar   │   (bg-surface)  │         (bg-surface)             │
+│ (56px) │    (w-80)       │                                  │
+│        │                 │  ┌────────────────────────────┐  │
+│        │  - Filtros      │  │ Tabs (conversaciones, etc) │  │
+│        │  - Listas       │  ├────────────────────────────┤  │
+│        │  - Navegación   │  │ Contenido activo           │  │
+│        │                 │  │                            │  │
+│        │                 │  └────────────────────────────┘  │
+└────────┴─────────────────┴──────────────────────────────────┘
+```
+
+### Extensión FluxCore (@fluxcore/core-ai)
+Extensión preinstalada por defecto que proporciona:
+- **Sugerencias IA**: Genera respuestas inteligentes basadas en contexto
+- **Modos de operación**: `suggest` (sugiere), `auto` (automático), `off`
+- **Branding**: Mensajes generados incluyen "(gestionado por FluxCore)"
+
+---
+
+## 🎨 Sistema de Diseño
+
+### Colores (Tema Oscuro)
+| Variable | Uso |
+|----------|-----|
+| `bg-base` | Fondo principal |
+| `bg-surface` | Paneles, sidebars |
+| `bg-elevated` | Cards, inputs |
+| `bg-hover` | Estados hover |
+| `text-primary` | Texto principal |
+| `text-secondary` | Texto secundario |
+| `text-muted` | Texto deshabilitado |
+| `accent` | Color de acento (azul) |
+
+### Componentes UI
+```
+components/ui/
+├── Button.tsx       # Botones con variantes
+├── Input.tsx        # Inputs y textareas
+├── Card.tsx         # Contenedores
+├── Select.tsx       # Dropdowns
+├── Checkbox.tsx     # Checkboxes y radios
+├── Avatar.tsx       # Avatares con estados
+├── Badge.tsx        # Badges y pills
+├── Table.tsx        # Tablas con sort
+├── SidebarLayout.tsx # Layout de sidebar
+├── CollapsibleSection.tsx # Secciones colapsables con toggle
+└── SliderInput.tsx  # Slider con input numérico
+```
+
+### CollapsibleSection
+Sección colapsable con toggle (patrón DaVinci Resolve):
+- **Toggle activo**: Usuario ha personalizado la configuración
+- **Toggle inactivo**: Usa valores por defecto
+
+### SliderInput
+Componente para valores numéricos:
+- Barra horizontal + círculo deslizante + campo numérico
+- Soporta min/max/step/decimals
 
 ---
 
@@ -59,7 +127,7 @@ bun run dev
 cd packages/db
 bun run src/audit-database.ts
 
-# Seed Fluxi (cuenta del sistema)
+# Seed FluxCore (cuenta del sistema)
 cd packages/db
 bun run src/seed-fluxi.ts
 
@@ -71,17 +139,13 @@ bun run src/repair-users.ts
 cd packages/db 
 bun run db:studio
 
-# Generar migración
+# Aplicar migraciones
 cd packages/db
-bun run db:generate
+bunx drizzle-kit push:pg
 ```
 
 ### Testing
 ```powershell
-# Tests unitarios
-cd apps/web
-bun run test
-
 # Tests E2E
 cd apps/web
 bun run test:e2e
@@ -89,12 +153,7 @@ bun run test:e2e
 
 ### Build
 ```powershell
-# Build producción
-cd apps/web
-bun run build
-
-# Build API
-cd apps/api
+# Build producción completo
 bun run build
 ```
 
@@ -102,19 +161,12 @@ bun run build
 
 ## ⚠️ Solución de Problemas
 
-### "No se encontraron cuentas"
-Regístrate de nuevo - el sistema ahora crea account automáticamente.
-
-### Docker no inicia
-```powershell
-docker run --name fluxcore-postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:14
-```
-
-### Puerto ocupado
-```powershell
-netstat -ano | findstr :3000
-taskkill /PID <PID> /F
-```
+| Problema | Solución |
+|----------|----------|
+| "No se encontraron cuentas" | Regístrate de nuevo (crea account automáticamente) |
+| FluxCore no aparece | Ejecutar `bun run src/seed-fluxi.ts` en packages/db |
+| Error de conexión DB | Verificar `docker ps` que `fluxcore-db` esté corriendo |
+| Puerto 3000 ocupado | `netstat -ano | findstr :3000` y `taskkill /PID <PID> /F` |
 
 ---
 
@@ -123,28 +175,10 @@ taskkill /PID <PID> /F
 | Servicio | URL |
 |----------|-----|
 | Web App | http://localhost:5173 |
-| **System Monitor** | **http://localhost:5173/monitor** |
+| System Monitor | http://localhost:5173/monitor |
 | API | http://localhost:3000 |
-| Swagger | http://localhost:3000/swagger |
 | Health | http://localhost:3000/health |
-| Diagnostic | http://localhost:3000/health/diagnostic |
-
----
-
-## 🔍 System Monitor
-
-Dashboard de monitoreo en tiempo real que muestra:
-- **PostgreSQL**: Conteo de todas las tablas, estado de conexión
-- **IndexedDB**: Estado del storage local, cola de sincronización
-- **Endpoints**: Estado de los endpoints principales
-- **Sync Comparison**: Comparación PostgreSQL vs IndexedDB
-
-### Acceso
-```
-http://localhost:5173/monitor
-```
-
-No requiere autenticación. Auto-refresh cada 5 segundos.
+| Swagger | http://localhost:3000/swagger |
 
 ---
 
@@ -154,5 +188,5 @@ No requiere autenticación. Auto-refresh cada 5 segundos.
 |-----------|-----------|
 | `TOTEM.md` | Visión y principios (inmutable) |
 | `EXECUTION_PLAN.md` | Plan de hitos |
+| `docs/DESIGN_SYSTEM.md` | Sistema de diseño canónico |
 | `docs/ESTADO_PROYECTO.md` | Estado actual |
-| `PRUEBA_DE_PRODUCCION.md` | Escenario de prueba |

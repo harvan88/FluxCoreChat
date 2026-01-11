@@ -106,15 +106,15 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         }
 
         const existingContent = message.content as any;
-        const isCoreIaBranded = existingContent?.__coreIa?.branding === true;
+        const isFluxCoreBranded = existingContent?.__fluxcore?.branding === true;
 
         const typedBody: any = body as any;
         let nextContent: any = typedBody.content;
-        if (isCoreIaBranded && typeof nextContent?.text === 'string') {
+        if (isFluxCoreBranded && typeof nextContent?.text === 'string') {
           nextContent = {
             ...nextContent,
-            text: aiService.appendCoreIABrandingFooter(nextContent.text),
-            __coreIa: existingContent.__coreIa,
+            text: aiService.appendFluxCoreBrandingFooter(nextContent.text),
+            __fluxcore: existingContent.__fluxcore,
           };
         }
 

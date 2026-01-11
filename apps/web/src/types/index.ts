@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  systemAdminScopes?: Record<string, boolean> | null;
 }
 
 export interface Account {

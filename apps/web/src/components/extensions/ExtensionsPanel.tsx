@@ -39,7 +39,7 @@ export function ExtensionsPanel({
     openTab('extensions', {
       type: 'extension',
       title: extensionName,
-      icon: '⚙️',
+      icon: 'Settings',
       closable: true,
       context: {
         extensionId,

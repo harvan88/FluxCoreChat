@@ -49,7 +49,7 @@ export function ExtensionCard({
           'w-12 h-12 rounded-xl flex items-center justify-center text-2xl',
           isEnabled ? 'bg-success/20' : 'bg-hover'
         )}>
-          {extension.icon || '🧩'}
+          <Settings className="w-6 h-6" />
         </div>
 
         {/* Info */}

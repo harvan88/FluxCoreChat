@@ -59,6 +59,8 @@ type UploadAudioFn = (args: { file: File }) => Promise<{
   };
 }>;
 
+type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
+
 export function ChatComposer(props: {
   value: string;
   onChange: (value: string) => void;
@@ -74,6 +76,7 @@ export function ChatComposer(props: {
   isUploading: boolean;
   uploadProgress: number;
   onClearUploadError: () => void;
+  onUserActivity?: (activity: UserActivityType) => void;
 }) {
   const MAX_MESSAGE_CHARS = 4000;
 
@@ -92,17 +95,29 @@ export function ChatComposer(props: {
   const openGalleryRef = useRef<(() => void) | null>(null);
   const openDocumentRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    if (!props.accountId) return;
-    void loadMode(props.relationshipId);
-  }, [props.accountId, props.relationshipId, loadMode]);
-
   const effectiveAIMode: AutomationMode = props.accountId ? currentMode : 'disabled';
   const isAutomaticMode = effectiveAIMode === 'automatic';
   const hasQueuedMedia = queuedMedia.length > 0;
   const hasText = props.value.trim().length > 0;
   const canSend = !props.disabled && !props.isSending && !isAutomaticMode && (hasText || hasQueuedMedia);
   const canOpenAIModeSelector = !!props.accountId && !props.disabled;
+
+  useEffect(() => {
+    if (isAudioRecorderOpen) {
+      props.onUserActivity?.('recording');
+    } else if (hasText) {
+      props.onUserActivity?.('typing');
+    } else {
+      props.onUserActivity?.('idle');
+    }
+  }, [isAudioRecorderOpen, hasText]);
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend();
+    }
+  };
 
   const handleChangeValue = (nextValue: string) => {
     if (nextValue.length > MAX_MESSAGE_CHARS) {
@@ -157,13 +172,7 @@ export function ChatComposer(props: {
     setIsAIModeOpen(false);
     setIsEmojiOpen(false);
     setIsAudioRecorderOpen(false);
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
-    }
+    props.onUserActivity?.('cancel');
   };
 
   const setAIMode = async (mode: AutomationMode) => {
@@ -244,6 +253,7 @@ export function ChatComposer(props: {
         setIsAttachmentOpen(false);
         setIsAIModeOpen(false);
         setIsEmojiOpen(false);
+        props.onUserActivity?.('cancel');
       }}
     />
   );
@@ -392,7 +402,7 @@ export function ChatComposer(props: {
             onChange={(e) => handleChangeValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Escribe un mensaje..."
-            disabled={props.isSending || props.disabled}
+            disabled={props.disabled}
             className="flex-1 min-w-0 bg-transparent text-primary placeholder:text-muted resize-none focus:outline-none text-sm max-h-32"
             rows={1}
           />

@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import clsx from 'clsx';
 import { 
   Check, 
   X, 
@@ -27,7 +28,13 @@ export interface AISuggestion {
   reasoning?: string;
   alternatives?: string[];
   createdAt: string;
+  mode?: string;
 }
+
+type AutoState = {
+  phase: 'waiting' | 'typing' | 'sending';
+  etaSeconds?: number | null;
+};
 
 interface AISuggestionCardProps {
   suggestion: AISuggestion;
@@ -35,6 +42,7 @@ interface AISuggestionCardProps {
   onDiscard: () => void;
   onRegenerate?: () => void;
   isLoading?: boolean;
+  autoState?: AutoState;
 }
 
 export function AISuggestionCard({
@@ -43,11 +51,32 @@ export function AISuggestionCard({
   onDiscard,
   onRegenerate,
   isLoading = false,
+  autoState,
 }: AISuggestionCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(suggestion.suggestedText);
   const [showReasoning, setShowReasoning] = useState(false);
   const [showAlternatives, setShowAlternatives] = useState(false);
+
+  const isAutoLocked = Boolean(autoState);
+
+  const autoBadge = (() => {
+    if (!autoState) return null;
+    switch (autoState.phase) {
+      case 'waiting':
+        return autoState.etaSeconds != null
+          ? `Auto en ${autoState.etaSeconds}s`
+          : 'Auto en cola';
+      case 'typing':
+        return autoState.etaSeconds != null
+          ? `Fluxi redactando (${autoState.etaSeconds}s)`
+          : 'Fluxi redactando';
+      case 'sending':
+        return 'Auto enviando...';
+      default:
+        return null;
+    }
+  })();
 
   const handleApprove = () => {
     onApprove(editedText);
@@ -103,9 +132,14 @@ export function AISuggestionCard({
               {Math.round(suggestion.confidence * 100)}% confianza
             </span>
           )}
+          {autoBadge && (
+            <span className="text-xs bg-warning/20 text-warning px-2 py-0.5 rounded-full">
+              {autoBadge}
+            </span>
+          )}
         </div>
         <span className="text-xs text-muted">
-          {suggestion.extensionId === 'core-ai' ? 'Core IA' : suggestion.extensionId}
+          {suggestion.extensionId === 'core-ai' ? 'FluxCore' : suggestion.extensionId}
         </span>
       </div>
 
@@ -191,21 +225,45 @@ export function AISuggestionCard({
             <>
               <button
                 onClick={handleApprove}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-success hover:bg-success/90 text-inverse text-sm rounded-lg transition-colors"
+                disabled={isAutoLocked}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
+                  isAutoLocked
+                    ? 'bg-success/40 text-inverse/60 cursor-not-allowed'
+                    : 'bg-success hover:bg-success/90 text-inverse'
+                )}
               >
                 <Check size={14} />
                 Enviar
               </button>
               <button
-                onClick={handleEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/90 text-inverse text-sm rounded-lg transition-colors"
+                onClick={() => {
+                  if (isAutoLocked) return;
+                  handleEdit();
+                }}
+                disabled={isAutoLocked}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
+                  isAutoLocked
+                    ? 'bg-accent/40 text-inverse/60 cursor-not-allowed'
+                    : 'bg-accent hover:bg-accent/90 text-inverse'
+                )}
               >
                 <Edit3 size={14} />
                 Editar
               </button>
               <button
-                onClick={onDiscard}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-hover hover:bg-active text-primary text-sm rounded-lg transition-colors"
+                onClick={() => {
+                  if (isAutoLocked) return;
+                  onDiscard();
+                }}
+                disabled={isAutoLocked}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors',
+                  isAutoLocked
+                    ? 'bg-hover text-primary/60 cursor-not-allowed'
+                    : 'bg-hover hover:bg-active text-primary'
+                )}
               >
                 <X size={14} />
                 Descartar

@@ -27,8 +27,11 @@ import { aiRoutes } from './routes/ai.routes';
 import { internalAiRoutes } from './routes/internal-ai.routes';
 import { creditsRoutes } from './routes/credits.routes';
 import { internalCreditsRoutes } from './routes/internal-credits.routes';
+import { systemAdminRoutes } from './routes/system-admin.routes';
 import { uploadRoutes } from './routes/upload.routes';
 import { websiteRoutes } from './routes/website.routes';
+import { fluxcoreRoutes } from './routes/fluxcore.routes';
+import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
@@ -180,8 +183,10 @@ const elysiaApp = new Elysia()
   .use(internalAiRoutes)
   .use(creditsRoutes)
   .use(internalCreditsRoutes)
+  .use(systemAdminRoutes)
   .use(uploadRoutes)
-  .use(websiteRoutes);
+  .use(websiteRoutes)
+  .use(fluxcoreRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: ReturnType<typeof Bun.serve>;

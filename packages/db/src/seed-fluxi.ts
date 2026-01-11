@@ -1,6 +1,7 @@
 /**
- * Seed: Crear cuenta de sistema Fluxi
- * Este script crea la cuenta de Fluxi que da la bienvenida a nuevos usuarios
+ * Seed: Crear cuenta de sistema FluxCore
+ * Este script crea la cuenta de FluxCore que da la bienvenida a nuevos usuarios
+ * y es administrada por el super administrador del sistema (harvan@hotmail.es)
  */
 
 import { db } from './connection';
@@ -8,21 +9,21 @@ import { users, accounts, actors } from './schema';
 import { hash } from 'bcrypt';
 import { eq } from 'drizzle-orm';
 
-const FLUXI_EMAIL = 'fluxi@fluxcore.system';
-const FLUXI_USERNAME = 'fluxi';
+const FLUXCORE_EMAIL = 'fluxcore@fluxcore.system';
+const FLUXCORE_USERNAME = 'fluxcore';
 
-async function seedFluxi() {
-  console.log('🤖 Verificando cuenta Fluxi...');
+async function seedFluxCore() {
+  console.log('🤖 Verificando cuenta FluxCore...');
 
   // Verificar si ya existe
   const [existing] = await db
     .select()
     .from(users)
-    .where(eq(users.email, FLUXI_EMAIL))
+    .where(eq(users.email, FLUXCORE_EMAIL))
     .limit(1);
 
   if (existing) {
-    console.log('✅ Fluxi ya existe');
+    console.log('✅ FluxCore ya existe');
     const [account] = await db
       .select()
       .from(accounts)
@@ -32,52 +33,53 @@ async function seedFluxi() {
     return account?.id;
   }
 
-  // Crear usuario Fluxi
-  const passwordHash = await hash('fluxi-system-no-login', 10);
-  const [fluxi] = await db
+  // Crear usuario FluxCore
+  const passwordHash = await hash('fluxcore-system-no-login', 10);
+  const [fluxcoreUser] = await db
     .insert(users)
     .values({
-      email: FLUXI_EMAIL,
+      email: FLUXCORE_EMAIL,
       passwordHash,
-      name: 'Fluxi',
+      name: 'FluxCore',
     })
     .returning();
 
-  console.log(`✅ Usuario Fluxi creado: ${fluxi.id}`);
+  console.log(`✅ Usuario FluxCore creado: ${fluxcoreUser.id}`);
 
-  // Crear cuenta Fluxi
+  // Crear cuenta FluxCore
   const [account] = await db
     .insert(accounts)
     .values({
-      ownerUserId: fluxi.id,
-      username: FLUXI_USERNAME,
-      displayName: 'Fluxi',
+      ownerUserId: fluxcoreUser.id,
+      username: FLUXCORE_USERNAME,
+      displayName: 'FluxCore',
       accountType: 'business',
+      alias: 'fluxcore',
       profile: {
-        bio: '¡Hola! Soy Fluxi, tu asistente de FluxCore. Estoy aquí para ayudarte a configurar tu cuenta y responder tus preguntas.',
+        bio: '¡Hola! Soy FluxCore, tu asistente. Estoy aquí para ayudarte a configurar tu cuenta y responder tus preguntas.',
         avatarUrl: null,
         isSystemAccount: true,
       },
-      privateContext: 'Soy Fluxi, el asistente virtual de FluxCore. Mi rol es dar la bienvenida a nuevos usuarios y ayudarles a configurar su cuenta. Debo ser amigable, conciso y útil.',
+      privateContext: 'Soy FluxCore, el asistente del sistema. Mi rol es dar la bienvenida a nuevos usuarios y ayudarles a configurar su cuenta. Debo ser amigable, conciso y útil.',
     })
     .returning();
 
-  console.log(`✅ Cuenta Fluxi creada: ${account.id}`);
+  console.log(`✅ Cuenta FluxCore creada: ${account.id}`);
 
   // Create actor (owner relationship)
   await db.insert(actors).values({
-    userId: fluxi.id,
+    userId: fluxcoreUser.id,
     accountId: account.id,
     role: 'owner',
     actorType: 'user',
   });
 
-  console.log('✅ Fluxi seed completado');
+  console.log('✅ FluxCore seed completado');
   return account.id;
 }
 
 // Ejecutar si es llamado directamente
-seedFluxi()
+seedFluxCore()
   .then(() => process.exit(0))
   .catch((err) => {
     console.error('❌ Error:', err);

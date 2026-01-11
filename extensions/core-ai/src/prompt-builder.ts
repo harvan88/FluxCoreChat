@@ -66,8 +66,8 @@ export class PromptBuilder {
   /**
    * Construye el prompt completo para la IA
    */
-  build(context: ContextData, recipientAccountId: string): BuiltPrompt {
-    const systemPrompt = this.buildSystemPrompt(context, recipientAccountId);
+  build(context: ContextData, recipientAccountId: string, extraInstructions?: string[]): BuiltPrompt {
+    const systemPrompt = this.buildSystemPrompt(context, recipientAccountId, extraInstructions);
     const messages = this.buildMessageHistory(context, recipientAccountId);
 
     return {
@@ -80,11 +80,19 @@ export class PromptBuilder {
   /**
    * Construye el system prompt con todo el contexto
    */
-  private buildSystemPrompt(context: ContextData, _recipientAccountId: string): string {
+  private buildSystemPrompt(context: ContextData, _recipientAccountId: string, extraInstructions?: string[]): string {
     const sections: string[] = [];
 
-    // Instrucciones base
-    sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${context.account?.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
+    // Instrucciones base o personalizadas del asistente
+    if (extraInstructions && extraInstructions.length > 0) {
+      // Si hay instrucciones del asistente (FluxCore Runtime), reemplazan o complementan la base
+      // Por ahora, las ponemos PRIMERO como la verdad absoluta del comportamiento
+      sections.push(extraInstructions.join('\n\n'));
+      sections.push('\n--- Contexto Dinámico ---');
+    } else {
+      // Fallback a Cori si no hay asistente definido
+      sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${context.account?.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
+    }
 
     const now = new Date();
     const nowUtc = now.toISOString();

@@ -64,6 +64,9 @@ export function SettingsMenu() {
   const { user } = useAuthStore();
   const { openTab } = usePanelStore();
 
+  const hasCreditsAccess = Boolean(user?.systemAdminScopes?.['*'] || user?.systemAdminScopes?.credits);
+  const visibleItems = hasCreditsAccess ? settingItems : settingItems.filter((item) => item.id !== 'credits');
+
   const handleOpenSettingsTab = (item: SettingMenuItem) => {
     openTab('settings', {
       type: 'settings',
@@ -94,7 +97,7 @@ export function SettingsMenu() {
 
       {/* Menu items */}
       <div className="flex-1 overflow-y-auto py-2">
-        {settingItems.map((item) => (
+        {visibleItems.map((item) => (
           <button
             key={item.id}
             onClick={() => handleOpenSettingsTab(item)}

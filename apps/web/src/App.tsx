@@ -40,19 +40,21 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/design-system" element={<DesignSystemPage />} />
-      <Route path="/monitor" element={<SystemMonitor />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route 
-        path="/login" 
-        element={!isAuthenticated ? <AuthPage /> : <Navigate to="/" />} 
-      />
-      <Route 
-        path="/*" 
-        element={isAuthenticated ? <Layout /> : <Navigate to="/login" />} 
-      />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/design-system" element={<DesignSystemPage />} />
+        <Route path="/monitor" element={<SystemMonitor />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route 
+          path="/login" 
+          element={!isAuthenticated ? <AuthPage /> : <Navigate to="/" />} 
+        />
+        <Route 
+          path="/*" 
+          element={isAuthenticated ? <Layout /> : <Navigate to="/login" />} 
+        />
+      </Routes>
+    </>
   );
 }
 

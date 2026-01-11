@@ -25,9 +25,15 @@ interface UseWebSocketOptions {
   onSuggestion?: (suggestion: AISuggestion) => void;
   onSuggestionGenerating?: () => void;
   onSuggestionDisabled?: (reason: string) => void;
+  onSuggestionAutoWaiting?: (payload: { suggestionId: string; delayMs: number }) => void;
+  onSuggestionAutoTyping?: (payload: { suggestionId: string }) => void;
+  onSuggestionAutoSending?: (payload: { suggestionId: string }) => void;
+  onSuggestionAutoCancelled?: (payload: { suggestionId: string }) => void;
+  onActivityState?: (payload: { accountId: string; conversationId: string; activity: string }) => void;
   autoConnect?: boolean;
   reconnect?: boolean;
   reconnectInterval?: number;
+  pingInterval?: number; // Add pingInterval option
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
@@ -36,9 +42,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     onSuggestion,
     onSuggestionGenerating,
     onSuggestionDisabled,
+    onSuggestionAutoWaiting,
+    onSuggestionAutoTyping,
+    onSuggestionAutoSending,
+    onSuggestionAutoCancelled,
+    onActivityState,
     autoConnect = true,
     reconnect = true,
     reconnectInterval = 3000,
+    pingInterval = 30000, // Add default pingInterval
   } = options;
 
   // Obtener accountId actual para reconexión automática
@@ -58,8 +70,28 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const MAX_RECONNECT_ATTEMPTS = 5;
   
   // Refs para callbacks estables (evitar loops de reconexión)
-  const callbacksRef = useRef({ onMessage, onSuggestion, onSuggestionGenerating, onSuggestionDisabled });
-  callbacksRef.current = { onMessage, onSuggestion, onSuggestionGenerating, onSuggestionDisabled };
+  const callbacksRef = useRef({
+    onMessage,
+    onSuggestion,
+    onSuggestionGenerating,
+    onSuggestionDisabled,
+    onSuggestionAutoWaiting,
+    onSuggestionAutoTyping,
+    onSuggestionAutoSending,
+    onSuggestionAutoCancelled,
+    onActivityState,
+  });
+  callbacksRef.current = {
+    onMessage,
+    onSuggestion,
+    onSuggestionGenerating,
+    onSuggestionDisabled,
+    onSuggestionAutoWaiting,
+    onSuggestionAutoTyping,
+    onSuggestionAutoSending,
+    onSuggestionAutoCancelled,
+    onActivityState,
+  };
 
   // Limpiar timeout de reconexión
   const clearReconnectTimeout = useCallback(() => {
@@ -81,104 +113,153 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     manualDisconnectRef.current = false;
 
     try {
-      const ws = new WebSocket(WS_URL);
+      const connectWebSocket = () => {
+        console.log('[WebSocket] Connecting to:', WS_URL);
+        const ws = new WebSocket(WS_URL);
 
-      ws.onopen = () => {
-        if (!mountedRef.current) return;
-        console.log('[WebSocket] Connected');
-        setStatus('connected');
-        reconnectAttemptsRef.current = 0; // Reset on successful connection
-        setReconnectAttempts(0);
-        setLastError(null);
-        
-        // Actualizar accountId actual
-        currentAccountIdRef.current = useUIStore.getState().selectedAccountId;
-        
-        // Re-suscribir a relationships anteriores
-        subscribedRelationshipsRef.current.forEach(relationshipId => {
-          ws.send(JSON.stringify({ type: 'subscribe', relationshipId }));
-        });
-      };
+        ws.onopen = () => {
+          if (!mountedRef.current) return;
+          console.log('[WebSocket] Connected');
+          setStatus('connected');
+          reconnectAttemptsRef.current = 0; // Reset on successful connection
+          setReconnectAttempts(0);
+          setLastError(null);
+          
+          // Actualizar accountId actual
+          currentAccountIdRef.current = useUIStore.getState().selectedAccountId;
+          
+          // Re-suscribir a relationships anteriores
+          subscribedRelationshipsRef.current.forEach(relationshipId => {
+            ws.send(JSON.stringify({ type: 'subscribe', relationshipId }));
+          });
+        };
 
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as WSMessage;
-          setLastMessage(message);
-          
-          // Manejar tipos específicos (usar refs para callbacks estables)
-          const { onMessage: onMsg, onSuggestion: onSug, onSuggestionGenerating: onGen, onSuggestionDisabled: onDis } = callbacksRef.current;
-          
-          switch (message.type) {
-            case 'suggestion:generating':
-              onGen?.();
-              break;
-              
-            case 'suggestion:ready':
-              if (message.data && onSug) {
-                onSug(message.data as AISuggestion);
-              }
-              break;
-              
-            case 'suggestion:disabled':
-              onDis?.(message.reason || 'Automation disabled');
-              break;
+        ws.onmessage = (event) => {
+          console.log('[WebSocket] Received message:', event.data);
+          try {
+            const message = JSON.parse(event.data) as WSMessage;
+            setLastMessage(message);
             
-            // FC-308: Handler para enrichment batch
-            case 'enrichment:batch':
-              if (message.data) {
-                const batch = message.data as EnrichmentBatch;
-                useEnrichmentStore.getState().processBatch(batch);
-              }
-              break;
+            // Manejar tipos específicos (usar refs para callbacks estables)
+            const {
+              onMessage: onMsg,
+              onSuggestion: onSug,
+              onSuggestionGenerating: onGen,
+              onSuggestionDisabled: onDis,
+              onSuggestionAutoWaiting: onAutoWaiting,
+              onSuggestionAutoTyping: onAutoTyping,
+              onSuggestionAutoSending: onAutoSending,
+              onSuggestionAutoCancelled: onAutoCancelled,
+              onActivityState: onActivityStateCallback,
+            } = callbacksRef.current;
+            
+            switch (message.type) {
+              case 'suggestion:generating':
+                onGen?.();
+                break;
+                
+              case 'suggestion:ready':
+                if (message.data && onSug) {
+                  onSug(message.data as AISuggestion);
+                }
+                break;
+                
+              case 'suggestion:disabled':
+                onDis?.(message.reason || 'Automation disabled');
+                break;
+
+              case 'suggestion:auto_waiting':
+                if (message.suggestionId && message.delayMs && onAutoWaiting) {
+                  onAutoWaiting({ suggestionId: message.suggestionId, delayMs: message.delayMs });
+                }
+                break;
+
+              case 'suggestion:auto_typing':
+                if (message.suggestionId && onAutoTyping) {
+                  onAutoTyping({ suggestionId: message.suggestionId });
+                }
+                break;
+
+              case 'suggestion:auto_sending':
+                if (message.suggestionId && onAutoSending) {
+                  onAutoSending({ suggestionId: message.suggestionId });
+                }
+                break;
+
+              case 'suggestion:auto_cancelled':
+                if (message.suggestionId && onAutoCancelled) {
+                  onAutoCancelled({ suggestionId: message.suggestionId });
+                }
+                break;
               
-            default:
-              onMsg?.(message);
-          }
-        } catch (e) {
-          console.warn('[WebSocket] Failed to parse message:', e);
-        }
-      };
+              // FC-308: Handler para enrichment batch
+              case 'enrichment:batch':
+                if (message.data) {
+                  const batch = message.data as EnrichmentBatch;
+                  useEnrichmentStore.getState().processBatch(batch);
+                }
+                break;
 
-      ws.onclose = (event) => {
-        if (!mountedRef.current) return;
-        console.log('[WebSocket] Disconnected:', event.code, event.reason);
-        setStatus('disconnected');
-        setLastError(`WebSocket cerrado (${event.code})${event.reason ? `: ${event.reason}` : ''}`);
-        wsRef.current = null;
-
-        if (manualDisconnectRef.current) {
-          return;
-        }
-        
-        if (reconnect && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          reconnectAttemptsRef.current++;
-          setReconnectAttempts(reconnectAttemptsRef.current);
-          const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1); // Exponential backoff
-          console.log(`[WebSocket] Reconnect attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (mountedRef.current) {
-              connect();
+              case 'user_activity_state':
+                if (onActivityStateCallback) {
+                  onActivityStateCallback({
+                    accountId: message.data.accountId,
+                    conversationId: message.data.conversationId,
+                    activity: message.data.activity
+                  });
+                }
+                return;
+              
+              default:
+                onMsg?.(message);
             }
-          }, delay);
-        } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-          console.warn('[WebSocket] Max reconnect attempts reached. Giving up.');
-          setStatus('error');
-          setLastError('WebSocket: máximo de reintentos alcanzado');
-        }
-      };
+          } catch (e) {
+            console.warn('[WebSocket] Failed to parse message:', e);
+          }
+        };
 
-      ws.onerror = () => {
-        // Silenciar errores esperados durante reconexión
-        // El evento onclose manejará la reconexión
-        if (!mountedRef.current) return;
-        // Solo loguear si no estamos en proceso de reconexión
-        if (reconnectAttemptsRef.current === 0) {
-          console.warn('[WebSocket] Connection error (will retry)');
-        }
-        setLastError('WebSocket: error de conexión');
-      };
+        ws.onclose = (event) => {
+          if (!mountedRef.current) return;
+          console.log('[WebSocket] Disconnected:', event.code, event.reason);
+          setStatus('disconnected');
+          setLastError(`WebSocket cerrado (${event.code})${event.reason ? `: ${event.reason}` : ''}`);
+          wsRef.current = null;
 
-      wsRef.current = ws;
+          if (manualDisconnectRef.current) {
+            return;
+          }
+          
+          if (reconnect && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttemptsRef.current++;
+            setReconnectAttempts(reconnectAttemptsRef.current);
+            const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1); // Exponential backoff
+            console.log(`[WebSocket] Reconnect attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (mountedRef.current) {
+                connect();
+              }
+            }, delay);
+          } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+            console.warn('[WebSocket] Max reconnect attempts reached. Giving up.');
+            setStatus('error');
+            setLastError('WebSocket: máximo de reintentos alcanzado');
+          }
+        };
+
+        ws.onerror = () => {
+          // Silenciar errores esperados durante reconexión
+          // El evento onclose manejará la reconexión
+          if (!mountedRef.current) return;
+          // Solo loguear si no estamos en proceso de reconexión
+          if (reconnectAttemptsRef.current === 0) {
+            console.warn('[WebSocket] Connection error (will retry)');
+          }
+          setLastError('WebSocket: error de conexión');
+        };
+
+        wsRef.current = ws;
+      };
+      connectWebSocket();
     } catch (error) {
       console.error('[WebSocket] Failed to connect:', error);
       setStatus('error');
@@ -269,6 +350,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     return send({ type: 'ping' });
   }, [send]);
 
+  const reportActivity = useCallback(
+    (params: { conversationId: string; accountId: string; activity: string }) => {
+      console.log('[DEBUG] Sending activity via WebSocket:', params);
+      return send({
+        type: 'user_activity',
+        ...params,
+      });
+    },
+    [send]
+  );
+
   // Auto-conectar (solo una vez al montar)
   useEffect(() => {
     mountedRef.current = true;
@@ -304,10 +396,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     const interval = setInterval(() => {
       ping();
-    }, 30000); // Ping cada 30 segundos
+    }, pingInterval); // Use pingInterval option
 
     return () => clearInterval(interval);
-  }, [status, ping]);
+  }, [status, ping, pingInterval]);
+
+  useEffect(() => {
+    console.log('[useWebSocket] Status changed to:', status, 'Error:', lastError);
+  }, [status, lastError]);
 
   return {
     status,
@@ -325,5 +421,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     discardSuggestion,
     sendMessage,
     ping,
+    reportActivity,
   };
 }

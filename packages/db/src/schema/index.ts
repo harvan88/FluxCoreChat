@@ -8,6 +8,7 @@ export * from './messages';
 export * from './media-attachments';
 export * from './account-ai-entitlements';
 export * from './credits';
+export * from './system-admins';
 
 // Hito 4: Sistema de Extensiones
 export * from './extensions';
@@ -27,3 +28,12 @@ export * from './password-reset-tokens';
 
 // Extension Karen: Website Builder
 export * from './website-configs';
+
+// FluxCore: Arquitectura de Asistentes IA
+export * from './fluxcore-assistants';
+export * from './fluxcore-instructions';
+export * from './fluxcore-instruction-versions';
+export * from './fluxcore-vector-stores';
+export * from './fluxcore-tools';
+export * from './fluxcore-assistant-instructions';
+export * from './fluxcore-assistant-vector-stores';

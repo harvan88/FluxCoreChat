@@ -69,3 +69,7 @@ apps/api/public/sites/
 apps/web/vite.config.ts.timestamp-*.mjs
 
 # API KEYS
+
+# Media & temporary dumps
+Video de presentación/
+temporales (eliminar)/

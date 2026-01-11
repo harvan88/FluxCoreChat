@@ -2,9 +2,10 @@ import { hash, compare } from 'bcrypt';
 import { db } from '@fluxcore/db';
 import { users, accounts, actors, relationships, conversations, messages, passwordResetTokens } from '@fluxcore/db';
 import { eq, and, gt } from 'drizzle-orm';
+import { systemAdminService } from './system-admin.service';
 
 const SALT_ROUNDS = 10;
-const FLUXI_USERNAME = 'fluxi';
+const FLUXCORE_USERNAME = 'fluxcore';
 
 export class AuthService {
   async register(data: { email: string; password: string; name: string }) {
@@ -56,8 +57,8 @@ export class AuthService {
 
     console.log(`[Auth] Created user ${user.id} with account ${account.id}`);
 
-    // Crear relación con Fluxi y conversación de bienvenida
-    await this.createFluxiWelcome(account.id, data.name);
+    // Crear relación con FluxCore y conversación de bienvenida
+    await this.createFluxCoreWelcome(account.id, data.name);
 
     return user;
   }
@@ -88,11 +89,14 @@ export class AuthService {
       .from(accounts)
       .where(eq(accounts.ownerUserId, user.id));
 
+    const systemAdminScopes = await systemAdminService.getScopes(user.id);
+
     return {
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
+        systemAdminScopes: systemAdminScopes ?? null,
       },
       accounts: userAccounts,
     };
@@ -105,10 +109,12 @@ export class AuthService {
       throw new Error('User not found');
     }
 
+    const systemAdminScopes = await systemAdminService.getScopes(user.id);
     return {
       id: user.id,
       email: user.email,
       name: user.name,
+      systemAdminScopes: systemAdminScopes ?? null,
     };
   }
 
@@ -178,30 +184,30 @@ export class AuthService {
   }
 
   /**
-   * Crear relación con Fluxi y mensaje de bienvenida
+   * Crear relación con FluxCore y mensaje de bienvenida
    */
-  private async createFluxiWelcome(newAccountId: string, userName: string) {
+  private async createFluxCoreWelcome(newAccountId: string, userName: string) {
     try {
-      // Buscar cuenta de Fluxi
-      const [fluxiAccount] = await db
+      // Buscar cuenta de FluxCore
+      const [fluxcoreAccount] = await db
         .select()
         .from(accounts)
-        .where(eq(accounts.username, FLUXI_USERNAME))
+        .where(eq(accounts.username, FLUXCORE_USERNAME))
         .limit(1);
 
-      if (!fluxiAccount) {
-        console.warn('[Auth] Fluxi account not found. Run seed:fluxi first.');
+      if (!fluxcoreAccount) {
+        console.warn('[Auth] FluxCore account not found. Run seed:fluxcore first.');
         return;
       }
 
-      // Crear relación Fluxi -> Nuevo usuario
+      // Crear relación FluxCore -> Nuevo usuario
       const [relationship] = await db
         .insert(relationships)
         .values({
-          accountAId: fluxiAccount.id,
+          accountAId: fluxcoreAccount.id,
           accountBId: newAccountId,
           perspectiveA: { savedName: userName },
-          perspectiveB: { savedName: 'Fluxi' },
+          perspectiveB: { savedName: 'FluxCore' },
         })
         .returning();
 
@@ -217,17 +223,17 @@ export class AuthService {
       // Crear mensaje de bienvenida
       await db.insert(messages).values({
         conversationId: conversation.id,
-        senderAccountId: fluxiAccount.id,
+        senderAccountId: fluxcoreAccount.id,
         type: 'incoming',
         content: {
-          text: `¡Hola ${userName}! 👋\n\nSoy Fluxi, tu asistente de FluxCore. Estoy aquí para ayudarte a:\n\n• Configurar tu perfil\n• Añadir contactos\n• Explorar las extensiones\n\n¿En qué puedo ayudarte hoy?`,
+          text: `¡Hola ${userName}! 👋\n\nSoy FluxCore, tu asistente. Estoy aquí para ayudarte a:\n\n• Configurar tu perfil\n• Añadir contactos\n• Explorar las extensiones\n\n¿En qué puedo ayudarte hoy?`,
         },
       });
 
-      console.log(`[Auth] Created Fluxi welcome for account ${newAccountId}`);
+      console.log(`[Auth] Created FluxCore welcome for account ${newAccountId}`);
     } catch (error) {
-      console.error('[Auth] Error creating Fluxi welcome:', error);
-      // No fallar el registro si Fluxi no está disponible
+      console.error('[Auth] Error creating FluxCore welcome:', error);
+      // No fallar el registro si FluxCore no está disponible
     }
   }
 }
