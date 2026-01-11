@@ -71,6 +71,12 @@ const coreAISchema: ConfigSchema = {
     min: 0,
     max: 300,
   },
+  smartDelayEnabled: {
+    type: 'boolean',
+    label: 'Smart Delay',
+    description: 'Permite que el delay se ajuste según la actividad detectada en el chat',
+    default: false,
+  },
   model: {
     type: 'select',
     label: 'Modelo de IA',
@@ -165,7 +171,7 @@ export function ExtensionConfigPanel({
     openTab('extensions', {
       type: 'extension',
       title: 'Prompt Inspector',
-      icon: '🧾',
+      icon: 'Terminal',
       closable: true,
       context: {
         extensionId,

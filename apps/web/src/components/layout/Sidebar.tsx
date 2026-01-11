@@ -11,7 +11,7 @@
  * - Actividades con prefijo 'ext:' renderizan el panel de la extensión
  */
 
-import { useEffect, type ComponentType } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { Lock, LockOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
@@ -22,6 +22,7 @@ import { SettingsMenu } from '../settings/SettingsMenu';
 import { ExtensionsPanel } from '../extensions';
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
 import { WebsiteBuilderSidebar } from '../extensions/WebsiteBuilderSidebar';
+import { FluxCoreSidebar } from '../fluxcore/FluxCoreSidebar';
 import { useExtensions } from '../../hooks/useExtensions';
 
 // Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
@@ -38,6 +39,8 @@ export function Sidebar() {
     toggleSidebarPinned,
     isMobile,
   } = useUIStore();
+
+  const [fluxCoreActiveView, setFluxCoreActiveView] = useState<'usage' | 'assistants' | 'instructions' | 'knowledge-base' | 'tools' | 'debug' | 'billing'>('usage');
   
   const { installations } = useExtensions(selectedAccountId);
 
@@ -91,6 +94,77 @@ export function Sidebar() {
     // Verificar si es una actividad de extensión
     if (activeActivity.startsWith('ext:')) {
       const extensionId = activeActivity.replace('ext:', '');
+
+      // FluxCore - Plataforma de Orquestación de Asistentes IA
+      if (extensionId === '@fluxcore/core-ai') {
+        return (
+          <FluxCoreSidebar 
+            activeView={fluxCoreActiveView}
+            onViewChange={(view) => {
+              setFluxCoreActiveView(view);
+              // Abrir tab en DynamicContainer para cada vista
+              const { layout, openTab, activateTab, closeTab, focusContainer } = usePanelStore.getState();
+              const viewTitles: Record<string, string> = {
+                usage: 'Uso',
+                assistants: 'Asistentes',
+                instructions: 'Instrucciones del sistema',
+                'knowledge-base': 'Base de conocimiento',
+                tools: 'Herramientas',
+                debug: 'Depuración',
+                billing: 'Facturación',
+              };
+
+              const viewIcons: Record<string, string> = {
+                usage: 'BarChart3',
+                assistants: 'Bot',
+                instructions: 'FileText',
+                'knowledge-base': 'Database',
+                tools: 'Wrench',
+                debug: 'Bug',
+                billing: 'CreditCard',
+              };
+
+              const existing = layout.containers
+                .flatMap((c) => c.tabs.map((t) => ({ containerId: c.id, tab: t, container: c })))
+                .find(
+                  ({ tab }) =>
+                    tab.type === 'extension' &&
+                    tab.context?.extensionId === '@fluxcore/core-ai' &&
+                    tab.context?.view === view &&
+                    tab.context?.accountId === selectedAccountId
+                );
+
+              if (existing) {
+                const isAlreadyActive = existing.container.activeTabId === existing.tab.id;
+                const isAlreadyFocused = layout.focusedContainerId === existing.containerId;
+
+                if (isAlreadyActive && isAlreadyFocused) {
+                  closeTab(existing.containerId, existing.tab.id);
+                  return;
+                }
+
+                activateTab(existing.containerId, existing.tab.id);
+                focusContainer(existing.containerId);
+                return;
+              }
+
+              openTab('extensions', {
+                type: 'extension',
+                title: viewTitles[view] || view,
+                icon: viewIcons[view] || 'Settings',
+                closable: true,
+                context: {
+                  extensionId: '@fluxcore/core-ai',
+                  extensionName: 'FluxCore',
+                  view: view,
+                  accountId: selectedAccountId,
+                },
+              });
+            }}
+            accountName="FluxCore"
+          />
+        );
+      }
 
       // Karen (Website Builder) migra a tab
       if (extensionId === '@fluxcore/website-builder') {

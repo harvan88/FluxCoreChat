@@ -10,12 +10,29 @@ import { DynamicContainer } from '../panels';
 import { WelcomeView } from '../chat/WelcomeView';
 
 export function ViewPort() {
-  const { selectedConversationId, activeActivity, setSelectedConversation, setActiveConversation, conversations } = useUIStore();
+  const { selectedConversationId, activeActivity, selectedAccountId, setSelectedConversation, setActiveConversation, conversations } = useUIStore();
   const containers = useContainers();
-  const { layout, openTab, activateTab, focusContainer } = usePanelStore();
+  const { layout, openTab, activateTab, focusContainer, closeTab } = usePanelStore();
   
   // FIX: Ref para evitar race condition con tabs duplicados
   const processingRef = useRef<string | null>(null);
+  const previousAccountIdRef = useRef<string | null>(null);
+
+  // 13R: Cerrar tabs cross-account al cambiar de cuenta
+  useEffect(() => {
+    if (selectedAccountId && previousAccountIdRef.current && previousAccountIdRef.current !== selectedAccountId) {
+      // La cuenta cambió - cerrar tabs que no pertenecen a la nueva cuenta
+      containers.forEach(container => {
+        container.tabs.forEach(tab => {
+          // Verificar si el tab tiene contexto de cuenta específica
+          if (tab.context.accountId && tab.context.accountId !== selectedAccountId) {
+            closeTab(container.id, tab.id);
+          }
+        });
+      });
+    }
+    previousAccountIdRef.current = selectedAccountId;
+  }, [selectedAccountId, containers, closeTab]);
 
   // Efecto para abrir chat cuando se selecciona una conversación
   useEffect(() => {

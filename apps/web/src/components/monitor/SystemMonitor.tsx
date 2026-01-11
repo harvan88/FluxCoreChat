@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { db } from '../../db';
-import { RefreshCw, Database, HardDrive, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { RefreshCw, Database, HardDrive, Wifi, WifiOff, CheckCircle, XCircle, AlertCircle, Zap, Trash2, BookOpen, Search } from 'lucide-react';
 
 interface PostgresState {
   status: 'loading' | 'healthy' | 'degraded' | 'error';
@@ -218,7 +218,7 @@ export function SystemMonitor() {
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-primary">🔍 System Monitor</h1>
+          <h1 className="text-2xl font-bold text-primary flex items-center gap-2"><Search size={20} /> System Monitor</h1>
           <div className="flex items-center gap-4">
             {isOnline ? (
               <span className="flex items-center gap-2 text-green-500">
@@ -425,7 +425,7 @@ export function SystemMonitor() {
 
         {/* Quick Actions */}
         <div className="bg-surface border border-subtle rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-primary mb-4">⚡ Quick Actions</h2>
+          <h2 className="text-xl font-semibold text-primary mb-4 flex items-center gap-2"><Zap size={18} /> Quick Actions</h2>
           <div className="flex flex-wrap gap-4">
             <button
               onClick={async () => {
@@ -437,7 +437,7 @@ export function SystemMonitor() {
               }}
               className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded hover:bg-red-500/30"
             >
-              🗑️ Clear IndexedDB
+              <span className="inline-flex items-center gap-2"><Trash2 size={16} /> Clear IndexedDB</span>
             </button>
             <a
               href={`${API_BASE}/swagger`}
@@ -445,7 +445,7 @@ export function SystemMonitor() {
               rel="noopener noreferrer"
               className="px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded hover:bg-blue-500/30"
             >
-              📖 Swagger UI
+              <span className="inline-flex items-center gap-2"><BookOpen size={16} /> Swagger UI</span>
             </a>
             <a
               href={`${API_BASE}/health/diagnostic`}
@@ -453,7 +453,7 @@ export function SystemMonitor() {
               rel="noopener noreferrer"
               className="px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded hover:bg-green-500/30"
             >
-              🔍 Raw Diagnostic JSON
+              <span className="inline-flex items-center gap-2"><Search size={16} /> Raw Diagnostic JSON</span>
             </a>
             <button
               onClick={() => {
@@ -466,7 +466,7 @@ export function SystemMonitor() {
               }}
               className="px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded hover:bg-purple-500/30"
             >
-              🔍 Log Debug to Console
+              <span className="inline-flex items-center gap-2"><Search size={16} /> Log Debug to Console</span>
             </button>
           </div>
         </div>

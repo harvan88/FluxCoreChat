@@ -75,10 +75,8 @@ describe('TabBar', () => {
     expect(titleSpan?.textContent).toBe('Alexa…');
     expect(titleSpan?.getAttribute('title')).toBe('Alexander');
 
-    const iconSpan = Array.from(container.querySelectorAll('span')).find(
-      (s) => s.textContent === '✉️'
-    );
-    expect(iconSpan).toBeTruthy();
+    const iconSvg = container.querySelector('span.text-sm svg');
+    expect(iconSvg).toBeTruthy();
 
     unmount();
   });

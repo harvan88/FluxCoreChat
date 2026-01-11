@@ -32,8 +32,8 @@ class AIService {
   private extension: CoreAIExtension;
   private wsEmitter?: (event: string, data: any) => void;
   private probeClients: Map<string, OpenAICompatibleClient> = new Map();
-  private readonly CORE_IA_PROMO_MARKER = '[[core_ia:promo]]';
-  private readonly CORE_IA_BRANDING_FOOTER = '(este chat fue gestionado por Core IA más información en meetgar.com/core-ia)';
+  private readonly FLUXCORE_PROMO_MARKER = '[[fluxcore:promo]]';
+  private readonly FLUXCORE_BRANDING_FOOTER = '(gestionado por FluxCore)';
   private readonly AI_SESSION_FEATURE_KEY = 'ai.session';
   private readonly OPENAI_ENGINE = 'openai_chat';
 
@@ -55,17 +55,17 @@ class AIService {
     });
   }
 
-  stripCoreIAPromoMarker(text: string): { text: string; promo: boolean } {
+  stripFluxCorePromoMarker(text: string): { text: string; promo: boolean } {
     if (typeof text !== 'string' || text.length === 0) {
       return { text: text || '', promo: false };
     }
 
-    const markerIdx = text.indexOf(this.CORE_IA_PROMO_MARKER);
+    const markerIdx = text.indexOf(this.FLUXCORE_PROMO_MARKER);
     if (markerIdx === -1) {
       return { text, promo: false };
     }
 
-    const withoutMarker = text.split(this.CORE_IA_PROMO_MARKER).join('');
+    const withoutMarker = text.split(this.FLUXCORE_PROMO_MARKER).join('');
     const cleaned = withoutMarker
       .replace(/\n{3,}/g, '\n\n')
       .trim();
@@ -73,7 +73,7 @@ class AIService {
     return { text: cleaned, promo: true };
   }
 
-  private stripCoreIABrandingFooterFromEnd(text: string): string {
+  private stripFluxCoreBrandingFooterFromEnd(text: string): string {
     if (typeof text !== 'string' || text.length === 0) return text || '';
 
     const lines = text.split('\n');
@@ -88,8 +88,8 @@ class AIService {
     const lastLine = lines[end].trim();
 
     if (
-      lastLine === this.CORE_IA_BRANDING_FOOTER ||
-      (lastLine.includes('meetgar.com/core-ia') && lastLine.toLowerCase().includes('gestionado'))
+      lastLine === this.FLUXCORE_BRANDING_FOOTER ||
+      lastLine.toLowerCase().includes('gestionado por fluxcore')
     ) {
       const trimmedLines = lines.slice(0, end);
       let end2 = trimmedLines.length - 1;
@@ -102,23 +102,23 @@ class AIService {
     return text;
   }
 
-  appendCoreIABrandingFooter(text: string): string {
+  appendFluxCoreBrandingFooter(text: string): string {
     const safeText = typeof text === 'string' ? text : '';
 
-    const withoutFooter = this.stripCoreIABrandingFooterFromEnd(safeText);
+    const withoutFooter = this.stripFluxCoreBrandingFooterFromEnd(safeText);
     const trimmed = withoutFooter.trim();
     if (trimmed.length === 0) {
-      return this.CORE_IA_BRANDING_FOOTER;
+      return this.FLUXCORE_BRANDING_FOOTER;
     }
 
-    return `${trimmed}\n\n${this.CORE_IA_BRANDING_FOOTER}`;
+    return `${trimmed}\n\n${this.FLUXCORE_BRANDING_FOOTER}`;
   }
 
   getSuggestionBrandingDecision(suggestionId?: string | null): { promo: boolean } {
     if (!suggestionId) return { promo: false };
     const stored = this.getSuggestion(suggestionId);
     if (!stored?.content) return { promo: false };
-    return { promo: this.stripCoreIAPromoMarker(stored.content).promo };
+    return { promo: this.stripFluxCorePromoMarker(stored.content).promo };
   }
 
   /**
@@ -273,7 +273,7 @@ class AIService {
   /**
    * Obtener configuración de IA para una cuenta
    */
-  private async getAccountConfig(accountId: string): Promise<any> {
+  async getAccountConfig(accountId: string): Promise<any> {
     try {
       const entitlement = await aiEntitlementsService.getEntitlement(accountId);
       const [installation] = await db
@@ -310,6 +310,7 @@ class AIService {
           providerOrder: [],
           mode: 'off' as const,
           responseDelay: 30,
+          smartDelayEnabled: false,
           model: 'llama-3.1-8b-instant',
           maxTokens: 256,
           temperature: 0.7,
@@ -330,6 +331,7 @@ class AIService {
           providerOrder: providerSelection.providerOrder,
           mode: 'off' as const,
           responseDelay: 30,
+          smartDelayEnabled: false,
           model: 'llama-3.1-8b-instant',
           maxTokens: 256,
           temperature: 0.7,
@@ -352,6 +354,7 @@ class AIService {
         enabled: installation.enabled !== false && cfg.enabled !== false,
         mode: (cfg.mode as 'suggest' | 'auto' | 'off') || 'suggest',
         responseDelay: typeof cfg.responseDelay === 'number' ? cfg.responseDelay : 30,
+        smartDelayEnabled: typeof cfg.smartDelayEnabled === 'boolean' ? cfg.smartDelayEnabled : false,
         model: typeof cfg.model === 'string' ? cfg.model : 'llama-3.1-8b-instant',
         maxTokens: typeof cfg.maxTokens === 'number' ? cfg.maxTokens : 256,
         temperature: typeof cfg.temperature === 'number' ? cfg.temperature : 0.7,
@@ -366,6 +369,7 @@ class AIService {
         providerOrder: [],
         mode: 'off' as const,
         responseDelay: 30,
+        smartDelayEnabled: false,
         model: 'llama-3.1-8b-instant',
         maxTokens: 256,
         temperature: 0.7,

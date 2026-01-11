@@ -129,6 +129,23 @@ function addTrace(entry: AITraceEntry): void {
   }
 }
 
+// Tipo simplificado de la respuesta del Runtime API
+interface AssistantComposition {
+  assistant: {
+    id: string;
+    name: string;
+    modelConfig: {
+      provider: 'groq' | 'openai';
+      model: string;
+      temperature: number;
+      topP: number;
+    };
+  };
+  instructions: Array<{ content: string; order: number }>;
+  vectorStores: Array<any>;
+  tools: Array<any>;
+}
+
 export class CoreAIExtension {
   private config: CoreAIConfig;
   private promptBuilder: PromptBuilder;
@@ -154,6 +171,31 @@ export class CoreAIExtension {
       temperature: this.config.temperature,
       model: this.config.model,
     });
+  }
+
+  /**
+   * Fetch active assistant from FluxCore Runtime API
+   */
+  private async fetchActiveAssistant(accountId: string): Promise<AssistantComposition | null> {
+    try {
+      // TODO: Get API URL from config or env. Defaulting to localhost:3000 for now.
+      const port = process.env.PORT || 3000;
+      const url = `http://localhost:${port}/fluxcore/runtime/active-assistant?accountId=${accountId}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        if (response.status !== 404) {
+          console.warn(`[core-ai] Failed to fetch active assistant: ${response.status} ${response.statusText}`);
+        }
+        return null;
+      }
+      
+      const data = await response.json();
+      return data as AssistantComposition;
+    } catch (error) {
+      console.warn('[core-ai] Error fetching active assistant:', error);
+      return null;
+    }
   }
 
   /**
@@ -583,9 +625,17 @@ export class CoreAIExtension {
     systemPrompt: string;
     messages: Array<{ role: 'user' | 'assistant'; content: string }>;
     trace: AITraceEntry;
+    modelOverride?: string;
+    maxTokensOverride?: number;
+    temperatureOverride?: number;
   }): Promise<{ content: string; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }; provider: 'groq' | 'openai'; baseUrl: string; requestBody: ChatCompletionRequestBody }> {
     const timeoutMs = this.config.timeoutMs || 15000;
     const maxAttemptsPerProvider = 2;
+
+    // Usar overrides o config por defecto
+    const model = params.modelOverride || this.config.model;
+    const maxTokens = params.maxTokensOverride ?? this.config.maxTokens;
+    const temperature = params.temperatureOverride ?? this.config.temperature;
 
     let lastError: any = null;
 
@@ -596,13 +646,13 @@ export class CoreAIExtension {
       for (let attempt = 1; attempt <= maxAttemptsPerProvider; attempt++) {
         const startedAt = Date.now();
         const requestBody: ChatCompletionRequestBody = {
-          model: this.config.model,
+          model,
           messages: [
             { role: 'system' as const, content: params.systemPrompt },
             ...params.messages,
           ],
-          max_tokens: this.config.maxTokens,
-          temperature: this.config.temperature,
+          max_tokens: maxTokens,
+          temperature,
         };
 
         const traceAttempt: AITraceAttempt = {
@@ -620,9 +670,9 @@ export class CoreAIExtension {
             apiKey: provider.apiKey,
             systemPrompt: params.systemPrompt,
             messages: params.messages,
-            model: this.config.model,
-            maxTokens: this.config.maxTokens,
-            temperature: this.config.temperature,
+            model,
+            maxTokens,
+            temperature,
             timeoutMs,
           });
 

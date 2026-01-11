@@ -1,21 +1,21 @@
 import { Elysia, t } from 'elysia';
 import { creditsService } from '../services/credits.service';
 import { accountService } from '../services/account.service';
+import { systemAdminService } from '../services/system-admin.service';
 
-function isInternalRequest(headers: Record<string, string | undefined>): boolean {
-  const configured = process.env.INTERNAL_API_KEY;
-  if (!configured) return false;
-  const provided = headers['x-internal-key'];
-  return typeof provided === 'string' && provided.length > 0 && provided === configured;
+async function hasInternalAccess(userId: string | undefined, scope: string = 'credits'): Promise<boolean> {
+  if (!userId) return false;
+  return await systemAdminService.hasScope(userId, scope);
 }
 
 export const internalCreditsRoutes = new Elysia({ prefix: '/internal/credits' })
   .post(
     '/grant-by-query',
     async ({ body, headers, set }) => {
-      if (!isInternalRequest(headers as any)) {
-        set.status = 401;
-        return { success: false, message: 'Unauthorized' };
+      const userId = headers['x-user-id'];
+      if (!(await hasInternalAccess(userId, 'credits'))) {
+        set.status = 403;
+        return { success: false, message: 'Acceso denegado. Se requiere scope: credits' };
       }
 
       try {
@@ -76,9 +76,10 @@ export const internalCreditsRoutes = new Elysia({ prefix: '/internal/credits' })
   .post(
     '/grant/:accountId',
     async ({ params, body, headers, set }) => {
-      if (!isInternalRequest(headers as any)) {
-        set.status = 401;
-        return { success: false, message: 'Unauthorized' };
+      const userId = headers['x-user-id'];
+      if (!(await hasInternalAccess(userId, 'credits'))) {
+        set.status = 403;
+        return { success: false, message: 'Acceso denegado. Se requiere scope: credits' };
       }
 
       try {
@@ -111,9 +112,10 @@ export const internalCreditsRoutes = new Elysia({ prefix: '/internal/credits' })
   .post(
     '/policies',
     async ({ body, headers, set }) => {
-      if (!isInternalRequest(headers as any)) {
-        set.status = 401;
-        return { success: false, message: 'Unauthorized' };
+      const userId = headers['x-user-id'];
+      if (!(await hasInternalAccess(userId, 'policies'))) {
+        set.status = 403;
+        return { success: false, message: 'Acceso denegado. Se requiere scope: policies' };
       }
 
       try {

@@ -13,9 +13,9 @@ const builtInExtensions: Map<string, ExtensionManifest> = new Map();
 // Manifest de @fluxcore/core-ai (preinstalada)
 const coreAiManifest: ExtensionManifest = {
   id: '@fluxcore/core-ai',
-  name: 'Core IA',
+  name: 'FluxCore',
   version: '1.0.0',
-  description: 'IA contextual por defecto para respuestas automáticas',
+  description: 'Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto',
   author: 'FluxCore',
   preinstalled: true,
   permissions: [

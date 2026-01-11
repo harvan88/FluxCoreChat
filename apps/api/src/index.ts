@@ -18,6 +18,8 @@ import { appointmentsRoutes } from './routes/appointments.routes';
 import { adaptersRoutes } from './routes/adapters.routes';
 import { workspacesRoutes } from './routes/workspaces.routes';
 import { automationRoutes } from './routes/automation.routes';
+import { messageCore } from './core/message-core';
+import { conversationService } from './services/conversation.service';
 
 const PORT = process.env.PORT || 3000;
 
@@ -84,6 +86,20 @@ const app = new Elysia()
   .use(workspacesRoutes)
   .use(automationRoutes)
   .listen(PORT);
+
+async function initializeMessageCore() {
+  try {
+    const conversations = await conversationService.getAllConversations();
+    conversations.forEach(conv => {
+      messageCore.registerConversation(conv.id, conv.relationshipId);
+    });
+    console.log(`[MessageCore] Registered ${conversations.length} conversations`);
+  } catch (error) {
+    console.error('[MessageCore] Failed to register conversations:', error);
+  }
+}
+
+initializeMessageCore();
 
 logger.info('FluxCore API started', {
   hostname: app.server?.hostname,

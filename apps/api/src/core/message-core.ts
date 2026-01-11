@@ -47,6 +47,8 @@ export interface ReceiveResult {
 export class MessageCore {
   private notificationCallbacks: Map<string, (data: any) => void> = new Map();
   private autoReplyQueue: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private conversations = new Map<string, { relationshipId: string }>();
+  private rooms: Map<string, any[]> = new Map();
 
   /**
    * Recibe y procesa un mensaje
@@ -149,6 +151,9 @@ export class MessageCore {
                 this.autoReplyQueue.delete(debounceKey);
               }
 
+              // Mapeo de modo de automatización a modo de IA
+              const aiMode = automationResult.mode === 'automatic' ? 'auto' : 'suggest';
+
               const delayMs = await aiService.getAutoReplyDelayMs(targetAccountId);
 
               const timeout = setTimeout(async () => {
@@ -158,20 +163,20 @@ export class MessageCore {
                     targetAccountId,
                     messageText,
                     {
-                      mode: 'auto',
+                      mode: aiMode,
                       triggerMessageId: message.id,
                       triggerMessageCreatedAt: (message as any).createdAt,
                     }
                   );
 
                   if (suggestion?.content) {
-                    const stripped = aiService.stripCoreIAPromoMarker(suggestion.content);
+                    const stripped = aiService.stripFluxCorePromoMarker(suggestion.content);
                     const finalText = stripped.promo
-                      ? aiService.appendCoreIABrandingFooter(stripped.text)
+                      ? aiService.appendFluxCoreBrandingFooter(stripped.text)
                       : stripped.text;
 
                     const content: any = stripped.promo
-                      ? { text: finalText, __coreIa: { branding: true } }
+                      ? { text: finalText, __fluxcore: { branding: true } }
                       : { text: finalText };
 
                     await this.send({
@@ -247,6 +252,40 @@ export class MessageCore {
     if (callback) {
       callback(data);
     }
+  }
+
+  registerConversation(conversationId: string, relationshipId: string) {
+    this.conversations.set(conversationId, { relationshipId });
+    console.log(`[MessageCore] Registered conversation ${conversationId} with relationship ${relationshipId}`);
+  }
+
+  /**
+   * Transmite estado de actividad a participantes
+   */
+  broadcastActivity(conversationId: string, payload: any) {
+    const conv = this.conversations.get(conversationId);
+    if (conv) {
+      this.broadcast(conv.relationshipId, {
+        type: 'user_activity_state',
+        ...payload,
+        conversationId
+      });
+    } else {
+      // Fallback: Broadcast to all connections in the conversation room
+      console.warn(`[WARN] Broadcasting activity without registration for conversation ${conversationId}`);
+      this.broadcastToRoom(conversationId, {
+        type: 'user_activity_state',
+        ...payload,
+        conversationId
+      });
+    }
+  }
+
+  private broadcastToRoom(roomId: string, message: any) {
+    const connections = this.rooms.get(roomId) || [];
+    connections.forEach(conn => {
+      conn.send(JSON.stringify(message));
+    });
   }
 }
 

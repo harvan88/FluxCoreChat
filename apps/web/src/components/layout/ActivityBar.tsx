@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Users, Settings, LogOut, Puzzle, PanelLeftOpen, PanelLeftClose, Globe, Calendar, ShoppingCart, FileText, Zap } from 'lucide-react';
+import { MessageSquare, Users, Settings, LogOut, Puzzle, PanelLeftOpen, PanelLeftClose, Globe, Calendar, ShoppingCart, FileText, Zap, Bot } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -45,6 +45,7 @@ const iconMap: Record<string, React.ReactNode> = {
   'file-text': <FileText size={22} />,
   zap: <Zap size={22} />,
   puzzle: <Puzzle size={22} />,
+  bot: <Bot size={22} />,
 };
 
 export function ActivityBar() {
@@ -117,7 +118,7 @@ export function ActivityBar() {
 
     const interval = setInterval(() => {
       void refresh();
-    }, 15000);
+    }, 60000);
 
     return () => {
       cancelled = true;

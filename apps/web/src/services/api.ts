@@ -123,6 +123,10 @@ class ApiService {
     this.setToken(null);
   }
 
+  async getSession(): Promise<ApiResponse<{ user: User; accounts: Account[] }>> {
+    return this.request<{ user: User; accounts: Account[] }>('/auth/me');
+  }
+
   // Accounts
   async getAccounts(): Promise<ApiResponse<Account[]>> {
     return this.request<Account[]>('/accounts');

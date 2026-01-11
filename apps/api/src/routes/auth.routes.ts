@@ -26,15 +26,12 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         // Get user accounts
         const { accountService } = await import('../services/account.service');
         const accounts = await accountService.getAccountsByUserId(user.id);
+        const safeUser = await authService.getUserById(user.id);
 
         return {
           success: true,
           data: {
-            user: {
-              id: user.id,
-              email: user.email,
-              name: user.name,
-            },
+            user: safeUser,
             accounts,
             token,
           },
@@ -65,6 +62,55 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       detail: {
         tags: ['Auth'],
         summary: 'Register new user',
+      },
+    }
+  )
+  .get(
+    '/me',
+    async ({ jwt, headers, set }) => {
+      const auth = headers.authorization;
+      if (!auth || !auth.startsWith('Bearer ')) {
+        set.status = 401;
+        return {
+          success: false,
+          message: 'Unauthorized',
+        };
+      }
+
+      try {
+        const payload = await jwt.verify(auth.slice(7));
+        if (!payload || typeof payload.userId !== 'string') {
+          set.status = 401;
+          return {
+            success: false,
+            message: 'Unauthorized',
+          };
+        }
+
+        const user = await authService.getUserById(payload.userId);
+        const { accountService } = await import('../services/account.service');
+        const accounts = await accountService.getAccountsByUserId(payload.userId);
+
+        return {
+          success: true,
+          data: {
+            user,
+            accounts,
+          },
+        };
+      } catch (error) {
+        console.error('[Auth] /me error:', error);
+        set.status = 401;
+        return {
+          success: false,
+          message: 'Unauthorized',
+        };
+      }
+    },
+    {
+      detail: {
+        tags: ['Auth'],
+        summary: 'Get current authenticated user',
       },
     }
   )

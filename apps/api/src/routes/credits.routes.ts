@@ -2,13 +2,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { accountService } from '../services/account.service';
 import { creditsService } from '../services/credits.service';
-
-function isCreditsAdmin(user: { email?: string } | null | undefined): boolean {
-  const configured = process.env.CREDITS_ADMIN_EMAIL;
-  if (!configured) return false;
-  const email = typeof user?.email === 'string' ? user.email : '';
-  return email.toLowerCase() === configured.toLowerCase();
-}
+import { systemAdminService } from '../services/system-admin.service';
 
 export const creditsRoutes = new Elysia({ prefix: '/credits' })
   .use(authMiddleware)
@@ -20,7 +14,8 @@ export const creditsRoutes = new Elysia({ prefix: '/credits' })
         return { success: false, message: 'Unauthorized' };
       }
 
-      if (!isCreditsAdmin(user)) {
+      const allowed = await systemAdminService.hasScope(user.id, 'credits');
+      if (!allowed) {
         set.status = 403;
         return { success: false, message: 'Forbidden' };
       }
@@ -65,7 +60,8 @@ export const creditsRoutes = new Elysia({ prefix: '/credits' })
         return { success: false, message: 'Unauthorized' };
       }
 
-      if (!isCreditsAdmin(user)) {
+      const allowed = await systemAdminService.hasScope(user.id, 'credits');
+      if (!allowed) {
         set.status = 403;
         return { success: false, message: 'Forbidden' };
       }

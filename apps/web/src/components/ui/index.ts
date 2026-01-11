@@ -40,3 +40,14 @@ export type { AvatarProps, AvatarGroupProps, AvatarSize, AvatarStatus } from './
 // FC-412: SidebarLayout Component
 export { SidebarLayout, SidebarSection, SidebarItem } from './SidebarLayout';
 export type { SidebarLayoutProps, SidebarSectionProps, SidebarItemProps } from './SidebarLayout';
+
+// FC-413: CollapsibleSection Component
+export { CollapsibleSection } from './CollapsibleSection';
+export type { CollapsibleSectionProps } from './CollapsibleSection';
+
+// FC-414: SliderInput Component
+export { SliderInput } from './SliderInput';
+export type { SliderInputProps } from './SliderInput';
+
+export { Switch } from './Switch';
+export type { SwitchProps } from './Switch';

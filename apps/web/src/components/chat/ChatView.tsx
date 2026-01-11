@@ -3,7 +3,7 @@
  * V2-1: Conectado a API real
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { AlertTriangle, MessageCircle, MoreVertical, Phone, Video, Loader2, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message } from '../../types';
@@ -14,14 +14,18 @@ import { useConnectionStatus, useOfflineMessages } from '../../hooks/useOfflineF
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useUIStore } from '../../store/uiStore';
+import { useAutoReplyStore } from '../../store/autoReplyStore';
 import { db } from '../../db';
 import { Avatar } from '../ui/Avatar';
+import { ParticipantsActivityBar } from './ParticipantsActivityBar';
 
 interface ChatViewProps {
   conversationId: string;
   accountId?: string; // Cuenta actual del usuario
   relationshipId?: string;
 }
+
+type ActivityType = 'typing' | 'recording' | 'idle';
 
 export function ChatView({ conversationId, accountId, relationshipId }: ChatViewProps) {
   const [message, setMessage] = useState('');
@@ -64,13 +68,57 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     removeSuggestion 
   } = useAISuggestions(conversationId);
 
+  const autoReplyState = useAutoReplyStore((state) => state.conversations[conversationId]);
+  const setWaitingAutoReply = useAutoReplyStore((state) => state.setWaiting);
+  const setWaitingBySuggestionAutoReply = useAutoReplyStore((state) => state.setWaitingBySuggestion);
+  const setTypingAutoReply = useAutoReplyStore((state) => state.setTypingBySuggestion);
+  const setSendingAutoReply = useAutoReplyStore((state) => state.setSendingBySuggestion);
+  const cancelAutoReplyBySuggestion = useAutoReplyStore((state) => state.cancelBySuggestion);
+  const cancelAutoReplyByConversation = useAutoReplyStore((state) => state.cancel);
+  const completeAutoReply = useAutoReplyStore((state) => state.complete);
+
+  const SMART_DELAY_INITIAL_MS = 15000;
+  const SMART_DELAY_TYPING_MS = 5000;
+
+  const [participantActivities, setParticipantActivities] = useState<Record<string, ActivityType>>({});
+
+  // Definir handleActivityState PRIMERO
+  const handleActivityState = useCallback((event: {
+    accountId: string;
+    conversationId: string;
+    activity: string;
+  }) => {
+    // Only process events for this conversation
+    if (event.conversationId !== conversationId) return;
+    console.log('[DEBUG] Updating activity state for account:', event.accountId, 'Activity:', event.activity);
+    setParticipantActivities(prev => ({
+      ...prev,
+      [event.accountId]: event.activity as ActivityType
+    }));
+  }, [conversationId]);
+
   // V2-1.3: WebSocket para tiempo real
-  const { status: wsStatus, lastError: wsLastError, reconnectAttempts: wsReconnectAttempts, connect: connectWS, subscribe, unsubscribe } = useWebSocket({
+  const {
+    status: wsStatus,
+    lastError: wsLastError,
+    reconnectAttempts: wsReconnectAttempts,
+    connect: connectWS,
+    subscribe,
+    unsubscribe,
+    reportActivity,
+  } = useWebSocket({
     onMessage: (msg) => {
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
         // Solo refresh si el mensaje NO es nuestro (evitar duplicados)
         const incomingAccountId = msg.data?.senderAccountId;
         const generatedBy = msg.data?.generatedBy;
+        if (generatedBy === 'ai') {
+          const autoStateForConversation = useAutoReplyStore.getState().conversations[conversationId];
+          if (autoStateForConversation) {
+            removeSuggestion(autoStateForConversation.suggestionId);
+            completeAutoReply(conversationId);
+          }
+        }
         if (incomingAccountId !== accountId || generatedBy === 'ai') {
           refresh();
         }
@@ -79,13 +127,31 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     onSuggestion: (suggestion) => {
       if (suggestion.conversationId === conversationId) {
         addSuggestion(suggestion);
+        if ((suggestion as any).mode === 'automatic') {
+          setWaitingAutoReply(conversationId, suggestion.id, SMART_DELAY_INITIAL_MS);
+        }
       }
     },
+    onSuggestionAutoWaiting: ({ suggestionId, delayMs }) => {
+      setWaitingBySuggestionAutoReply(suggestionId, delayMs);
+    },
+    onSuggestionAutoTyping: ({ suggestionId }) => {
+      setTypingAutoReply(suggestionId, SMART_DELAY_TYPING_MS);
+    },
+    onSuggestionAutoSending: ({ suggestionId }) => {
+      setSendingAutoReply(suggestionId);
+    },
+    onSuggestionAutoCancelled: ({ suggestionId }) => {
+      cancelAutoReplyBySuggestion(suggestionId);
+      removeSuggestion(suggestionId);
+    },
+    onActivityState: handleActivityState
   });
 
   // Suscribirse a cambios en la relación
   useEffect(() => {
     if (activeRelationshipId) {
+      console.log('[DEBUG] Subscribing to relationship:', activeRelationshipId);
       subscribe(activeRelationshipId);
       return () => {
         unsubscribe(activeRelationshipId);
@@ -97,6 +163,23 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     pendingConversationScrollRef.current = true;
     isAtBottomRef.current = true;
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!autoReplyState) return;
+    const hasSuggestion = suggestions.some((s) => s.id === autoReplyState.suggestionId);
+    if (!hasSuggestion) {
+      completeAutoReply(conversationId);
+    }
+  }, [autoReplyState, suggestions, conversationId, completeAutoReply]);
+
+  const [, forceAutoReplyTick] = useState(0);
+  useEffect(() => {
+    if (!autoReplyState?.eta) return;
+    const interval = setInterval(() => {
+      forceAutoReplyTick((tick) => tick + 1);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [autoReplyState?.eta]);
 
   useEffect(() => {
     let raf: number | null = null;
@@ -154,6 +237,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       } as any);
       setMessage('');
       setReplyingTo(null);
+      handleUserActivity('cancel');
     } catch (err) {
       console.error('[ChatView] Send error:', err);
       setSendError(err instanceof Error ? err.message : 'Error al enviar mensaje');
@@ -186,6 +270,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
   const handleDiscardSuggestion = (suggestionId: string) => {
     removeSuggestion(suggestionId);
+    cancelAutoReplyBySuggestion(suggestionId);
   };
 
   // NOTA: Simulación de IA removida - conectar a API real
@@ -205,6 +290,27 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       console.error('[ChatView] Delete error:', err);
     }
   };
+
+  const handleUserActivity = (activity: 'typing' | 'recording' | 'idle' | 'cancel') => {
+    if (!accountId) return;
+    reportActivity({
+      activity,
+      accountId,
+      conversationId,
+    });
+    if (activity === 'cancel') {
+      cancelAutoReplyByConversation(conversationId);
+    }
+  };
+
+  const handleCancelAutoReply = () => {
+    if (!autoReplyState) return;
+    handleUserActivity('cancel');
+    removeSuggestion(autoReplyState.suggestionId);
+  };
+
+  const remainingSeconds =
+    autoReplyState?.eta != null ? Math.max(0, Math.ceil((autoReplyState.eta - Date.now()) / 1000)) : null;
 
   return (
     <div className="h-full bg-base flex flex-col overflow-hidden">
@@ -278,7 +384,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => connectWS()}
-              className="px-3 py-1.5 text-xs rounded-md bg-hover text-primary hover:bg-active transition-colors"
+              className="px-3 py-1.5 rounded-md bg-hover text-primary hover:bg-active transition-colors"
             >
               Reintentar
             </button>
@@ -369,15 +475,27 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
                 isLoading={true}
               />
             )}
-            {suggestions.map((suggestion) => (
-              <AISuggestionCard
-                key={suggestion.id}
-                suggestion={suggestion}
-                onApprove={(text) => handleApproveSuggestion(suggestion.id, text)}
-                onDiscard={() => handleDiscardSuggestion(suggestion.id)}
-                // onRegenerate removed - will connect to real AI API
-              />
-            ))}
+            {suggestions.map((suggestion) => {
+              const autoStateForCard =
+                autoReplyState && autoReplyState.suggestionId === suggestion.id
+                  ? {
+                      phase: autoReplyState.status,
+                      etaSeconds:
+                        autoReplyState.eta != null
+                          ? Math.max(0, Math.ceil((autoReplyState.eta - Date.now()) / 1000))
+                          : null,
+                    }
+                  : undefined;
+              return (
+                <AISuggestionCard
+                  key={suggestion.id}
+                  suggestion={suggestion}
+                  autoState={autoStateForCard}
+                  onApprove={(text) => handleApproveSuggestion(suggestion.id, text)}
+                  onDiscard={() => handleDiscardSuggestion(suggestion.id)}
+                />
+              );
+            })}
 
             <div ref={messagesEndRef} />
           </div>
@@ -401,7 +519,30 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         </div>
       )}
 
+      <ParticipantsActivityBar activities={participantActivities} />
+
       {/* Input */}
+      {autoReplyState && (
+        <div className="mx-4 mb-3 p-3 bg-accent/10 border border-accent/20 rounded-xl flex items-center justify-between gap-3 flex-shrink-0">
+          <div>
+            <div className="text-sm text-primary font-medium">
+              {autoReplyState.message || 'Fluxi está preparando una respuesta automática'}
+            </div>
+            {remainingSeconds !== null && (
+              <div className="text-xs text-muted">
+                Se enviará en {remainingSeconds}s · ID {autoReplyState.suggestionId.slice(0, 6)}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleCancelAutoReply}
+            className="px-4 py-1.5 rounded-full bg-error-muted text-error text-sm hover:bg-error-muted/80 transition-colors"
+          >
+            Cancelar auto-respuesta
+          </button>
+        </div>
+      )}
       <ChatComposer
         value={message}
         onChange={setMessage}
@@ -415,6 +556,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         isUploading={isUploadingAttachment}
         uploadProgress={uploadProgress}
         onClearUploadError={clearUploadError}
+        onUserActivity={handleUserActivity}
       />
     </div>
   );

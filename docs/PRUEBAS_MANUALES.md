@@ -1,3 +1,43 @@
+## Paso 13: Prueba Manual de Créditos (Hito 10R)
+
+### 13.1 Intento sin rol de sistema
+
+```powershell
+# Requiere token JWT válido
+$grantBody = @{
+    amount = 100
+    query = "testuser"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:3000/credits/admin/grant" `
+    -Method POST `
+    -Headers @{
+        "Content-Type"="application/json"
+        "Authorization"="Bearer $token"
+    } `
+    -Body $grantBody
+```
+
+**Resultado esperado:** `403 Forbidden` con mensaje `Forbidden`.
+
+### 13.2 Otorgar rol de sistema (DB)
+
+```sql
+INSERT INTO system_admins (user_id, scopes, created_by)
+VALUES ('<USER_ID>', jsonb_build_object('credits', true), '<ADMIN_ID>');
+```
+
+Repite la llamada de 13.1.  
+**Resultado esperado:** `200 OK` y `balance` actualizado.
+
+### 13.3 Revocar rol
+
+```sql
+DELETE FROM system_admins WHERE user_id = '<USER_ID>';
+```
+
+Repite la llamada de 13.1 → vuelve a 403.
+
 # Pruebas Manuales de FluxCore
 
 > Instrucciones paso a paso para verificar el funcionamiento del sistema
@@ -23,8 +63,9 @@ bun install
 # DATABASE_URL=postgresql://user:password@localhost:5432/fluxcore
 # JWT_SECRET=tu-secreto-aqui
 
-# 1.4 Aplicar migraciones
-bun run packages/db/src/migrate.ts
+# 1.4 Aplicar migraciones (Drizzle)
+cd packages/db
+bunx drizzle-kit push:pg
 ```
 
 ## Paso 2: Iniciar el Servidor
@@ -312,12 +353,11 @@ ws.onmessage = (event) => {
 
 ### Error de migraciones
 ```powershell
-# Regenerar migraciones
+# Aplicar migraciones pendientes con Drizzle
 cd packages/db
-bun run db:generate
-bun run db:migrate
+bunx drizzle-kit push:pg
 ```
 
 ---
 
-**Última actualización**: 2025-12-06
+**Última actualización**: 2025-12-26

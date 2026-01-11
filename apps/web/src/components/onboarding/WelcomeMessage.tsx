@@ -1,6 +1,6 @@
 /**
  * FC-840: WelcomeMessage
- * FC-841: FluxiAvatar
+ * FC-841: FluxCoreAvatar
  * FC-843: FirstTimeExperience
  * Componentes de experiencia de bienvenida para nuevos usuarios
  */
@@ -21,7 +21,7 @@ import { Button, Card } from '../ui';
 // FC-841: FluxiAvatar
 // ============================================================================
 
-interface FluxiAvatarProps {
+interface FluxCoreAvatarProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   animated?: boolean;
 }
@@ -33,7 +33,7 @@ const sizeClasses = {
   xl: 'w-24 h-24 text-4xl',
 };
 
-export function FluxiAvatar({ size = 'md', animated = false }: FluxiAvatarProps) {
+export function FluxCoreAvatar({ size = 'md', animated = false }: FluxCoreAvatarProps) {
   return (
     <div
       className={`
@@ -62,14 +62,14 @@ interface WelcomeMessageProps {
 export function WelcomeMessage({ userName, onDismiss, onAction }: WelcomeMessageProps) {
   return (
     <div className="flex gap-3 p-4">
-      <FluxiAvatar size="md" />
+      <FluxCoreAvatar size="md" />
       <div className="flex-1 min-w-0">
         <div className="bg-elevated rounded-2xl rounded-tl-sm p-4 shadow-sm">
           <p className="text-primary">
             ¡Hola{userName ? `, ${userName}` : ''}! 👋
           </p>
           <p className="text-secondary mt-2">
-            Soy <strong className="text-accent">Fluxi</strong>, tu asistente virtual de FluxCore. 
+            Soy <strong className="text-accent">FluxCore</strong>, tu asistente virtual. 
             Estoy aquí para ayudarte a sacar el máximo provecho de tu experiencia.
           </p>
           <p className="text-secondary mt-2">
@@ -98,7 +98,7 @@ export function WelcomeMessage({ userName, onDismiss, onAction }: WelcomeMessage
         
         <div className="mt-1 text-xs text-muted flex items-center gap-1">
           <Sparkles size={10} />
-          <span>Fluxi • Asistente de FluxCore</span>
+          <span>FluxCore</span>
         </div>
       </div>
       

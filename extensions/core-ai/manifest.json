@@ -1,8 +1,8 @@
 {
   "id": "@fluxcore/core-ai",
-  "name": "Core IA",
+  "name": "FluxCore",
   "version": "1.0.0",
-  "description": "IA contextual por defecto para respuestas inteligentes basadas en el contexto de la relación",
+  "description": "Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto",
   "author": "FluxCore",
   "preinstalled": true,
   "permissions": [
@@ -20,6 +20,16 @@
     "onUninstall",
     "onConfigChange"
   ],
+  "ui": {
+    "sidebar": {
+      "icon": "zap",
+      "title": "FluxCore"
+    },
+    "panel": {
+      "title": "FluxCore",
+      "component": "FluxCorePanel"
+    }
+  },
   "configSchema": {
     "enabled": {
       "type": "boolean",
@@ -44,6 +54,11 @@
       "min": 0,
       "max": 300,
       "description": "Segundos de espera antes de generar respuesta automática"
+    },
+    "smartDelayEnabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Activa Smart Delay para que la IA espere según la actividad del usuario"
     },
     "model": {
       "type": "string",

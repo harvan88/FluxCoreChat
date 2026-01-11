@@ -17,6 +17,14 @@ import { ExpandedEditor } from '../editors/ExpandedEditor';
 import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
 import { CoreAIPromptInspectorPanel } from '../extensions/CoreAIPromptInspectorPanel';
+import { FluxCorePanel } from '../fluxcore';
+import { 
+  AssistantsView, 
+  InstructionsView, 
+  VectorStoresView, 
+  ToolsView,
+  UsageView,
+} from '../fluxcore/views';
 import { CreditsSection } from '../settings/CreditsSection';
 import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
@@ -139,7 +147,8 @@ interface ExtensionTabContentProps {
 
 function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   const { selectedAccountId } = useUIStore();
-  const { closeTab } = usePanelStore();
+  const { openTab, activateTab, closeTab, focusContainer } = usePanelStore();
+  const layout = usePanelStore((s) => s.layout);
   const { installations, updateConfig } = useExtensions(selectedAccountId || null);
 
   const extensionId = typeof tab.context.extensionId === 'string' ? tab.context.extensionId : '';
@@ -174,11 +183,162 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     );
   }
 
-  const view = tab.context.view === 'panel'
-    ? 'panel'
-    : tab.context.view === 'promptInspector'
-      ? 'promptInspector'
-      : 'config';
+  const view = tab.context.view || 'config';
+
+  const openOrFocusFluxCoreTab = (
+    viewId: string,
+    title: string,
+    icon: string,
+    extraContext: Record<string, any>
+  ) => {
+    const existing = layout.containers
+      .flatMap((c) => c.tabs.map((t) => ({ containerId: c.id, tab: t, container: c })))
+      .find(({ tab: t }) => {
+        if (t.type !== 'extension') return false;
+        if (t.context?.extensionId !== '@fluxcore/core-ai') return false;
+        if (t.context?.accountId !== selectedAccountId) return false;
+        if (t.context?.view !== viewId) return false;
+        for (const [k, v] of Object.entries(extraContext)) {
+          if (t.context?.[k] !== v) return false;
+        }
+        return true;
+      });
+
+    if (existing) {
+      const isAlreadyActive = existing.container.activeTabId === existing.tab.id;
+      const isAlreadyFocused = layout.focusedContainerId === existing.containerId;
+
+      if (isAlreadyActive && isAlreadyFocused) {
+        closeTab(existing.containerId, existing.tab.id);
+        return;
+      }
+
+      activateTab(existing.containerId, existing.tab.id);
+      focusContainer(existing.containerId);
+      return;
+    }
+
+    openTab('extensions', {
+      type: 'extension',
+      title,
+      icon,
+      closable: true,
+      context: {
+        extensionId: '@fluxcore/core-ai',
+        extensionName: 'FluxCore',
+        view: viewId,
+        accountId: selectedAccountId,
+        ...extraContext,
+      },
+    });
+  };
+
+  const onOpenFluxCoreItemTab = (tabId: string, title: string, data: any) => {
+    if (!selectedAccountId) return;
+
+    if (data?.type === 'assistant') {
+      const id = data?.assistantId || data?.assistant?.id || tabId;
+      openOrFocusFluxCoreTab('assistant', title, 'Bot', { assistantId: id });
+      return;
+    }
+
+    if (data?.type === 'instruction') {
+      const id = data?.instructionId || data?.instruction?.id || tabId;
+      openOrFocusFluxCoreTab('instruction', title, 'FileText', { instructionId: id });
+      return;
+    }
+
+    if (data?.type === 'vectorStore') {
+      const id = data?.vectorStoreId || data?.store?.id || tabId;
+      openOrFocusFluxCoreTab('vector-store', title, 'Database', { vectorStoreId: id });
+    }
+  };
+
+  // FluxCore Views - Vistas específicas de la plataforma de orquestación de IA
+  if (extensionId.includes('core-ai')) {
+    const accountId = selectedAccountId || '';
+    
+    switch (view) {
+      case 'fluxcore':
+        return (
+          <FluxCorePanel
+            key={tab.id}
+            accountId={accountId}
+            accountName={installation.manifest?.name || 'FluxCore'}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'usage':
+        return <UsageView key={tab.id} accountId={accountId} />;
+      case 'assistants':
+        return (
+          <AssistantsView
+            key={tab.id}
+            accountId={accountId}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'assistant':
+        return (
+          <AssistantsView
+            key={tab.id}
+            accountId={accountId}
+            assistantId={tab.context.assistantId}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'instructions':
+        return (
+          <InstructionsView
+            key={tab.id}
+            accountId={accountId}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'instruction':
+        return (
+          <InstructionsView
+            key={tab.id}
+            accountId={accountId}
+            instructionId={tab.context.instructionId}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'knowledge-base':
+        return (
+          <VectorStoresView
+            key={tab.id}
+            accountId={accountId}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'vector-store':
+        return (
+          <VectorStoresView
+            key={tab.id}
+            accountId={accountId}
+            vectorStoreId={tab.context.vectorStoreId}
+            onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      case 'tools':
+        return <ToolsView key={tab.id} accountId={accountId} />;
+      case 'debug':
+        return (
+          <div className="h-full flex items-center justify-center text-muted">
+            Depuración del asistente - Próximamente
+          </div>
+        );
+      case 'billing':
+        return (
+          <div className="h-full flex items-center justify-center text-muted">
+            Facturación - Próximamente
+          </div>
+        );
+      case 'promptInspector':
+        return <CoreAIPromptInspectorPanel />;
+    }
+  }
 
   if (view === 'panel') {
     const panelComponentName = installation.manifest?.ui?.panel?.component;

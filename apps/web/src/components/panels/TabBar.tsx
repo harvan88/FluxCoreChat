@@ -2,14 +2,14 @@
  * TabBar - Barra de pestañas para Dynamic Container
  * TOTEM PARTE 11: Tab navigation
  * 
- * Controles de header: [📌] [⤢] [×]
+ * Controles de header: Pin, Maximize, Close
  * - Pin: Fijar container
  * - Maximize: Expandir/restaurar
  * - Close: Cerrar container
  */
 
-import { useState } from 'react';
-import { Pin, PinOff, Maximize2, Minimize2, X } from 'lucide-react';
+import { useState, type ReactNode, isValidElement } from 'react';
+import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 import { usePanelStore, useContainers } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
@@ -184,7 +184,41 @@ function TabItem({
   onDragStart,
   onDragEnd,
 }: TabItemProps) {
-  const displayIcon = tab.icon ?? (tab.type === 'chat' ? '✉️' : null);
+  const resolveIcon = (icon: unknown): ReactNode | null => {
+    if (icon == null) return null;
+
+    if (typeof icon !== 'string') {
+      if (typeof icon === 'number') return icon;
+      if (isValidElement(icon)) return icon;
+      return null;
+    }
+
+    if (icon === '\u2709\uFE0F') return <MessageSquare size={14} />;
+
+    const map: Record<string, ReactNode> = {
+      Bot: <Bot size={14} />,
+      FileText: <FileText size={14} />,
+      Database: <Database size={14} />,
+      Wrench: <Wrench size={14} />,
+      BarChart3: <BarChart3 size={14} />,
+      Bug: <Bug size={14} />,
+      CreditCard: <CreditCard size={14} />,
+      Settings: <Settings size={14} />,
+      MessageSquare: <MessageSquare size={14} />,
+    };
+
+    return map[icon] ?? icon;
+  };
+
+  const getDefaultIcon = (type: string) => {
+    switch (type) {
+      case 'chat': return <MessageSquare size={14} />;
+      case 'assistant': return <Bot size={14} />;
+      default: return null;
+    }
+  };
+
+  const displayIcon = resolveIcon(tab.icon) ?? getDefaultIcon(tab.type);
   const maxTitleChars = tab.type === 'chat' ? 5 : 18;
   const displayTitle =
     tab.title.length > maxTitleChars ? `${tab.title.slice(0, maxTitleChars)}…` : tab.title;

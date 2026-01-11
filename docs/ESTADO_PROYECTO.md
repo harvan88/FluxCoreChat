@@ -1,22 +1,53 @@
 # Estado del Proyecto FluxCore
 
-> **Última actualización**: 2024-12-09  
-> **Estado**: 🟢 **PRODUCTION-READY** - Hitos 0-20 completados
+> **Última actualización:** 2026-01-09  
+> **Estado:** 🟠 **EN PROGRESO**  
+> El foco actual es **FluxCore (Sistema IA)**: completar el flujo end-to-end de bibliotecas (Asistentes / Instrucciones / Base de conocimiento / Herramientas) y alinear el UX de tabs según `FLUX CORE.md`.
 
-## ✅ Estado Actual
+## 🛠️ Hitos en ejecución
 
-El sistema está **técnicamente completo** y listo para la **PRUEBA DE PRODUCCIÓN**:
-- ✅ Backend: 100% funcional
-- ✅ Database: 17 tablas sincronizadas
-- ✅ Sincronización: IndexedDB ↔ PostgreSQL
-- ✅ Frontend: Todos los componentes implementados
-- ✅ UI/UX: Sistema de diseño canónico aplicado
-- ✅ Account Management: Completo
-- ✅ Workspace & Collaborators: Completo
-- ✅ Welcome Experience: Completo
-- ✅ PWA Support: Configurado
+| Hito | Nombre | Estado real | Evidencia |
+|------|--------|-------------|-----------|
+| 10R | Production Ready – Seguridad de Créditos | ✅ **Completado** | Sistema de administradores con `system_admins` + scopes; endpoints `/internal/system-admins/*`. | Ver `1. EXECUTION_PLAN.md` |
+| 12R | Smart Delay UX | ✅ **Completado** | UI conectada a eventos `suggestion:auto_*` (waiting/typing/sending). | Ver `1. EXECUTION_PLAN.md` |
+| 13R | Component Library & UI Protocol | ✅ **Completado** | Protocolo UI documentado + prevención cross-account en ViewPort. | Ver `1. EXECUTION_PLAN.md` |
+| FC-AI-UX | FluxCore UX Tabs + CRUD | 🟡 **En progreso** | Tabs lista/detalle sin duplicados + creación/edición real de activos (ver abajo). | `apps/web/src/components/layout/Sidebar.tsx`, `apps/web/src/components/panels/DynamicContainer.tsx` |
 
-Ver `PRUEBA_DE_PRODUCCION.md` para ejecutar el escenario de prueba.
+## 🔎 Estado verificado
+
+- **Backend y DB** operativos.
+- **FluxCore**: endpoints protegidos por JWT y el frontend agrega `Authorization` a las vistas principales.
+- **Tabs FluxCore (lista/detalle)**:
+  - **Lista**: click en sección abre tab con icono semántico.
+  - **Detalle**: click en un item abre tab de detalle con el mismo icono y título dinámico.
+  - **No duplicados**: si el tab ya existe se enfoca; si está activo+en foco, se cierra (toggle).
+- **CRUD real (sin mocks)**:
+  - Asistentes: creación + autosave PUT (payload estricto; fix `description: null`).
+  - Instrucciones: creación + cargar por id + guardar PUT.
+  - Vector Stores: creación + cargar por id + guardar PUT.
+
+### Pendientes inmediatos (FluxCore)
+
+- **Editor unificado**: reutilizar el editor del “contexto IA” del perfil para Instrucciones del sistema (con adaptabilidad).
+- **Autosave consistente**: definir si Instrucciones/Vector Stores deben autosave (hoy tienen botón Guardar).
+- **Vector store files**: UI + endpoints para adjuntar archivos (ya existe API `/vector-stores/:id/files`, falta UI real).
+
+## ✅ Hitos completados (sin cambios respecto a la auditoría previa)
+
+| Hito | Nombre | Estado | Pruebas |
+|------|--------|--------|---------|
+| 0 | Bootstrap del Monorepo | ✅ | N/A |
+| 1 | Fundamentos de Identidad | ✅ | ✅ Criterios |
+| 2 | Chat Core | ✅ | ✅ 14/14 |
+| 3 | Workspace UI | ✅ | ✅ Frontend |
+| 4 | Sistema de Extensiones | ✅ | ✅ 11/11 |
+| 5 | @fluxcore/core-ai | ✅ | ✅ 12/12 |
+| 6 | Contexto Relacional | ✅ | ✅ 16/16 |
+| 7 | Extensión Turnos | ✅ | ✅ 12/12 |
+| 8 | Adaptadores WhatsApp | ✅ | ✅ 8/8 |
+| 9 | Workspaces Colaborativos | ✅ | ✅ 16/16 |
+
+> **Nota:** Los hitos 10, 12 y 13 están completados. El trabajo activo se centra en FluxCore (sistema IA) y su UX end-to-end.
 
 ## 📊 Resumen de Hitos
 
@@ -47,10 +78,14 @@ Ver `PRUEBA_DE_PRODUCCION.md` para ejecutar el escenario de prueba.
 
 | Hito | Nombre | Estado | Prioridad |
 |------|--------|--------|-----------|
-| PC-1 | Avatar Upload System | ⏳ Pendiente | Alta |
-| PC-2 | Password Reset Flow | ⏳ Pendiente | Media |
+| PC-1 | Avatar Upload System | ✅ Completado | Alta |
+| PC-2 | Password Reset Flow | ✅ Completado | Media |
 | PC-3 | Automation Triggers Avanzados | ⏳ Pendiente | Baja |
 | PC-4 | UI Completeness | ⏳ Pendiente | Media |
+| AUDIT-1 | Security: Credits Admin | ✅ Fixed | CRÍTICA |
+| AUDIT-2 | UI: Iconography Consistency | ✅ Fixed | Media |
+| AUDIT-3 | AI: Smart Delay Implementation | ✅ Fixed | Alta |
+| AUDIT-4 | UI: Tab Duplication Prevention | ✅ Fixed | Alta |
 
 > Ver `EXECUTION_PLAN.md` sección "Hitos de Pendientes por Corregir" para detalles.
 

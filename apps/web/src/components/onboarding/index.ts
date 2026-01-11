@@ -3,7 +3,7 @@
  */
 
 export {
-  FluxiAvatar,
+  FluxCoreAvatar,
   WelcomeMessage,
   FirstTimeExperience,
   useFirstTimeExperience,
