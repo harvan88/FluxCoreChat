@@ -37,3 +37,21 @@ export * from './fluxcore-vector-stores';
 export * from './fluxcore-tools';
 export * from './fluxcore-assistant-instructions';
 export * from './fluxcore-assistant-vector-stores';
+
+// RAG-001: Document Chunks con embeddings vectoriales (pgvector)
+export * from './fluxcore-document-chunks';
+
+// RAG-002: Sistema de permisos para compartir assets
+export * from './fluxcore-asset-permissions';
+
+// RAG-003: Configuración granular de RAG
+export * from './fluxcore-rag-configurations';
+
+// RAG-005: Marketplace de Vector Stores
+export * from './fluxcore-marketplace';
+
+// RAG-010: Billing y Usage Tracking
+export * from './fluxcore-billing';
+
+// RAG-021: Archivos Centralizados
+export * from './fluxcore-files';

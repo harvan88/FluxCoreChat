@@ -1,0 +1,1 @@
+ALTER TABLE "fluxcore_instructions" ADD COLUMN "is_managed" boolean DEFAULT false NOT NULL;

@@ -12,9 +12,22 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Database, Share2, RotateCcw, Upload, Pencil } from 'lucide-react';
+import {
+  Database,
+  Plus,
+  Trash2,
+  Pencil,
+  Share2,
+  RotateCcw,
+  Check,
+  X,
+  Copy,
+} from 'lucide-react';
 import { Button, Badge } from '../../ui';
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
+import { DeleteFooter } from '../components/DeleteFooter';
+import { RAGConfigSection } from '../components/RAGConfigSection';
+import { VectorStoreFilesSection } from '../components/VectorStoreFilesSection';
 import { useAuthStore } from '../../../store/authStore';
 
 interface VectorStoreFile {
@@ -28,7 +41,7 @@ interface VectorStore {
   id: string;
   name: string;
   description?: string;
-  status: 'draft' | 'production' | 'expired';
+  status: 'draft' | 'active' | 'expired';
   updatedAt: string;
   lastModifiedBy?: string;
   sizeBytes: number;
@@ -50,6 +63,7 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   const [stores, setStores] = useState<VectorStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStore, setSelectedStore] = useState<VectorStore | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const autoSelectedStoreIdRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -163,11 +177,49 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   };
 
   const handleSelectStore = (store: VectorStore) => {
-    if (onOpenTab && !vectorStoreId) {
-      onOpenTab(store.id, store.name, { type: 'vectorStore', vectorStoreId: store.id });
+    setDeleteConfirm(null);
+    if (onOpenTab) {
+      onOpenTab(store.id, store.name, {
+        type: 'vectorStore',
+        vectorStoreId: store.id,
+      });
       return;
     }
+
     setSelectedStore(store);
+  };
+
+  const deleteStoreById = async (id: string) => {
+    if (!token) return;
+    try {
+      const response = await fetch(`/api/fluxcore/vector-stores/${id}?accountId=${accountId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setStores((prev) => prev.filter((s) => s.id !== id));
+        setSelectedStore((prev) => (prev?.id === id ? null : prev));
+        setDeleteConfirm(null);
+        setSaveError(null);
+        return;
+      }
+
+      const data = await response.json().catch(() => null);
+      const msg = typeof data?.message === 'string' ? data.message : 'No se pudo eliminar el vector store';
+      setSaveError(msg);
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting vector store:', error);
+      setSaveError('Error de conexión');
+    }
+  };
+
+  const handleDeleteStore = async () => {
+    if (!selectedStore || deleteConfirm !== selectedStore.id) return;
+    await deleteStoreById(selectedStore.id);
   };
 
   useEffect(() => {
@@ -204,12 +256,33 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'production':
-        return <Badge variant="success">Producción</Badge>;
+      case 'active':
+        return <Badge variant="success">Activo</Badge>;
       case 'expired':
         return <Badge variant="error">Expirado</Badge>;
       default:
         return <Badge variant="info">Borrador</Badge>;
+    }
+  };
+
+  const copyConfigToClipboard = async (store: VectorStore) => {
+    const config = {
+      vectorStore: {
+        id: store.id,
+        name: store.name,
+        description: store.description,
+        status: store.status,
+        expirationPolicy: store.expirationPolicy,
+        expiresAt: store.expiresAt,
+        sizeBytes: store.sizeBytes,
+        fileCount: store.fileCount,
+        updatedAt: store.updatedAt,
+      },
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+    } catch (err) {
+      console.error('Error copying to clipboard:', err);
     }
   };
 
@@ -264,9 +337,9 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content - área scrolleable */}
         <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-2xl space-y-4">
+          <div className="max-w-4xl mx-auto space-y-4">
             {/* ID */}
             <div className="text-sm">
               <span className="text-muted">ID: </span>
@@ -315,17 +388,38 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
 
             {/* Archivos adjuntos */}
             <CollapsibleSection title="Archivos adjuntos" defaultExpanded>
-              <div className="space-y-3">
-                <div className="text-sm text-muted">
-                  {selectedStore.fileCount} archivo(s)
-                </div>
-                <Button size="sm" variant="secondary">
-                  <Upload size={14} className="mr-1" />
-                  Agregar archivo
-                </Button>
-              </div>
+              <VectorStoreFilesSection
+                vectorStoreId={selectedStore.id}
+                accountId={accountId}
+                onFileCountChange={(count) => setSelectedStore({ ...selectedStore, fileCount: count })}
+              />
             </CollapsibleSection>
+
+            {/* Configuración RAG */}
+            <RAGConfigSection
+              vectorStoreId={selectedStore.id}
+              accountId={accountId}
+            />
           </div>
+        </div>
+
+        {/* Footer fijo con botón copiar JSON y eliminar */}
+        <div className="px-6 py-3 border-t border-subtle flex items-center justify-between">
+          <button
+            onClick={() => copyConfigToClipboard(selectedStore)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded transition-colors"
+            title="Copiar configuración como JSON"
+          >
+            <Copy size={16} />
+            <span>Copiar JSON</span>
+          </button>
+          <DeleteFooter
+            isConfirming={deleteConfirm === selectedStore.id}
+            actionLabel="Eliminar vector store"
+            onRequestDelete={() => setDeleteConfirm(selectedStore.id)}
+            onConfirm={handleDeleteStore}
+            onCancel={() => setDeleteConfirm(null)}
+          />
         </div>
       </div>
     );
@@ -369,12 +463,12 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
               <thead>
                 <tr className="border-b border-subtle">
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Nombre de vector</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Asistente</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden md:table-cell">Asistente</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Estado</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Última modificación</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Tamaño</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Expira</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden lg:table-cell">Última modificación</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden lg:table-cell">Tamaño</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden lg:table-cell">Expira</th>
+                  <th className="px-4 py-3 sticky right-0 bg-surface"></th>
                 </tr>
               </thead>
               <tbody>
@@ -385,31 +479,130 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
                     onClick={() => handleSelectStore(store)}
                   >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Database size={16} className="text-accent" />
-                        <span className="font-medium text-primary">{store.name}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Database size={16} className="text-accent flex-shrink-0 min-w-[16px] min-h-[16px]" />
+                          <span className="font-medium text-primary truncate">{store.name}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 md:hidden">
+                          <button
+                            className="p-1 hover:bg-elevated rounded"
+                            title="Compartir"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Share2 size={16} className="text-muted" />
+                          </button>
+                          <button
+                            className="p-1 hover:bg-elevated rounded"
+                            title="Recargar"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <RotateCcw size={16} className="text-muted" />
+                          </button>
+
+                          {deleteConfirm === store.id ? (
+                            <>
+                              <button
+                                className="p-1 hover:bg-elevated rounded"
+                                title="Eliminar definitivamente"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void deleteStoreById(store.id);
+                                }}
+                              >
+                                <Check size={16} className="text-error" />
+                              </button>
+                              <button
+                                className="p-1 hover:bg-elevated rounded"
+                                title="Cancelar"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirm(null);
+                                }}
+                              >
+                                <X size={16} className="text-muted" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="p-1 hover:bg-elevated rounded"
+                              title="Eliminar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(store.id);
+                              }}
+                            >
+                              <Trash2 size={16} className="text-muted hover:text-error" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-secondary">-</td>
+                    <td className="px-4 py-3 text-secondary hidden md:table-cell">-</td>
                     <td className="px-4 py-3">{getStatusBadge(store.status)}</td>
-                    <td className="px-4 py-3 text-secondary text-sm">
+                    <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                       {formatDate(store.updatedAt)}
                       {store.lastModifiedBy && ` ${store.lastModifiedBy}`}
                     </td>
-                    <td className="px-4 py-3 text-secondary text-sm">
+                    <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                       {formatSize(store.sizeBytes)}
                     </td>
-                    <td className="px-4 py-3 text-secondary text-sm">
+                    <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                       {store.expiresAt ? formatDate(store.expiresAt) : 'Nunca'}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                        <button className="p-1 hover:bg-elevated rounded" title="Compartir">
-                          <Share2 size={16} className="text-muted" />
+                    <td className="px-4 py-3 hidden md:table-cell sticky right-0 bg-surface group-hover:bg-hover">
+                      <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="p-1 hover:bg-elevated rounded"
+                          title="Compartir"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Share2 size={16} className="text-muted flex-shrink-0" />
                         </button>
-                        <button className="p-1 hover:bg-elevated rounded" title="Recargar">
-                          <RotateCcw size={16} className="text-muted" />
+                        <button
+                          className="p-1 hover:bg-elevated rounded"
+                          title="Recargar"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <RotateCcw size={16} className="text-muted flex-shrink-0" />
                         </button>
+
+                        {deleteConfirm === store.id ? (
+                          <>
+                            <button
+                              className="p-1 hover:bg-elevated rounded"
+                              title="Eliminar definitivamente"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteStoreById(store.id);
+                              }}
+                            >
+                              <Check size={16} className="text-error flex-shrink-0" />
+                            </button>
+                            <button
+                              className="p-1 hover:bg-elevated rounded"
+                              title="Cancelar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(null);
+                              }}
+                            >
+                              <X size={16} className="text-muted flex-shrink-0" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="p-1 hover:bg-elevated rounded"
+                            title="Eliminar"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirm(store.id);
+                            }}
+                          >
+                            <Trash2 size={16} className="text-muted hover:text-error flex-shrink-0" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

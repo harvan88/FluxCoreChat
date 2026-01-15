@@ -5,7 +5,7 @@
  * Cada instrucción puede ser asignada a uno o más asistentes.
  */
 
-import { pgTable, uuid, varchar, timestamp, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, boolean } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
 
 export const fluxcoreInstructions = pgTable('fluxcore_instructions', {
@@ -24,6 +24,7 @@ export const fluxcoreInstructions = pgTable('fluxcore_instructions', {
   
   // Estado
   status: varchar('status', { length: 20 }).notNull().default('draft'), // 'draft', 'production', 'disabled'
+  isManaged: boolean('is_managed').notNull().default(false), // true para instrucciones gestionadas dinámicamente
   
   // Metadata
   lastModifiedBy: varchar('last_modified_by', { length: 255 }),

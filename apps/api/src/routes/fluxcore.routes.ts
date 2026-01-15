@@ -18,7 +18,7 @@ import { fluxcoreService } from '../services/fluxcore.service';
 
 const assistantsRoutes = new Elysia({ prefix: '/assistants' })
   .use(authMiddleware)
-  
+
   // GET /fluxcore/assistants
   .get(
     '/',
@@ -52,7 +52,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
       },
     }
   )
-  
+
   // GET /fluxcore/assistants/:id
   .get(
     '/:id',
@@ -93,7 +93,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
       },
     }
   )
-  
+
   // POST /fluxcore/assistants
   .post(
     '/',
@@ -154,7 +154,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
       },
     }
   )
-  
+
   // PUT /fluxcore/assistants/:id
   .put(
     '/:id',
@@ -223,7 +223,48 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
       },
     }
   )
-  
+
+  .post(
+    '/:id/activate',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const { accountId } = body as any;
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      try {
+        const assistant = await fluxcoreService.setActiveAssistant(params.id, accountId);
+        if (!assistant) {
+          set.status = 404;
+          return { success: false, message: 'Assistant not found' };
+        }
+        return { success: true, data: assistant };
+      } catch (error: any) {
+        const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 500;
+        set.status = statusCode;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      body: t.Object({
+        accountId: t.String(),
+      }),
+      detail: {
+        tags: ['FluxCore'],
+        summary: 'Set assistant as active (ensures single active per account)',
+      },
+    }
+  )
+
   // DELETE /fluxcore/assistants/:id
   .delete(
     '/:id',
@@ -271,7 +312,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
 
 const instructionsRoutes = new Elysia({ prefix: '/instructions' })
   .use(authMiddleware)
-  
+
   // GET /fluxcore/instructions
   .get(
     '/',
@@ -305,7 +346,7 @@ const instructionsRoutes = new Elysia({ prefix: '/instructions' })
       },
     }
   )
-  
+
   // GET /fluxcore/instructions/:id
   .get(
     '/:id',
@@ -346,7 +387,7 @@ const instructionsRoutes = new Elysia({ prefix: '/instructions' })
       },
     }
   )
-  
+
   // POST /fluxcore/instructions
   .post(
     '/',
@@ -378,7 +419,7 @@ const instructionsRoutes = new Elysia({ prefix: '/instructions' })
       },
     }
   )
-  
+
   // PUT /fluxcore/instructions/:id
   .put(
     '/:id',
@@ -419,7 +460,7 @@ const instructionsRoutes = new Elysia({ prefix: '/instructions' })
       },
     }
   )
-  
+
   // DELETE /fluxcore/instructions/:id
   .delete(
     '/:id',
@@ -443,8 +484,9 @@ const instructionsRoutes = new Elysia({ prefix: '/instructions' })
         }
         return { success: true, message: 'Instruction deleted' };
       } catch (error: any) {
-        set.status = 500;
-        return { success: false, message: error.message };
+        const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 500;
+        set.status = statusCode;
+        return { success: false, message: error.message, details: error.details };
       }
     },
     {
@@ -467,7 +509,7 @@ const instructionsRoutes = new Elysia({ prefix: '/instructions' })
 
 const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
   .use(authMiddleware)
-  
+
   // GET /fluxcore/vector-stores
   .get(
     '/',
@@ -501,7 +543,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // GET /fluxcore/vector-stores/:id
   .get(
     '/:id',
@@ -542,7 +584,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // POST /fluxcore/vector-stores
   .post(
     '/',
@@ -575,7 +617,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // PUT /fluxcore/vector-stores/:id
   .put(
     '/:id',
@@ -617,7 +659,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // DELETE /fluxcore/vector-stores/:id
   .delete(
     '/:id',
@@ -641,8 +683,9 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
         }
         return { success: true, message: 'Vector store deleted' };
       } catch (error: any) {
-        set.status = 500;
-        return { success: false, message: error.message };
+        const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 500;
+        set.status = statusCode;
+        return { success: false, message: error.message, details: error.details };
       }
     },
     {
@@ -658,7 +701,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // GET /fluxcore/vector-stores/:id/files
   .get(
     '/:id/files',
@@ -686,7 +729,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // POST /fluxcore/vector-stores/:id/files
   .post(
     '/:id/files',
@@ -722,7 +765,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       },
     }
   )
-  
+
   // DELETE /fluxcore/vector-stores/:id/files/:fileId
   .delete(
     '/:id/files/:fileId',
@@ -746,12 +789,167 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
     },
     {
       params: t.Object({
-        storeId: t.String(),
+        id: t.String(),
         fileId: t.String(),
       }),
       detail: {
         tags: ['FluxCore'],
         summary: 'Delete file from vector store',
+      },
+    }
+  )
+
+  // POST /fluxcore/vector-stores/:id/files/upload
+  // Endpoint para subir archivo con contenido
+  .post(
+    '/:id/files/upload',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        // Importar servicios dinámicamente para evitar dependencia circular
+        const { fileService } = await import('../services/file.service');
+        const { documentProcessingService } = await import('../services/document-processing.service');
+
+        const { file, accountId } = body as { file: File; accountId: string };
+
+        if (!file || !accountId) {
+          set.status = 400;
+          return { success: false, message: 'file and accountId are required' };
+        }
+
+        // Leer contenido del archivo
+        const arrayBuffer = await file.arrayBuffer();
+        const content = Buffer.from(arrayBuffer);
+
+        // Subir y vincular archivo
+        const { file: uploadedFile, linkId } = await fileService.uploadAndLink(
+          {
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            sizeBytes: file.size,
+            content,
+            accountId,
+            uploadedBy: user.id,
+          },
+          params.id
+        );
+
+        // Iniciar procesamiento asíncrono
+        documentProcessingService.processDocument(
+          linkId,
+          params.id,
+          accountId,
+          content,
+          file.type || 'text/plain'
+        ).catch(err => {
+          console.error('[fluxcore] Error processing document:', err);
+        });
+
+        return {
+          success: true,
+          data: {
+            fileId: uploadedFile.id,
+            linkId,
+            name: uploadedFile.name,
+            mimeType: uploadedFile.mimeType,
+            sizeBytes: uploadedFile.sizeBytes,
+            status: 'processing',
+          }
+        };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      detail: {
+        tags: ['FluxCore'],
+        summary: 'Upload file content to vector store with automatic processing',
+      },
+    }
+  )
+
+  // POST /fluxcore/vector-stores/:id/files/:fileId/reprocess
+  // Re-procesar un archivo existente
+  .post(
+    '/:id/files/:fileId/reprocess',
+    async ({ user, params, query, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const accountId = query.accountId;
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      try {
+        const { fileService } = await import('../services/file.service');
+        const { documentProcessingService } = await import('../services/document-processing.service');
+
+        const link = await fluxcoreService.getVectorStoreFileById(params.fileId, params.id);
+        if (!link) {
+          set.status = 404;
+          return { success: false, message: 'File not found' };
+        }
+
+        const centralFileId = link.fileId;
+        if (!centralFileId) {
+          set.status = 400;
+          return { success: false, message: 'File has no stored content for reprocessing' };
+        }
+
+        // Obtener contenido del archivo central
+        const textContent = await fileService.getTextContent(centralFileId);
+
+        if (!textContent) {
+          set.status = 400;
+          return { success: false, message: 'File has no stored content for reprocessing' };
+        }
+
+        // Actualizar estado
+        await fileService.updateLinkStatus(link.id, 'processing');
+
+        // Obtener info del archivo
+        const file = await fileService.getById(centralFileId);
+
+        // Re-procesar
+        documentProcessingService.processDocument(
+          link.id,
+          params.id,
+          accountId,
+          textContent,
+          file?.mimeType || link.mimeType || 'text/plain'
+        ).catch(err => {
+          console.error('[fluxcore] Error reprocessing document:', err);
+        });
+
+        return { success: true, message: 'Reprocessing started' };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+        fileId: t.String(),
+      }),
+      query: t.Object({
+        accountId: t.String(),
+      }),
+      detail: {
+        tags: ['FluxCore'],
+        summary: 'Reprocess an existing file in vector store',
       },
     }
   );
@@ -762,7 +960,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
 
 const toolsRoutes = new Elysia({ prefix: '/tools' })
   .use(authMiddleware)
-  
+
   // GET /fluxcore/tools/definitions
   .get(
     '/definitions',
@@ -787,7 +985,7 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
       },
     }
   )
-  
+
   // GET /fluxcore/tools/connections
   .get(
     '/connections',
@@ -821,7 +1019,7 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
       },
     }
   )
-  
+
   // POST /fluxcore/tools/connections
   .post(
     '/connections',
@@ -851,7 +1049,7 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
       },
     }
   )
-  
+
   // DELETE /fluxcore/tools/connections/:id
   .delete(
     '/connections/:id',

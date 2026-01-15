@@ -39,8 +39,10 @@ export interface ExtensionManifest {
   description: string;
   author: string;
   preinstalled?: boolean;
+  hooks?: string[];
   permissions: ContextPermission[];
   tools?: ExtensionTool[];
   ui?: ExtensionUIConfig;
   configSchema?: Record<string, ConfigSchemaField>;
+  entrypoint?: string;
 }
