@@ -66,8 +66,9 @@ async function copyToClipboard(text: string) {
   }
 }
 
-export function CoreAIPromptInspectorPanel() {
+export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string }) {
   const selectedAccountId = useUIStore((s) => s.selectedAccountId);
+  const effectiveAccountId = accountId || selectedAccountId;
 
   const [conversationFilter, setConversationFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -86,14 +87,14 @@ export function CoreAIPromptInspectorPanel() {
   }, [conversationFilter]);
 
   const loadTraces = async () => {
-    if (!selectedAccountId) return;
+    if (!effectiveAccountId) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
       const res = await api.getAITraces({
-        accountId: selectedAccountId,
+        accountId: effectiveAccountId,
         conversationId: effectiveConversationFilter || undefined,
         limit: 50,
       });
@@ -114,7 +115,7 @@ export function CoreAIPromptInspectorPanel() {
   };
 
   const handleCopyAll = async () => {
-    if (!selectedAccountId) return;
+    if (!effectiveAccountId) return;
     if (isCopyingAll) return;
 
     setIsCopyingAll(true);
@@ -122,7 +123,7 @@ export function CoreAIPromptInspectorPanel() {
 
     try {
       const listRes = await api.getAITraces({
-        accountId: selectedAccountId,
+        accountId: effectiveAccountId,
         conversationId: effectiveConversationFilter || undefined,
         limit: 200,
       });
@@ -138,7 +139,7 @@ export function CoreAIPromptInspectorPanel() {
       for (const t of summaries) {
         const traceId = t?.id;
         if (!traceId) continue;
-        const res = await api.getAITrace({ accountId: selectedAccountId, traceId });
+        const res = await api.getAITrace({ accountId: effectiveAccountId, traceId });
         if (res.success) {
           details.push(res.data);
         } else {
@@ -155,13 +156,13 @@ export function CoreAIPromptInspectorPanel() {
   };
 
   const loadTraceDetail = async (traceId: string) => {
-    if (!selectedAccountId) return;
+    if (!effectiveAccountId) return;
 
     setDetailLoading(true);
     setError(null);
 
     try {
-      const res = await api.getAITrace({ accountId: selectedAccountId, traceId });
+      const res = await api.getAITrace({ accountId: effectiveAccountId, traceId });
       if (!res.success) {
         setError(res.error || 'Error al cargar detalle');
         setDetail(null);
@@ -183,11 +184,11 @@ export function CoreAIPromptInspectorPanel() {
     setTraces([]);
     setError(null);
 
-    if (selectedAccountId) {
+    if (effectiveAccountId) {
       loadTraces();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId]);
+  }, [effectiveAccountId]);
 
   useEffect(() => {
     if (!selectedTraceId) {
@@ -199,7 +200,7 @@ export function CoreAIPromptInspectorPanel() {
   }, [selectedTraceId]);
 
   const handleClear = async () => {
-    if (!selectedAccountId) return;
+    if (!effectiveAccountId) return;
 
     const confirmed = window.confirm('¿Limpiar trazas de Prompt Inspector para esta cuenta?');
     if (!confirmed) return;
@@ -208,7 +209,7 @@ export function CoreAIPromptInspectorPanel() {
     setError(null);
 
     try {
-      const res = await api.clearAITraces(selectedAccountId);
+      const res = await api.clearAITraces(effectiveAccountId);
       if (!res.success) {
         setError(res.error || 'Error al limpiar trazas');
         return;
@@ -222,7 +223,7 @@ export function CoreAIPromptInspectorPanel() {
     }
   };
 
-  if (!selectedAccountId) {
+  if (!effectiveAccountId) {
     return (
       <div className="h-full flex items-center justify-center text-muted">
         Selecciona una cuenta para inspeccionar los prompts.
@@ -374,6 +375,67 @@ export function CoreAIPromptInspectorPanel() {
                     </div>
                   </div>
                 </div>
+
+                {detail?.context?.assistantMeta && (
+                  <div className="bg-elevated border border-subtle rounded p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm text-primary font-medium">Runtime</div>
+                      <button
+                        onClick={() => copyToClipboard(JSON.stringify(detail.context.assistantMeta, null, 2))}
+                        className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+                        title="Copiar assistantMeta (JSON)"
+                      >
+                        <Copy size={16} />
+                      </button>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="text-muted">assistant</div>
+                      <div className="text-secondary break-all">
+                        {detail.context.assistantMeta.assistantName || '—'} ({detail.context.assistantMeta.assistantId || '—'})
+                      </div>
+
+                      <div className="text-muted">instructions</div>
+                      <div className="text-secondary break-all">
+                        {Array.isArray(detail.context.assistantMeta.instructionLinks) && detail.context.assistantMeta.instructionLinks.length > 0
+                          ? detail.context.assistantMeta.instructionLinks
+                            .map((x: any) => `${x?.name || '—'} (${x?.id || '—'})${x?.versionId ? ` v:${x.versionId}` : ''}`)
+                            .join('\n')
+                          : '—'}
+                      </div>
+
+                      <div className="text-muted">vector stores</div>
+                      <div className="text-secondary break-all">
+                        {Array.isArray(detail.context.assistantMeta.vectorStores) && detail.context.assistantMeta.vectorStores.length > 0
+                          ? detail.context.assistantMeta.vectorStores
+                            .map((x: any) => `${x?.name || '—'} (${x?.id || '—'})`)
+                            .join('\n')
+                          : (Array.isArray(detail.context.assistantMeta.vectorStoreIds) && detail.context.assistantMeta.vectorStoreIds.length > 0
+                            ? detail.context.assistantMeta.vectorStoreIds.join('\n')
+                            : '—')}
+                      </div>
+
+                      <div className="text-muted">requested model</div>
+                      <div className="text-secondary">
+                        {detail.context.assistantMeta.modelConfig
+                          ? `${detail.context.assistantMeta.modelConfig.provider || '—'} / ${detail.context.assistantMeta.modelConfig.model || '—'}`
+                          : '—'}
+                      </div>
+
+                      <div className="text-muted">effective model</div>
+                      <div className="text-secondary">
+                        {detail.context.assistantMeta.effective
+                          ? `${detail.context.assistantMeta.effective.provider || '—'} / ${detail.context.assistantMeta.effective.model || '—'}`
+                          : '—'}
+                      </div>
+
+                      <div className="text-muted">effective baseUrl</div>
+                      <div className="text-secondary break-all">
+                        {detail.context.assistantMeta.effective?.baseUrl || '—'}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <Section
                   title="System Prompt"

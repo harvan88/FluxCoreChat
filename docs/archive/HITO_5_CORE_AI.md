@@ -1,23 +1,23 @@
-# Hito 5: @fluxcore/core-ai
+# Hito 5: @fluxcore/fluxcore
 
 > **Estado**: ✅ Completado  
 > **Fecha**: 2025-12-06
 
 ## Resumen
 
-Implementación de la extensión de IA por defecto `@fluxcore/core-ai`, que proporciona respuestas inteligentes basadas en el contexto de la relación usando modelos de Groq (LLaMA, Mixtral).
+Implementación de la extensión de IA por defecto `@fluxcore/fluxcore`, que proporciona respuestas inteligentes basadas en el contexto de la relación usando modelos de Groq (LLaMA, Mixtral).
 
 ## Componentes Implementados
 
-### Extensión @fluxcore/core-ai (FC-170, FC-171)
+### Extensión @fluxcore/fluxcore (FC-170, FC-171)
 
-**Ubicación**: `extensions/core-ai/`
+**Ubicación**: `extensions/fluxcore/`
 
 ```
-extensions/core-ai/
+extensions/fluxcore/
 ├── manifest.json       # Definición de la extensión
 └── src/
-    ├── index.ts        # CoreAIExtension principal
+    ├── index.ts        # FluxCoreExtension principal
     ├── prompt-builder.ts # Constructor de prompts contextuales
     └── groq-client.ts  # Cliente para API de Groq
 ```
@@ -124,10 +124,10 @@ GROQ_API_KEY=gsk_your_api_key_here
 ## Archivos Creados
 
 ### Extensión
-- `extensions/core-ai/manifest.json`
-- `extensions/core-ai/src/index.ts`
-- `extensions/core-ai/src/prompt-builder.ts`
-- `extensions/core-ai/src/groq-client.ts`
+- `extensions/fluxcore/manifest.json`
+- `extensions/fluxcore/src/index.ts`
+- `extensions/fluxcore/src/prompt-builder.ts`
+- `extensions/fluxcore/src/groq-client.ts`
 
 ### API
 - `apps/api/src/services/ai.service.ts`

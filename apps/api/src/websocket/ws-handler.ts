@@ -7,7 +7,7 @@
 
 import { messageCore } from '../core/message-core';
 import { automationController } from '../services/automation-controller.service';
-import { aiService } from '../services/ai.service';
+import { extensionHost } from '../services/extension-host.service';
 import { smartDelayService } from '../services/smart-delay.service';
 
 interface WSMessage {
@@ -128,9 +128,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
       case 'approve_suggestion':
         // Aprobar y enviar sugerencia como mensaje
         if (data.conversationId && data.senderAccountId && data.suggestedText) {
-          const decision = aiService.getSuggestionBrandingDecision(data.suggestionId);
+          const decision = extensionHost.getSuggestionBrandingDecision(data.suggestionId);
           const finalText = decision.promo
-            ? aiService.appendFluxCoreBrandingFooter(data.suggestedText)
+            ? extensionHost.appendFluxCoreBrandingFooter(data.suggestedText)
             : data.suggestedText;
 
           const content: any = decision.promo
@@ -273,7 +273,8 @@ function broadcast(relationshipId: string, payload: any): void {
 }
 
 /**
- * HITO-WEBSOCKET-SUGGESTIONS: Manejar solicitud de sugerencia de IA
+ * 🔧 REFACTORIZADO: Manejar solicitud de sugerencia de IA
+ * Delay se aplica ANTES de generar sugerencia, usa timingConfig del asistente activo
  */
 async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> {
   const { conversationId, accountId, relationshipId } = data;
@@ -295,34 +296,48 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       return;
     }
 
-    // Notificar que estamos generando
-    ws.send(JSON.stringify({
-      type: 'suggestion:generating',
-      conversationId,
-    }));
-
-    // V2-2: Generar sugerencia con AI service real
-    let suggestion;
+    // 🔧 NUEVO: Obtener asistente activo para usar su timingConfig
+    const { fluxcoreService } = await import('../services/fluxcore.service');
+    const composition = await fluxcoreService.resolveActiveAssistant(accountId!);
     
-    // Usar AI service real con Groq
-    const lastMessage = data.content?.text || 'Mensaje del usuario';
-    const aiSuggestion = await aiService.generateResponse(
-      conversationId!,
-      accountId!,
-      lastMessage,
-      {
-        mode: 'suggest',
-        triggerMessageId: typeof data?.messageId === 'string' ? data.messageId : undefined,
-        triggerMessageCreatedAt: data?.createdAt ? new Date(data.createdAt as any) : undefined,
-      }
-    );
+    // Extraer timingConfig del asistente activo (o usar defaults)
+    const delaySeconds = composition?.assistant?.timingConfig?.responseDelaySeconds ?? 2;
+    const smartDelayEnabled = composition?.assistant?.timingConfig?.smartDelay ?? false;
 
-    if (aiSuggestion) {
-      const stripped = aiService.stripFluxCorePromoMarker(aiSuggestion.content);
-      suggestion = {
+    // Función auxiliar para generar sugerencia
+    const generateSuggestion = async () => {
+      // Notificar que estamos generando
+      ws.send(JSON.stringify({
+        type: 'suggestion:generating',
+        conversationId,
+      }));
+
+      const lastMessage = data.content?.text || 'Mensaje del usuario';
+      const aiSuggestion = await extensionHost.generateAIResponse(
+        conversationId!,
+        accountId!,
+        lastMessage,
+        {
+          mode: evaluation.mode === 'automatic' ? 'auto' : 'suggest',
+          triggerMessageId: typeof data?.messageId === 'string' ? data.messageId : undefined,
+          triggerMessageCreatedAt: data?.createdAt ? new Date(data.createdAt as any) : undefined,
+        }
+      );
+
+      if (!aiSuggestion) {
+        ws.send(JSON.stringify({
+          type: 'suggestion:unavailable',
+          reason: 'AI service not configured.',
+          conversationId,
+        }));
+        return null;
+      }
+
+      const stripped = extensionHost.stripFluxCorePromoMarker(aiSuggestion.content);
+      return {
         id: aiSuggestion.id,
         conversationId,
-        extensionId: 'core-ai',
+        extensionId: '@fluxcore/fluxcore',
         suggestedText: stripped.text,
         confidence: 0.9,
         reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage.totalTokens} tokens)`,
@@ -330,65 +345,40 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
         createdAt: aiSuggestion.generatedAt.toISOString(),
         mode: evaluation.mode,
       };
-    }
+    };
 
-    // Si no hay sugerencia (API no configurada), notificar al cliente
-    if (!suggestion) {
-      ws.send(JSON.stringify({
-        type: 'suggestion:unavailable',
-        reason: 'AI service not configured. Set GROQ_API_KEY environment variable or configure @fluxcore/core-ai installation.',
-        conversationId,
-      }));
-      return;
-    }
-
-    // Enviar sugerencia al cliente
-    ws.send(JSON.stringify({
-      type: 'suggestion:ready',
-      data: suggestion,
-    }));
-
+    // 🔧 NUEVO: Aplicar delay ANTES de generar (en modo automático)
     if (evaluation.mode === 'automatic') {
-      const aiConfig = await aiService.getAccountConfig(accountId!);
-
-      if (aiConfig.smartDelayEnabled) {
+      if (smartDelayEnabled) {
+        // Smart delay: Monitorea actividad del usuario
         smartDelayService.scheduleResponse({
           conversationId: conversationId!,
           accountId: accountId!,
-          suggestionId: suggestion.id,
+          suggestionId: 'pending', // Se actualizará después
           lastMessageText: data.content?.text || '',
           onTypingStart: () => {
             ws.send(JSON.stringify({
               type: 'suggestion:auto_typing',
-              suggestionId: suggestion.id,
             }));
           },
           onProcess: async () => {
-            ws.send(JSON.stringify({
-              type: 'suggestion:auto_sending',
-              suggestionId: suggestion.id,
-            }));
-
-            const decision = aiService.getSuggestionBrandingDecision(suggestion.id);
-            const finalText = decision.promo
-              ? aiService.appendFluxCoreBrandingFooter(suggestion.suggestedText)
-              : suggestion.suggestedText;
-
-            await messageCore.send({
-              conversationId: conversationId!,
-              senderAccountId: accountId!,
-              content: { text: finalText } as any,
-              type: 'outgoing',
-              generatedBy: 'ai',
-            });
+            const suggestion = await generateSuggestion();
+            if (suggestion) {
+              await processSuggestion(ws, {
+                conversationId: conversationId!,
+                accountId: accountId!,
+                suggestion,
+                lastMessageText: data.content?.text || '',
+              });
+            }
           },
         });
       } else {
-        const delayMs = (aiConfig.responseDelay || 30) * 1000;
+        // Fixed delay: Esperar antes de generar
+        const delayMs = delaySeconds * 1000;
 
         ws.send(JSON.stringify({
           type: 'suggestion:auto_waiting',
-          suggestionId: suggestion.id,
           delayMs,
         }));
 
@@ -396,32 +386,34 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
           try {
             ws.send(JSON.stringify({
               type: 'suggestion:auto_typing',
-              suggestionId: suggestion.id,
             }));
 
-            setTimeout(async () => {
-              ws.send(JSON.stringify({
-                type: 'suggestion:auto_sending',
-                suggestionId: suggestion.id,
-              }));
-
-              const decision = aiService.getSuggestionBrandingDecision(suggestion.id);
-              const finalText = decision.promo
-                ? aiService.appendFluxCoreBrandingFooter(suggestion.suggestedText)
-                : suggestion.suggestedText;
-
-              await messageCore.send({
-                conversationId: conversationId!,
-                senderAccountId: accountId!,
-                content: { text: finalText } as any,
-                type: 'outgoing',
-                generatedBy: 'ai',
-              });
-            }, 2000);
+            // 🔧 CRÍTICO: Generar sugerencia DESPUÉS del delay
+            const suggestion = await generateSuggestion();
+            
+            if (suggestion) {
+              setTimeout(async () => {
+                await processSuggestion(ws, {
+                  conversationId: conversationId!,
+                  accountId: accountId!,
+                  suggestion,
+                  lastMessageText: data.content?.text || '',
+                });
+              }, 2000); // Typing animation delay
+            }
           } catch (error) {
             console.error('[ws-handler] Error in fixed delay auto-send:', error);
           }
         }, delayMs);
+      }
+    } else {
+      // Modo sugerencia: Generar inmediatamente sin delay
+      const suggestion = await generateSuggestion();
+      if (suggestion) {
+        ws.send(JSON.stringify({
+          type: 'suggestion:ready',
+          data: suggestion,
+        }));
       }
     }
 
@@ -494,9 +486,9 @@ async function processSuggestion(ws: any, params: {
     }));
     
     // Send the message
-    const decision = aiService.getSuggestionBrandingDecision(params.suggestion.id);
+    const decision = extensionHost.getSuggestionBrandingDecision(params.suggestion.id);
     const finalText = decision.promo
-      ? aiService.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
+      ? extensionHost.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
       : params.suggestion.suggestedText;
     
     await messageCore.send({

@@ -17,7 +17,7 @@ Integración del `ExtensionHost` en el flujo de `MessageCore` para que las exten
 - `ExtensionHost.processMessage()` existía pero NO era llamado
 - Las extensiones instaladas no procesaban mensajes
 
-**Resultado:** Las extensiones como `@fluxcore/core-ai` estaban instaladas pero inactivas.
+**Resultado:** Las extensiones como `@fluxcore/fluxcore` estaban instaladas pero inactivas.
 
 ---
 
@@ -269,7 +269,7 @@ Con COR-001 completado, las extensiones ahora pueden:
 
 1. **Recibir mensajes** via `onMessage` callback
 2. **Procesar contenido** y generar acciones
-3. **Responder automáticamente** (ej: @fluxcore/core-ai)
+3. **Responder automáticamente** (ej: @fluxcore/fluxcore)
 
 **Siguiente prioridad:** Implementar ejecución real de extensiones (cargar código de extensión y ejecutar `onMessage`).
 

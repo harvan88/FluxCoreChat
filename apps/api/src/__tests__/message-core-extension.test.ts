@@ -126,7 +126,7 @@ describe('COR-001: MessageCore + ExtensionHost Integration', () => {
 
   it('should include extensionResults in response when extensions are installed', async () => {
     // Este test verifica que el flujo de extensiones funciona
-    // Primero verificamos que core-ai está preinstalada
+    // Primero verificamos que FluxCore está preinstalada
 
     const extensionsRes = await fetch(`${API_URL}/extensions/available`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -134,11 +134,11 @@ describe('COR-001: MessageCore + ExtensionHost Integration', () => {
 
     if (extensionsRes.ok) {
       const extensions: any = await extensionsRes.json();
-      const coreAi = extensions.find((e: any) => e.id === '@fluxcore/core-ai');
+      const fluxcore = extensions.find((e: any) => e.id === '@fluxcore/fluxcore');
       
-      // Si core-ai está disponible, verificar que está en la lista
-      if (coreAi) {
-        expect(coreAi.preinstalled).toBe(true);
+      // Si FluxCore está disponible, verificar que está en la lista
+      if (fluxcore) {
+        expect(fluxcore.preinstalled).toBe(true);
       }
     }
 

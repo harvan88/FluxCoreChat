@@ -112,7 +112,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
         return { success: false, message: 'Account does not belong to user' };
       }
 
-      const traces = aiService.listTraces({ accountId, conversationId, limit });
+      const traces = await aiService.listTraces({ accountId, conversationId, limit });
       return { success: true, data: traces };
     } catch (error: any) {
       set.status = 500;
@@ -147,7 +147,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
         return { success: false, message: 'Account does not belong to user' };
       }
 
-      const trace = aiService.getTrace({ accountId, traceId: params.traceId });
+      const trace = await aiService.getTrace({ accountId, traceId: params.traceId });
       if (!trace) {
         set.status = 404;
         return { success: false, message: 'Trace not found' };
@@ -188,7 +188,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
         return { success: false, message: 'Account does not belong to user' };
       }
 
-      const cleared = aiService.clearTraces({ accountId });
+      const cleared = await aiService.clearTraces({ accountId });
       return { success: true, data: { cleared } };
     } catch (error: any) {
       set.status = 500;

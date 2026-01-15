@@ -37,7 +37,7 @@
 - `auth`: Autenticación
 - `chat`: Sistema de chat
 - `extensions`: Sistema de extensiones
-- `core-ai`: Extensión @fluxcore/core-ai
+- `fluxcore`: Extensión @fluxcore/fluxcore
 
 ---
 
@@ -336,7 +336,7 @@ git commit -m "feat(core): implement MessageCore orchestrator
 - Create MessageCore class without AI logic
 - Implement receive() method
 - Delegate to persistence, notifications, and extensions
-- NO integrated AI - delegates to @fluxcore/core-ai extension
+- NO integrated AI - delegates to @fluxcore/fluxcore extension
 
 Task: FC-050"
 
@@ -518,13 +518,13 @@ Duration: 2 weeks"
 
 ---
 
-## Hito 5: @fluxcore/core-ai (1.5 semanas)
+## Hito 5: @fluxcore/fluxcore (1.5 semanas)
 
-### Branch: `feature/core-ai-extension`
+### Branch: `feature/fluxcore-extension`
 
 ```bash
-# FC-170: Crear extensión core-ai
-git commit -m "feat(core-ai): create @fluxcore/core-ai extension
+# FC-170: Crear extensión fluxcore
+git commit -m "feat(fluxcore): create @fluxcore/fluxcore extension
 
 - Initialize extension package structure
 - Setup TypeScript configuration
@@ -532,8 +532,8 @@ git commit -m "feat(core-ai): create @fluxcore/core-ai extension
 
 Task: FC-170"
 
-# FC-171: Manifest de core-ai
-git commit -m "feat(core-ai): define manifest.json
+# FC-171: Manifest de fluxcore
+git commit -m "feat(fluxcore): define manifest.json
 
 - Add extension metadata
 - Define required permissions
@@ -543,7 +543,7 @@ git commit -m "feat(core-ai): define manifest.json
 Task: FC-171"
 
 # FC-172: PromptBuilder
-git commit -m "feat(core-ai): implement PromptBuilder
+git commit -m "feat(fluxcore): implement PromptBuilder
 
 - Create prompt construction service
 - Combine profile + private_context + relationship context
@@ -553,7 +553,7 @@ git commit -m "feat(core-ai): implement PromptBuilder
 Task: FC-172"
 
 # FC-173: Integrar Groq SDK
-git commit -m "feat(core-ai): integrate Groq SDK
+git commit -m "feat(fluxcore): integrate Groq SDK
 
 - Add Groq client configuration
 - Implement chat completion calls
@@ -563,7 +563,7 @@ git commit -m "feat(core-ai): integrate Groq SDK
 Task: FC-173"
 
 # FC-174: Modos suggest/auto/off
-git commit -m "feat(core-ai): implement AI response modes
+git commit -m "feat(fluxcore): implement AI response modes
 
 - Add suggest mode (requires approval)
 - Add auto mode (sends automatically)
@@ -573,7 +573,7 @@ git commit -m "feat(core-ai): implement AI response modes
 Task: FC-174"
 
 # FC-175: Cola de respuestas con delay
-git commit -m "feat(core-ai): add response queue with delay
+git commit -m "feat(fluxcore): add response queue with delay
 
 - Implement configurable response delay
 - Create queue system for AI responses
@@ -581,10 +581,10 @@ git commit -m "feat(core-ai): add response queue with delay
 
 Task: FC-175"
 
-# FC-176: Pre-instalar core-ai
-git commit -m "feat(api): auto-install core-ai on account creation
+# FC-176: Pre-instalar fluxcore
+git commit -m "feat(api): auto-install fluxcore on account creation
 
-- Add hook to install @fluxcore/core-ai
+- Add hook to install @fluxcore/fluxcore
 - Enable by default for new accounts
 - Set default configuration
 
@@ -610,7 +610,7 @@ git commit -m "feat(web): create AI suggestion card component
 Task: FC-178"
 
 # FC-179: Panel de configuración
-git commit -m "feat(web): add core-ai settings panel
+git commit -m "feat(web): add fluxcore settings panel
 
 - Create AI configuration UI
 - Add mode selector (suggest/auto/off)
@@ -621,7 +621,7 @@ Task: FC-179"
 
 # Merge a develop
 git checkout develop
-git merge feature/core-ai-extension --no-ff -m "feat: merge @fluxcore/core-ai extension (Hito 5)
+git merge feature/fluxcore-extension --no-ff -m "feat: merge @fluxcore/fluxcore extension (Hito 5)
 
 Completed tasks: FC-170 to FC-179
 Duration: 1.5 weeks"
@@ -635,7 +635,7 @@ Duration: 1.5 weeks"
 
 ```bash
 # FC-130: Extender PromptBuilder
-git commit -m "feat(core-ai): extend PromptBuilder with relationship context
+git commit -m "feat(fluxcore): extend PromptBuilder with relationship context
 
 - Add relationship context to prompts
 - Parse structured context entries
@@ -724,7 +724,7 @@ git commit -m "feat(extensions): create appointments extension
 - Add appointment management API
 - Create appointment UI components
 - Add calendar view
-- Integrate with core-ai for tool calling
+- Integrate with fluxcore for tool calling
 
 Tasks: FC-180 to FC-191"
 
@@ -856,7 +856,7 @@ FluxCore v1.0.0 - First production release
 
 Features:
 - Complete chat system with multi-channel support
-- Extension system with @fluxcore/core-ai
+- Extension system with @fluxcore/fluxcore
 - WhatsApp integration
 - Collaborative workspaces
 - Production-ready infrastructure

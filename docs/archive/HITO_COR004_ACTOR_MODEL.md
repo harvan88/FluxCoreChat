@@ -31,7 +31,7 @@ Un **Actor** es cualquier entidad que puede enviar o recibir mensajes:
 |-----------|-------------|---------|
 | `account` | Cuenta de usuario | Usuario personal o negocio |
 | `user` | Usuario directo | Contextos administrativos |
-| `builtin_ai` | IA del sistema | @fluxcore/core-ai |
+| `builtin_ai` | IA del sistema | @fluxcore/fluxcore |
 | `extension` | Extensión instalada | @fluxcore/appointments |
 
 ### Diagrama de Entidad-Relación (ERD)
@@ -102,7 +102,7 @@ createActor(data)                    // Crear actor
 getActorById(id)                     // Obtener por ID
 getOrCreateActorForAccount(accountId) // Auto-crear para cuenta
 getActorByExtensionId(extensionId)   // Buscar por extensión
-getCoreAiActor()                     // Obtener actor core-ai
+getFluxCoreActor()                   // Obtener actor FluxCore
 getExtensionActors()                 // Listar actores extensión
 getActorsByType(type)                // Filtrar por tipo
 ```
@@ -134,7 +134,7 @@ await db.insert(actors).values({
 5. Añadir `from_actor_id` a messages
 6. Añadir `to_actor_id` a messages
 7. Crear índices para performance
-8. Crear actores builtin (core-ai, appointments)
+8. Crear actores builtin (fluxcore, appointments)
 
 ### Ejecutar migración
 
@@ -228,7 +228,7 @@ Debería mostrar:
 
 | actor_type | extension_id | display_name |
 |------------|--------------|--------------|
-| builtin_ai | @fluxcore/core-ai | FluxCore AI |
+| builtin_ai | @fluxcore/fluxcore | FluxCore AI |
 | extension | @fluxcore/appointments | Sistema de Turnos |
 
 #### 4. Crear usuario y cuenta
@@ -279,7 +279,7 @@ Los campos `from_actor_id` y `to_actor_id` estarán NULL para mensajes existente
 - [x] `ActorService` implementado
 - [x] `AccountService` crea actor automáticamente
 - [x] Migración ejecutada exitosamente
-- [x] Actores builtin creados (core-ai, appointments)
+- [x] Actores builtin creados (fluxcore, appointments)
 - [x] Índices creados para performance
 - [x] Tests existentes siguen pasando (8/8)
 - [x] Build compila correctamente
@@ -292,7 +292,7 @@ Los campos `from_actor_id` y `to_actor_id` estarán NULL para mensajes existente
 Con COR-004 completado, ahora es posible:
 
 1. **Trazabilidad completa** - Saber exactamente quién envió cada mensaje
-2. **Mensajes de IA identificados** - core-ai tiene su propio actor
+2. **Mensajes de IA identificados** - fluxcore tiene su propio actor
 3. **Extensiones como actores** - Cada extensión puede enviar mensajes
 4. **Auditoría** - Historial completo de origen/destino
 
@@ -300,10 +300,10 @@ Con COR-004 completado, ahora es posible:
 
 ```typescript
 // Al crear un mensaje de IA:
-const coreAiActor = await actorService.getCoreAiActor();
+const fluxcoreActor = await actorService.getFluxCoreActor();
 const message = await messageService.createMessage({
   // ... otros campos ...
-  fromActorId: coreAiActor.id,
+  fromActorId: fluxcoreActor.id,
   toActorId: recipientActor.id,
 });
 ```

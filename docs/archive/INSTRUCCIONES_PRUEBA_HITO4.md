@@ -91,7 +91,7 @@ $extensions.data | ForEach-Object { Write-Host "- $($_.id): $($_.name)" }
 
 ### 4.4 Obtener Manifest de Extensión
 ```powershell
-$manifest = Invoke-RestMethod -Uri "http://localhost:3000/extensions/manifest/%40fluxcore%2Fcore-ai" `
+$manifest = Invoke-RestMethod -Uri "http://localhost:3000/extensions/manifest/%40fluxcore%2Ffluxcore" `
   -Method GET
 Write-Host "Extension: $($manifest.data.name) v$($manifest.data.version)"
 Write-Host "Permisos: $($manifest.data.permissions.Count)"
@@ -101,7 +101,7 @@ Write-Host "Permisos: $($manifest.data.permissions.Count)"
 ```powershell
 $install = Invoke-RestMethod -Uri "http://localhost:3000/extensions/install" `
   -Method POST -Headers $headers -ContentType "application/json" `
-  -Body "{`"accountId`":`"$accountId`",`"extensionId`":`"@fluxcore/core-ai`"}"
+  -Body "{`"accountId`":`"$accountId`",`"extensionId`":`"@fluxcore/fluxcore`"}"
 Write-Host "Instalada: $($install.data.extensionId)"
 Write-Host "Habilitada: $($install.data.enabled)"
 ```
@@ -115,7 +115,7 @@ $installed.data | ForEach-Object { Write-Host "- $($_.extensionId) (enabled: $($
 
 ### 4.7 Actualizar Configuración
 ```powershell
-$extIdEncoded = [System.Web.HttpUtility]::UrlEncode("@fluxcore/core-ai")
+$extIdEncoded = [System.Web.HttpUtility]::UrlEncode("@fluxcore/fluxcore")
 $update = Invoke-RestMethod `
   -Uri "http://localhost:3000/extensions/$accountId/$extIdEncoded" `
   -Method PATCH -Headers $headers -ContentType "application/json" `

@@ -10,6 +10,7 @@ import clsx from 'clsx';
 import { ExtensionCard } from './ExtensionCard';
 import { useExtensions } from '../../hooks/useExtensions';
 import { usePanelStore } from '../../store/panelStore';
+import { useUIStore } from '../../store/uiStore';
 
 type TabType = 'all' | 'installed' | 'available';
 
@@ -24,6 +25,7 @@ export function ExtensionsPanel({
   const [searchQuery, setSearchQuery] = useState('');
 
   const { openTab } = usePanelStore();
+  const { setActiveActivity } = useUIStore();
 
   const {
     extensions,
@@ -35,7 +37,7 @@ export function ExtensionsPanel({
     refresh,
   } = useExtensions(accountId);
 
-  const handleOpenConfigure = (extensionId: string, extensionName: string) => {
+  const handleOpenConfigure = (extensionId: string, extensionName: string, view?: string) => {
     openTab('extensions', {
       type: 'extension',
       title: extensionName,
@@ -44,8 +46,13 @@ export function ExtensionsPanel({
       context: {
         extensionId,
         extensionName,
+        ...(view ? { view } : {}),
       },
     });
+  };
+
+  const handleActivateExtension = (extensionId: string) => {
+    setActiveActivity(`ext:${extensionId}` as any);
   };
 
   if (!accountId) {
@@ -178,7 +185,23 @@ export function ExtensionsPanel({
               onToggle={(enabled) => toggle(extension.id, enabled)}
               onConfigure={
                 extension.status !== 'available'
-                  ? () => handleOpenConfigure(extension.id, extension.name)
+                  ? () => {
+                      const panelComponent = extension.installation?.manifest?.ui?.panel?.component;
+                      const isFluxCore = panelComponent === 'FluxCorePanel';
+                      const hasSidebarUI = Boolean(extension.installation?.manifest?.ui?.sidebar);
+
+                      if (isFluxCore) {
+                        handleActivateExtension(extension.id);
+                        return;
+                      }
+
+                      if (hasSidebarUI) {
+                        handleActivateExtension(extension.id);
+                        return;
+                      }
+
+                      handleOpenConfigure(extension.id, extension.name);
+                    }
                   : undefined
               }
               isLoading={isLoading}

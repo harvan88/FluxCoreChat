@@ -1,5 +1,5 @@
 {
-  "id": "@fluxcore/core-ai",
+  "id": "@fluxcore/fluxcore",
   "name": "FluxCore",
   "version": "1.0.0",
   "description": "Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto",

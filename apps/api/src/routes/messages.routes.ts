@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { messageCore } from '../core/message-core';
-import { aiService } from '../services/ai.service';
+import { extensionHost } from '../services/extension-host.service';
 
 export const messagesRoutes = new Elysia({ prefix: '/messages' })
   .use(authMiddleware)
@@ -113,7 +113,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         if (isFluxCoreBranded && typeof nextContent?.text === 'string') {
           nextContent = {
             ...nextContent,
-            text: aiService.appendFluxCoreBrandingFooter(nextContent.text),
+            text: extensionHost.appendFluxCoreBrandingFooter(nextContent.text),
             __fluxcore: existingContent.__fluxcore,
           };
         }

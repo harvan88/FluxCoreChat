@@ -254,7 +254,7 @@ interface LocalMessage {
 |----|-------------|-----------|------------|-------------------------|--------------|
 | COR-030 | Crear servicio ActorService | ALTA | Backend | Gestión de actores (crear, obtener, mapear) | COR-004 |
 | COR-031 | Actualizar MessageService para usar actors | ALTA | Backend | Mensajes se crean con from_actor_id y to_actor_id | COR-030 |
-| COR-032 | Crear actor para core-ai extension | ALTA | Backend | @fluxcore/core-ai tiene su actor registrado | COR-030 |
+| COR-032 | Crear actor para fluxcore extension | ALTA | Backend | @fluxcore/fluxcore tiene su actor registrado | COR-030 |
 | COR-033 | Crear actors para otras extensiones | MEDIA | Backend | Extensiones instaladas crean su actor | COR-030 |
 | COR-034 | Actualizar endpoints de mensajes | MEDIA | Backend | GET messages incluye información de actor | COR-031 |
 | COR-035 | Migración de datos existentes | ALTA | Database | Mensajes existentes se migran con actors correctos | COR-031 |

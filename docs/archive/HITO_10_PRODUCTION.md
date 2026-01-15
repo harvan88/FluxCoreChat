@@ -136,7 +136,7 @@ El endpoint `/health` retorna el estado del servidor:
 │                            │                                     │
 │   ┌───────────────────────────────────────────────────────┐     │
 │   │                   EXTENSIONES                          │     │
-│   │   • @fluxcore/core-ai      • @fluxcore/appointments   │     │
+│   │   • @fluxcore/fluxcore      • @fluxcore/appointments   │     │
 │   └───────────────────────────────────────────────────────┘     │
 │                            ▲                                     │
 │                            │                                     │

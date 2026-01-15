@@ -13,7 +13,7 @@
 | Área | TOTEM Esperado | Estado Real | Brecha |
 |------|----------------|-------------|--------|
 | **Chat Core** | Mensajería completa | Funcional con mocks en UI | 🟡 30% |
-| **Extensiones** | Framework + core-ai + appointments | Backend OK, UI parcial | 🟡 25% |
+| **Extensiones** | Framework + fluxcore + appointments | Backend OK, UI parcial | 🟡 25% |
 | **UI Chat** | Threads, edición, respuestas, estados | Solo mensajes básicos | 🔴 60% |
 | **Flujos IA** | Sugerencias en tiempo real | WebSocket listo, sin AI real | 🟡 40% |
 | **Offline-First** | IndexedDB + Sync | Hooks creados, sin integración | 🟡 35% |
@@ -69,11 +69,11 @@
 | extension_contexts table | ❌ No existe | ALTO |
 | UI ExtensionsPanel | ✅ Creado | - |
 | UI ExtensionConfigPanel | ❌ No existe | MEDIO |
-| Pre-install core-ai on account creation | ❌ No implementado | ALTO |
+| Pre-install fluxcore on account creation | ❌ No implementado | ALTO |
 
 **Acciones Requeridas:**
 1. Crear tabla `extension_contexts` para overlays
-2. Hook de pre-instalación de core-ai en `accountService.create()`
+2. Hook de pre-instalación de fluxcore en `accountService.create()`
 3. Crear ExtensionConfigPanel para editar configuración
 
 ### 2.3 AI Integration - Brechas
@@ -182,13 +182,13 @@
 | Tarea | Descripción | Tiempo |
 |-------|-------------|--------|
 | V2-4.1 | Crear schema extension_contexts | 30m |
-| V2-4.2 | Pre-instalar core-ai en nuevas cuentas | 30m |
+| V2-4.2 | Pre-instalar fluxcore en nuevas cuentas | 30m |
 | V2-4.3 | Crear ExtensionConfigPanel component | 1h |
 | V2-4.4 | Integrar ExtensionsPanel en sidebar | 30m |
 | V2-4.5 | Test: instalar/configurar extensión | 30m |
 
 **Criterios de Éxito:**
-- [ ] Nueva cuenta tiene core-ai preinstalada
+- [ ] Nueva cuenta tiene fluxcore preinstalada
 - [ ] Usuario puede ver y configurar extensiones
 - [ ] Configuración de extensión persiste
 
@@ -302,7 +302,7 @@ DÍA 4 (3h):
 | Archivo | Cambio |
 |---------|--------|
 | `packages/db/src/schema/extension-contexts.ts` | CREAR: Schema overlays |
-| `apps/api/src/services/account.service.ts` | Pre-instalar core-ai |
+| `apps/api/src/services/account.service.ts` | Pre-instalar fluxcore |
 | `apps/web/src/components/extensions/ExtensionConfigPanel.tsx` | CREAR |
 
 ---

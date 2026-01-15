@@ -220,7 +220,7 @@ WHERE mode = 'automatic';
 | selectedAccountId | accountStore | setActiveAccount | persist + broadcast | `@c:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/store/accountStore.ts:90-94` |
 | activeConversationId | uiStore | setActiveConversation | memory only | `@c:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/store/uiStore.ts:135` |
 | automation mode | automation_rules DB | setRule API | DB + WS broadcast | `@c:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/api/src/services/automation-controller.service.ts:80-125` |
-| core-ai enabled | extensions_installations DB | toggle API | DB persist | VERIFIED via SQL |
+| fluxcore enabled | extensions_installations DB | toggle API | DB persist | VERIFIED via SQL |
 | credits balance | credits_ledger DB | grant/consume | DB atomic ops | `@c:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/api/src/routes/credits.routes.ts:139-167` |
 | extension state | extensions_installations | toggle method | DB + memory cache | VERIFIED via API |
 

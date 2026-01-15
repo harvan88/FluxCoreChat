@@ -1,4 +1,4 @@
-# Instrucciones de Prueba - Hito 5: @fluxcore/core-ai
+# Instrucciones de Prueba - Hito 5: @fluxcore/fluxcore
 
 ## Requisitos Previos
 

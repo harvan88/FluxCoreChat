@@ -48,11 +48,12 @@ export function Sidebar() {
     if (!activeActivity.startsWith('ext:')) return;
 
     const extensionId = activeActivity.replace('ext:', '');
-    if (extensionId !== '@fluxcore/website-builder') return;
-
     const installation = installations.find((i) => i.extensionId === extensionId);
 
     if (!installation) return;
+
+    const panelComponent = installation.manifest?.ui?.panel?.component;
+    if (panelComponent !== 'WebsiteBuilderPanel') return;
 
     const title = installation.manifest?.ui?.sidebar?.title || installation.manifest?.name || 'Extensión';
 
@@ -94,15 +95,18 @@ export function Sidebar() {
     // Verificar si es una actividad de extensión
     if (activeActivity.startsWith('ext:')) {
       const extensionId = activeActivity.replace('ext:', '');
+      const installation = installations.find((i) => i.extensionId === extensionId);
 
-      // FluxCore - Plataforma de Orquestación de Asistentes IA
-      if (extensionId === '@fluxcore/core-ai') {
+      const panelComponent = installation?.manifest?.ui?.panel?.component;
+      const extensionName = installation?.manifest?.name || installation?.manifest?.ui?.panel?.title || 'Extensión';
+
+      if (panelComponent === 'FluxCorePanel') {
         return (
-          <FluxCoreSidebar 
+          <FluxCoreSidebar
             activeView={fluxCoreActiveView}
             onViewChange={(view) => {
               setFluxCoreActiveView(view);
-              // Abrir tab en DynamicContainer para cada vista
+
               const { layout, openTab, activateTab, closeTab, focusContainer } = usePanelStore.getState();
               const viewTitles: Record<string, string> = {
                 usage: 'Uso',
@@ -129,7 +133,7 @@ export function Sidebar() {
                 .find(
                   ({ tab }) =>
                     tab.type === 'extension' &&
-                    tab.context?.extensionId === '@fluxcore/core-ai' &&
+                    tab.context?.extensionId === extensionId &&
                     tab.context?.view === view &&
                     tab.context?.accountId === selectedAccountId
                 );
@@ -154,30 +158,24 @@ export function Sidebar() {
                 icon: viewIcons[view] || 'Settings',
                 closable: true,
                 context: {
-                  extensionId: '@fluxcore/core-ai',
-                  extensionName: 'FluxCore',
+                  extensionId,
+                  extensionName,
                   view: view,
                   accountId: selectedAccountId,
                 },
               });
             }}
-            accountName="FluxCore"
+            accountName={extensionName}
           />
         );
       }
 
-      // Karen (Website Builder) migra a tab
-      if (extensionId === '@fluxcore/website-builder') {
+      if (panelComponent === 'WebsiteBuilderPanel') {
         return <WebsiteBuilderSidebar />;
       }
 
-      // Fallback legacy para otras extensiones (si existen)
-      const installation = installations.find(i => i.extensionId === extensionId);
-
-      if (installation?.manifest?.ui?.panel?.component) {
-        const componentName = installation.manifest.ui.panel.component;
-        const ExtensionComponent = extensionComponents[componentName];
-
+      if (panelComponent) {
+        const ExtensionComponent = extensionComponents[panelComponent];
         if (ExtensionComponent) {
           return <ExtensionComponent />;
         }

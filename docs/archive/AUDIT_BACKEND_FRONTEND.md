@@ -72,7 +72,7 @@ message_enrichments ✅ Vacía (limpia)
 
 ### 1. Extensiones NO se cargan desde /extensions
 **Archivo:** `manifest-loader.service.ts`
-**Problema:** Solo carga `@fluxcore/core-ai` como built-in. No carga manifests de `/extensions/`
+**Problema:** Solo carga `@fluxcore/fluxcore` como built-in. No carga manifests de `/extensions/`
 **Solución:** Llamar `loadFromDirectory()` al iniciar el servidor
 
 ### 2. Usuario nuevo no tiene Fluxi

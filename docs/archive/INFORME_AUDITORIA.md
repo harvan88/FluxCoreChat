@@ -21,7 +21,7 @@
 
 ### Diagnóstico General
 
-El proyecto FluxCore tiene una **sólida implementación backend** con schemas de base de datos bien diseñados, sistema de extensiones funcional, y core-ai implementado correctamente como extensión (respetando el principio inmutable #2). Sin embargo, presenta **deficiencias críticas en el frontend** y en la implementación de contratos arquitectónicos canónicos definidos en el TOTEM.
+El proyecto FluxCore tiene una **sólida implementación backend** con schemas de base de datos bien diseñados, sistema de extensiones funcional, y fluxcore implementado correctamente como extensión (respetando el principio inmutable #2). Sin embargo, presenta **deficiencias críticas en el frontend** y en la implementación de contratos arquitectónicos canónicos definidos en el TOTEM.
 
 **El proyecto NO está listo para producción** como declara ESTADO_PROYECTO.md.
 
@@ -32,7 +32,7 @@ El proyecto FluxCore tiene una **sólida implementación backend** con schemas d
 | # | Principio | Cumplido | Observaciones | Severidad |
 |---|-----------|----------|---------------|-----------|
 | 1 | **El núcleo es sagrado** | ✅ Parcial | MessageCore NO delega a ExtensionHost en mensajes entrantes | ALTA |
-| 2 | **Núcleo agnóstico a IA** | ✅ SÍ | core-ai es extensión separada en `extensions/core-ai/` | - |
+| 2 | **Núcleo agnóstico a IA** | ✅ SÍ | fluxcore es extensión separada en `extensions/fluxcore/` | - |
 | 3 | **Gratuito por defecto** | ⚠️ N/A | No hay implementación de planes/monetización | MEDIA |
 | 4 | **Separación persona/cuenta** | ✅ SÍ | users → accounts bien separados | - |
 | 5 | **Contactos ≠ Conversaciones** | ✅ SÍ | relationships vs conversations implementado | - |
@@ -127,11 +127,11 @@ El proyecto FluxCore tiene una **sólida implementación backend** con schemas d
 
 ---
 
-### Hito 5: @fluxcore/core-ai ✅ COMPLETADO
+### Hito 5: @fluxcore/fluxcore ✅ COMPLETADO
 
 | Tarea | Estado | Verificación |
 |-------|--------|--------------|
-| FC-170: Crear extensión | ✅ | `extensions/core-ai/` |
+| FC-170: Crear extensión | ✅ | `extensions/fluxcore/` |
 | FC-171: Manifest.json | ✅ | Permisos correctos |
 | FC-172: PromptBuilder | ✅ | 4 capas de contexto |
 | FC-173: Groq SDK | ✅ | GroqClient implementado |
@@ -256,7 +256,7 @@ El proyecto FluxCore tiene una **sólida implementación backend** con schemas d
 | **Backend API** | 12 rutas | 0 | 100% |
 | **Base de Datos** | 10 tablas | 0 | 100% |
 | **Sistema Extensiones** | Completo | - | 100% |
-| **core-ai Extension** | Completo | UI config | 90% |
+| **fluxcore Extension** | Completo | UI config | 90% |
 | **Frontend Layout** | Básico | Panel Stack | 30% |
 | **Offline Support** | Ninguno | Completo | 0% |
 | **Actor Model** | Básico | Completo | 40% |

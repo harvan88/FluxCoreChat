@@ -125,6 +125,10 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
         canSharePermissions: true, // Propietario puede compartir permisos
       });
 
+      await extensionHost.onInstall(accountId, extensionId);
+      await extensionHost.onConfigUpdate(accountId, extensionId, (installation as any).config || defaultConfig);
+      await extensionHost.onEnable(accountId, extensionId);
+
       return {
         success: true,
         data: installation,
@@ -166,6 +170,9 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
       }
 
       const extensionId = decodeURIComponent(params.extensionId);
+
+      await extensionHost.onUninstall(params.accountId, extensionId);
+
       const deleted = await extensionService.uninstall(params.accountId, extensionId);
       
       if (!deleted) {
@@ -221,6 +228,18 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
         enabled,
       });
 
+      if (updated) {
+        if (config) {
+          await extensionHost.onConfigUpdate(params.accountId, extensionId, (updated as any).config || config);
+        }
+        if (enabled === true) {
+          await extensionHost.onEnable(params.accountId, extensionId);
+        }
+        if (enabled === false) {
+          await extensionHost.onDisable(params.accountId, extensionId);
+        }
+      }
+
       if (!updated) {
         set.status = 404;
         return { success: false, message: 'Extension installation not found' };
@@ -262,6 +281,7 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
       const extensionId = decodeURIComponent(params.extensionId);
       const updated = await extensionService.setEnabled(params.accountId, extensionId, true);
+      await extensionHost.onEnable(params.accountId, extensionId);
       return { success: true, data: updated };
     } catch (error: any) {
       set.status = 500;
@@ -291,6 +311,7 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
       const extensionId = decodeURIComponent(params.extensionId);
       const updated = await extensionService.setEnabled(params.accountId, extensionId, false);
+      await extensionHost.onDisable(params.accountId, extensionId);
       return { success: true, data: updated };
     } catch (error: any) {
       set.status = 500;

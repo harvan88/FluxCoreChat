@@ -6,8 +6,10 @@
  */
 
 import { db } from '@fluxcore/db';
-import { actors, type ActorType } from '@fluxcore/db';
+import { actors } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
+
+type ActorType = 'account' | 'user' | 'builtin_ai' | 'extension';
 
 export class ActorService {
   /**
@@ -95,10 +97,10 @@ export class ActorService {
   }
 
   /**
-   * Obtener actor builtin de core-ai
+   * Obtener actor builtin de FluxCore
    */
-  async getCoreAiActor() {
-    return this.getActorByExtensionId('@fluxcore/core-ai');
+  async getFluxCoreActor() {
+    return this.getActorByExtensionId('@fluxcore/fluxcore');
   }
 
   /**
@@ -112,7 +114,7 @@ export class ActorService {
   }
 
   /**
-   * Obtener todos los actores builtin (core-ai)
+   * Obtener todos los actores builtin (IA)
    */
   async getBuiltinActors() {
     return await db

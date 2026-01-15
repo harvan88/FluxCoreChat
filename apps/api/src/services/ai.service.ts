@@ -1,5 +1,5 @@
 /**
- * AI Service - Integra la extensión @fluxcore/core-ai con el sistema
+ * AI Service - Integra la extensión @fluxcore/fluxcore con el sistema
  * 
  * Gestiona:
  * - Generación de sugerencias de IA
@@ -10,17 +10,40 @@
 import { db } from '@fluxcore/db';
 import { messages, conversations, accounts, relationships, extensionInstallations } from '@fluxcore/db';
 import { and, eq, desc } from 'drizzle-orm';
-import { 
-  CoreAIExtension, 
-  getCoreAI, 
-  type AISuggestion, 
-  type MessageEvent,
-  type ContextData,
-  OpenAICompatibleClient,
-  AIClientError,
-} from '../../../../extensions/core-ai/src';
+import { manifestLoader } from './manifest-loader.service';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { aiEntitlementsService, type AIProviderId } from './ai-entitlements.service';
 import { creditsService } from './credits.service';
+
+type AISuggestion = {
+  id: string;
+  conversationId: string;
+  content: string;
+  generatedAt: Date;
+  model: string;
+  traceId?: string;
+  provider?: 'groq' | 'openai';
+  baseUrl?: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  status: 'pending' | 'approved' | 'rejected' | 'edited';
+};
+
+type MessageEvent = {
+  messageId: string;
+  conversationId: string;
+  senderAccountId: string;
+  recipientAccountId: string;
+  content: string;
+  messageType: string;
+  createdAt: Date;
+};
+
+type ContextData = any;
 
 export interface AIServiceConfig {
   defaultEnabled: boolean;
@@ -29,30 +52,103 @@ export interface AIServiceConfig {
 }
 
 class AIService {
-  private extension: CoreAIExtension;
   private wsEmitter?: (event: string, data: any) => void;
-  private probeClients: Map<string, OpenAICompatibleClient> = new Map();
+  private probeClients: Map<string, any> = new Map();
+  private suggestions: Map<string, AISuggestion> = new Map();
+  private fluxcoreModulePromise: Promise<any> | null = null;
+  private fluxcoreExtensionPromise: Promise<any> | null = null;
+  private fluxcoreExtension: any | null = null;
   private readonly FLUXCORE_PROMO_MARKER = '[[fluxcore:promo]]';
   private readonly FLUXCORE_BRANDING_FOOTER = '(gestionado por FluxCore)';
+  private readonly FLUXCORE_USERNAME = 'fluxcore';
   private readonly AI_SESSION_FEATURE_KEY = 'ai.session';
   private readonly OPENAI_ENGINE = 'openai_chat';
 
   constructor() {
-    this.extension = getCoreAI({
-      enabled: true,
-      mode: 'suggest',
-      responseDelay: 30,
-      provider: 'groq',
-      model: 'llama-3.1-8b-instant',
-      maxTokens: 256,
-      temperature: 0.7,
-      timeoutMs: 15000,
-    });
+  }
 
-    // Registrar callback para sugerencias
-    this.extension.onSuggestion((suggestion) => {
-      this.emitSuggestion(suggestion);
-    });
+  private async loadFluxCoreModule(): Promise<any> {
+    if (this.fluxcoreModulePromise) return this.fluxcoreModulePromise;
+
+    this.fluxcoreModulePromise = (async () => {
+      const extensionId = '@fluxcore/fluxcore';
+      const manifest = manifestLoader.getManifest(extensionId);
+      const root = manifestLoader.getExtensionRoot(extensionId);
+      const entrypoint = typeof (manifest as any)?.entrypoint === 'string' ? (manifest as any).entrypoint : null;
+
+      if (!manifest || !root || !entrypoint) {
+        throw new Error('fluxcore runtime entrypoint not available');
+      }
+
+      const absEntrypoint = path.resolve(root, entrypoint);
+      const moduleUrl = pathToFileURL(absEntrypoint).href;
+      return import(moduleUrl);
+    })();
+
+    return this.fluxcoreModulePromise;
+  }
+
+  private async getFluxCoreExtension(): Promise<any | null> {
+    if (this.fluxcoreExtension) return this.fluxcoreExtension;
+    if (this.fluxcoreExtensionPromise) return this.fluxcoreExtensionPromise;
+
+    this.fluxcoreExtensionPromise = (async () => {
+      try {
+        const mod: any = await this.loadFluxCoreModule();
+        if (typeof mod?.getFluxCore !== 'function') {
+          return null;
+        }
+
+        const ext = mod.getFluxCore({
+          enabled: true,
+          mode: 'suggest',
+          responseDelay: 30,
+          provider: 'groq',
+          model: 'llama-3.1-8b-instant',
+          maxTokens: 256,
+          temperature: 0.7,
+          timeoutMs: 15000,
+        });
+
+        if (typeof ext?.onSuggestion === 'function') {
+          ext.onSuggestion((suggestion: AISuggestion) => {
+            if (suggestion?.id) {
+              this.suggestions.set(suggestion.id, suggestion);
+            }
+            this.emitSuggestion(suggestion);
+          });
+        }
+
+        this.fluxcoreExtension = ext;
+        return ext;
+      } catch (error: any) {
+        console.warn('[ai-service] Could not load fluxcore runtime:', error?.message || error);
+        return null;
+      }
+    })();
+
+    return this.fluxcoreExtensionPromise;
+  }
+
+  private async getProbeClient(baseUrl: string): Promise<any> {
+    const existing = this.probeClients.get(baseUrl);
+    if (existing) return existing;
+
+    const mod: any = await this.loadFluxCoreModule();
+    if (typeof mod?.OpenAICompatibleClient !== 'function') {
+      throw new Error('fluxcore OpenAICompatibleClient not available');
+    }
+
+    const created = new mod.OpenAICompatibleClient(baseUrl);
+    this.probeClients.set(baseUrl, created);
+    return created;
+  }
+
+  private normalizeProbeError(error: any): { type: string; message: string; statusCode?: number } {
+    const type = typeof error?.type === 'string' ? error.type : 'unknown';
+    const message = typeof error?.message === 'string' ? error.message : 'Unknown error';
+    const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : undefined;
+    return { type, message, statusCode };
   }
 
   stripFluxCorePromoMarker(text: string): { text: string; promo: boolean } {
@@ -130,6 +226,7 @@ class AIService {
 
   /**
    * Procesar un mensaje entrante y generar sugerencia si corresponde
+   * NOTA: Este método genera la sugerencia. El delay debe aplicarse ANTES de llamar a este método.
    */
   async processMessage(
     messageId: string,
@@ -138,21 +235,71 @@ class AIService {
     recipientAccountId: string,
     content: string
   ): Promise<AISuggestion | null> {
+    console.log('[ai-service] ========== PROCESANDO MENSAJE ==========');
+    console.log('[ai-service] Message ID:', messageId);
+    console.log('[ai-service] Conversation ID:', conversationId);
+    console.log('[ai-service] Sender:', senderAccountId);
+    console.log('[ai-service] Recipient:', recipientAccountId);
+    console.log('[ai-service] Content:', content?.substring(0, 100));
+
     try {
-      // Obtener configuración de la extensión para la cuenta receptora
+      const extension = await this.getFluxCoreExtension();
+      if (!extension) {
+        console.log('[ai-service] ❌ Extension fluxcore NO disponible');
+        return null;
+      }
+      console.log('[ai-service] ✓ Extension fluxcore cargada');
+
+      // Obtener configuración base de la extensión
       const config = await this.getAccountConfig(recipientAccountId);
+
+      // 🔧 Obtener asistente activo con su composición completa
+      const { fluxcoreService } = await import('./fluxcore.service');
+      const composition = await fluxcoreService.resolveActiveAssistant(recipientAccountId);
+
+      const assistantModelConfig = composition?.assistant?.modelConfig || {};
+      const assistantProviderRaw = typeof (assistantModelConfig as any)?.provider === 'string' ? (assistantModelConfig as any).provider : null;
+      const assistantProvider = assistantProviderRaw === 'groq' || assistantProviderRaw === 'openai' ? assistantProviderRaw : null;
+
+      const baseProviderOrder = Array.isArray(config?.providerOrder) ? config.providerOrder : [];
+      const assistantProviderAvailable = assistantProvider
+        ? baseProviderOrder.some((p: any) => p?.provider === assistantProvider)
+        : false;
+
+      const providerOrder = assistantProviderAvailable && assistantProvider
+        ? baseProviderOrder
+          .slice()
+          .sort((a: any, b: any) => (a?.provider === assistantProvider ? 0 : 1) - (b?.provider === assistantProvider ? 0 : 1))
+        : baseProviderOrder;
+
+      const configWithAssistantPref = {
+        ...config,
+        provider: assistantProviderAvailable ? assistantProvider : config.provider,
+        providerOrder,
+      };
+
       const gated = await this.applyCreditsGating({
         accountId: recipientAccountId,
         conversationId,
-        config,
+        config: configWithAssistantPref,
       });
-      
+
       if (!gated.config.enabled || gated.config.mode === 'off') {
+        console.log('[ai-service] ❌ IA deshabilitada. enabled:', gated.config.enabled, 'mode:', gated.config.mode);
         return null;
       }
+      console.log('[ai-service] ✓ IA habilitada. mode:', gated.config.mode);
 
       // Construir contexto
       const context = await this.buildContext(recipientAccountId, conversationId);
+
+      // 🔧 NUEVO: Construir system prompt desde instructions del asistente
+      let systemPrompt = '';
+      if (composition?.instructions) {
+        for (const instruction of composition.instructions) {
+          systemPrompt += instruction.content + '\n\n';
+        }
+      }
 
       // Crear evento de mensaje
       const event: MessageEvent = {
@@ -165,21 +312,64 @@ class AIService {
         createdAt: new Date(),
       };
 
-      // Actualizar configuración de la extensión
-      await this.extension.onConfigChange(recipientAccountId, {
+      // 🔧 MODIFICADO: Actualizar configuración usando modelConfig del asistente activo
+      const assistantModel = typeof (assistantModelConfig as any)?.model === 'string' ? (assistantModelConfig as any).model : null;
+      const assistantTemperature = typeof (assistantModelConfig as any)?.temperature === 'number' ? (assistantModelConfig as any).temperature : null;
+      const assistantTopP = typeof (assistantModelConfig as any)?.topP === 'number' ? (assistantModelConfig as any).topP : null;
+      const assistantResponseFormat = typeof (assistantModelConfig as any)?.responseFormat === 'string' ? (assistantModelConfig as any).responseFormat : null;
+
+      // 🔧 FIX CRÍTICO: Usar provider del asistente activo, NO de extension_installations
+      const finalProvider = assistantProvider || gated.config.provider || 'groq';
+
+      // Construir providerOrder con el provider del asistente primero
+      let finalProviderOrder = gated.config.providerOrder || [];
+      if (assistantProvider && !finalProviderOrder.some((p: any) => p.provider === assistantProvider)) {
+        // Agregar provider del asistente si no está en la lista
+        const newProviderEntry = {
+          provider: assistantProvider,
+          baseUrl: assistantProvider === 'openai' ? 'https://api.openai.com/v1' : 'https://api.groq.com/openai/v1',
+          apiKey: assistantProvider === 'openai' ? process.env.OPENAI_API_KEY : process.env.GROQ_API_KEY,
+          keySource: 'env_single',
+        };
+        if (newProviderEntry.apiKey) {
+          finalProviderOrder = [newProviderEntry, ...finalProviderOrder];
+        }
+      } else if (assistantProvider) {
+        // Reordenar para que el provider del asistente esté primero
+        finalProviderOrder = [
+          ...finalProviderOrder.filter((p: any) => p.provider === assistantProvider),
+          ...finalProviderOrder.filter((p: any) => p.provider !== assistantProvider),
+        ];
+      }
+
+      await extension.onConfigChange(recipientAccountId, {
         enabled: gated.config.enabled,
         mode: gated.config.mode,
         responseDelay: gated.config.responseDelay,
-        provider: gated.config.provider,
-        model: gated.config.model || 'llama-3.1-8b-instant',
+        provider: finalProvider,  // ← USAR PROVIDER DEL ASISTENTE
+        model: assistantModel || gated.config.model || 'llama-3.1-8b-instant',  // ← SIEMPRE USAR MODELO DEL ASISTENTE
         maxTokens: gated.config.maxTokens || 256,
-        temperature: gated.config.temperature || 0.7,
+        temperature: assistantTemperature ?? gated.config.temperature ?? 0.7,
+        topP: assistantTopP ?? 1.0,
+        responseFormat: assistantResponseFormat || 'text',
         timeoutMs: 15000,
-        providerOrder: gated.config.providerOrder,
+        providerOrder: finalProviderOrder,  // ← USAR PROVEEDOR ORDER CORREGIDO
+        systemPrompt: systemPrompt.trim() || undefined,
+      });
+
+      console.log('[ai-service] Config aplicada (FIX):', {
+        enabled: gated.config.enabled,
+        mode: gated.config.mode,
+        model: assistantModel || gated.config.model,
+        provider: finalProvider,
+        providerOrderLength: finalProviderOrder?.length || 0,
+        providerOrderProviders: finalProviderOrder?.map((p: any) => p.provider),
       });
 
       // Generar sugerencia
-      const suggestion = await this.extension.onMessage(event, context, recipientAccountId);
+      console.log('[ai-service] Llamando extension.onMessage()...');
+      const suggestion = await extension.onMessage(event, context, recipientAccountId);
+      console.log('[ai-service] Resultado onMessage:', suggestion ? 'SUGERENCIA GENERADA' : 'null');
 
       if (
         gated.sessionId &&
@@ -194,12 +384,14 @@ class AIService {
       }
 
       if (suggestion) {
+        this.suggestions.set(suggestion.id, suggestion);
         this.emitSuggestion(suggestion);
       }
 
       return suggestion;
     } catch (error: any) {
-      console.error('[ai-service] Error processing message:', error.message);
+      console.error('[ai-service] ❌ ERROR en processMessage:', error.message);
+      console.error('[ai-service] Stack:', error.stack);
       return null;
     }
   }
@@ -282,13 +474,17 @@ class AIService {
         .where(
           and(
             eq(extensionInstallations.accountId, accountId),
-            eq(extensionInstallations.extensionId, '@fluxcore/core-ai')
+            eq(extensionInstallations.extensionId, '@fluxcore/fluxcore')
           )
         )
         .limit(1);
 
       const defaultAllowedProviders = (['groq', 'openai'] as AIProviderId[])
         .filter((provider) => this.getProductKeysForProvider(provider).length > 0);
+
+      console.log('[ai-service] OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+      console.log('[ai-service] GROQ_API_KEY exists:', !!process.env.GROQ_API_KEY);
+      console.log('[ai-service] defaultAllowedProviders:', defaultAllowedProviders);
 
       const defaultProvider: AIProviderId | null = defaultAllowedProviders.includes('groq')
         ? 'groq'
@@ -340,10 +536,34 @@ class AIService {
 
       const cfg = (installation.config || {}) as Record<string, any>;
 
-      const requestedProvider = cfg.provider === 'openai' || cfg.provider === 'groq' ? (cfg.provider as AIProviderId) : null;
+      // Consultar asistente activo para obtener modelConfig y timingConfig
+      const { fluxcoreService } = await import('./fluxcore.service');
+      const activeAssistant = await fluxcoreService.resolveActiveAssistant(accountId);
+
+      // Priorizar config del asistente activo sobre extension_installations
+      const assistantModelConfig = activeAssistant?.assistant?.modelConfig as Record<string, any> || {};
+      const assistantTimingConfig = activeAssistant?.assistant?.timingConfig as Record<string, any> || {};
+
+      // Provider: usar del asistente si existe, sino de extension_installations
+      const requestedProvider =
+        (assistantModelConfig.provider === 'openai' || assistantModelConfig.provider === 'groq')
+          ? (assistantModelConfig.provider as AIProviderId)
+          : (cfg.provider === 'openai' || cfg.provider === 'groq' ? (cfg.provider as AIProviderId) : null);
+
       const providerSelection = this.resolveProviderSelection({
         selectedProvider: requestedProvider,
         entitlement: effectiveEntitlement,
+      });
+
+      // Log para debug
+      console.log('[ai-service] Using assistant config:', {
+        hasActiveAssistant: !!activeAssistant?.assistant,
+        assistantProvider: assistantModelConfig.provider,
+        assistantModel: assistantModelConfig.model,
+        assistantDelay: assistantTimingConfig.responseDelaySeconds,
+        cfgProvider: cfg.provider,
+        cfgModel: cfg.model,
+        finalProvider: requestedProvider,
       });
 
       return {
@@ -353,14 +573,24 @@ class AIService {
         providerOrder: providerSelection.providerOrder,
         enabled: installation.enabled !== false && cfg.enabled !== false,
         mode: (cfg.mode as 'suggest' | 'auto' | 'off') || 'suggest',
-        responseDelay: typeof cfg.responseDelay === 'number' ? cfg.responseDelay : 30,
-        smartDelayEnabled: typeof cfg.smartDelayEnabled === 'boolean' ? cfg.smartDelayEnabled : false,
-        model: typeof cfg.model === 'string' ? cfg.model : 'llama-3.1-8b-instant',
-        maxTokens: typeof cfg.maxTokens === 'number' ? cfg.maxTokens : 256,
-        temperature: typeof cfg.temperature === 'number' ? cfg.temperature : 0.7,
+        // Priorizar timingConfig del asistente
+        responseDelay: typeof assistantTimingConfig.responseDelaySeconds === 'number'
+          ? assistantTimingConfig.responseDelaySeconds
+          : (typeof cfg.responseDelay === 'number' ? cfg.responseDelay : 30),
+        smartDelayEnabled: assistantTimingConfig.smartDelay === true || cfg.smartDelayEnabled === true,
+        // Priorizar modelConfig del asistente
+        model: typeof assistantModelConfig.model === 'string'
+          ? assistantModelConfig.model
+          : (typeof cfg.model === 'string' ? cfg.model : 'llama-3.1-8b-instant'),
+        maxTokens: typeof assistantModelConfig.maxTokens === 'number'
+          ? assistantModelConfig.maxTokens
+          : (typeof cfg.maxTokens === 'number' ? cfg.maxTokens : 256),
+        temperature: typeof assistantModelConfig.temperature === 'number'
+          ? assistantModelConfig.temperature
+          : (typeof cfg.temperature === 'number' ? cfg.temperature : 0.7),
       };
     } catch (error: any) {
-      console.warn('[ai-service] Could not load core-ai config:', error.message);
+      console.warn('[ai-service] Could not load fluxcore config:', error.message);
       return {
         enabled: false,
         entitled: false,
@@ -423,6 +653,10 @@ class AIService {
     const poolVar = provider === 'groq' ? process.env.GROQ_API_KEYS : process.env.OPENAI_API_KEYS;
     const singleVar = provider === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY;
 
+    console.log(`[ai-service] getProductKeysForProvider(${provider}):`);
+    console.log(`  - poolVar exists: ${!!poolVar}`);
+    console.log(`  - singleVar exists: ${!!singleVar}, length: ${singleVar?.length || 0}`);
+
     const pool = (poolVar || '')
       .split(',')
       .map((k) => k.trim())
@@ -433,7 +667,9 @@ class AIService {
       ? [{ apiKey: singleVar.trim(), keySource: 'env_single' }]
       : [];
 
-    return [...pool, ...single];
+    const result = [...pool, ...single];
+    console.log(`  - Result keys: ${result.length}`);
+    return result;
   }
 
   /**
@@ -458,14 +694,14 @@ class AIService {
       // Obtener relación
       let relationship = null;
       let relContext: any[] = [];
-      
+
       if (conversation?.relationshipId) {
         const [rel] = await db
           .select()
           .from(relationships)
           .where(eq(relationships.id, conversation.relationshipId))
           .limit(1);
-        
+
         relationship = rel;
 
         // El contexto está en el campo context de la relación (JSONB)
@@ -542,54 +778,72 @@ class AIService {
    * Aprobar una sugerencia
    */
   approveSuggestion(suggestionId: string): AISuggestion | null {
-    return this.extension.approveSuggestion(suggestionId);
+    const suggestion = this.suggestions.get(suggestionId);
+    if (!suggestion) return null;
+    suggestion.status = 'approved';
+    return suggestion;
   }
 
   /**
    * Rechazar una sugerencia
    */
   rejectSuggestion(suggestionId: string): AISuggestion | null {
-    return this.extension.rejectSuggestion(suggestionId);
+    const suggestion = this.suggestions.get(suggestionId);
+    if (!suggestion) return null;
+    suggestion.status = 'rejected';
+    return suggestion;
   }
 
   /**
    * Editar y aprobar una sugerencia
    */
   editSuggestion(suggestionId: string, newContent: string): AISuggestion | null {
-    return this.extension.editSuggestion(suggestionId, newContent);
+    const suggestion = this.suggestions.get(suggestionId);
+    if (!suggestion) return null;
+    suggestion.content = newContent;
+    suggestion.status = 'edited';
+    return suggestion;
   }
 
   /**
    * Obtener sugerencia por ID
    */
   getSuggestion(suggestionId: string): AISuggestion | null {
-    return this.extension.getSuggestion(suggestionId);
+    return this.suggestions.get(suggestionId) || null;
   }
 
   /**
    * Obtener sugerencias pendientes para una conversación
    */
   getPendingSuggestions(conversationId: string): AISuggestion[] {
-    return this.extension.getPendingSuggestions(conversationId);
+    return Array.from(this.suggestions.values()).filter(
+      (s) => s.conversationId === conversationId && s.status === 'pending'
+    );
   }
 
-  listTraces(params: { accountId: string; conversationId?: string; limit?: number }): any[] {
-    return this.extension.listTraces(params as any);
+  async listTraces(params: { accountId: string; conversationId?: string; limit?: number }): Promise<any[]> {
+    const extension = await this.getFluxCoreExtension();
+    if (!extension || typeof extension.listTraces !== 'function') return [];
+    return extension.listTraces(params as any);
   }
 
-  getTrace(params: { accountId: string; traceId: string }): any | null {
-    return this.extension.getTrace(params as any);
+  async getTrace(params: { accountId: string; traceId: string }): Promise<any | null> {
+    const extension = await this.getFluxCoreExtension();
+    if (!extension || typeof extension.getTrace !== 'function') return null;
+    return extension.getTrace(params as any);
   }
 
-  clearTraces(params: { accountId: string }): number {
-    return this.extension.clearTraces(params as any);
+  async clearTraces(params: { accountId: string }): Promise<number> {
+    const extension = await this.getFluxCoreExtension();
+    if (!extension || typeof extension.clearTraces !== 'function') return 0;
+    return extension.clearTraces(params as any);
   }
 
   /**
    * Verificar si la API está configurada
    */
   isConfigured(): boolean {
-    return this.extension.isApiConfigured();
+    return this.getProductKeysForProvider('groq').length > 0 || this.getProductKeysForProvider('openai').length > 0;
   }
 
   async getAutoReplyDelayMs(accountId: string): Promise<number> {
@@ -603,7 +857,9 @@ class AIService {
    * Probar conexión con la API
    */
   async testConnection(): Promise<boolean> {
-    return this.extension.testApiConnection();
+    const extension = await this.getFluxCoreExtension();
+    if (!extension || typeof extension.testApiConnection !== 'function') return false;
+    return extension.testApiConnection();
   }
 
   async getStatusForAccount(accountId: string): Promise<any> {
@@ -627,7 +883,7 @@ class AIService {
     if (configured) {
       for (let i = 0; i < providerOrder.length; i++) {
         const p = providerOrder[i];
-        const client = this.getProbeClient(p.baseUrl);
+        const client = await this.getProbeClient(p.baseUrl);
 
         try {
           await client.testConnection({ apiKey: p.apiKey, timeoutMs: 15000 });
@@ -725,7 +981,7 @@ class AIService {
     if (configured) {
       for (let i = 0; i < providerOrder.length; i++) {
         const p = providerOrder[i];
-        const client = this.getProbeClient(p.baseUrl);
+        const client = await this.getProbeClient(p.baseUrl);
 
         try {
           await client.testConnection({ apiKey: p.apiKey, timeoutMs: 15000 });
@@ -800,7 +1056,7 @@ class AIService {
     }
 
     const baseUrl = params.provider === 'groq' ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1';
-    const client = this.getProbeClient(baseUrl);
+    const client = await this.getProbeClient(baseUrl);
 
     try {
       const res = await client.createChatCompletion({
@@ -837,29 +1093,6 @@ class AIService {
     }
   }
 
-  private getProbeClient(baseUrl: string): OpenAICompatibleClient {
-    const existing = this.probeClients.get(baseUrl);
-    if (existing) return existing;
-    const created = new OpenAICompatibleClient(baseUrl);
-    this.probeClients.set(baseUrl, created);
-    return created;
-  }
-
-  private normalizeProbeError(error: any): { type: string; message: string; statusCode?: number } {
-    if (error instanceof AIClientError) {
-      return {
-        type: (error as any).type || 'unknown',
-        message: error.message,
-        statusCode: (error as any).statusCode,
-      };
-    }
-
-    return {
-      type: 'unknown',
-      message: error?.message || 'Unknown error',
-    };
-  }
-
   /**
    * Generar respuesta manualmente
    */
@@ -869,6 +1102,9 @@ class AIService {
     lastMessageContent: string,
     options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date } = {}
   ): Promise<AISuggestion | null> {
+    const extension = await this.getFluxCoreExtension();
+    if (!extension) return null;
+
     const config = await this.getAccountConfig(recipientAccountId);
     const gated = await this.applyCreditsGating({
       accountId: recipientAccountId,
@@ -882,7 +1118,7 @@ class AIService {
 
     const modeForPrompt = options.mode || config.mode;
 
-    await this.extension.onConfigChange(recipientAccountId, {
+    await extension.onConfigChange(recipientAccountId, {
       enabled: gated.config.enabled,
       mode: modeForPrompt,
       responseDelay: gated.config.responseDelay,
@@ -895,7 +1131,7 @@ class AIService {
     });
 
     const context = await this.buildContext(recipientAccountId, conversationId);
-    
+
     const event: MessageEvent = {
       messageId: options.triggerMessageId || crypto.randomUUID(),
       conversationId,
@@ -906,7 +1142,11 @@ class AIService {
       createdAt: options.triggerMessageCreatedAt || new Date(),
     };
 
-    const suggestion = await this.extension.generateSuggestion(event, context, recipientAccountId);
+    const suggestion = await extension.generateSuggestion(event, context, recipientAccountId);
+
+    if (suggestion) {
+      this.suggestions.set(suggestion.id, suggestion);
+    }
 
     if (
       gated.sessionId &&
@@ -921,6 +1161,79 @@ class AIService {
     }
 
     return suggestion;
+  }
+
+  async tryCreateWelcomeConversation(params: { newAccountId: string; userName: string }): Promise<void> {
+    try {
+      const [installation] = await db
+        .select()
+        .from(extensionInstallations)
+        .where(
+          and(
+            eq(extensionInstallations.accountId, params.newAccountId),
+            eq(extensionInstallations.extensionId, '@fluxcore/fluxcore')
+          )
+        )
+        .limit(1);
+
+      if (!installation || installation.enabled === false) {
+        return;
+      }
+
+      const [fluxcoreAccount] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.username, this.FLUXCORE_USERNAME))
+        .limit(1);
+
+      if (!fluxcoreAccount) {
+        return;
+      }
+
+      const [existingRelationship] = await db
+        .select()
+        .from(relationships)
+        .where(
+          and(
+            eq(relationships.accountAId, fluxcoreAccount.id),
+            eq(relationships.accountBId, params.newAccountId)
+          )
+        )
+        .limit(1);
+
+      if (existingRelationship) {
+        return;
+      }
+
+      const [relationship] = await db
+        .insert(relationships)
+        .values({
+          accountAId: fluxcoreAccount.id,
+          accountBId: params.newAccountId,
+          perspectiveA: { savedName: params.userName },
+          perspectiveB: { savedName: 'FluxCore' },
+        })
+        .returning();
+
+      const [conversation] = await db
+        .insert(conversations)
+        .values({
+          relationshipId: relationship.id,
+          channel: 'web',
+        })
+        .returning();
+
+      await db.insert(messages).values({
+        conversationId: conversation.id,
+        senderAccountId: fluxcoreAccount.id,
+        type: 'incoming',
+        content: {
+          text: `¡Hola ${params.userName}! 👋\n\nSoy FluxCore, tu asistente. Estoy aquí para ayudarte a:\n\n• Configurar tu perfil\n• Añadir contactos\n• Explorar las extensiones\n\n¿En qué puedo ayudarte hoy?`,
+        },
+      });
+    } catch (error: any) {
+      console.error('[ai-service] Error creating FluxCore welcome:', error?.message || error);
+    }
   }
 }
 

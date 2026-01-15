@@ -79,6 +79,10 @@ export function CollapsibleSection({
               onCheckedChange={(v) => {
                 setCustomized(v);
                 onToggleCustomized?.(v);
+                // 🔧 AUTO-EXPAND: Si se activa, expandir sección
+                if (v === true && !isExpanded) {
+                  setIsExpanded(true);
+                }
               }}
               disabled={disabled}
               size="sm"

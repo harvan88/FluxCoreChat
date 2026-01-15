@@ -46,7 +46,7 @@ bun run dev
 ### Verificación
 - **API:** http://localhost:3000/health → `{"status":"ok"}`
 - **Web:** http://localhost:5173
-- **Extensión FluxCore:** Verificar en logs `Loaded extension: @fluxcore/core-ai`
+- **Extensión FluxCore:** Verificar en logs `Loaded extension: @fluxcore/fluxcore`
 
 ---
 
@@ -69,7 +69,7 @@ bun run dev
 └────────┴─────────────────┴──────────────────────────────────┘
 ```
 
-### Extensión FluxCore (@fluxcore/core-ai)
+### Extensión FluxCore (@fluxcore/fluxcore)
 Extensión preinstalada por defecto que proporciona:
 - **Sugerencias IA**: Genera respuestas inteligentes basadas en contexto
 - **Modos de operación**: `suggest` (sugiere), `auto` (automático), `off`

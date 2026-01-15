@@ -40,7 +40,7 @@
 | Backend endpoints | ✅ EXISTEN | `/extensions`, `/extensions/installed/:accountId` |
 | Datos | ❌ VACÍO | No hay extensiones registradas en BD |
 
-**Acción:** Seed de extensiones (core-ai ya debería existir)
+**Acción:** Seed de extensiones (fluxcore ya debería existir)
 
 ### 5. ARQUITECTURA SETTINGS (VIOLACIÓN CANÓNICA)
 | Actual | Canónico |
@@ -94,7 +94,7 @@ COMPONENTES ANALIZADOS: 8
 
 | Issue | Tarea |
 |-------|-------|
-| EXT-001 | Verificar seed de core-ai |
+| EXT-001 | Verificar seed de fluxcore |
 | EXT-002 | Mostrar extensiones instaladas |
 
 ---

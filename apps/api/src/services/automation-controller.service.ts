@@ -594,12 +594,12 @@ class AutomationControllerService {
     if (mode === 'automatic') {
       actions.push({
         type: 'generate_response',
-        extensionId: config?.extensionId || 'core-ai',
+        extensionId: config?.extensionId || '@fluxcore/fluxcore',
       });
     } else if (mode === 'supervised') {
       actions.push({
         type: 'suggest_response',
-        extensionId: config?.extensionId || 'core-ai',
+        extensionId: config?.extensionId || '@fluxcore/fluxcore',
       });
     }
 

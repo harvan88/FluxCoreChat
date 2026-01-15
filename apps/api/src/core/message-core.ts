@@ -3,7 +3,6 @@ import { conversationService } from '../services/conversation.service';
 import { relationshipService } from '../services/relationship.service';
 import { extensionHost, type ProcessMessageResult } from '../services/extension-host.service';
 import { automationController, type TriggerEvaluation } from '../services/automation-controller.service';
-import { aiService } from '../services/ai.service';
 import type { MessageContent } from '@fluxcore/db';
 
 export interface MessageEnvelope {
@@ -154,11 +153,11 @@ export class MessageCore {
               // Mapeo de modo de automatización a modo de IA
               const aiMode = automationResult.mode === 'automatic' ? 'auto' : 'suggest';
 
-              const delayMs = await aiService.getAutoReplyDelayMs(targetAccountId);
+              const delayMs = await extensionHost.getAIAutoReplyDelayMs(targetAccountId);
 
               const timeout = setTimeout(async () => {
                 try {
-                  const suggestion = await aiService.generateResponse(
+                  const suggestion = await extensionHost.generateAIResponse(
                     envelope.conversationId,
                     targetAccountId,
                     messageText,
@@ -170,9 +169,9 @@ export class MessageCore {
                   );
 
                   if (suggestion?.content) {
-                    const stripped = aiService.stripFluxCorePromoMarker(suggestion.content);
+                    const stripped = extensionHost.stripFluxCorePromoMarker(suggestion.content);
                     const finalText = stripped.promo
-                      ? aiService.appendFluxCoreBrandingFooter(stripped.text)
+                      ? extensionHost.appendFluxCoreBrandingFooter(stripped.text)
                       : stripped.text;
 
                     const content: any = stripped.promo

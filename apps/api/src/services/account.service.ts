@@ -1,17 +1,10 @@
 import { db } from '@fluxcore/db';
-import { accounts, actors, extensionInstallations, users } from '@fluxcore/db';
+import { accounts, actors, users } from '@fluxcore/db';
 import { eq, and, or, ilike } from 'drizzle-orm';
 import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
+import { extensionHost } from './extension-host.service';
 
-// V2-4.2: Configuración por defecto de core-ai
-const DEFAULT_CORE_AI_CONFIG = {
-  enabled: true,
-  mode: 'suggest',
-  responseDelay: 30,
-  model: 'llama-3.1-8b-instant',
-  maxTokens: 256,
-  temperature: 0.7,
-};
+// V2-4.2: Instalación de extensiones preinstaladas en nuevas cuentas
 
 export class AccountService {
   async createAccount(data: {
@@ -65,15 +58,7 @@ export class AccountService {
       actorType: 'user', // BUG-001: Campo requerido por schema
     });
 
-    // V2-4.2: Pre-instalar core-ai en nuevas cuentas
-    await db.insert(extensionInstallations).values({
-      accountId: account.id,
-      extensionId: '@fluxcore/core-ai',
-      version: '1.0.0',
-      enabled: true,
-      config: DEFAULT_CORE_AI_CONFIG,
-      grantedPermissions: ['messages:read', 'messages:suggest', 'context:read'],
-    });
+    await extensionHost.installPreinstalledExtensions(account.id);
 
     return account;
   }

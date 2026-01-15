@@ -47,8 +47,8 @@ test.describe('Extensions', () => {
     if (await extensionsButton.isVisible()) {
       await extensionsButton.click();
 
-      // Verificar que hay al menos una extensión (core-ai)
-      await expect(page.getByText(/core-ai|ia|asistente/i)).toBeVisible({ timeout: 5000 });
+      // Verificar que hay al menos una extensión (FluxCore)
+      await expect(page.getByText(/fluxcore|ia|asistente/i)).toBeVisible({ timeout: 5000 });
     }
   });
 
@@ -62,7 +62,7 @@ test.describe('Extensions', () => {
 
       // Click en una extensión
       const extensionCard = page.locator('[data-testid="extension-card"]').first().or(
-        page.getByText(/core-ai/i)
+        page.getByText(/fluxcore/i)
       );
       
       if (await extensionCard.isVisible()) {
@@ -101,7 +101,7 @@ test.describe('Extensions', () => {
     }
   });
 
-  test('should show core-ai extension features', async ({ page }) => {
+  test('should show FluxCore extension features', async ({ page }) => {
     const extensionsButton = page.locator('[data-activity="extensions"]').or(
       page.getByRole('button', { name: /extensiones|extensions/i })
     );
@@ -109,10 +109,10 @@ test.describe('Extensions', () => {
     if (await extensionsButton.isVisible()) {
       await extensionsButton.click();
 
-      // Buscar core-ai
-      const coreAiCard = page.getByText(/core-ai|asistente.*ia/i);
+      // Buscar FluxCore
+      const fluxcoreCard = page.getByText(/fluxcore|asistente.*ia/i);
       
-      if (await coreAiCard.isVisible()) {
+      if (await fluxcoreCard.isVisible()) {
         // Verificar que muestra características de IA
         await expect(page.getByText(/sugerencias|respuestas|ai|ia/i)).toBeVisible();
       }
