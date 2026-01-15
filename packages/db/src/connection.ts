@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 // Database connection string
-const connectionString = process.env.DATABASE_URL || 'postgresql://localhost:5432/fluxcore';
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/fluxcore';
 
 // Create postgres connection
 export const pool = postgres(connectionString, {
