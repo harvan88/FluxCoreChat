@@ -122,13 +122,13 @@ async function runMigration() {
       console.log('  ℹ️ role ya es opcional');
     });
 
-    // 3.1 Crear actor para core-ai si no existe (usar INSERT ON CONFLICT)
+    // 3.1 Crear actor para FluxCore si no existe (usar INSERT ON CONFLICT)
     await db.execute(sql`
       INSERT INTO actors (actor_type, extension_id, display_name)
-      VALUES ('builtin_ai', '@fluxcore/core-ai', 'FluxCore AI')
+      VALUES ('builtin_ai', '@fluxcore/fluxcore', 'FluxCore AI')
       ON CONFLICT DO NOTHING
     `);
-    console.log('  ✅ Actor @fluxcore/core-ai verificado');
+    console.log('  ✅ Actor @fluxcore/fluxcore verificado');
 
     // 3.2 Crear actor para appointments si no existe
     await db.execute(sql`
@@ -142,7 +142,7 @@ async function runMigration() {
     console.log('\n📊 Resumen:');
     console.log('  - actors: actor_type, extension_id, display_name');
     console.log('  - messages: from_actor_id, to_actor_id');
-    console.log('  - Actores builtin creados: core-ai, appointments');
+    console.log('  - Actores builtin creados: fluxcore, appointments');
 
   } catch (error: any) {
     console.error('❌ Migration failed:', error.message);

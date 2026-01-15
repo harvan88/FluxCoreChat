@@ -10,9 +10,12 @@ import * as path from 'path';
 // Extensiones registradas (built-in)
 const builtInExtensions: Map<string, ExtensionManifest> = new Map();
 
-// Manifest de @fluxcore/core-ai (preinstalada)
-const coreAiManifest: ExtensionManifest = {
-  id: '@fluxcore/core-ai',
+// Ruta base (root folder) de extensiones cargadas desde disco
+const extensionRoots: Map<string, string> = new Map();
+
+// Manifest de @fluxcore/fluxcore (preinstalada)
+const fluxcoreManifest: ExtensionManifest = {
+  id: '@fluxcore/fluxcore',
   name: 'FluxCore',
   version: '1.0.0',
   description: 'Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto',
@@ -65,9 +68,9 @@ const coreAiManifest: ExtensionManifest = {
   },
 };
 
-// Registrar extensiones built-in (solo core-ai es preinstalada)
+// Registrar extensiones built-in (FluxCore es preinstalada)
 // Nota: Karen (@fluxcore/website-builder) se carga desde extensions/Karen/manifest.json
-builtInExtensions.set(coreAiManifest.id, coreAiManifest);
+builtInExtensions.set(fluxcoreManifest.id, fluxcoreManifest);
 
 class ManifestLoaderService {
   private manifests: Map<string, ExtensionManifest> = new Map(builtInExtensions);
@@ -77,6 +80,10 @@ class ManifestLoaderService {
    */
   getManifest(extensionId: string): ExtensionManifest | null {
     return this.manifests.get(extensionId) || null;
+  }
+
+  getExtensionRoot(extensionId: string): string | null {
+    return extensionRoots.get(extensionId) || null;
   }
 
   /**
@@ -160,6 +167,7 @@ class ManifestLoaderService {
       }
 
       this.manifests.set(manifest.id, manifest);
+      extensionRoots.set(manifest.id, extensionPath);
       return manifest;
     } catch (error) {
       console.error(`Failed to load manifest from ${manifestPath}:`, error);

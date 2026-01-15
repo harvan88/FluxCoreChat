@@ -33,7 +33,7 @@ Use este punto como referencia si necesita hacer rollback.
 - [x] Reintentar mensajes fallidos
 - [x] Input correctamente posicionado
 
-### 🤖 IA (core-ai)
+### 🤖 IA (fluxcore)
 - [x] Sugerencias de IA vía Groq API
 - [x] Fallback a mock si no hay API key
 - [x] Aprobar/rechazar/regenerar sugerencias

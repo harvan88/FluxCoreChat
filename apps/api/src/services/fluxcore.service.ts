@@ -9,7 +9,7 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, ne } from 'drizzle-orm';
 import {
   db,
   fluxcoreAssistants,
@@ -22,6 +22,7 @@ import {
   fluxcoreAssistantVectorStores,
   fluxcoreAssistantTools,
   fluxcoreInstructionVersions,
+  accounts,
   type FluxcoreAssistant,
   type NewFluxcoreAssistant,
   type FluxcoreInstruction,
@@ -43,6 +44,99 @@ export type FluxcoreInstructionWithContent = FluxcoreInstruction & {
   lineCount: number;
 };
 
+export type FluxcoreAssistantWithRelations = FluxcoreAssistant & {
+  instructionIds: string[];
+  vectorStoreIds: string[];
+  toolIds: string[];
+};
+
+type FluxcoreConflictError = Error & {
+  statusCode?: number;
+  details?: any;
+};
+
+// ============================================================================
+// DYNAMIC CONTENT GENERATION
+// ============================================================================
+
+/**
+ * Genera dinámicamente el contenido de una instrucción gestionada
+ * basándose en el perfil y contexto privado de la cuenta
+ */
+async function generateManagedInstructionContent(accountId: string): Promise<string> {
+  const [account] = await db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .limit(1);
+
+  if (!account) {
+    return 'Eres Cori, asistente IA.';
+  }
+
+  const sections: string[] = [];
+
+  // Instrucciones base
+  sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${account.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
+
+  // Tiempo actual
+  const now = new Date();
+  const nowUtc = now.toISOString();
+  let nowArgentina: string;
+  try {
+    nowArgentina = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(now);
+  } catch (_err) {
+    nowArgentina = nowUtc;
+  }
+
+  sections.push('\n### Tiempo actual (momento de generar esta respuesta):');
+  sections.push(`- UTC: ${nowUtc}`);
+  sections.push(`- America/Argentina/Buenos_Aires: ${nowArgentina} (UTC-03:00)`);
+  sections.push('Los timestamps del historial entre corchetes (ej: [2025-12-18T15:50:59.683Z]) están en UTC.');
+
+  // Contexto privado
+  const privateContext = typeof account.privateContext === 'string'
+    ? account.privateContext.trim()
+    : '';
+
+  if (privateContext.length > 0) {
+    sections.push('\n### Contexto para la IA:');
+    sections.push(privateContext.substring(0, 5000));
+  }
+
+  sections.push('Tu objetivo es generar respuestas que mantengan la voz y estilo del usuario.');
+  sections.push('Responde de forma concisa y natural, como lo haría el usuario.');
+
+  // Contexto del perfil
+  if (account.profile && typeof account.profile === 'object') {
+    const profile = account.profile as Record<string, any>;
+    const bio = profile.bio;
+    if (bio && typeof bio === 'string' && bio.length > 0) {
+      sections.push(`\n### Sobre ${account.displayName}:`);
+      sections.push(`Bio: ${bio.substring(0, 200)}`);
+    }
+  }
+
+  // Instrucciones finales
+  sections.push('\n### Instrucciones:');
+  sections.push('- Mantén el tono consistente con los mensajes anteriores del usuario.');
+  sections.push('- No uses emojis a menos que el usuario los use frecuentemente.');
+  sections.push('- Responde en el mismo idioma del mensaje recibido.');
+  sections.push('- Sé breve pero útil.');
+  sections.push('- No incluyas timestamps ni prefijos tipo [2025-...Z] en tu respuesta.');
+
+  return sections.join('\n');
+}
+
 // ============================================================================
 // COMPOSITION & RUNTIME (Brain)
 // ============================================================================
@@ -52,6 +146,92 @@ export interface AssistantComposition {
   instructions: { content: string; order: number; versionId: string | null; name: string }[];
   vectorStores: (FluxcoreVectorStore & { accessMode: string })[];
   tools: (FluxcoreToolDefinition & { config: any; connectionId: string; connectionStatus: string })[];
+}
+
+async function ensureActiveAssistant(accountId: string): Promise<FluxcoreAssistant> {
+  const [active] = await db
+    .select()
+    .from(fluxcoreAssistants)
+    .where(and(eq(fluxcoreAssistants.accountId, accountId), eq(fluxcoreAssistants.status, 'active')))
+    .orderBy(desc(fluxcoreAssistants.updatedAt))
+    .limit(1);
+
+  if (active) {
+    return active;
+  }
+
+  // Crear instrucción gestionada por defecto
+  const defaultInstructionContent = await generateManagedInstructionContent(accountId);
+  const wordCount = defaultInstructionContent.split(/\s+/).filter(Boolean).length;
+  const lineCount = defaultInstructionContent.split('\n').length;
+  const sizeBytes = Buffer.byteLength(defaultInstructionContent, 'utf8');
+  const tokensEstimated = Math.ceil(wordCount * 1.3);
+
+  const [defaultInstruction] = await db
+    .insert(fluxcoreInstructions)
+    .values({
+      accountId,
+      name: 'Instrucciones para el asistente (por defecto)',
+      description: 'Instrucciones del sistema gestionadas dinámicamente desde tu perfil',
+      status: 'active',
+      visibility: 'private',
+      isManaged: true,
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  const [defaultVersion] = await db
+    .insert(fluxcoreInstructionVersions)
+    .values({
+      instructionId: defaultInstruction.id,
+      versionNumber: 1,
+      content: defaultInstructionContent,
+      sizeBytes,
+      tokensEstimated,
+      wordCount,
+      lineCount,
+    })
+    .returning();
+
+  await db
+    .update(fluxcoreInstructions)
+    .set({ currentVersionId: defaultVersion.id })
+    .where(eq(fluxcoreInstructions.id, defaultInstruction.id));
+
+  // Crear asistente por defecto
+  const [created] = await db
+    .insert(fluxcoreAssistants)
+    .values({
+      accountId,
+      name: 'Asistente por defecto',
+      description: 'Asistente activo por defecto',
+      status: 'active',
+      modelConfig: {
+        provider: 'groq',
+        model: 'llama-3.1-8b-instant',
+        temperature: 1.0,
+        topP: 1.0,
+        responseFormat: 'text',
+      },
+      timingConfig: {
+        responseDelaySeconds: 2,
+        smartDelay: false,
+      },
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  // Vincular instrucción al asistente
+  await db
+    .insert(fluxcoreAssistantInstructions)
+    .values({
+      assistantId: created.id,
+      instructionId: defaultInstruction.id,
+      order: 1,
+      isEnabled: true,
+    });
+
+  return created;
 }
 
 /**
@@ -100,14 +280,19 @@ export async function getAssistantComposition(assistantId: string): Promise<Assi
   const instructions = await Promise.all(instructionsResult.map(async ({ instruction, link, version }) => {
     let content = version?.content || '';
     
-    // Si hay una versión fijada y no coincide con la current (que trajimos en el join por defecto), hacer fetch extra
-    if (link.versionId && link.versionId !== instruction.currentVersionId) {
-      const [pinnedVersion] = await db
-        .select()
-        .from(fluxcoreInstructionVersions)
-        .where(eq(fluxcoreInstructionVersions.id, link.versionId))
-        .limit(1);
-      if (pinnedVersion) content = pinnedVersion.content;
+    // Si la instrucción es gestionada, generar contenido dinámicamente
+    if (instruction.isManaged) {
+      content = await generateManagedInstructionContent(assistant.accountId);
+    } else {
+      // Si hay una versión fijada y no coincide con la current (que trajimos en el join por defecto), hacer fetch extra
+      if (link.versionId && link.versionId !== instruction.currentVersionId) {
+        const [pinnedVersion] = await db
+          .select()
+          .from(fluxcoreInstructionVersions)
+          .where(eq(fluxcoreInstructionVersions.id, link.versionId))
+          .limit(1);
+        if (pinnedVersion) content = pinnedVersion.content;
+      }
     }
 
     return {
@@ -180,19 +365,7 @@ export async function getAssistantComposition(assistantId: string): Promise<Assi
  * Determina qué asistente debe responder para una cuenta
  */
 export async function resolveActiveAssistant(accountId: string): Promise<AssistantComposition | null> {
-  const [activeAssistant] = await db
-    .select()
-    .from(fluxcoreAssistants)
-    .where(and(
-      eq(fluxcoreAssistants.accountId, accountId),
-      eq(fluxcoreAssistants.status, 'production')
-    ))
-    .limit(1);
-
-  if (!activeAssistant) {
-    return null;
-  }
-
+  const activeAssistant = await ensureActiveAssistant(accountId);
   return getAssistantComposition(activeAssistant.id);
 }
 
@@ -200,15 +373,53 @@ export async function resolveActiveAssistant(accountId: string): Promise<Assista
 // ASSISTANTS
 // ============================================================================
 
-export async function getAssistants(accountId: string): Promise<FluxcoreAssistant[]> {
-  return db
+async function attachAssistantRelations(assistant: FluxcoreAssistant): Promise<FluxcoreAssistantWithRelations> {
+  const [instructionLinks, vectorLinks, toolLinks] = await Promise.all([
+    db
+      .select({
+        instructionId: fluxcoreAssistantInstructions.instructionId,
+      })
+      .from(fluxcoreAssistantInstructions)
+      .where(eq(fluxcoreAssistantInstructions.assistantId, assistant.id))
+      .orderBy(fluxcoreAssistantInstructions.order),
+    db
+      .select({
+        vectorStoreId: fluxcoreAssistantVectorStores.vectorStoreId,
+      })
+      .from(fluxcoreAssistantVectorStores)
+      .where(eq(fluxcoreAssistantVectorStores.assistantId, assistant.id)),
+    db
+      .select({
+        toolConnectionId: fluxcoreAssistantTools.toolConnectionId,
+      })
+      .from(fluxcoreAssistantTools)
+      .where(eq(fluxcoreAssistantTools.assistantId, assistant.id)),
+  ]);
+
+  return {
+    ...assistant,
+    instructionIds: instructionLinks.map((link) => link.instructionId),
+    vectorStoreIds: vectorLinks.map((link) => link.vectorStoreId),
+    toolIds: toolLinks.map((link) => link.toolConnectionId),
+  };
+}
+
+export async function getAssistants(accountId: string): Promise<FluxcoreAssistantWithRelations[]> {
+  const assistants = await db
     .select()
     .from(fluxcoreAssistants)
     .where(eq(fluxcoreAssistants.accountId, accountId))
     .orderBy(desc(fluxcoreAssistants.updatedAt));
+
+  if (assistants.length === 0) {
+    const created = await ensureActiveAssistant(accountId);
+    return [await attachAssistantRelations(created)];
+  }
+
+  return Promise.all(assistants.map(attachAssistantRelations));
 }
 
-export async function getAssistantById(id: string, accountId: string): Promise<FluxcoreAssistant | null> {
+export async function getAssistantById(id: string, accountId: string): Promise<FluxcoreAssistantWithRelations | null> {
   const [assistant] = await db
     .select()
     .from(fluxcoreAssistants)
@@ -217,7 +428,9 @@ export async function getAssistantById(id: string, accountId: string): Promise<F
       eq(fluxcoreAssistants.accountId, accountId)
     ))
     .limit(1);
-  return assistant || null;
+
+  if (!assistant) return null;
+  return attachAssistantRelations(assistant);
 }
 
 export interface CreateAssistantDTO extends NewFluxcoreAssistant {
@@ -227,45 +440,55 @@ export interface CreateAssistantDTO extends NewFluxcoreAssistant {
 }
 
 export async function createAssistant(data: CreateAssistantDTO): Promise<FluxcoreAssistant> {
-  // 1. Create Assistant
   const { instructionIds, vectorStoreIds, toolIds, ...assistantData } = data;
-  
-  const [assistant] = await db
-    .insert(fluxcoreAssistants)
-    .values(assistantData)
-    .returning();
 
-  // 2. Create Relations
-  if (instructionIds && instructionIds.length > 0) {
-    await db.insert(fluxcoreAssistantInstructions).values(
-      instructionIds.map((id, index) => ({
-        assistantId: assistant.id,
-        instructionId: id,
-        order: index,
-      }))
-    );
-  }
+  return db.transaction(async (tx) => {
+    if (assistantData.status === 'active' && typeof assistantData.accountId === 'string') {
+      await tx
+        .update(fluxcoreAssistants)
+        .set({ status: 'draft', updatedAt: new Date() })
+        .where(and(
+          eq(fluxcoreAssistants.accountId, assistantData.accountId),
+          eq(fluxcoreAssistants.status, 'active')
+        ));
+    }
 
-  if (vectorStoreIds && vectorStoreIds.length > 0) {
-    await db.insert(fluxcoreAssistantVectorStores).values(
-      vectorStoreIds.map((id) => ({
-        assistantId: assistant.id,
-        vectorStoreId: id,
-        accessMode: 'read',
-      }))
-    );
-  }
+    const [assistant] = await tx
+      .insert(fluxcoreAssistants)
+      .values(assistantData)
+      .returning();
 
-  if (toolIds && toolIds.length > 0) {
-    await db.insert(fluxcoreAssistantTools).values(
-      toolIds.map((toolConnectionId) => ({
-        assistantId: assistant.id,
-        toolConnectionId,
-      }))
-    );
-  }
+    if (instructionIds && instructionIds.length > 0) {
+      await tx.insert(fluxcoreAssistantInstructions).values(
+        instructionIds.map((id, index) => ({
+          assistantId: assistant.id,
+          instructionId: id,
+          order: index,
+        }))
+      );
+    }
 
-  return assistant;
+    if (vectorStoreIds && vectorStoreIds.length > 0) {
+      await tx.insert(fluxcoreAssistantVectorStores).values(
+        vectorStoreIds.map((id) => ({
+          assistantId: assistant.id,
+          vectorStoreId: id,
+          accessMode: 'read',
+        }))
+      );
+    }
+
+    if (toolIds && toolIds.length > 0) {
+      await tx.insert(fluxcoreAssistantTools).values(
+        toolIds.map((toolConnectionId) => ({
+          assistantId: assistant.id,
+          toolConnectionId,
+        }))
+      );
+    }
+
+    return assistant;
+  });
 }
 
 export async function updateAssistant(
@@ -275,62 +498,93 @@ export async function updateAssistant(
 ): Promise<FluxcoreAssistant | null> {
   const { instructionIds, vectorStoreIds, toolIds, ...assistantData } = data;
 
-  // 1. Update Assistant Fields
-  const [assistant] = await db
-    .update(fluxcoreAssistants)
-    .set({ ...assistantData, updatedAt: new Date() })
-    .where(and(
-      eq(fluxcoreAssistants.id, id),
-      eq(fluxcoreAssistants.accountId, accountId)
-    ))
-    .returning();
-
-  if (!assistant) return null;
-
-  // 2. Update Relations (Replace All strategy for simplicity)
-  
-  // Instructions
-  if (instructionIds !== undefined) {
-    await db.delete(fluxcoreAssistantInstructions).where(eq(fluxcoreAssistantInstructions.assistantId, id));
-    if (instructionIds.length > 0) {
-      await db.insert(fluxcoreAssistantInstructions).values(
-        instructionIds.map((instId, index) => ({
-          assistantId: id,
-          instructionId: instId,
-          order: index,
-        }))
-      );
+  return db.transaction(async (tx) => {
+    if (assistantData.status === 'active') {
+      await tx
+        .update(fluxcoreAssistants)
+        .set({ status: 'draft', updatedAt: new Date() })
+        .where(and(
+          eq(fluxcoreAssistants.accountId, accountId),
+          eq(fluxcoreAssistants.status, 'active'),
+          ne(fluxcoreAssistants.id, id)
+        ));
     }
-  }
 
-  // Vector Stores
-  if (vectorStoreIds !== undefined) {
-    await db.delete(fluxcoreAssistantVectorStores).where(eq(fluxcoreAssistantVectorStores.assistantId, id));
-    if (vectorStoreIds.length > 0) {
-      await db.insert(fluxcoreAssistantVectorStores).values(
-        vectorStoreIds.map((vsId) => ({
-          assistantId: id,
-          vectorStoreId: vsId,
-          accessMode: 'read',
-        }))
-      );
+    const [assistant] = await tx
+      .update(fluxcoreAssistants)
+      .set({ ...assistantData, updatedAt: new Date() })
+      .where(and(
+        eq(fluxcoreAssistants.id, id),
+        eq(fluxcoreAssistants.accountId, accountId)
+      ))
+      .returning();
+
+    if (!assistant) return null;
+
+    if (instructionIds !== undefined) {
+      await tx.delete(fluxcoreAssistantInstructions).where(eq(fluxcoreAssistantInstructions.assistantId, id));
+      if (instructionIds.length > 0) {
+        await tx.insert(fluxcoreAssistantInstructions).values(
+          instructionIds.map((instId, index) => ({
+            assistantId: id,
+            instructionId: instId,
+            order: index,
+          }))
+        );
+      }
     }
-  }
 
-  // Tools
-  if (toolIds !== undefined) {
-    await db.delete(fluxcoreAssistantTools).where(eq(fluxcoreAssistantTools.assistantId, id));
-    if (toolIds.length > 0) {
-      await db.insert(fluxcoreAssistantTools).values(
-        toolIds.map((toolConnectionId) => ({
-          assistantId: id,
-          toolConnectionId,
-        }))
-      );
+    if (vectorStoreIds !== undefined) {
+      await tx.delete(fluxcoreAssistantVectorStores).where(eq(fluxcoreAssistantVectorStores.assistantId, id));
+      if (vectorStoreIds.length > 0) {
+        await tx.insert(fluxcoreAssistantVectorStores).values(
+          vectorStoreIds.map((vsId) => ({
+            assistantId: id,
+            vectorStoreId: vsId,
+            accessMode: 'read',
+          }))
+        );
+      }
     }
-  }
 
-  return assistant;
+    if (toolIds !== undefined) {
+      await tx.delete(fluxcoreAssistantTools).where(eq(fluxcoreAssistantTools.assistantId, id));
+      if (toolIds.length > 0) {
+        await tx.insert(fluxcoreAssistantTools).values(
+          toolIds.map((toolConnectionId) => ({
+            assistantId: id,
+            toolConnectionId,
+          }))
+        );
+      }
+    }
+
+    return assistant;
+  });
+}
+
+export async function setActiveAssistant(id: string, accountId: string): Promise<FluxcoreAssistant | null> {
+  return db.transaction(async (tx) => {
+    await tx
+      .update(fluxcoreAssistants)
+      .set({ status: 'draft', updatedAt: new Date() })
+      .where(and(
+        eq(fluxcoreAssistants.accountId, accountId),
+        eq(fluxcoreAssistants.status, 'active'),
+        ne(fluxcoreAssistants.id, id)
+      ));
+
+    const [assistant] = await tx
+      .update(fluxcoreAssistants)
+      .set({ status: 'active', updatedAt: new Date() })
+      .where(and(
+        eq(fluxcoreAssistants.id, id),
+        eq(fluxcoreAssistants.accountId, accountId)
+      ))
+      .returning();
+
+    return assistant || null;
+  });
 }
 
 export async function deleteAssistant(id: string, accountId: string): Promise<boolean> {
@@ -391,13 +645,28 @@ export async function getInstructionById(id: string, accountId: string): Promise
 
   if (!row) return null;
 
+  // Si es instrucción gestionada, generar contenido dinámicamente
+  let content = row.version?.content || '';
+  let sizeBytes = row.version?.sizeBytes || 0;
+  let tokensEstimated = row.version?.tokensEstimated || 0;
+  let wordCount = row.version?.wordCount || 0;
+  let lineCount = row.version?.lineCount || 0;
+
+  if (row.instruction.isManaged) {
+    content = await generateManagedInstructionContent(accountId);
+    wordCount = content.split(/\s+/).filter(Boolean).length;
+    lineCount = content.split('\n').length;
+    sizeBytes = Buffer.byteLength(content, 'utf8');
+    tokensEstimated = Math.ceil(wordCount * 1.3);
+  }
+
   return {
     ...row.instruction,
-    content: row.version?.content || '',
-    sizeBytes: row.version?.sizeBytes || 0,
-    tokensEstimated: row.version?.tokensEstimated || 0,
-    wordCount: row.version?.wordCount || 0,
-    lineCount: row.version?.lineCount || 0,
+    content,
+    sizeBytes,
+    tokensEstimated,
+    wordCount,
+    lineCount,
   };
 }
 
@@ -455,6 +724,21 @@ export async function updateInstruction(
 ): Promise<FluxcoreInstruction | null> {
   const { content, ...instructionData } = data;
 
+  // Verificar si es instrucción gestionada
+  const [existing] = await db
+    .select()
+    .from(fluxcoreInstructions)
+    .where(and(
+      eq(fluxcoreInstructions.id, id),
+      eq(fluxcoreInstructions.accountId, accountId)
+    ))
+    .limit(1);
+
+  if (!existing) return null;
+  if (existing.isManaged) {
+    throw new Error('No se puede editar una instrucción gestionada. Edita tu perfil en Configuración.');
+  }
+
   const [instruction] = await db
     .update(fluxcoreInstructions)
     .set({ ...instructionData, updatedAt: new Date() })
@@ -511,6 +795,26 @@ export async function updateInstruction(
 }
 
 export async function deleteInstruction(id: string, accountId: string): Promise<boolean> {
+  const usedBy = await db
+    .select({ id: fluxcoreAssistants.id, name: fluxcoreAssistants.name })
+    .from(fluxcoreAssistantInstructions)
+    .innerJoin(
+      fluxcoreAssistants,
+      eq(fluxcoreAssistantInstructions.assistantId, fluxcoreAssistants.id)
+    )
+    .where(and(
+      eq(fluxcoreAssistantInstructions.instructionId, id),
+      eq(fluxcoreAssistants.accountId, accountId)
+    ))
+    .limit(1);
+
+  if (usedBy.length > 0) {
+    const err = new Error('No se puede eliminar: esta instrucción está siendo usada por un asistente') as FluxcoreConflictError;
+    err.statusCode = 409;
+    err.details = { usedByAssistants: usedBy };
+    throw err;
+  }
+
   const result = await db
     .delete(fluxcoreInstructions)
     .where(and(
@@ -570,6 +874,26 @@ export async function updateVectorStore(
 }
 
 export async function deleteVectorStore(id: string, accountId: string): Promise<boolean> {
+  const usedBy = await db
+    .select({ id: fluxcoreAssistants.id, name: fluxcoreAssistants.name })
+    .from(fluxcoreAssistantVectorStores)
+    .innerJoin(
+      fluxcoreAssistants,
+      eq(fluxcoreAssistantVectorStores.assistantId, fluxcoreAssistants.id)
+    )
+    .where(and(
+      eq(fluxcoreAssistantVectorStores.vectorStoreId, id),
+      eq(fluxcoreAssistants.accountId, accountId)
+    ))
+    .limit(1);
+
+  if (usedBy.length > 0) {
+    const err = new Error('No se puede eliminar: este vector store está siendo usado por un asistente') as FluxcoreConflictError;
+    err.statusCode = 409;
+    err.details = { usedByAssistants: usedBy };
+    throw err;
+  }
+
   const result = await db
     .delete(fluxcoreVectorStores)
     .where(and(
@@ -621,6 +945,18 @@ export async function deleteVectorStoreFile(id: string, vectorStoreId: string): 
     ))
     .returning();
   return result.length > 0;
+}
+
+export async function getVectorStoreFileById(id: string, vectorStoreId: string): Promise<FluxcoreVectorStoreFile | null> {
+  const [row] = await db
+    .select()
+    .from(fluxcoreVectorStoreFiles)
+    .where(and(
+      eq(fluxcoreVectorStoreFiles.id, id),
+      eq(fluxcoreVectorStoreFiles.vectorStoreId, vectorStoreId)
+    ))
+    .limit(1);
+  return row || null;
 }
 
 // ============================================================================
@@ -717,6 +1053,7 @@ export const fluxcoreService = {
   getAssistantById,
   createAssistant,
   updateAssistant,
+  setActiveAssistant,
   deleteAssistant,
   
   // Instructions
@@ -735,6 +1072,7 @@ export const fluxcoreService = {
   getVectorStoreFiles,
   addVectorStoreFile,
   deleteVectorStoreFile,
+  getVectorStoreFileById,
   
   // Tools
   getToolDefinitions,

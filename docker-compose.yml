@@ -1,7 +1,7 @@
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database with pgvector for RAG
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: fluxcore-db
     environment:
       POSTGRES_USER: postgres

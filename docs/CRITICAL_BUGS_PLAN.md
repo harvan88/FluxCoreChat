@@ -18,9 +18,9 @@ await db.insert(actors).values({
 });
 ```
 
-### BUG-002: Cuentas antiguas sin core-ai
+### BUG-002: Cuentas antiguas sin fluxcore
 **Problema:** Cuentas creadas antes de V2-4.2 no tienen extensión instalada
-**Fix:** Script de migración para instalar core-ai en cuentas existentes
+**Fix:** Script de migración para instalar fluxcore en cuentas existentes
 
 ### BUG-003: No se crea conversación al crear relación
 **Problema:** María y Carlos tienen relación pero no conversación

@@ -14,17 +14,14 @@ import { ProfileSection } from '../settings/ProfileSection';
 import { AccountsSection } from '../accounts';
 import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
-import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
-import { CoreAIPromptInspectorPanel } from '../extensions/CoreAIPromptInspectorPanel';
-import { FluxCorePanel } from '../fluxcore';
-import { 
-  AssistantsView, 
-  InstructionsView, 
-  VectorStoresView, 
-  ToolsView,
-  UsageView,
-} from '../fluxcore/views';
+import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
+import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
+import { UsageView } from '../fluxcore/views/UsageView';
+import { AssistantsView } from '../fluxcore/views/AssistantsView';
+import { InstructionsView } from '../fluxcore/views/InstructionsView';
+import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
+import { ToolsView } from '../fluxcore/views/ToolsView';
 import { CreditsSection } from '../settings/CreditsSection';
 import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
@@ -159,6 +156,9 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     return installations.find((i) => i.extensionId === extensionId) || null;
   }, [installations, extensionId]);
 
+  const panelComponent = installation?.manifest?.ui?.panel?.component;
+  const isFluxCore = panelComponent === 'FluxCorePanel';
+
   if (!selectedAccountId) {
     return (
       <div className="h-full flex items-center justify-center text-muted">
@@ -183,7 +183,11 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     );
   }
 
-  const view = tab.context.view || 'config';
+  const requestedView = typeof tab.context.view === 'string' ? tab.context.view : undefined;
+  const view =
+    isFluxCore && (requestedView === 'config' || requestedView === 'panel' || requestedView === 'fluxcore')
+      ? 'assistants'
+      : (requestedView || (isFluxCore ? 'assistants' : 'config'));
 
   const openOrFocusFluxCoreTab = (
     viewId: string,
@@ -195,7 +199,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       .flatMap((c) => c.tabs.map((t) => ({ containerId: c.id, tab: t, container: c })))
       .find(({ tab: t }) => {
         if (t.type !== 'extension') return false;
-        if (t.context?.extensionId !== '@fluxcore/core-ai') return false;
+        if (t.context?.extensionId !== extensionId) return false;
         if (t.context?.accountId !== selectedAccountId) return false;
         if (t.context?.view !== viewId) return false;
         for (const [k, v] of Object.entries(extraContext)) {
@@ -224,8 +228,8 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       icon,
       closable: true,
       context: {
-        extensionId: '@fluxcore/core-ai',
-        extensionName: 'FluxCore',
+        extensionId,
+        extensionName,
         view: viewId,
         accountId: selectedAccountId,
         ...extraContext,
@@ -255,19 +259,10 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   };
 
   // FluxCore Views - Vistas específicas de la plataforma de orquestación de IA
-  if (extensionId.includes('core-ai')) {
+  if (isFluxCore) {
     const accountId = selectedAccountId || '';
     
     switch (view) {
-      case 'fluxcore':
-        return (
-          <FluxCorePanel
-            key={tab.id}
-            accountId={accountId}
-            accountName={installation.manifest?.name || 'FluxCore'}
-            onOpenTab={onOpenFluxCoreItemTab}
-          />
-        );
       case 'usage':
         return <UsageView key={tab.id} accountId={accountId} />;
       case 'assistants':
@@ -324,19 +319,15 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       case 'tools':
         return <ToolsView key={tab.id} accountId={accountId} />;
       case 'debug':
-        return (
-          <div className="h-full flex items-center justify-center text-muted">
-            Depuración del asistente - Próximamente
-          </div>
-        );
+        return <FluxCorePromptInspectorPanel accountId={accountId} />;
       case 'billing':
         return (
           <div className="h-full flex items-center justify-center text-muted">
-            Facturación - Próximamente
+            Facturación (próximamente)
           </div>
         );
       case 'promptInspector':
-        return <CoreAIPromptInspectorPanel />;
+        return <FluxCorePromptInspectorPanel accountId={accountId} />;
     }
   }
 
@@ -359,13 +350,15 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   }
 
   if (view === 'promptInspector') {
-    if (extensionId.includes('core-ai')) {
-      return <CoreAIPromptInspectorPanel />;
+    if (isFluxCore) {
+      return <FluxCorePromptInspectorPanel accountId={selectedAccountId || undefined} />;
     }
 
     return (
-      <div className="h-full flex items-center justify-center text-muted">
-        Prompt Inspector no disponible para esta extensión.
+      <div className="h-full flex flex-col bg-surface">
+        <div className="flex items-center justify-center text-muted">
+          Prompt Inspector no disponible para esta extensión.
+        </div>
       </div>
     );
   }
@@ -375,6 +368,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       extensionId={extensionId}
       extensionName={extensionName || installation.manifest?.name || extensionId}
       config={(installation.config || {}) as Record<string, unknown>}
+      supportsPromptInspector={isFluxCore}
       onSave={async (config) => {
         await updateConfig(extensionId, config as Record<string, unknown>);
       }}

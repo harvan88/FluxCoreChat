@@ -12,6 +12,7 @@ import { InstructionsView } from './views/InstructionsView';
 import { VectorStoresView } from './views/VectorStoresView';
 import { ToolsView } from './views/ToolsView';
 import { UsageView } from './views/UsageView';
+import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
 
 interface FluxCorePanelProps {
   accountId: string;
@@ -35,11 +36,7 @@ export function FluxCorePanel({ accountId, accountName, onOpenTab }: FluxCorePan
       case 'tools':
         return <ToolsView accountId={accountId} />;
       case 'debug':
-        return (
-          <div className="flex-1 flex items-center justify-center text-muted">
-            Depuración del asistente (próximamente)
-          </div>
-        );
+        return <FluxCorePromptInspectorPanel accountId={accountId} />;
       case 'billing':
         return (
           <div className="flex-1 flex items-center justify-center text-muted">

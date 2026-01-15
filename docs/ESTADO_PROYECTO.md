@@ -41,7 +41,7 @@
 | 2 | Chat Core | ✅ | ✅ 14/14 |
 | 3 | Workspace UI | ✅ | ✅ Frontend |
 | 4 | Sistema de Extensiones | ✅ | ✅ 11/11 |
-| 5 | @fluxcore/core-ai | ✅ | ✅ 12/12 |
+| 5 | @fluxcore/fluxcore | ✅ | ✅ 12/12 |
 | 6 | Contexto Relacional | ✅ | ✅ 16/16 |
 | 7 | Extensión Turnos | ✅ | ✅ 12/12 |
 | 8 | Adaptadores WhatsApp | ✅ | ✅ 8/8 |
@@ -58,7 +58,7 @@
 | 2 | Chat Core | ✅ Completado | ✅ 14/14 pruebas |
 | 3 | Workspace UI | ✅ Completado | ✅ Frontend funcionando |
 | 4 | Sistema de Extensiones | ✅ Completado | ✅ 11/11 pruebas |
-| 5 | @fluxcore/core-ai | ✅ Completado | ✅ 12/12 pruebas |
+| 5 | @fluxcore/fluxcore | ✅ Completado | ✅ 12/12 pruebas |
 | 6 | Contexto Relacional | ✅ Completado | ✅ 16/16 pruebas |
 | 7 | Extensión de Turnos | ✅ Completado | ✅ 12/12 pruebas |
 | 8 | Adaptadores (WhatsApp) | ✅ Completado | ✅ 8/8 pruebas |
@@ -111,7 +111,7 @@
 | V2-2 | AI Sugerencias Reales | ✅ Completado | Groq API integrada en WebSocket |
 | V2-3 | Chat Avanzado | ✅ Completado | Edit/Delete/Reply-to endpoints |
 | V2-4.1 | Extension Config | ✅ Completado | ExtensionConfigPanel component |
-| V2-4.2 | Pre-install core-ai | ✅ Completado | Auto-instalación en nuevas cuentas |
+| V2-4.2 | Pre-install fluxcore | ✅ Completado | Auto-instalación en nuevas cuentas |
 | V2-4.4 | Extensions Sidebar | ✅ Completado | Panel en ActivityBar/Sidebar |
 | V2-5 | Offline-First Integrado | ✅ Completado | useChatOffline, ConnectionIndicator |
 | FIX-1 | Auth UX | ✅ Completado | Mostrar/ocultar contraseña, recuperar pwd |

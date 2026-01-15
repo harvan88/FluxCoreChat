@@ -26,11 +26,11 @@ fluxcore/
 │   ├── db/           # Schema Drizzle + migrations
 │   └── core/         # Lógica compartida
 └── extensions/       # Extensiones oficiales
-    ├── core-ai/      # IA por defecto (preinstalada)
+    ├── fluxcore/      # IA por defecto (preinstalada)
     └── appointments/ # Sistema de turnos
 ```
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 - **Runtime**: Bun
 - **Backend**: Elysia
@@ -110,7 +110,7 @@ Ver [documentación de extensiones](./docs/extensions.md) para más detalles.
 | 2 | Chat Core | ✅ | ✅ 8/8 |
 | 3 | Workspace UI | ✅ | ✅ |
 | 4 | Sistema de Extensiones | ✅ | ✅ 11/11 |
-| 5 | @fluxcore/core-ai | ✅ | ✅ 12/12 |
+| 5 | @fluxcore/fluxcore | ✅ | ✅ 12/12 |
 | 6 | Contexto Relacional | ✅ | ✅ 16/16 |
 | 7 | Extensión de Turnos | ✅ | ✅ 12/12 |
 | 8 | Adaptadores (WhatsApp) | ✅ | ✅ 8/8 |

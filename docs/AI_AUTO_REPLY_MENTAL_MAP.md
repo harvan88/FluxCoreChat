@@ -1,4 +1,4 @@
-# AI Auto-Reply (Core-AI) — Mental Map (Source of truth = code)
+# AI Auto-Reply (FluxCore) — Mental Map (Source of truth = code)
 
 ## 1) End-to-end flow (runtime)
 
@@ -29,11 +29,11 @@
 #### Config resolution
 - `AIService.getAccountConfig(accountId)`:
   - Loads entitlement: `account_ai_entitlements` via `ai-entitlements.service.ts`
-  - Loads installation/config: `extension_installations` row for `@fluxcore/core-ai`
+  - Loads installation/config: `extension_installations` row for `@fluxcore/fluxcore`
   - Builds `providerOrder` from env keys (`GROQ_API_KEY`, `OPENAI_API_KEY`, pools).
 
-### 4. Core-AI extension execution
-- **Extension**: `extensions/core-ai/src/index.ts`
+### 4. FluxCore extension execution
+- **Extension**: `extensions/fluxcore/src/index.ts`
 - Receives config via `onConfigChange`.
 - Generates completion via `createChatCompletionWithFallback()`.
 
@@ -59,8 +59,8 @@
 - Auto-reply requires `mode === 'automatic'`.
 - If mode is `supervised`, system may generate suggestions but not auto-send.
 
-### Gate C — Core-AI installed/enabled
-- Needs `extension_installations` row for `@fluxcore/core-ai` for that account.
+### Gate C — FluxCore installed/enabled
+- Needs `extension_installations` row for `@fluxcore/fluxcore` for that account.
 - Needs `installation.enabled !== false` and `config.enabled !== false`.
 
 ### Gate D — Provider keys configured
@@ -68,7 +68,7 @@
 - Keys taken from env vars.
 
 ### Gate E — Provider/model mismatch
-- `extensions/core-ai/manifest.json` validates config schema.
+- `extensions/fluxcore/manifest.json` validates config schema.
 - If `model` not in enum or `responseDelay` violates min/max -> backend rejects config update.
 
 ---
@@ -99,8 +99,8 @@
   - `apps/web/src/store/uiStore.ts` (`selectedAccountId`)
   - `apps/web/src/store/accountStore.ts` (`activeAccountId`)
 
-### B) Configure core-ai
-- UI panel: Extensions -> Configure `@fluxcore/core-ai`.
+### B) Configure FluxCore
+- UI panel: Extensions -> Configure `@fluxcore/fluxcore`.
 - Key config fields:
   - `provider`: `groq` or `openai`
   - `model`: choose `gpt-4o-mini-2024-07-18` for OpenAI
@@ -113,5 +113,5 @@
 
 1. `POST /ai/probe` (openai + gpt-4o-mini-2024-07-18) -> ok
 2. Set account automation to `automatic`
-3. Set core-ai config: provider=openai, model=gpt-4o-mini-2024-07-18, mode=auto, responseDelay=0
+3. Set FluxCore config: provider=openai, model=gpt-4o-mini-2024-07-18, mode=auto, responseDelay=0
 4. Send message to that account -> AI replies automatically

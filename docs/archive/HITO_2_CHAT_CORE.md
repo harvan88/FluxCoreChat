@@ -600,7 +600,7 @@ CREATE TABLE message_enrichments (
 **Hito 3: Extensiones Core** (2 semanas)
 - FC-070: Sistema de extensiones base
 - FC-071: Extension manifest y permisos
-- FC-072: @fluxcore/core-ai (primera extensión)
+- FC-072: @fluxcore/fluxcore (primera extensión)
 - FC-073-089: Integración con Groq, UI de extensiones
 
 ## Notas Técnicas

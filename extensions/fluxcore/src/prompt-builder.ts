@@ -41,6 +41,57 @@ export interface ContextData {
     messageType: string;
   }>;
   overlays?: Record<string, any>;
+
+  assistantMeta?: {
+    assistantId?: string;
+    assistantName?: string;
+    instructionIds?: string[];
+    instructionLinks?: Array<{
+      id: string;
+      name?: string;
+      order?: number;
+      versionId?: string | null;
+    }>;
+    vectorStoreIds?: string[];
+    vectorStores?: Array<{
+      id: string;
+      name?: string;
+    }>;
+    toolIds?: string[];
+    tools?: Array<{
+      id: string;
+      name?: string;
+    }>;
+    modelConfig?: {
+      provider?: string;
+      model?: string;
+      temperature?: number;
+      topP?: number;
+      responseFormat?: string;
+    };
+
+    effective?: {
+      provider?: string;
+      baseUrl?: string;
+      model?: string;
+      maxTokens?: number;
+      temperature?: number;
+      topP?: number;
+    };
+  };
+
+  // RAG-008: Contexto de Base de Conocimiento
+  ragContext?: {
+    context: string;           // Texto formateado con chunks relevantes
+    sources: Array<{           // Referencias a las fuentes
+      content: string;         // Preview del contenido
+      source: string;          // Nombre del documento/sección
+      similarity: number;      // Score de similitud
+    }>;
+    totalTokens: number;       // Tokens usados por el contexto RAG
+    chunksUsed: number;        // Cantidad de chunks incluidos
+    vectorStoreIds?: string[]; // IDs de los vector stores consultados
+  };
 }
 
 export interface PromptConfig {
@@ -61,7 +112,7 @@ export class PromptBuilder {
   private readonly MAX_CONTEXT_LENGTH = 500;
   private readonly MAX_PRIVATE_CONTEXT_LENGTH = 5000;
 
-  constructor(private config: PromptConfig) {}
+  constructor(private config: PromptConfig) { }
 
   /**
    * Construye el prompt completo para la IA
@@ -79,62 +130,27 @@ export class PromptBuilder {
 
   /**
    * Construye el system prompt con todo el contexto
+   * Las instrucciones base ahora SIEMPRE vienen de FluxCore (gestionadas dinámicamente)
    */
   private buildSystemPrompt(context: ContextData, _recipientAccountId: string, extraInstructions?: string[]): string {
     const sections: string[] = [];
 
-    // Instrucciones base o personalizadas del asistente
+    // Instrucciones del asistente (FluxCore Runtime)
+    // Ahora SIEMPRE debe haber instrucciones desde FluxCore, incluyendo la instrucción gestionada por defecto
     if (extraInstructions && extraInstructions.length > 0) {
-      // Si hay instrucciones del asistente (FluxCore Runtime), reemplazan o complementan la base
-      // Por ahora, las ponemos PRIMERO como la verdad absoluta del comportamiento
       sections.push(extraInstructions.join('\n\n'));
-      sections.push('\n--- Contexto Dinámico ---');
-    } else {
-      // Fallback a Cori si no hay asistente definido
-      sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${context.account?.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
     }
 
-    const now = new Date();
-    const nowUtc = now.toISOString();
-    let nowArgentina: string;
-    try {
-      nowArgentina = new Intl.DateTimeFormat('sv-SE', {
-        timeZone: 'America/Argentina/Buenos_Aires',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).format(now);
-    } catch (_err) {
-      nowArgentina = nowUtc;
-    }
+    // RAG-008: Contexto de Base de Conocimiento (Vector Stores)
+    // Se inyecta DESPUÉS de las instrucciones y ANTES del contexto de relación
+    if (context.ragContext && context.ragContext.context) {
+      sections.push('\n### Base de Conocimiento:');
+      sections.push('Usa la siguiente información de la base de conocimiento para responder preguntas relevantes:');
+      sections.push(context.ragContext.context);
 
-    sections.push('\n### Tiempo actual (momento de generar esta respuesta):');
-    sections.push(`- UTC: ${nowUtc}`);
-    sections.push(`- America/Argentina/Buenos_Aires: ${nowArgentina} (UTC-03:00)`);
-    sections.push('Los timestamps del historial entre corchetes (ej: [2025-12-18T15:50:59.683Z]) están en UTC.');
-
-    const privateContext = typeof context.account?.privateContext === 'string'
-      ? context.account.privateContext.trim()
-      : '';
-
-    if (privateContext.length > 0) {
-      sections.push('\n### Contexto para la IA:');
-      sections.push(this.truncate(privateContext, this.MAX_PRIVATE_CONTEXT_LENGTH));
-    }
-
-    sections.push('Tu objetivo es generar respuestas que mantengan la voz y estilo del usuario.');
-    sections.push('Responde de forma concisa y natural, como lo haría el usuario.');
-
-    // Contexto del perfil
-    if (context.account) {
-      const profileContext = this.buildProfileContext(context.account);
-      if (profileContext) {
-        sections.push(`\n### Sobre ${context.account.displayName}:`);
-        sections.push(profileContext);
+      // Agregar nota sobre las fuentes disponibles
+      if (context.ragContext.sources && context.ragContext.sources.length > 0) {
+        sections.push(`\n(${context.ragContext.chunksUsed} fragmentos de ${context.ragContext.sources.length} fuentes consultadas)`);
       }
     }
 
@@ -156,16 +172,8 @@ export class PromptBuilder {
       }
     }
 
-    // Instrucciones finales
-    sections.push('\n### Instrucciones:');
-    sections.push('- Mantén el tono consistente con los mensajes anteriores del usuario.');
-    sections.push('- No uses emojis a menos que el usuario los use frecuentemente.');
-    sections.push('- Responde en el mismo idioma del mensaje recibido.');
-    sections.push('- Sé breve pero útil.');
-    sections.push('- No incluyas timestamps ni prefijos tipo [2025-...Z] en tu respuesta.');
-
     if (this.config.mode === 'suggest') {
-      sections.push('- Esta es una SUGERENCIA. El usuario la revisará antes de enviar.');
+      sections.push('\n- Esta es una SUGERENCIA. El usuario la revisará antes de enviar.');
     }
 
     return sections.join('\n');
@@ -257,11 +265,11 @@ export class PromptBuilder {
       const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(content);
 
       return {
-      // Desde la perspectiva del usuario que va a responder:
-      // - Mensajes del otro usuario son "user" (el que pregunta)
-      // - Mensajes propios son "assistant" (las respuestas)
-      role: msg.senderAccountId === recipientAccountId ? 'assistant' : 'user' as 'user' | 'assistant',
-      content: alreadyPrefixed ? content : `[${ts}] ${content}`,
+        // Desde la perspectiva del usuario que va a responder:
+        // - Mensajes del otro usuario son "user" (el que pregunta)
+        // - Mensajes propios son "assistant" (las respuestas)
+        role: msg.senderAccountId === recipientAccountId ? 'assistant' : 'user' as 'user' | 'assistant',
+        content: alreadyPrefixed ? content : `[${ts}] ${content}`,
       };
     });
   }

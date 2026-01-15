@@ -1,11 +1,12 @@
 import { hash, compare } from 'bcrypt';
 import { db } from '@fluxcore/db';
-import { users, accounts, actors, relationships, conversations, messages, passwordResetTokens } from '@fluxcore/db';
+import { users, accounts, passwordResetTokens } from '@fluxcore/db';
 import { eq, and, gt } from 'drizzle-orm';
 import { systemAdminService } from './system-admin.service';
+import { accountService } from './account.service';
+import { extensionHost } from './extension-host.service';
 
 const SALT_ROUNDS = 10;
-const FLUXCORE_USERNAME = 'fluxcore';
 
 export class AuthService {
   async register(data: { email: string; password: string; name: string }) {
@@ -35,24 +36,12 @@ export class AuthService {
 
     // Create default personal account for the user
     const username = data.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    const [account] = await db
-      .insert(accounts)
-      .values({
-        ownerUserId: user.id,
-        username: `${username}_${Date.now().toString(36)}`, // Ensure unique
-        displayName: data.name,
-        accountType: 'personal',
-        profile: {},
-        privateContext: null,
-      })
-      .returning();
-
-    // Create actor (owner relationship)
-    await db.insert(actors).values({
-      userId: user.id,
-      accountId: account.id,
-      role: 'owner',
-      actorType: 'user',
+    const account = await accountService.createAccount({
+      ownerUserId: user.id,
+      username: `${username}_${Date.now().toString(36)}`, // Ensure unique
+      displayName: data.name,
+      accountType: 'personal',
+      profile: {},
     });
 
     console.log(`[Auth] Created user ${user.id} with account ${account.id}`);
@@ -187,54 +176,7 @@ export class AuthService {
    * Crear relación con FluxCore y mensaje de bienvenida
    */
   private async createFluxCoreWelcome(newAccountId: string, userName: string) {
-    try {
-      // Buscar cuenta de FluxCore
-      const [fluxcoreAccount] = await db
-        .select()
-        .from(accounts)
-        .where(eq(accounts.username, FLUXCORE_USERNAME))
-        .limit(1);
-
-      if (!fluxcoreAccount) {
-        console.warn('[Auth] FluxCore account not found. Run seed:fluxcore first.');
-        return;
-      }
-
-      // Crear relación FluxCore -> Nuevo usuario
-      const [relationship] = await db
-        .insert(relationships)
-        .values({
-          accountAId: fluxcoreAccount.id,
-          accountBId: newAccountId,
-          perspectiveA: { savedName: userName },
-          perspectiveB: { savedName: 'FluxCore' },
-        })
-        .returning();
-
-      // Crear conversación de bienvenida
-      const [conversation] = await db
-        .insert(conversations)
-        .values({
-          relationshipId: relationship.id,
-          channel: 'web',
-        })
-        .returning();
-
-      // Crear mensaje de bienvenida
-      await db.insert(messages).values({
-        conversationId: conversation.id,
-        senderAccountId: fluxcoreAccount.id,
-        type: 'incoming',
-        content: {
-          text: `¡Hola ${userName}! 👋\n\nSoy FluxCore, tu asistente. Estoy aquí para ayudarte a:\n\n• Configurar tu perfil\n• Añadir contactos\n• Explorar las extensiones\n\n¿En qué puedo ayudarte hoy?`,
-        },
-      });
-
-      console.log(`[Auth] Created FluxCore welcome for account ${newAccountId}`);
-    } catch (error) {
-      console.error('[Auth] Error creating FluxCore welcome:', error);
-      // No fallar el registro si FluxCore no está disponible
-    }
+    await extensionHost.tryCreateWelcomeConversation({ newAccountId, userName });
   }
 }
 

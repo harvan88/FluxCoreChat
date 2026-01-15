@@ -5,7 +5,7 @@
 
 ## Resumen
 
-Implementación del sistema de extensiones para FluxCore, permitiendo instalar, configurar y gestionar extensiones por cuenta. Incluye la extensión preinstalada `@fluxcore/core-ai`.
+Implementación del sistema de extensiones para FluxCore, permitiendo instalar, configurar y gestionar extensiones por cuenta. Incluye la extensión preinstalada `@fluxcore/fluxcore`.
 
 ## Componentes Implementados
 
@@ -54,11 +54,11 @@ POST   /extensions/:accountId/:extId/disable - Deshabilitar
 GET    /extensions/manifest/:extId      - Obtener manifest
 ```
 
-## Extensión Preinstalada: @fluxcore/core-ai
+## Extensión Preinstalada: @fluxcore/fluxcore
 
 ```json
 {
-  "id": "@fluxcore/core-ai",
+  "id": "@fluxcore/fluxcore",
   "name": "FluxCore AI",
   "version": "1.0.0",
   "preinstalled": true,
@@ -137,7 +137,7 @@ GET    /extensions/manifest/:extId      - Obtener manifest
 
 ## Próximos Pasos
 
-1. **Hito 5**: Implementar `@fluxcore/core-ai` completo con PromptBuilder y Groq SDK
+1. **Hito 5**: Implementar `@fluxcore/fluxcore` completo con PromptBuilder y Groq SDK
 2. Conectar WebSocket con sistema de extensiones
 3. UI de gestión de extensiones en frontend
 

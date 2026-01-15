@@ -11,7 +11,20 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Bot, Share2, Download, RotateCcw, ChevronDown, Copy, X, SquareChevronRight, Pencil } from 'lucide-react';
+import {
+  Bot,
+  Plus,
+  Copy,
+  Check,
+  Zap,
+  ChevronDown,
+  X,
+  Download,
+  Share2,
+  RotateCcw,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { Button, Badge, Checkbox } from '../../ui';
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
@@ -30,7 +43,7 @@ interface Assistant {
   instructionIds?: string[];
   vectorStoreIds?: string[];
   toolIds?: string[];
-  status: 'draft' | 'production' | 'disabled';
+  status: 'draft' | 'active' | 'disabled';
   modelConfig: {
     provider: string;
     model: string;
@@ -77,7 +90,10 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
   const [vectorStores, setVectorStores] = useState<VectorStore[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [activateConfirm, setActivateConfirm] = useState<string | null>(null);
   const [selectedAssistant, setSelectedAssistant] = useState<Assistant | null>(null);
+  const [isCopyingActiveConfig, setIsCopyingActiveConfig] = useState(false);
   const [enabledSections, setEnabledSections] = useState({
     initial: true,
     provider: true,
@@ -90,6 +106,18 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const autoSelectedAssistantIdRef = useRef<string | null>(null);
+
+  const sortedAssistants = assistants
+    .slice()
+    .sort((a, b) => {
+      const aActive = a.status === 'active' ? 1 : 0;
+      const bActive = b.status === 'active' ? 1 : 0;
+      if (aActive !== bActive) return bActive - aActive;
+
+      const aTs = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTs = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTs - aTs;
+    });
 
   const buildAssistantPayload = (assistant: Assistant) => ({
     accountId,
@@ -214,6 +242,36 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
     }
   };
 
+  const openInstructionReference = (instructionId: string) => {
+    if (!instructionId) return;
+    const instruction = instructions.find((inst) => inst.id === instructionId);
+    if (onOpenTab) {
+      onOpenTab(
+        instructionId,
+        instruction?.name ?? 'Sistema de instrucciones',
+        {
+          type: 'instruction',
+          instructionId,
+        }
+      );
+    }
+  };
+
+  const openVectorStoreReference = (vectorStoreId: string) => {
+    if (!vectorStoreId) return;
+    const vectorStore = vectorStores.find((vs) => vs.id === vectorStoreId);
+    if (onOpenTab) {
+      onOpenTab(
+        vectorStoreId,
+        vectorStore?.name ?? 'Base de conocimiento',
+        {
+          type: 'vectorStore',
+          vectorStoreId,
+        }
+      );
+    }
+  };
+
   const scheduleSave = (assistant: Assistant, immediate = false) => {
     if (!assistant.id) return;
     if (!token) return;
@@ -292,6 +350,34 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
     }
   };
 
+  const activateAssistantById = async (id: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/fluxcore/assistants/${id}/activate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ accountId }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        const msg = typeof data?.message === 'string' ? data.message : 'Error al activar asistente';
+        setSaveError(msg);
+        return;
+      }
+
+      setActivateConfirm(null);
+      await loadData();
+      setSelectedAssistant((prev) => (prev?.id === id ? { ...prev, status: 'active' } : prev));
+    } catch (e) {
+      console.error('Error activating assistant', e);
+      setSaveError('Error de conexión');
+    }
+  };
+
 
   const formatSize = (bytes: number): string => {
     if (!bytes) return '0 B';
@@ -308,8 +394,8 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'production':
-        return <Badge variant="success">Producción</Badge>;
+      case 'active':
+        return <Badge variant="success">Activo</Badge>;
       case 'disabled':
         return <Badge variant="warning">Desactivado</Badge>;
       default:
@@ -376,34 +462,76 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
     // TODO: Toast notification
   };
 
-  const handleSelectAssistant = async (summary: Assistant) => {
-    // Cargar composición completa desde el runtime API
+  const handleCopyActiveConfig = async () => {
+    if (!accountId) return;
+    if (isCopyingActiveConfig) return;
+
+    setIsCopyingActiveConfig(true);
+    setSaveError(null);
+
     try {
-      const res = await fetch(`/api/fluxcore/runtime/composition/${summary.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const res = await fetch(`/api/fluxcore/runtime/active-assistant?accountId=${encodeURIComponent(accountId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-      if (res.ok) {
-        const composition = await res.json();
-        // Mapear la composición al formato de edición
-        const fullAssistant: Assistant = {
-          ...summary,
-          description: (summary as any).description ?? undefined,
-          instructionIds: composition.instructions.slice(0, 1).map((i: any) => i.id),
-          vectorStoreIds: composition.vectorStores.map((v: any) => v.id),
-          toolIds: composition.tools.map((t: any) => t.connectionId ?? t.id),
-        };
-        setSelectedAssistant(fullAssistant);
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('Error fetching active assistant composition:', text);
+        setSaveError('Error al obtener la configuración activa');
         return;
       }
+
+      const data = await res.json().catch(() => null);
+      if (!data) {
+        setSaveError('Respuesta inválida del servidor');
+        return;
+      }
+
+      copyToClipboard(JSON.stringify(data, null, 2));
     } catch (e) {
-      console.error('Error loading assistant composition', e);
+      console.error('Error copying active config', e);
+      setSaveError('Error de conexión');
+    } finally {
+      setIsCopyingActiveConfig(false);
     }
-    
-    // Fallback si falla la carga de composición
-    setSelectedAssistant({
-      ...summary,
-      description: (summary as any).description ?? undefined,
-    });
+  };
+
+  const handleSelectAssistant = async (assistant: Assistant) => {
+    setSelectedAssistant(assistant);
+    setIsSaving(false);
+    setDeleteConfirm(null);
+    setActivateConfirm(null);
+  };
+
+  const deleteAssistantById = async (id: string) => {
+    if (!token) return;
+    try {
+      const response = await fetch(`/api/fluxcore/assistants/${id}?accountId=${accountId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setAssistants((prev) => prev.filter((a) => a.id !== id));
+        setSelectedAssistant((prev) => (prev?.id === id ? null : prev));
+        setDeleteConfirm(null);
+        setActivateConfirm(null);
+      }
+    } catch (error) {
+      console.error('Error deleting assistant:', error);
+    }
+  };
+
+  const handleDeleteAssistant = async () => {
+    if (!selectedAssistant || deleteConfirm !== selectedAssistant.id) return;
+    await deleteAssistantById(selectedAssistant.id);
+  };
+
+  const handleActivateAssistant = async () => {
+    if (!selectedAssistant || activateConfirm !== selectedAssistant.id) return;
+    await activateAssistantById(selectedAssistant.id);
   };
 
   useEffect(() => {
@@ -508,11 +636,19 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                     <>
                       {currentId && (
                         <div className="flex flex-wrap gap-2 mb-2">
-                          <Badge variant="info" className="flex items-center gap-1">
+                          <Badge
+                            variant="info"
+                            className="flex items-center gap-1 cursor-pointer hover:bg-accent/20 transition-colors"
+                            onClick={() => openInstructionReference(currentId)}
+                          >
                             {current?.name || currentId}
                             <button
+                              type="button"
                               className="ml-1 hover:text-red-400"
-                              onClick={() => updateAssistantState({ instructionIds: [] }, { immediate: true })}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateAssistantState({ instructionIds: [] }, { immediate: true });
+                              }}
                               aria-label="Quitar instrucción"
                             >
                               <X size={12} />
@@ -560,14 +696,25 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                   {(selectedAssistant.vectorStoreIds || []).map((id) => {
                     const vs = vectorStores.find(v => v.id === id);
                     return (
-                      <Badge key={id} variant="info" className="flex items-center gap-1">
+                      <Badge
+                        key={id}
+                        variant="info"
+                        className="flex items-center gap-1 cursor-pointer hover:bg-accent/20 transition-colors"
+                        onClick={() => openVectorStoreReference(id)}
+                      >
                         {vs?.name || id}
                         <button 
+                          type="button"
                           className="ml-1 hover:text-red-400"
-                          onClick={() => updateAssistantState({
-                            vectorStoreIds: selectedAssistant.vectorStoreIds?.filter(vid => vid !== id)
-                          }, { immediate: true })}
-                        ><X size={12} /></button>
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateAssistantState({
+                              vectorStoreIds: selectedAssistant.vectorStoreIds?.filter(vid => vid !== id)
+                            }, { immediate: true });
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
                       </Badge>
                     );
                   })}
@@ -817,24 +964,94 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
           </CollapsibleSection>
         </div>
 
-        {/* Footer con acciones */}
-        <div className="px-6 py-3 border-t border-subtle flex items-center justify-between bg-background z-10">
-          <div className="flex items-center gap-4">
-            {!assistantId && (
-              <button 
-                className="text-sm text-muted hover:text-primary flex items-center gap-1"
-                onClick={() => setSelectedAssistant(null)}
+        <div className="border-t border-subtle p-4 bg-surface flex flex-wrap items-center gap-3 justify-start">
+          {selectedAssistant.status !== 'active' && (
+            activateConfirm === selectedAssistant.id ? (
+              <>
+                <span className="text-sm text-muted">¿Confirmar activación?</span>
+                <button
+                  onClick={handleActivateAssistant}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
+                  title="Activar ahora"
+                  type="button"
+                >
+                  <Zap size={16} className="text-inverse" />
+                  Activar ahora
+                </button>
+                <button
+                  onClick={() => setActivateConfirm(null)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <span className="text-xs text-muted">Esto desactivará cualquier otro asistente activo.</span>
+              </>
+            ) : (
+              <button
+                onClick={() => {
+                  setActivateConfirm(selectedAssistant.id);
+                  setDeleteConfirm(null);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
+                title="Activar asistente"
+                type="button"
               >
-                <RotateCcw size={14} />
-                Volver
+                <Zap size={16} className="text-inverse" />
+                Activar asistente
               </button>
-            )}
-            {isSaving && <span className="text-xs text-muted">Guardando...</span>}
-            {saveError && <span className="text-xs text-red-500">{saveError}</span>}
-            <button className="text-sm text-muted hover:text-primary flex items-center gap-1">
-              <SquareChevronRight size={14} /> Prompt Inspector
+            )
+          )}
+
+          <button
+            onClick={handleCopyActiveConfig}
+            className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
+            title="Copiar configuración activa (runtime)"
+            type="button"
+            disabled={isCopyingActiveConfig}
+          >
+            <Copy size={16} />
+            {isCopyingActiveConfig ? 'Copiando…' : 'Copiar config activa'}
+          </button>
+
+          <span className="flex-1" />
+
+          {deleteConfirm === selectedAssistant.id ? (
+            <>
+              <span className="text-sm text-muted">¿Confirmar eliminación?</span>
+              <button
+                onClick={handleDeleteAssistant}
+                className="inline-flex items-center gap-1.5 rounded-md bg-error px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-error/90"
+                type="button"
+              >
+                <Trash2 size={16} className="text-inverse" />
+                Eliminar definitivamente
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
+                type="button"
+              >
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => {
+                setDeleteConfirm(selectedAssistant.id);
+                setActivateConfirm(null);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md bg-error px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-error/90"
+              title="Eliminar asistente"
+              type="button"
+            >
+              <Trash2 size={16} className="text-inverse" />
+              Eliminar asistente
             </button>
-          </div>
+          )}
+
+          {isSaving && <span className="text-xs text-muted">Guardando...</span>}
+          {saveError && <span className="text-xs text-red-500">{saveError}</span>}
         </div>
       </div>
     );
@@ -876,15 +1093,15 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
             <thead>
               <tr className="border-b border-subtle text-left">
                 <th className="px-4 py-3 text-xs font-medium text-muted">Nombre</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted">Instrucciones</th>
+                <th className="px-4 py-3 text-xs font-medium text-muted hidden md:table-cell">Instrucciones</th>
                 <th className="px-4 py-3 text-xs font-medium text-muted">Estado</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted">Última modificación</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted">Tamaño</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted"></th>
+                <th className="px-4 py-3 text-xs font-medium text-muted hidden lg:table-cell">Última modificación</th>
+                <th className="px-4 py-3 text-xs font-medium text-muted hidden lg:table-cell">Tamaño</th>
+                <th className="px-4 py-3 text-xs font-medium text-muted sticky right-0 bg-surface"></th>
               </tr>
             </thead>
             <tbody>
-              {assistants.map((assistant) => (
+              {sortedAssistants.map((assistant) => (
                 <tr
                   key={assistant.id}
                   className="border-b border-subtle hover:bg-hover cursor-pointer group"
@@ -902,11 +1119,17 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <Bot size={16} className="text-accent" />
+                      <Bot size={16} className="text-accent flex-shrink-0 min-w-[16px] min-h-[16px]" />
+                      {assistant.status === 'active' && (
+                        <span
+                          className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"
+                          title="Asistente activo"
+                        />
+                      )}
                       <span className="font-medium text-primary">{assistant.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 hidden md:table-cell">
                     <span className="text-muted text-xs">
                       {(assistant.instructionIds || []).length > 0
                         ? ((assistant.instructionIds || []).slice(0, 1).map(id => instructions.find(i => i.id === id)?.name || 'Desconocido').join(', '))
@@ -914,17 +1137,99 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                     </span>
                   </td>
                   <td className="px-4 py-3">{getStatusBadge(assistant.status)}</td>
-                  <td className="px-4 py-3 text-secondary text-sm">
+                  <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                     {formatDate(assistant.updatedAt)} {assistant.lastModifiedBy}
                   </td>
-                  <td className="px-4 py-3 text-secondary text-sm">
+                  <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                     {formatSize(assistant.sizeBytes)} - {assistant.tokensUsed || 0} tokens
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                      <button className="p-1 hover:bg-active rounded"><Share2 size={14} /></button>
-                      <button className="p-1 hover:bg-active rounded"><Download size={14} /></button>
-                      <button className="p-1 hover:bg-active rounded"><RotateCcw size={14} /></button>
+                  <td className="px-4 py-3 sticky right-0 bg-surface group-hover:bg-hover">
+                    <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                      <button className="p-1 hover:bg-active rounded" onClick={(e) => e.stopPropagation()}>
+                        <Share2 size={14} className="text-muted flex-shrink-0" />
+                      </button>
+                      <button className="p-1 hover:bg-active rounded" onClick={(e) => e.stopPropagation()}>
+                        <Download size={14} className="text-muted flex-shrink-0" />
+                      </button>
+                      <button className="p-1 hover:bg-active rounded" onClick={(e) => e.stopPropagation()}>
+                        <RotateCcw size={14} className="text-muted flex-shrink-0" />
+                      </button>
+
+                      {assistant.status !== 'active' && (
+                        activateConfirm === assistant.id ? (
+                          <>
+                            <button
+                              className="p-1 hover:bg-active rounded"
+                              title="Activar ahora"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void activateAssistantById(assistant.id);
+                              }}
+                            >
+                              <Check size={14} className="text-success flex-shrink-0" />
+                            </button>
+                            <button
+                              className="p-1 hover:bg-active rounded"
+                              title="Cancelar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActivateConfirm(null);
+                              }}
+                            >
+                              <X size={14} className="text-muted flex-shrink-0" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="p-1 hover:bg-active rounded"
+                            title="Activar"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActivateConfirm(assistant.id);
+                              setDeleteConfirm(null);
+                            }}
+                          >
+                            <Zap size={14} className="text-muted hover:text-success flex-shrink-0" />
+                          </button>
+                        )
+                      )}
+
+                      {deleteConfirm === assistant.id ? (
+                        <>
+                          <button
+                            className="p-1 hover:bg-active rounded"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteAssistantById(assistant.id);
+                            }}
+                            title="Eliminar definitivamente"
+                          >
+                            <Check size={14} className="text-error" />
+                          </button>
+                          <button
+                            className="p-1 hover:bg-active rounded"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirm(null);
+                            }}
+                            title="Cancelar"
+                          >
+                            <X size={14} className="text-muted" />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="p-1 hover:bg-active rounded"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm(assistant.id);
+                            setActivateConfirm(null);
+                          }}
+                          title="Eliminar"
+                        >
+                          <Trash2 size={14} className="text-muted hover:text-error flex-shrink-0" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

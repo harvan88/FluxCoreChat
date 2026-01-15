@@ -1,5 +1,5 @@
 /**
- * Test Suite: AI System (@fluxcore/core-ai)
+ * Test Suite: AI System (@fluxcore/fluxcore)
  * 
  * Pruebas del sistema de IA:
  * - Estado del servicio
@@ -259,8 +259,8 @@ async function runTests() {
     if (!res.success) throw new Error(res.message || 'Failed to set automation rule');
   });
 
-  await test('Set core-ai responseDelay=0 for Account 2', async () => {
-    const encodedExtId = encodeURIComponent('@fluxcore/core-ai');
+  await test('Set FluxCore responseDelay=0 for Account 2', async () => {
+    const encodedExtId = encodeURIComponent('@fluxcore/fluxcore');
     const res = await request(`/extensions/${accountId2}/${encodedExtId}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${authToken}` },
@@ -271,7 +271,7 @@ async function runTests() {
       }),
     });
 
-    if (!res.success) throw new Error(res.message || 'Failed to update core-ai config');
+    if (!res.success) throw new Error(res.message || 'Failed to update FluxCore config');
   });
 
   await test('Auto-Reply: send message from Account 1 and wait AI reply from Account 2', async () => {

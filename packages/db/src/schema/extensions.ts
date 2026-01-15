@@ -16,7 +16,7 @@ export const extensionInstallations = pgTable('extension_installations', {
   // Cuenta que tiene instalada la extensión
   accountId: uuid('account_id').notNull().references(() => accounts.id),
   
-  // Identificador de la extensión (e.g., "@fluxcore/core-ai")
+  // Identificador de la extensión (e.g., "@fluxcore/fluxcore")
   extensionId: varchar('extension_id', { length: 100 }).notNull(),
   
   // Versión instalada

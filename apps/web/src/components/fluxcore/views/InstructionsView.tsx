@@ -13,9 +13,23 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, FileText, Share2, Download, Copy, Eye, Code, X, RotateCcw, Pencil } from 'lucide-react';
+import {
+  Plus,
+  FileText,
+  Check,
+  Share2,
+  Download,
+  Copy,
+  Eye,
+  Code,
+  X,
+  RotateCcw,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { Button, Badge } from '../../ui';
 import { useAuthStore } from '../../../store/authStore';
+import { usePanelStore } from '../../../store/panelStore';
 
 const MAX_CHARS = 5000;
 
@@ -125,7 +139,7 @@ interface Instruction {
   name: string;
   description?: string;
   content: string;
-  status: 'draft' | 'production' | 'disabled';
+  status: 'draft' | 'active' | 'disabled';
   updatedAt: string;
   lastModifiedBy?: string;
   sizeBytes: number;
@@ -133,6 +147,7 @@ interface Instruction {
   wordCount: number;
   lineCount: number;
   usedByAssistants?: string[];
+  isManaged?: boolean;
 }
 
 interface InstructionsViewProps {
@@ -143,13 +158,15 @@ interface InstructionsViewProps {
 
 export function InstructionsView({ accountId, onOpenTab, instructionId }: InstructionsViewProps) {
   const { token } = useAuthStore();
+  const { openTab } = usePanelStore();
   const [instructions, setInstructions] = useState<Instruction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedInstruction, setSelectedInstruction] = useState<Instruction | null>(null);
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
   const autoSelectedInstructionIdRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -234,11 +251,52 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
   };
 
   const handleSelectInstruction = (instruction: Instruction) => {
-    if (onOpenTab && !instructionId) {
-      onOpenTab(instruction.id, instruction.name, { type: 'instruction', instructionId: instruction.id });
+    setDeleteConfirm(null);
+    setDeleteError(null);
+    if (onOpenTab) {
+      onOpenTab(instruction.id, instruction.name, {
+        type: 'instruction',
+        instructionId: instruction.id,
+      });
       return;
     }
+
     setSelectedInstruction(instruction);
+    setIsSaving(false);
+  };
+
+  const deleteInstructionById = async (id: string) => {
+    if (!token) return;
+
+    try {
+      const response = await fetch(`/api/fluxcore/instructions/${id}?accountId=${accountId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setInstructions((prev) => prev.filter((i) => i.id !== id));
+        setSelectedInstruction((prev) => (prev?.id === id ? null : prev));
+        setDeleteConfirm(null);
+        setDeleteError(null);
+        return;
+      }
+
+      const data = await response.json().catch(() => null);
+      const msg = typeof data?.message === 'string' ? data.message : 'No se pudo eliminar la instrucción';
+      setDeleteError(msg);
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting instruction:', error);
+      setDeleteError('Error de conexión');
+    }
+  };
+
+  const handleDeleteInstruction = async () => {
+    if (!selectedInstruction || deleteConfirm !== selectedInstruction.id) return;
+    await deleteInstructionById(selectedInstruction.id);
   };
 
   useEffect(() => {
@@ -276,8 +334,8 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'production':
-        return <Badge variant="success">Producción</Badge>;
+      case 'active':
+        return <Badge variant="success">Activo</Badge>;
       case 'disabled':
         return <Badge variant="warning">Desactivado</Badge>;
       default:
@@ -285,20 +343,20 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
     }
   };
 
-  // Calcular estadísticas del contenido editado
-  const getStats = (content: string) => {
-    const lines = content.split('\n').length;
-    const words = content.trim().split(/\s+/).filter(Boolean).length;
-    const tokens = Math.ceil(words * 1.3);
-    const chars = content.length;
-    return { lines, words, tokens, chars };
-  };
+  // Calcular estadísticas del contenido editado (no usado actualmente)
+  // const getStats = (content: string) => {
+  //   const lines = content.split('\n').length;
+  //   const words = content.trim().split(/\s+/).filter(Boolean).length;
+  //   const tokens = Math.ceil(words * 1.3);
+  //   const chars = content.length;
+  //   return { lines, words, tokens, chars };
+  // };
 
   const handleContentChange = (newContent: string) => {
-    if (newContent.length <= MAX_CHARS && selectedInstruction) {
-      setSelectedInstruction({ ...selectedInstruction, content: newContent });
-      setHasChanges(true);
-    }
+    if (!selectedInstruction) return;
+    const truncatedContent = newContent.slice(0, MAX_CHARS);
+    setSelectedInstruction({ ...selectedInstruction, content: truncatedContent });
+    setHasChanges(true);
   };
 
   const handleCopyContent = async () => {
@@ -338,7 +396,6 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
     if (newName.trim() === selectedInstruction.name) return;
 
     setIsSaving(true);
-    setSaveError(null);
 
     try {
       const res = await fetch(`/api/fluxcore/instructions/${selectedInstruction.id}`, {
@@ -359,7 +416,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
       if (!res.ok) {
         const text = await res.text();
         console.error('Error saving instruction name:', text);
-        setSaveError('Error al guardar nombre');
+        console.error('Failed to save instruction name');
         return;
       }
 
@@ -367,7 +424,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
       await loadInstructions(); // Update the list
     } catch (e) {
       console.error('Error saving instruction name', e);
-      setSaveError('Error de conexión');
+      console.error('Connection error');
     } finally {
       setIsSaving(false);
     }
@@ -378,7 +435,6 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
     if (!selectedInstruction?.id) return;
 
     setIsSaving(true);
-    setSaveError(null);
 
     try {
       const res = await fetch(`/api/fluxcore/instructions/${selectedInstruction.id}`, {
@@ -399,7 +455,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
       if (!res.ok) {
         const text = await res.text();
         console.error('Error saving instruction:', text);
-        setSaveError('Error al guardar cambios');
+        console.error('Failed to save instruction');
         return;
       }
 
@@ -407,7 +463,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
       setHasChanges(false);
     } catch (e) {
       console.error('Error saving instruction', e);
-      setSaveError('Error de conexión');
+      console.error('Connection error');
     } finally {
       setIsSaving(false);
     }
@@ -415,11 +471,44 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
 
   // Vista de detalle con editor (según diseño: editor con números de línea)
   if (selectedInstruction) {
-    const stats = getStats(selectedInstruction.content);
     const lines = selectedInstruction.content.split('\n');
+    const isManaged = selectedInstruction.isManaged === true;
 
     return (
       <div className="h-full flex flex-col bg-background">
+        {/* Banner para instrucciones gestionadas */}
+        {isManaged && (
+          <div className="px-6 py-3 bg-accent/10 border-b border-accent/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-accent">
+                <FileText size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-primary">
+                  Esta instrucción es gestionada automáticamente
+                </p>
+                <p className="text-xs text-secondary mt-0.5">
+                  Su contenido se genera dinámicamente desde tu perfil. Para editarlo, ve a Configuración → Perfil → Contexto para la IA.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                openTab('settings', {
+                  type: 'settings',
+                  title: 'Perfil',
+                  closable: true,
+                  context: {
+                    settingsSection: 'profile',
+                  },
+                });
+              }}
+            >
+              Ir a Perfil
+            </Button>
+          </div>
+        )}
         <div className="px-6 py-3 border-b border-subtle flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <FileText size={18} className="text-accent flex-shrink-0" />
@@ -437,8 +526,8 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
                 type="text"
                 className="text-lg font-semibold text-primary bg-transparent border-none focus:outline-none focus:ring-0 w-full p-0"
                 value={selectedInstruction.name}
-                onChange={(e) => setSelectedInstruction({ ...selectedInstruction, name: e.target.value })}
-                onBlur={(e) => handleNameSave(e.target.value)}
+                onChange={(e) => !isManaged && setSelectedInstruction({ ...selectedInstruction, name: e.target.value })}
+                onBlur={(e) => !isManaged && handleNameSave(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.currentTarget.blur();
@@ -446,6 +535,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
                 }}
                 placeholder="Nombre de la instrucción"
                 aria-label="Nombre de la instrucción"
+                disabled={isManaged}
               />
             </div>
           </div>
@@ -491,11 +581,13 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
             >
               <Download size={16} className="text-muted" />
             </button>
-            <Button size="sm" className="ml-2" disabled={!hasChanges || isSaving} onClick={handleSave}>
-              Guardar
-            </Button>
+            {!isManaged && (
+              <Button size="sm" className="ml-2" disabled={!hasChanges || isSaving} onClick={handleSave}>
+                Guardar
+              </Button>
+            )}
             {!instructionId && (
-              <button 
+              <button
                 className="p-2 hover:bg-hover rounded"
                 onClick={() => setSelectedInstruction(null)}
                 title="Cerrar"
@@ -522,9 +614,11 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
               <textarea
                 className="flex-1 p-4 bg-transparent text-primary font-mono text-sm leading-6 resize-none focus:outline-none"
                 value={selectedInstruction.content}
-                onChange={(e) => handleContentChange(e.target.value)}
+                onChange={(e) => !isManaged && handleContentChange(e.target.value)}
                 placeholder="# Instrucciones&#10;&#10;Escribe aquí las instrucciones para el asistente..."
                 spellCheck={false}
+                maxLength={MAX_CHARS}
+                readOnly={isManaged}
               />
             </div>
           ) : (
@@ -539,18 +633,56 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
           )}
         </div>
 
-        {/* Footer con estadísticas */}
-        <div className="px-6 py-2 border-t border-subtle flex items-center justify-between text-xs text-muted">
-          <div className="flex items-center gap-4">
-            <span>{stats.lines} líneas</span>
-            <span>{stats.words} palabras</span>
-            <span>~{stats.tokens} tokens</span>
-            {isSaving && <span>Guardando...</span>}
-            {saveError && <span className="text-red-500">{saveError}</span>}
+        {/* Footer con estadísticas y eliminación */}
+        <div className="border-t border-subtle">
+          <div className="p-4 text-xs text-muted space-y-1">
+            <div className="flex justify-between">
+              <span>Líneas:</span>
+              <span className="text-primary">{selectedInstruction.lineCount || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Palabras:</span>
+              <span className="text-primary">{selectedInstruction.wordCount || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Tokens estimados:</span>
+              <span className="text-primary">{selectedInstruction.tokensEstimated || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Caracteres:</span>
+              <span className={selectedInstruction.content.length > MAX_CHARS ? 'text-error' : 'text-primary'}>
+                {selectedInstruction.content.length} / {MAX_CHARS}
+              </span>
+            </div>
           </div>
-          <span className={stats.chars > MAX_CHARS * 0.9 ? 'text-warning' : ''}>
-            {stats.chars.toLocaleString()}/{MAX_CHARS.toLocaleString()} caracteres
-          </span>
+          <div className="border-t border-subtle p-4 flex items-center justify-between gap-3 bg-surface">
+            {deleteError && <span className="text-xs text-red-500">{deleteError}</span>}
+            {deleteConfirm === selectedInstruction.id ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted">¿Confirmar eliminación?</span>
+                <button
+                  onClick={handleDeleteInstruction}
+                  className="px-3 py-1.5 bg-error text-inverse rounded text-sm font-medium hover:bg-error/90 transition-colors"
+                >
+                  Eliminar definitivamente
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-3 py-1.5 bg-elevated text-secondary rounded text-sm hover:bg-hover transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setDeleteConfirm(selectedInstruction.id)}
+                className="p-2 text-muted hover:text-error hover:bg-error/10 rounded transition-colors"
+                title="Eliminar instrucción"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -594,11 +726,11 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
               <thead>
                 <tr className="border-b border-subtle">
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Nombre</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Asistente</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden md:table-cell">Asistente</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Estado</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Última modificación</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Tamaño</th>
-                  <th className="px-4 py-3"></th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden lg:table-cell">Última modificación</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase hidden lg:table-cell">Tamaño</th>
+                  <th className="px-4 py-3 sticky right-0 bg-surface"></th>
                 </tr>
               </thead>
               <tbody>
@@ -609,31 +741,134 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
                     onClick={() => handleSelectInstruction(instruction)}
                   >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <FileText size={16} className="text-accent" />
-                        <span className="font-medium text-primary">{instruction.name}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={16} className="text-accent flex-shrink-0 min-w-[16px] min-h-[16px]" />
+                          <span className="font-medium text-primary truncate">{instruction.name}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 md:hidden">
+                          <button
+                            className="p-1 hover:bg-elevated rounded"
+                            title="Compartir"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Share2 size={16} className="text-muted" />
+                          </button>
+                          <button
+                            className="p-1 hover:bg-elevated rounded"
+                            title="Descargar"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Download size={16} className="text-muted" />
+                          </button>
+
+                          {deleteConfirm === instruction.id ? (
+                            <>
+                              <button
+                                className="p-1 hover:bg-elevated rounded"
+                                title="Eliminar definitivamente"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void deleteInstructionById(instruction.id);
+                                }}
+                              >
+                                <Check size={16} className="text-error" />
+                              </button>
+                              <button
+                                className="p-1 hover:bg-elevated rounded"
+                                title="Cancelar"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirm(null);
+                                }}
+                              >
+                                <X size={16} className="text-muted" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="p-1 hover:bg-elevated rounded"
+                              title="Eliminar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(instruction.id);
+                              }}
+                            >
+                              <Trash2 size={16} className="text-muted hover:text-error" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-secondary">-</td>
+                    <td className="px-4 py-3 text-secondary hidden md:table-cell">-</td>
                     <td className="px-4 py-3">{getStatusBadge(instruction.status)}</td>
-                    <td className="px-4 py-3 text-secondary text-sm">
+                    <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                       {formatDate(instruction.updatedAt)}
                       {instruction.lastModifiedBy && ` ${instruction.lastModifiedBy}`}
                     </td>
-                    <td className="px-4 py-3 text-secondary text-sm">
+                    <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
                       {formatSize(instruction.sizeBytes)} - {instruction.tokensEstimated} tokens
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                        <button className="p-1 hover:bg-elevated rounded" title="Compartir">
-                          <Share2 size={16} className="text-muted" />
+                    <td className="px-4 py-3 hidden md:table-cell sticky right-0 bg-surface group-hover:bg-hover">
+                      <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button
+                          className="p-1 hover:bg-elevated rounded"
+                          title="Compartir"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Share2 size={16} className="text-muted flex-shrink-0" />
                         </button>
-                        <button className="p-1 hover:bg-elevated rounded" title="Descargar">
-                          <Download size={16} className="text-muted" />
+                        <button
+                          className="p-1 hover:bg-elevated rounded"
+                          title="Descargar"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Download size={16} className="text-muted flex-shrink-0" />
                         </button>
-                        <button className="p-1 hover:bg-elevated rounded" title="Recargar">
-                          <RotateCcw size={16} className="text-muted" />
+                        <button
+                          className="p-1 hover:bg-elevated rounded"
+                          title="Recargar"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <RotateCcw size={16} className="text-muted flex-shrink-0" />
                         </button>
+
+                        {deleteConfirm === instruction.id ? (
+                          <>
+                            <button
+                              className="p-1 hover:bg-elevated rounded"
+                              title="Eliminar definitivamente"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteInstructionById(instruction.id);
+                              }}
+                            >
+                              <Check size={16} className="text-error flex-shrink-0" />
+                            </button>
+                            <button
+                              className="p-1 hover:bg-elevated rounded"
+                              title="Cancelar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(null);
+                              }}
+                            >
+                              <X size={16} className="text-muted flex-shrink-0" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="p-1 hover:bg-elevated rounded"
+                            title="Eliminar"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteConfirm(instruction.id);
+                            }}
+                          >
+                            <Trash2 size={16} className="text-muted hover:text-error flex-shrink-0" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

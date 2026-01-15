@@ -1,7 +1,7 @@
 /**
  * V2-4: ExtensionConfigPanel Component
  * 
- * Panel para configurar una extensión instalada.
+ * Panel para configurar una extensi?n instalada.
  */
 
 import { useState, useEffect } from 'react';
@@ -30,16 +30,17 @@ interface ExtensionConfigPanelProps {
   extensionName: string;
   config: ExtensionConfig;
   schema?: ConfigSchema;
+  supportsPromptInspector?: boolean;
   onSave: (config: ExtensionConfig) => Promise<void>;
   onClose: () => void;
 }
 
-// Schema por defecto para core-ai
-const coreAISchema: ConfigSchema = {
+// Schema por defecto para FluxCore
+const fluxCoreSchema: ConfigSchema = {
   enabled: {
     type: 'boolean',
     label: 'Habilitado',
-    description: 'Activar o desactivar la extensión de IA',
+    description: 'Activar o desactivar la extensi?n de IA',
     default: true,
   },
   provider: {
@@ -54,19 +55,19 @@ const coreAISchema: ConfigSchema = {
   },
   mode: {
     type: 'select',
-    label: 'Modo de operación',
-    description: 'Cómo debe comportarse la IA al recibir mensajes',
+    label: 'Modo de operaci?n',
+    description: 'C?mo debe comportarse la IA al recibir mensajes',
     default: 'suggest',
     options: [
-      { value: 'suggest', label: 'Sugerir (requiere aprobación)' },
-      { value: 'auto', label: 'Automático (responde solo)' },
+      { value: 'suggest', label: 'Sugerir (requiere aprobaci?n)' },
+      { value: 'auto', label: 'Autom?tico (responde solo)' },
       { value: 'off', label: 'Desactivado' },
     ],
   },
   responseDelay: {
     type: 'number',
     label: 'Delay de respuesta (segundos)',
-    description: 'Tiempo de espera antes de responder automáticamente',
+    description: 'Tiempo de espera antes de responder autom?ticamente',
     default: 30,
     min: 0,
     max: 300,
@@ -74,7 +75,7 @@ const coreAISchema: ConfigSchema = {
   smartDelayEnabled: {
     type: 'boolean',
     label: 'Smart Delay',
-    description: 'Permite que el delay se ajuste según la actividad detectada en el chat',
+    description: 'Permite que el delay se ajuste seg?n la actividad detectada en el chat',
     default: false,
   },
   model: {
@@ -83,7 +84,7 @@ const coreAISchema: ConfigSchema = {
     description: 'Modelo de lenguaje a utilizar',
     default: 'llama-3.1-8b-instant',
     options: [
-      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (rápido)' },
+      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (r?pido)' },
       { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B (potente)' },
       { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
       { value: 'gpt-4o-mini-2024-07-18', label: 'GPT-4o mini (2024-07-18)' },
@@ -92,7 +93,7 @@ const coreAISchema: ConfigSchema = {
   temperature: {
     type: 'number',
     label: 'Temperatura',
-    description: 'Mayor = más creativo, menor = más preciso',
+    description: 'Mayor = m?s creativo, menor = m?s preciso',
     default: 0.7,
     min: 0,
     max: 2,
@@ -104,6 +105,7 @@ export function ExtensionConfigPanel({
   extensionName,
   config,
   schema,
+  supportsPromptInspector = false,
   onSave,
   onClose,
 }: ExtensionConfigPanelProps) {
@@ -113,8 +115,8 @@ export function ExtensionConfigPanel({
 
   const { openTab } = usePanelStore();
 
-  // Usar schema de core-ai si es esa extensión y no hay schema custom
-  const activeSchema = schema || (extensionId.includes('core-ai') ? coreAISchema : {});
+  // Usar schema de FluxCore si corresponde y no hay schema custom
+  const activeSchema = schema || (supportsPromptInspector ? fluxCoreSchema : {});
 
   useEffect(() => {
     setLocalConfig(config);
@@ -125,7 +127,7 @@ export function ExtensionConfigPanel({
     setLocalConfig((prev) => {
       const next = { ...prev, [key]: value };
 
-      if (extensionId.includes('core-ai') && key === 'provider') {
+      if (supportsPromptInspector && key === 'provider') {
         const provider = value;
         const currentModel = next.model;
 
@@ -281,7 +283,7 @@ export function ExtensionConfigPanel({
         {Object.keys(activeSchema).length === 0 && (
           <div className="text-center py-8 text-muted">
             <Settings size={48} className="mx-auto mb-3 opacity-50" />
-            <p>Esta extensión no tiene opciones configurables.</p>
+            <p>Esta extensi?n no tiene opciones configurables.</p>
           </div>
         )}
       </div>
@@ -296,7 +298,7 @@ export function ExtensionConfigPanel({
             <RotateCcw size={16} />
             Restablecer
           </button>
-          {extensionId.includes('core-ai') && (
+          {supportsPromptInspector && (
             <button
               onClick={handleOpenPromptInspector}
               className="flex items-center gap-2 px-3 py-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors"

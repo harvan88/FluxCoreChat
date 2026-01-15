@@ -139,7 +139,7 @@ export function AISuggestionCard({
           )}
         </div>
         <span className="text-xs text-muted">
-          {suggestion.extensionId === 'core-ai' ? 'FluxCore' : suggestion.extensionId}
+          {suggestion.extensionId === '@fluxcore/fluxcore' ? 'FluxCore' : suggestion.extensionId}
         </span>
       </div>
 

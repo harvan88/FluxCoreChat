@@ -51,7 +51,7 @@ async function runTests() {
   // Check API is running
   try {
     const health = await request('/health');
-    if (health.status !== 'ok') {
+    if (health.status !== 'healthy' && health.status !== 'ok') {
       throw new Error('API not healthy');
     }
     console.log('✅ API is running\n');
@@ -104,9 +104,11 @@ async function runTests() {
 
   // Test 4: Get extension manifest
   await test('Get Extension Manifest', async () => {
-    const res = await request('/extensions/manifest/@fluxcore%2Fcore-ai');
+    const res = await request('/extensions/manifest/@fluxcore%2Ffluxcore', {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
     if (!res.success) throw new Error(res.message || 'Failed to get manifest');
-    if (res.data.id !== '@fluxcore/core-ai') throw new Error('Wrong extension ID');
+    if (res.data.id !== '@fluxcore/fluxcore') throw new Error('Wrong extension ID');
     console.log(`   Extension: ${res.data.name} v${res.data.version}`);
     console.log(`   Permissions: ${res.data.permissions.length}`);
   });
@@ -118,7 +120,7 @@ async function runTests() {
       headers: { Authorization: `Bearer ${authToken}` },
       body: JSON.stringify({
         accountId,
-        extensionId: '@fluxcore/core-ai',
+        extensionId: '@fluxcore/fluxcore',
       }),
     });
     if (!res.success) throw new Error(res.message || 'Installation failed');
@@ -139,7 +141,7 @@ async function runTests() {
 
   // Test 7: Update extension config
   await test('Update Extension Config', async () => {
-    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/core-ai')}`, {
+    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/fluxcore')}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${authToken}` },
       body: JSON.stringify({
@@ -155,7 +157,7 @@ async function runTests() {
 
   // Test 8: Disable extension
   await test('Disable Extension', async () => {
-    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/core-ai')}/disable`, {
+    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/fluxcore')}/disable`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${authToken}` },
     });
@@ -166,7 +168,7 @@ async function runTests() {
 
   // Test 9: Enable extension
   await test('Enable Extension', async () => {
-    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/core-ai')}/enable`, {
+    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/fluxcore')}/enable`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${authToken}` },
     });
@@ -177,7 +179,7 @@ async function runTests() {
 
   // Test 10: Uninstall extension
   await test('Uninstall Extension', async () => {
-    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/core-ai')}`, {
+    const res = await request(`/extensions/${accountId}/${encodeURIComponent('@fluxcore/fluxcore')}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${authToken}` },
     });

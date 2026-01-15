@@ -63,7 +63,7 @@ export interface AutomationConfig {
   // Tiempo de espera antes de respuesta automática (ms)
   delayMs?: number;
   
-  // Extensión específica a usar (null = core-ai)
+  // Extensión específica a usar (null = FluxCore)
   extensionId?: string | null;
   
   // Límite de respuestas automáticas por hora

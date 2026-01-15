@@ -16,7 +16,7 @@
 | T-002 | Extensions receive message context | Contexto de extensiones | Extensión recibe accountId, relationshipId, conversationId |
 | T-003 | Multiple extensions process same message | Multi-extensión | Todas las extensiones habilitadas procesan el mensaje |
 | T-004 | Extension failure doesn't break MessageCore | Resiliencia | Error en extensión no impide persistencia del mensaje |
-| T-005 | core-ai generates suggestion on incoming message | IA automática | Mensaje incoming genera sugerencia si mode='suggest' |
+| T-005 | FluxCore generates suggestion on incoming message | IA automática | Mensaje incoming genera sugerencia si mode='suggest' |
 
 ```typescript
 // test-messagecore-integration.ts
@@ -231,7 +231,7 @@ describe('Offline-First', () => {
 ### Principios Inmutables
 
 - [ ] **P1: Núcleo sagrado** - MessageCore no tiene lógica de negocio específica
-- [ ] **P2: Núcleo agnóstico a IA** - @fluxcore/core-ai es extensión separada
+- [ ] **P2: Núcleo agnóstico a IA** - @fluxcore/fluxcore es extensión separada
 - [ ] **P3: Gratuito por defecto** - Chat funciona sin extensiones premium
 - [ ] **P4: Separación persona/cuenta** - users y accounts están separados
 - [ ] **P5: Contactos ≠ Conversaciones** - relationships vs conversations
@@ -259,7 +259,7 @@ describe('Offline-First', () => {
 - [ ] **11.8 Responsive** - Colapsa en pantallas pequeñas
 - [ ] **11.9 API pública** - Events y Commands expuestos
 
-### Extensión @fluxcore/core-ai (PARTE 9.11)
+### Extensión @fluxcore/fluxcore (PARTE 9.11)
 
 - [ ] Es extensión, no parte del núcleo
 - [ ] Preinstalada y habilitada por defecto
@@ -313,7 +313,7 @@ bunx playwright test
 - [ ] Registrar usuario
 - [ ] Crear cuenta personal
 - [ ] Crear cuenta business
-- [ ] Verificar que core-ai está preinstalada
+- [ ] Verificar que FluxCore está preinstalada
 
 #### Flow 2: Chat básico
 

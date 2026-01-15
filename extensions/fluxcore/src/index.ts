@@ -1,5 +1,5 @@
 /**
- * @fluxcore/core-ai - Extensión de IA por defecto
+ * @fluxcore/fluxcore - Extensión de IA por defecto
  * 
  * Proporciona respuestas inteligentes basadas en el contexto de la relación
  * con tres modos de operación: suggest, auto y off.
@@ -8,7 +8,7 @@
 import { PromptBuilder, type ContextData, type BuiltPrompt } from './prompt-builder';
 import { OpenAICompatibleClient, AIClientError, type AIErrorType } from './openai-compatible-client';
 
-export interface CoreAIConfig {
+export interface FluxCoreConfig {
   enabled: boolean;
   mode: 'suggest' | 'auto' | 'off';
   responseDelay: number;
@@ -139,20 +139,21 @@ interface AssistantComposition {
       model: string;
       temperature: number;
       topP: number;
+      responseFormat?: 'text' | 'json';
     };
   };
-  instructions: Array<{ content: string; order: number }>;
+  instructions: Array<{ id: string; name?: string; content: string; order: number; versionId?: string | null }>;
   vectorStores: Array<any>;
   tools: Array<any>;
 }
 
-export class CoreAIExtension {
-  private config: CoreAIConfig;
+export class FluxCoreExtension {
+  private config: FluxCoreConfig;
   private promptBuilder: PromptBuilder;
   private clients: Map<string, OpenAICompatibleClient> = new Map();
   private onSuggestionCallback?: (suggestion: AISuggestion) => void;
 
-  constructor(config: Partial<CoreAIConfig> = {}) {
+  constructor(config: Partial<FluxCoreConfig> = {}) {
     this.config = {
       enabled: true,
       mode: 'suggest',
@@ -181,19 +182,65 @@ export class CoreAIExtension {
       // TODO: Get API URL from config or env. Defaulting to localhost:3000 for now.
       const port = process.env.PORT || 3000;
       const url = `http://localhost:${port}/fluxcore/runtime/active-assistant?accountId=${accountId}`;
-      
+
       const response = await fetch(url);
       if (!response.ok) {
         if (response.status !== 404) {
-          console.warn(`[core-ai] Failed to fetch active assistant: ${response.status} ${response.statusText}`);
+          console.warn(`[fluxcore] Failed to fetch active assistant: ${response.status} ${response.statusText}`);
         }
         return null;
       }
-      
+
       const data = await response.json();
       return data as AssistantComposition;
     } catch (error) {
-      console.warn('[core-ai] Error fetching active assistant:', error);
+      console.warn('[fluxcore] Error fetching active assistant:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch RAG context from Vector Stores via Runtime API
+   * RAG-008: Integración con retrieval service
+   */
+  private async fetchRAGContext(
+    accountId: string,
+    query: string,
+    vectorStoreIds?: string[]
+  ): Promise<ContextData['ragContext'] | null> {
+    try {
+      const port = process.env.PORT || 3000;
+      const url = `http://localhost:${port}/fluxcore/runtime/rag-context`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId,
+          query,
+          vectorStoreIds,
+          options: { topK: 5, maxTokens: 2000 },
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[fluxcore] Failed to fetch RAG context: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        return {
+          context: data.data.context || '',
+          sources: data.data.sources || [],
+          totalTokens: data.data.totalTokens || 0,
+          chunksUsed: data.data.chunksUsed || 0,
+          vectorStoreIds,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.warn('[fluxcore] Error fetching RAG context:', error);
       return null;
     }
   }
@@ -202,14 +249,14 @@ export class CoreAIExtension {
    * Hook: Cuando se instala la extensión
    */
   async onInstall(accountId: string): Promise<void> {
-    console.log(`[core-ai] Installed for account ${accountId}`);
+    console.log(`[fluxcore] Installed for account ${accountId}`);
   }
 
   /**
    * Hook: Cuando se desinstala la extensión
    */
   async onUninstall(accountId: string): Promise<void> {
-    console.log(`[core-ai] Uninstalled from account ${accountId}`);
+    console.log(`[fluxcore] Uninstalled from account ${accountId}`);
     // Cancelar respuestas pendientes
     this.cancelPendingResponses(accountId);
   }
@@ -217,8 +264,8 @@ export class CoreAIExtension {
   /**
    * Hook: Cuando cambia la configuración
    */
-  async onConfigChange(accountId: string, newConfig: Partial<CoreAIConfig>): Promise<void> {
-    console.log(`[core-ai] Config changed for account ${accountId}`, {
+  async onConfigChange(accountId: string, newConfig: Partial<FluxCoreConfig>): Promise<void> {
+    console.log(`[fluxcore] Config changed for account ${accountId}`, {
       enabled: newConfig.enabled,
       mode: newConfig.mode,
       responseDelay: newConfig.responseDelay,
@@ -231,9 +278,9 @@ export class CoreAIExtension {
         ? newConfig.providerOrder.map((p) => ({ provider: p.provider, baseUrl: p.baseUrl, keySource: p.keySource }))
         : undefined,
     });
-    
+
     Object.assign(this.config, newConfig);
-    
+
     this.promptBuilder.updateConfig({
       mode: this.config.mode,
       maxTokens: this.config.maxTokens,
@@ -300,15 +347,146 @@ export class CoreAIExtension {
     context: ContextData,
     recipientAccountId: string
   ): Promise<AISuggestion | null> {
+    console.log('[fluxcore] ========== generateSuggestion INICIO ==========');
+    console.log('[fluxcore] Event messageId:', event.messageId);
+    console.log('[fluxcore] Current config:', {
+      enabled: this.config.enabled,
+      mode: this.config.mode,
+      model: this.config.model,
+      temperature: this.config.temperature,
+    });
+
     try {
-      const providerOrder = this.getProviderOrder();
+      let providerOrder = this.getProviderOrder();
+      console.log('[fluxcore] Providers disponibles:', providerOrder.map(p => p.provider));
+
       if (providerOrder.length === 0) {
-        console.log('[core-ai] No provider configured, skipping generation');
+        console.log('[fluxcore] ❌ No hay providers configurados');
         return null;
       }
 
+      const active = await this.fetchActiveAssistant(recipientAccountId);
+
+      const instructionIds = Array.isArray(active?.instructions)
+        ? active!.instructions
+          .map((i: any) => (typeof i?.id === 'string' ? i.id : ''))
+          .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
+        : undefined;
+
+      const instructionLinks = Array.isArray(active?.instructions)
+        ? active!.instructions
+          .map((i: any) => ({
+            id: typeof i?.id === 'string' ? i.id : '',
+            name: typeof i?.name === 'string' ? i.name : undefined,
+            order: typeof i?.order === 'number' ? i.order : undefined,
+            versionId: typeof i?.versionId === 'string' ? i.versionId : null,
+          }))
+          .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
+        : undefined;
+
+      const vectorStoreIds = Array.isArray(active?.vectorStores)
+        ? active!.vectorStores
+          .map((vs: any) => (typeof vs?.id === 'string' ? vs.id : ''))
+          .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
+        : undefined;
+
+      const vectorStores = Array.isArray(active?.vectorStores)
+        ? active!.vectorStores
+          .map((vs: any) => ({
+            id: typeof vs?.id === 'string' ? vs.id : '',
+            name: typeof vs?.name === 'string' ? vs.name : undefined,
+          }))
+          .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
+        : undefined;
+
+      const toolIds = Array.isArray(active?.tools)
+        ? active!.tools
+          .map((t: any) => (typeof t?.connectionId === 'string' ? t.connectionId : (typeof t?.id === 'string' ? t.id : '')))
+          .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
+        : undefined;
+
+      const tools = Array.isArray(active?.tools)
+        ? active!.tools
+          .map((t: any) => ({
+            id: typeof t?.connectionId === 'string' ? t.connectionId : (typeof t?.id === 'string' ? t.id : ''),
+            name: typeof t?.name === 'string' ? t.name : undefined,
+          }))
+          .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
+        : undefined;
+
+      const assistantMeta: ContextData['assistantMeta'] | undefined = active?.assistant
+        ? {
+          assistantId: active.assistant.id,
+          assistantName: typeof active.assistant?.name === 'string' ? active.assistant.name : undefined,
+          instructionIds,
+          instructionLinks,
+          vectorStoreIds,
+          vectorStores,
+          toolIds,
+          tools,
+          modelConfig: active.assistant?.modelConfig
+            ? {
+              provider: active.assistant.modelConfig.provider,
+              model: active.assistant.modelConfig.model,
+              temperature: active.assistant.modelConfig.temperature,
+              topP: active.assistant.modelConfig.topP,
+              responseFormat: (active.assistant.modelConfig as any)?.responseFormat,
+            }
+            : undefined,
+        }
+        : undefined;
+
+      const preferredProvider =
+        active?.assistant?.modelConfig?.provider === 'groq' || active?.assistant?.modelConfig?.provider === 'openai'
+          ? active.assistant.modelConfig.provider
+          : null;
+
+      const hasPreferredProvider = preferredProvider
+        ? providerOrder.some((p) => p.provider === preferredProvider)
+        : false;
+
+      console.log('[fluxcore] Preferred provider:', preferredProvider);
+      console.log('[fluxcore] hasPreferredProvider:', hasPreferredProvider);
+      console.log('[fluxcore] Provider order final:', providerOrder.map(p => p.provider));
+
+      if (hasPreferredProvider && preferredProvider) {
+        providerOrder = providerOrder
+          .slice()
+          .sort((a, b) => (a.provider === preferredProvider ? 0 : 1) - (b.provider === preferredProvider ? 0 : 1));
+      }
+
       // Construir el prompt
-      const prompt = this.promptBuilder.build(context, recipientAccountId);
+      const extraInstructions = Array.isArray(active?.instructions)
+        ? active!.instructions
+          .map((i) => (typeof (i as any)?.content === 'string' ? (i as any).content : ''))
+          .filter((x) => typeof x === 'string' && x.trim().length > 0)
+        : [];
+
+      // RAG-008: Obtener contexto de Vector Stores si están configurados
+      let ragContext: ContextData['ragContext'] | undefined;
+      if (vectorStoreIds && vectorStoreIds.length > 0) {
+        const rag = await this.fetchRAGContext(recipientAccountId, event.content, vectorStoreIds);
+        ragContext = rag || {
+          context: '',
+          sources: [],
+          totalTokens: 0,
+          chunksUsed: 0,
+          vectorStoreIds,
+        };
+      }
+
+      // Inyectar RAG context en el contexto
+      const enrichedContext: ContextData = {
+        ...context,
+        assistantMeta,
+        ragContext,
+      };
+
+      const prompt = this.promptBuilder.build(
+        enrichedContext,
+        recipientAccountId,
+        extraInstructions.length > 0 ? extraInstructions : undefined
+      );
 
       // Añadir el mensaje actual al historial
       const hasCurrentInHistory = Array.isArray(context.messages)
@@ -359,7 +537,7 @@ export class CoreAIExtension {
         model: this.config.model,
         maxTokens: this.config.maxTokens,
         temperature: this.config.temperature,
-        context,
+        context: enrichedContext,
         builtPrompt: {
           systemPrompt: prompt.systemPrompt,
           messages: prompt.messages,
@@ -369,16 +547,45 @@ export class CoreAIExtension {
       };
 
       let response: ChatCompletionResult;
+      console.log('[fluxcore] Llamando createChatCompletionWithFallback...');
+      console.log('[fluxcore] modelOverride:', hasPreferredProvider && typeof active?.assistant?.modelConfig?.model === 'string'
+        ? active.assistant.modelConfig.model
+        : 'ninguno (usando default)');
+
       try {
         response = await this.createChatCompletionWithFallback({
           providerOrder,
           systemPrompt: prompt.systemPrompt,
           messages: messagesWithCurrent,
           trace,
+          modelOverride:
+            hasPreferredProvider && typeof active?.assistant?.modelConfig?.model === 'string'
+              ? active.assistant.modelConfig.model
+              : undefined,
+          temperatureOverride:
+            hasPreferredProvider && typeof active?.assistant?.modelConfig?.temperature === 'number'
+              ? active.assistant.modelConfig.temperature
+              : undefined,
         });
+        console.log('[fluxcore] ✓ Respuesta recibida de provider:', response.provider);
       } catch (error: any) {
+        console.log('[fluxcore] ❌ Error en createChatCompletionWithFallback:', error.message);
         addTrace(trace);
         throw error;
+      }
+
+      trace.model = response.requestBody.model;
+      trace.maxTokens = response.requestBody.max_tokens;
+      trace.temperature = response.requestBody.temperature;
+
+      if (assistantMeta) {
+        assistantMeta.effective = {
+          provider: response.provider,
+          baseUrl: response.baseUrl,
+          model: response.requestBody.model,
+          maxTokens: response.requestBody.max_tokens,
+          temperature: response.requestBody.temperature,
+        };
       }
 
       trace.final = {
@@ -414,17 +621,16 @@ export class CoreAIExtension {
       // Guardar sugerencia
       suggestions.set(suggestion.id, suggestion);
 
-      console.log(`[core-ai] Generated suggestion: ${suggestion.id} (${response.usage.total_tokens} tokens)`);
+      console.log(`[fluxcore] Generated suggestion: ${suggestion.id} (${response.usage.total_tokens} tokens)`);
 
       return suggestion;
     } catch (error: any) {
-      console.error('[core-ai] Error generating suggestion:', error?.message || 'Unknown error');
+      console.error('[fluxcore] Error generating suggestion:', error?.message || 'Unknown error');
       return null;
     }
   }
 
-  listTraces(params: { accountId: string; conversationId?: string; limit?: number }): Array<Pick<AITraceEntry, 'id' | 'createdAt' | 'accountId' | 'conversationId' | 'messageId' | 'mode' | 'model' | 'maxTokens' | 'temperature' | 'final'> & { attempts: number }>
-  {
+  listTraces(params: { accountId: string; conversationId?: string; limit?: number }): Array<Pick<AITraceEntry, 'id' | 'createdAt' | 'accountId' | 'conversationId' | 'messageId' | 'mode' | 'model' | 'maxTokens' | 'temperature' | 'final'> & { attempts: number }> {
     const limit = typeof params.limit === 'number' ? Math.max(1, Math.min(200, params.limit)) : 50;
     return traces
       .filter((t) => t.accountId === params.accountId)
@@ -571,7 +777,7 @@ export class CoreAIExtension {
   /**
    * Obtener configuración actual
    */
-  getConfig(): CoreAIConfig {
+  getConfig(): FluxCoreConfig {
     return { ...this.config };
   }
 
@@ -584,23 +790,41 @@ export class CoreAIExtension {
   }
 
   private getProviderOrder(): Array<{ provider: 'groq' | 'openai'; baseUrl: string; apiKey: string; keySource?: string }> {
+    console.log('[fluxcore] getProviderOrder - config.providerOrder length:', this.config.providerOrder?.length || 0);
+    console.log('[fluxcore] getProviderOrder - OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+    console.log('[fluxcore] getProviderOrder - GROQ_API_KEY exists:', !!process.env.GROQ_API_KEY);
+
     if (Array.isArray(this.config.providerOrder) && this.config.providerOrder.length > 0) {
+      console.log('[fluxcore] Usando providerOrder de config:', this.config.providerOrder.map(p => p.provider));
       return this.config.providerOrder.filter((p) => typeof p?.apiKey === 'string' && p.apiKey.length > 0);
     }
 
-    const legacyKey = this.config.apiKey || process.env.GROQ_API_KEY || '';
-    if (legacyKey) {
-      return [
-        {
-          provider: 'groq',
-          baseUrl: 'https://api.groq.com/openai/v1',
-          apiKey: legacyKey,
-          keySource: 'legacy',
-        },
-      ];
+    console.log('[fluxcore] Construyendo providerOrder desde environment...');
+    const providers: Array<{ provider: 'groq' | 'openai'; baseUrl: string; apiKey: string; keySource?: string }> = [];
+
+    // Groq primero (más estable/rápido para desarrollo)
+    const groqKey = this.config.apiKey || process.env.GROQ_API_KEY;
+    if (groqKey) {
+      providers.push({
+        provider: 'groq',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        apiKey: groqKey,
+        keySource: groqKey === this.config.apiKey ? 'config' : 'env_GROQ_API_KEY',
+      });
     }
 
-    return [];
+    // OpenAI como alternativa
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      providers.push({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: openaiKey,
+        keySource: 'env_OPENAI_API_KEY',
+      });
+    }
+
+    return providers;
   }
 
   private normalizeError(error: any): { type: AIErrorType; message: string; statusCode?: number } {
@@ -620,6 +844,42 @@ export class CoreAIExtension {
     );
   }
 
+  /**
+   * Obtiene un modelo compatible para el provider dado.
+   * Si el modelo solicitado no es compatible con el provider, retorna un equivalente.
+   */
+  private getCompatibleModel(requestedModel: string, provider: 'groq' | 'openai'): string {
+    // Modelos de OpenAI
+    const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o1', 'o1-mini'];
+    // Modelos de Groq
+    const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+
+    const isOpenAIModel = openaiModels.some(m => requestedModel.includes(m));
+    const isGroqModel = groqModels.some(m => requestedModel.includes(m));
+
+    // Si el modelo ya es compatible con el provider, usarlo
+    if (provider === 'openai' && isOpenAIModel) return requestedModel;
+    if (provider === 'groq' && isGroqModel) return requestedModel;
+    if (provider === 'groq' && !isOpenAIModel && !isGroqModel) return requestedModel; // Modelo custom, intentar
+
+    // Mapeo de fallback
+    if (provider === 'groq' && isOpenAIModel) {
+      // Modelo de OpenAI solicitado pero usando Groq - usar equivalente
+      if (requestedModel.includes('gpt-4o')) return 'llama-3.3-70b-versatile';
+      if (requestedModel.includes('gpt-4')) return 'llama-3.3-70b-versatile';
+      if (requestedModel.includes('gpt-3.5')) return 'llama-3.1-8b-instant';
+      return 'llama-3.1-8b-instant'; // Default Groq
+    }
+
+    if (provider === 'openai' && isGroqModel) {
+      // Modelo de Groq solicitado pero usando OpenAI - usar equivalente
+      if (requestedModel.includes('70b')) return 'gpt-4o';
+      return 'gpt-4o-mini'; // Default OpenAI
+    }
+
+    return requestedModel; // Fallback: usar el modelo tal cual
+  }
+
   private async createChatCompletionWithFallback(params: {
     providerOrder: Array<{ provider: 'groq' | 'openai'; baseUrl: string; apiKey: string; keySource?: string }>;
     systemPrompt: string;
@@ -632,8 +892,8 @@ export class CoreAIExtension {
     const timeoutMs = this.config.timeoutMs || 15000;
     const maxAttemptsPerProvider = 2;
 
-    // Usar overrides o config por defecto
-    const model = params.modelOverride || this.config.model;
+    // Modelo base solicitado (puede ser de cualquier provider)
+    const requestedModel = params.modelOverride || this.config.model;
     const maxTokens = params.maxTokensOverride ?? this.config.maxTokens;
     const temperature = params.temperatureOverride ?? this.config.temperature;
 
@@ -642,6 +902,10 @@ export class CoreAIExtension {
     for (let providerIdx = 0; providerIdx < params.providerOrder.length; providerIdx++) {
       const provider = params.providerOrder[providerIdx];
       const client = this.getClient(provider.baseUrl);
+
+      // Ajustar modelo según el provider (mapeo de modelos entre providers)
+      const model = this.getCompatibleModel(requestedModel, provider.provider);
+      console.log(`[fluxcore] Intentando provider=${provider.provider} con modelo=${model} (solicitado: ${requestedModel})`);
 
       for (let attempt = 1; attempt <= maxAttemptsPerProvider; attempt++) {
         const startedAt = Date.now();
@@ -721,16 +985,16 @@ export class CoreAIExtension {
 }
 
 // Exportar instancia singleton para uso en el servicio
-let instance: CoreAIExtension | null = null;
+let instance: FluxCoreExtension | null = null;
 
-export function getCoreAI(config?: Partial<CoreAIConfig>): CoreAIExtension {
+export function getFluxCore(config?: Partial<FluxCoreConfig>): FluxCoreExtension {
   if (!instance) {
-    instance = new CoreAIExtension(config);
+    instance = new FluxCoreExtension(config);
   }
   return instance;
 }
 
-export function resetCoreAI(): void {
+export function resetFluxCore(): void {
   instance = null;
 }
 

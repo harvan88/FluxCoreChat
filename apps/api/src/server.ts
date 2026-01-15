@@ -89,6 +89,11 @@ if (fs.existsSync(rootEnvPath)) {
 
 const PORT = process.env.PORT || 3000;
 
+// Diagnóstico de variables de entorno para AI
+console.log('🔑 Environment check:');
+console.log('   OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? `exists (${process.env.OPENAI_API_KEY.substring(0, 10)}...)` : 'NOT SET');
+console.log('   GROQ_API_KEY:', process.env.GROQ_API_KEY ? `exists (${process.env.GROQ_API_KEY.substring(0, 10)}...)` : 'NOT SET');
+
 const HOST = process.env.HOST || '::';
 
 const dnsOrder = process.env.FLUXCORE_DNS_ORDER;
@@ -186,6 +191,7 @@ const elysiaApp = new Elysia()
   .use(systemAdminRoutes)
   .use(uploadRoutes)
   .use(websiteRoutes)
+  .use(fluxcoreRuntimeRoutes)
   .use(fluxcoreRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
@@ -194,7 +200,7 @@ try {
   server = Bun.serve({
     hostname: HOST,
     port: PORT,
-    
+
     // Handler para HTTP - delega a Elysia
     fetch(req, server) {
       // Upgrade a WebSocket si es request de WS
@@ -204,7 +210,7 @@ try {
         if (upgraded) return undefined as any;
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
-      
+
       // Serve uploaded files statically
       if (url.pathname.startsWith('/uploads/')) {
         const relativePath = url.pathname.replace(/^\/+/, '');
@@ -232,22 +238,22 @@ try {
 
         return new Response(file, { headers });
       }
-      
+
       // Serve public websites (Karen extension)
       // Check if path matches /{alias} or /{alias}/*
       const publicSiteMatch = url.pathname.match(/^\/([a-zA-Z0-9_-]+)(\/.*)?$/);
       if (publicSiteMatch) {
         const alias = publicSiteMatch[1];
         const subPath = publicSiteMatch[2] || '/';
-        
+
         // Skip API routes and known paths
-        const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations', 
-          'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites', 
+        const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations',
+          'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites',
           'uploads', 'ws', 'swagger', 'health', 'app'];
-        
+
         if (!reservedPaths.includes(alias)) {
           const sitesDir = path.join(process.cwd(), 'public', 'sites', alias);
-          
+
           // Determine file path
           let filePath: string;
           if (subPath === '/' || subPath === '') {
@@ -256,23 +262,23 @@ try {
             // Try exact path first, then path/index.html
             const exactPath = path.join(sitesDir, subPath);
             const indexPath = path.join(sitesDir, subPath, 'index.html');
-            
+
             if (fs.existsSync(exactPath) && fs.statSync(exactPath).isFile()) {
               filePath = exactPath;
             } else {
               filePath = indexPath;
             }
           }
-          
+
           // Check if file exists
           if (fs.existsSync(filePath)) {
             const file = Bun.file(filePath);
             const contentType = filePath.endsWith('.html') ? 'text/html' :
-                                filePath.endsWith('.css') ? 'text/css' :
-                                filePath.endsWith('.js') ? 'application/javascript' :
-                                filePath.endsWith('.xml') ? 'application/xml' :
-                                'text/plain';
-            
+              filePath.endsWith('.css') ? 'text/css' :
+                filePath.endsWith('.js') ? 'application/javascript' :
+                  filePath.endsWith('.xml') ? 'application/xml' :
+                    'text/plain';
+
             return new Response(file, {
               headers: {
                 'Content-Type': contentType,
@@ -282,11 +288,11 @@ try {
           }
         }
       }
-      
+
       // Delegar a Elysia para HTTP
       return elysiaApp.handle(req);
     },
-    
+
     // Handler para WebSocket
     websocket: {
       message(ws, message) {
@@ -304,7 +310,7 @@ try {
   server = Bun.serve({
     hostname: '0.0.0.0',
     port: PORT,
-    
+
     // Handler para HTTP - delega a Elysia
     fetch(req, server) {
       // Upgrade a WebSocket si es request de WS
@@ -314,7 +320,7 @@ try {
         if (upgraded) return undefined as any;
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
-      
+
       // Serve uploaded files statically
       if (url.pathname.startsWith('/uploads/')) {
         const relativePath = url.pathname.replace(/^\/+/, '');
@@ -342,22 +348,22 @@ try {
 
         return new Response(file, { headers });
       }
-      
+
       // Serve public websites (Karen extension)
       // Check if path matches /{alias} or /{alias}/*
       const publicSiteMatch = url.pathname.match(/^\/([a-zA-Z0-9_-]+)(\/.*)?$/);
       if (publicSiteMatch) {
         const alias = publicSiteMatch[1];
         const subPath = publicSiteMatch[2] || '/';
-        
+
         // Skip API routes and known paths
-        const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations', 
-          'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites', 
+        const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations',
+          'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites',
           'uploads', 'ws', 'swagger', 'health', 'app'];
-        
+
         if (!reservedPaths.includes(alias)) {
           const sitesDir = path.join(process.cwd(), 'public', 'sites', alias);
-          
+
           // Determine file path
           let filePath: string;
           if (subPath === '/' || subPath === '') {
@@ -366,23 +372,23 @@ try {
             // Try exact path first, then path/index.html
             const exactPath = path.join(sitesDir, subPath);
             const indexPath = path.join(sitesDir, subPath, 'index.html');
-            
+
             if (fs.existsSync(exactPath) && fs.statSync(exactPath).isFile()) {
               filePath = exactPath;
             } else {
               filePath = indexPath;
             }
           }
-          
+
           // Check if file exists
           if (fs.existsSync(filePath)) {
             const file = Bun.file(filePath);
             const contentType = filePath.endsWith('.html') ? 'text/html' :
-                                filePath.endsWith('.css') ? 'text/css' :
-                                filePath.endsWith('.js') ? 'application/javascript' :
-                                filePath.endsWith('.xml') ? 'application/xml' :
-                                'text/plain';
-            
+              filePath.endsWith('.css') ? 'text/css' :
+                filePath.endsWith('.js') ? 'application/javascript' :
+                  filePath.endsWith('.xml') ? 'application/xml' :
+                    'text/plain';
+
             return new Response(file, {
               headers: {
                 'Content-Type': contentType,
@@ -392,11 +398,11 @@ try {
           }
         }
       }
-      
+
       // Delegar a Elysia para HTTP
       return elysiaApp.handle(req);
     },
-    
+
     // Handler para WebSocket
     websocket: {
       message(ws, message) {
