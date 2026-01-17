@@ -19,11 +19,8 @@ import {
     type FluxcoreMarketplaceListing,
     type NewFluxcoreMarketplaceListing,
     type FluxcoreMarketplaceSubscription,
-    type NewFluxcoreMarketplaceSubscription,
     type MarketplaceSearchFilter,
     type MarketplaceListingDetails,
-    type PricingModel,
-    type ListingStatus,
 } from '@fluxcore/db';
 import { eq, and, or, ilike, gte, lte, desc, asc, sql } from 'drizzle-orm';
 

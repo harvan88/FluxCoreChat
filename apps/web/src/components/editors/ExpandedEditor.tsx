@@ -24,6 +24,7 @@ interface ExpandedEditorProps {
   placeholder?: string;
   onSave: (content: string) => void;
   onClose: () => void;
+  onChange?: (content: string) => void;
 }
 
 export function ExpandedEditor({
@@ -33,12 +34,18 @@ export function ExpandedEditor({
   placeholder = 'Escribe aquí...',
   onSave,
   onClose,
+  onChange,
 }: ExpandedEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Mantener sincronizado cuando initialContent cambia externamente
+  useEffect(() => {
+    setContent(initialContent);
+  }, [initialContent]);
 
   // Track changes
   useEffect(() => {
@@ -195,7 +202,11 @@ export function ExpandedEditor({
           {viewMode === 'code' ? (
             <textarea
               value={content}
-              onChange={(e) => setContent(e.target.value.slice(0, maxLength))}
+              onChange={(e) => {
+                const next = e.target.value.slice(0, maxLength);
+                setContent(next);
+                onChange?.(next);
+              }}
               placeholder={placeholder}
               className="w-full h-full px-4 py-3 bg-base text-primary font-mono text-sm leading-6 resize-none focus:outline-none"
               spellCheck={false}

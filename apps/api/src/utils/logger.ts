@@ -189,7 +189,7 @@ export const logger = new Logger('fluxcore-api');
 
 export function createRequestLogger() {
   return {
-    beforeHandle: ({ request, set }: { request: Request; set: any }) => {
+    beforeHandle: ({ request }: { request: Request }) => {
       const requestId = logger.generateRequestId();
       const start = Date.now();
       

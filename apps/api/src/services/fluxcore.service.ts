@@ -10,6 +10,7 @@
 
 import { Buffer } from 'node:buffer';
 import { eq, and, desc, ne } from 'drizzle-orm';
+import * as openaiSync from './openai-sync.service';
 import {
   db,
   fluxcoreAssistants,
@@ -453,9 +454,79 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
         ));
     }
 
+    let externalId = assistantData.externalId;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FLUJO OPENAI: Crear asistente en OpenAI, NO crear instrucciones locales
+    // Las instrucciones viven SOLO en OpenAI, no en FluxCore
+    // ════════════════════════════════════════════════════════════════════════
+    if (assistantData.runtime === 'openai') {
+      // Obtener externalIds de vector stores OpenAI seleccionados
+      const openaiVectorStoreExternalIds: string[] = [];
+      if (vectorStoreIds && vectorStoreIds.length > 0) {
+        const vectorStores = await tx
+          .select()
+          .from(fluxcoreVectorStores)
+          .where(eq(fluxcoreVectorStores.accountId, assistantData.accountId));
+        
+        for (const vs of vectorStores) {
+          if (vectorStoreIds.includes(vs.id) && vs.backend === 'openai' && vs.externalId) {
+            openaiVectorStoreExternalIds.push(vs.externalId);
+          }
+        }
+      }
+
+      // Crear asistente en OpenAI con instrucciones directas (no locales)
+      externalId = await openaiSync.createOpenAIAssistant({
+        name: assistantData.name,
+        description: assistantData.description || undefined,
+        instructions: assistantData.description || 'You are a helpful assistant.',
+        modelConfig: assistantData.modelConfig as any,
+        vectorStoreIds: openaiVectorStoreExternalIds.length > 0 ? openaiVectorStoreExternalIds : undefined,
+      });
+
+      // Insertar asistente local como REFERENCIA (sin instrucciones locales)
+      const [assistant] = await tx
+        .insert(fluxcoreAssistants)
+        .values({ ...assistantData, externalId })
+        .returning();
+
+      // Solo vincular vector stores OpenAI (para saber cuáles están asociados)
+      if (vectorStoreIds && vectorStoreIds.length > 0) {
+        // Filtrar solo vector stores con backend='openai'
+        const openaiVsIds = await tx
+          .select({ id: fluxcoreVectorStores.id })
+          .from(fluxcoreVectorStores)
+          .where(and(
+            eq(fluxcoreVectorStores.accountId, assistantData.accountId),
+            eq(fluxcoreVectorStores.backend, 'openai')
+          ));
+        const openaiVsIdSet = new Set(openaiVsIds.map(v => v.id));
+        const filteredVsIds = vectorStoreIds.filter(id => openaiVsIdSet.has(id));
+        
+        if (filteredVsIds.length > 0) {
+          await tx.insert(fluxcoreAssistantVectorStores).values(
+            filteredVsIds.map((id) => ({
+              assistantId: assistant.id,
+              vectorStoreId: id,
+              accessMode: 'read',
+            }))
+          );
+        }
+      }
+
+      // NO vincular instructionIds - las instrucciones viven en OpenAI
+      // NO vincular toolIds - los tools se gestionan en OpenAI
+
+      return assistant;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FLUJO LOCAL: Crear asistente con instrucciones, vector stores y tools
+    // ════════════════════════════════════════════════════════════════════════
     const [assistant] = await tx
       .insert(fluxcoreAssistants)
-      .values(assistantData)
+      .values({ ...assistantData, externalId })
       .returning();
 
     if (instructionIds && instructionIds.length > 0) {
@@ -494,11 +565,22 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
 export async function updateAssistant(
   id: string,
   accountId: string,
-  data: Partial<CreateAssistantDTO>
+  data: Partial<CreateAssistantDTO> & { instructions?: string }
 ): Promise<FluxcoreAssistant | null> {
-  const { instructionIds, vectorStoreIds, toolIds, ...assistantData } = data;
+  const { instructionIds, vectorStoreIds, toolIds, instructions, ...assistantData } = data;
 
   return db.transaction(async (tx) => {
+    const [existingAssistant] = await tx
+      .select()
+      .from(fluxcoreAssistants)
+      .where(and(
+        eq(fluxcoreAssistants.id, id),
+        eq(fluxcoreAssistants.accountId, accountId)
+      ))
+      .limit(1);
+
+    if (!existingAssistant) return null;
+
     if (assistantData.status === 'active') {
       await tx
         .update(fluxcoreAssistants)
@@ -521,6 +603,69 @@ export async function updateAssistant(
 
     if (!assistant) return null;
 
+    // ════════════════════════════════════════════════════════════════════════
+    // FLUJO OPENAI: Actualizar en OpenAI, NO usar instrucciones locales
+    // ════════════════════════════════════════════════════════════════════════
+    if (assistant.runtime === 'openai' && assistant.externalId) {
+      const openaiVectorStoreExternalIds: string[] = [];
+      
+      if (vectorStoreIds !== undefined && vectorStoreIds.length > 0) {
+        const vectorStores = await tx
+          .select()
+          .from(fluxcoreVectorStores)
+          .where(eq(fluxcoreVectorStores.accountId, accountId));
+        
+        for (const vs of vectorStores) {
+          if (vectorStoreIds.includes(vs.id) && vs.backend === 'openai' && vs.externalId) {
+            openaiVectorStoreExternalIds.push(vs.externalId);
+          }
+        }
+      }
+
+      // Enviar instructions directamente a OpenAI (256K chars max)
+      await openaiSync.updateOpenAIAssistant({
+        externalId: assistant.externalId,
+        name: assistantData.name,
+        description: assistantData.description !== null ? assistantData.description : undefined,
+        instructions,
+        modelConfig: assistantData.modelConfig as any,
+        vectorStoreIds: openaiVectorStoreExternalIds.length > 0 ? openaiVectorStoreExternalIds : undefined,
+      });
+
+      // Para asistentes OpenAI: solo actualizar vector stores OpenAI
+      if (vectorStoreIds !== undefined) {
+        await tx.delete(fluxcoreAssistantVectorStores).where(eq(fluxcoreAssistantVectorStores.assistantId, id));
+        if (vectorStoreIds.length > 0) {
+          // Filtrar solo vector stores OpenAI
+          const openaiVsIds = await tx
+            .select({ id: fluxcoreVectorStores.id })
+            .from(fluxcoreVectorStores)
+            .where(and(
+              eq(fluxcoreVectorStores.accountId, accountId),
+              eq(fluxcoreVectorStores.backend, 'openai')
+            ));
+          const openaiVsIdSet = new Set(openaiVsIds.map(v => v.id));
+          const filteredVsIds = vectorStoreIds.filter(vsId => openaiVsIdSet.has(vsId));
+          
+          if (filteredVsIds.length > 0) {
+            await tx.insert(fluxcoreAssistantVectorStores).values(
+              filteredVsIds.map((vsId) => ({
+                assistantId: id,
+                vectorStoreId: vsId,
+                accessMode: 'read',
+              }))
+            );
+          }
+        }
+      }
+
+      // NO vincular instructionIds ni toolIds para OpenAI
+      return assistant;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FLUJO LOCAL: Actualizar instrucciones, vector stores y tools locales
+    // ════════════════════════════════════════════════════════════════════════
     if (instructionIds !== undefined) {
       await tx.delete(fluxcoreAssistantInstructions).where(eq(fluxcoreAssistantInstructions.assistantId, id));
       if (instructionIds.length > 0) {
@@ -588,6 +733,23 @@ export async function setActiveAssistant(id: string, accountId: string): Promise
 }
 
 export async function deleteAssistant(id: string, accountId: string): Promise<boolean> {
+  const [assistant] = await db
+    .select()
+    .from(fluxcoreAssistants)
+    .where(and(
+      eq(fluxcoreAssistants.id, id),
+      eq(fluxcoreAssistants.accountId, accountId)
+    ))
+    .limit(1);
+
+  if (assistant?.runtime === 'openai' && assistant.externalId) {
+    try {
+      await openaiSync.deleteOpenAIAssistant(assistant.externalId);
+    } catch (error) {
+      console.error('Error eliminando asistente de OpenAI:', error);
+    }
+  }
+
   const result = await db
     .delete(fluxcoreAssistants)
     .where(and(
@@ -788,6 +950,10 @@ export async function updateInstruction(
       ))
       .returning();
 
+    // ARQUITECTURA: Las instrucciones locales son SOLO para asistentes locales.
+    // Los asistentes OpenAI gestionan sus instrucciones directamente en OpenAI.
+    // NO sincronizar instrucciones locales a OpenAI.
+
     return updatedInstruction || instruction;
   }
 
@@ -850,9 +1016,20 @@ export async function getVectorStoreById(id: string, accountId: string): Promise
 }
 
 export async function createVectorStore(data: NewFluxcoreVectorStore): Promise<FluxcoreVectorStore> {
+  let externalId = data.externalId;
+
+  if (data.backend === 'openai') {
+    externalId = await openaiSync.createOpenAIVectorStore({
+      name: data.name,
+    });
+  }
+
   const [store] = await db
     .insert(fluxcoreVectorStores)
-    .values(data)
+    .values({
+      ...data,
+      externalId,
+    })
     .returning();
   return store;
 }
@@ -862,6 +1039,26 @@ export async function updateVectorStore(
   accountId: string,
   data: Partial<NewFluxcoreVectorStore>
 ): Promise<FluxcoreVectorStore | null> {
+  const [existing] = await db
+    .select()
+    .from(fluxcoreVectorStores)
+    .where(and(
+      eq(fluxcoreVectorStores.id, id),
+      eq(fluxcoreVectorStores.accountId, accountId)
+    ))
+    .limit(1);
+
+  if (!existing) return null;
+
+  if (existing.backend === 'openai' && typeof existing.externalId === 'string' && existing.externalId.length > 0) {
+    if (data.name !== undefined) {
+      await openaiSync.updateOpenAIVectorStore({
+        externalId: existing.externalId,
+        name: data.name,
+      });
+    }
+  }
+
   const [store] = await db
     .update(fluxcoreVectorStores)
     .set({ ...data, updatedAt: new Date() })
@@ -874,6 +1071,17 @@ export async function updateVectorStore(
 }
 
 export async function deleteVectorStore(id: string, accountId: string): Promise<boolean> {
+  const [existing] = await db
+    .select()
+    .from(fluxcoreVectorStores)
+    .where(and(
+      eq(fluxcoreVectorStores.id, id),
+      eq(fluxcoreVectorStores.accountId, accountId)
+    ))
+    .limit(1);
+
+  if (!existing) return false;
+
   const usedBy = await db
     .select({ id: fluxcoreAssistants.id, name: fluxcoreAssistants.name })
     .from(fluxcoreAssistantVectorStores)
@@ -892,6 +1100,10 @@ export async function deleteVectorStore(id: string, accountId: string): Promise<
     err.statusCode = 409;
     err.details = { usedByAssistants: usedBy };
     throw err;
+  }
+
+  if (existing.backend === 'openai' && typeof existing.externalId === 'string' && existing.externalId.length > 0) {
+    await openaiSync.deleteOpenAIVectorStore(existing.externalId);
   }
 
   const result = await db
@@ -957,6 +1169,16 @@ export async function getVectorStoreFileById(id: string, vectorStoreId: string):
     ))
     .limit(1);
   return row || null;
+}
+
+export async function updateVectorStoreFileStatus(
+  id: string,
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+): Promise<void> {
+  await db
+    .update(fluxcoreVectorStoreFiles)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(fluxcoreVectorStoreFiles.id, id));
 }
 
 // ============================================================================
@@ -1073,6 +1295,7 @@ export const fluxcoreService = {
   addVectorStoreFile,
   deleteVectorStoreFile,
   getVectorStoreFileById,
+  updateVectorStoreFileStatus,
   
   // Tools
   getToolDefinitions,

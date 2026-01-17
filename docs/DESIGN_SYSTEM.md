@@ -348,6 +348,25 @@ icon-lg:  24px  → Headers, acciones principales
 icon-xl:  32px  → Estados vacíos, ilustraciones
 ```
 
+### 7.3 Iconos Personalizados
+Para iconos especiales no incluidos en Lucide:
+1. Crear componente en `src/components/ui/icons`
+2. Registrar en `src/lib/icon-library.ts`
+3. Usar con tamaño consistente (ej: `<OpenAIIcon size={20} />`)
+
+**Ejemplo de uso:**
+```tsx
+import { OpenAIIcon } from '@/lib/icon-library';
+
+function MyComponent() {
+  return (
+    <div>
+      <OpenAIIcon size={24} className="text-accent" />
+    </div>
+  );
+}
+```
+
 ---
 
 ## PARTE 8: ANIMACIONES

@@ -86,7 +86,7 @@ export function VectorStoreFilesSection({
 
         try {
             const response = await fetch(
-                `/api/fluxcore/vector-stores/${vectorStoreId}/files`,
+                `/api/fluxcore/vector-stores/${vectorStoreId}/files?accountId=${encodeURIComponent(accountId)}`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
 
@@ -180,7 +180,7 @@ export function VectorStoreFilesSection({
 
         try {
             const response = await fetch(
-                `/api/fluxcore/vector-stores/${vectorStoreId}/files/${fileId}`,
+                `/api/fluxcore/vector-stores/${vectorStoreId}/files/${fileId}?accountId=${encodeURIComponent(accountId)}`,
                 {
                     method: 'DELETE',
                     headers: { Authorization: `Bearer ${token}` },

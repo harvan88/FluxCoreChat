@@ -9,7 +9,7 @@
  */
 
 import { Elysia, t } from 'elysia';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth.middleware';
 import { ragConfigService } from '../services/rag-config.service';
 
 export const ragConfigRoutes = new Elysia({ prefix: '/fluxcore/rag-config' })

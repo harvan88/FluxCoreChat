@@ -278,13 +278,28 @@ function broadcast(relationshipId: string, payload: any): void {
  */
 async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> {
   const { conversationId, accountId, relationshipId } = data;
+  const traceId = `ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   
   try {
+    console.log(`[ws-handler][${traceId}] request_suggestion received`, {
+      conversationId,
+      accountId,
+      relationshipId,
+      messageId: data.messageId,
+      hasContent: !!data.content,
+    });
+
     // Verificar modo de automatización
     const evaluation = await automationController.evaluateTrigger({
       accountId: accountId!,
       relationshipId,
       messageType: 'incoming',
+    });
+
+    console.log(`[ws-handler][${traceId}] automation evaluation`, {
+      shouldProcess: evaluation.shouldProcess,
+      reason: evaluation.reason,
+      mode: evaluation.mode,
     });
 
     if (!evaluation.shouldProcess) {
@@ -299,6 +314,15 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
     // 🔧 NUEVO: Obtener asistente activo para usar su timingConfig
     const { fluxcoreService } = await import('../services/fluxcore.service');
     const composition = await fluxcoreService.resolveActiveAssistant(accountId!);
+
+    console.log(`[ws-handler][${traceId}] active assistant`, {
+      id: composition?.assistant?.id,
+      name: composition?.assistant?.name,
+      runtime: composition?.assistant?.runtime,
+      externalId: composition?.assistant?.externalId,
+      timingConfig: composition?.assistant?.timingConfig,
+      modelConfig: composition?.assistant?.modelConfig,
+    });
     
     // Extraer timingConfig del asistente activo (o usar defaults)
     const delaySeconds = composition?.assistant?.timingConfig?.responseDelaySeconds ?? 2;
@@ -321,6 +345,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
           mode: evaluation.mode === 'automatic' ? 'auto' : 'suggest',
           triggerMessageId: typeof data?.messageId === 'string' ? data.messageId : undefined,
           triggerMessageCreatedAt: data?.createdAt ? new Date(data.createdAt as any) : undefined,
+          traceId,
         }
       );
 

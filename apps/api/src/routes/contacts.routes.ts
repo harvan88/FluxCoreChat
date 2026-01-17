@@ -63,7 +63,7 @@ export const contactsRoutes = new Elysia({ prefix: '/contacts' })
               id: msg.id,
               type: 'message',
               timestamp: msg.createdAt.toISOString(),
-              content: msg.content?.text || '[Mensaje sin texto]',
+              content: (msg.content as any)?.text || '[Mensaje sin texto]',
               author: senderAccount?.displayName,
             });
           }

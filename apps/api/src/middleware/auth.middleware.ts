@@ -48,6 +48,8 @@ export const authMiddleware = new Elysia({ name: 'auth' })
             message: 'Unauthorized',
           };
         }
+
+        return;
       });
     },
   }));

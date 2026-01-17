@@ -31,6 +31,7 @@ export const fluxcoreVectorStores = pgTable('fluxcore_vector_stores', {
 
   // Estado
   status: varchar('status', { length: 20 }).notNull().default('draft'), // 'draft', 'production', 'expired'
+  backend: varchar('backend', { length: 20 }).notNull().default('local'), // 'local', 'openai'
 
   // Configuración de expiración
   expirationPolicy: varchar('expiration_policy', { length: 50 }).default('never'), // 'never', 'days_after_creation', 'days_after_last_use'

@@ -206,7 +206,7 @@ try {
       // Upgrade a WebSocket si es request de WS
       const url = new URL(req.url);
       if (url.pathname === '/ws') {
-        const upgraded = server.upgrade(req);
+        const upgraded = (server as any).upgrade(req);
         if (upgraded) return undefined as any;
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
@@ -316,7 +316,7 @@ try {
       // Upgrade a WebSocket si es request de WS
       const url = new URL(req.url);
       if (url.pathname === '/ws') {
-        const upgraded = server.upgrade(req);
+        const upgraded = (server as any).upgrade(req);
         if (upgraded) return undefined as any;
         return new Response('WebSocket upgrade failed', { status: 400 });
       }

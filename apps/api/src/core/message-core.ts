@@ -165,6 +165,7 @@ export class MessageCore {
                       mode: aiMode,
                       triggerMessageId: message.id,
                       triggerMessageCreatedAt: (message as any).createdAt,
+                      traceId: message.id,
                     }
                   );
 

@@ -4,7 +4,6 @@
 
 import type { 
   Appointment, 
-  NewAppointment, 
   AppointmentService, 
   AppointmentStaff,
   TimeSlot,
@@ -150,7 +149,7 @@ export class AppointmentsService {
     }
 
     // Generate available slots
-    const slots = this.generateTimeSlots(dateObj, daySchedule, service?.duration || 30);
+    const slots = this.generateTimeSlots(daySchedule, service?.duration || 30);
     
     // Filter out booked slots
     const appointments = await this.getAppointmentsByDate(date);
@@ -325,7 +324,7 @@ export class AppointmentsService {
 
   // ============ HELPERS ============
 
-  private generateTimeSlots(date: Date, schedule: { open: string; close: string }, duration: number): TimeSlot[] {
+  private generateTimeSlots(schedule: { open: string; close: string }, duration: number): TimeSlot[] {
     const slots: TimeSlot[] = [];
     const openMinutes = this.parseTime(schedule.open);
     const closeMinutes = this.parseTime(schedule.close);

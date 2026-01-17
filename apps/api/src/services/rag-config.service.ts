@@ -10,7 +10,6 @@
 import { db } from '@fluxcore/db';
 import {
     fluxcoreRagConfigurations,
-    fluxcoreVectorStores,
     type NewFluxcoreRagConfiguration,
     type RAGConfig,
     toRAGConfig,
@@ -277,13 +276,6 @@ export class RAGConfigService {
         if (existing.length > 0) {
             return this.update(existing[0].id, config);
         }
-
-        // Obtener accountId del vector store (no usado pero puede ser útil para logging)
-        const _vs = await db
-            .select({ accountId: fluxcoreVectorStores.accountId })
-            .from(fluxcoreVectorStores)
-            .where(eq(fluxcoreVectorStores.id, vectorStoreId))
-            .limit(1);
 
         return this.create({
             ...config,

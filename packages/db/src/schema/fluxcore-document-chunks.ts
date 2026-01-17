@@ -7,11 +7,17 @@
  * RAG-001: Infraestructura de Base de Datos Vectorial
  */
 
-import { pgTable, uuid, varchar, timestamp, text, integer, jsonb, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, integer, jsonb, uniqueIndex, index, customType } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { accounts } from './accounts';
 import { fluxcoreVectorStores } from './fluxcore-vector-stores';
 import { fluxcoreVectorStoreFiles } from './fluxcore-vector-stores';
+
+ const vector1536 = customType<{ data: string | null; driverData: string | null }>({
+   dataType() {
+     return 'vector(1536)';
+   },
+ });
 
 /**
  * Metadata del chunk para contexto adicional
@@ -61,10 +67,8 @@ export const fluxcoreDocumentChunks = pgTable('fluxcore_document_chunks', {
   content: text('content').notNull(),
   chunkIndex: integer('chunk_index').notNull(),
   tokenCount: integer('token_count').notNull().default(0),
-  
-  // NOTA: La columna 'embedding' de tipo vector(1536) se crea en la migración SQL
-  // Drizzle no soporta el tipo vector nativamente
-  // Para queries, usar sql`` con el operador <=> para similitud coseno
+
+  embedding: vector1536('embedding'),
   
   // Metadata JSONB para información adicional
   metadata: jsonb('metadata').$type<ChunkMetadata>().default({}),

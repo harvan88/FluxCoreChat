@@ -46,6 +46,12 @@ export class ConversationService {
       .where(eq(conversations.relationshipId, relationshipId));
   }
 
+  async getAllConversations(): Promise<Array<{ id: string; relationshipId: string }>> {
+    return await db
+      .select({ id: conversations.id, relationshipId: conversations.relationshipId })
+      .from(conversations);
+  }
+
   async updateConversation(
     conversationId: string,
     data: {

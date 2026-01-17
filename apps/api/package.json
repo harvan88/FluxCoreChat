@@ -8,7 +8,7 @@
     "dev:simple": "bun run --watch src/server.ts",
     "build": "bun build src/server.ts --outdir dist --target bun",
     "start": "bun run dist/server.js",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit -p tsconfig.lint.json",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -19,7 +19,8 @@
     "@fluxcore/types": "workspace:*",
     "bcrypt": "^6.0.0",
     "croner": "^9.1.0",
-    "elysia": "0.8.17"
+    "elysia": "0.8.17",
+    "openai": "^6.16.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

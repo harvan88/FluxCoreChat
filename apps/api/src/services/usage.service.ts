@@ -10,7 +10,6 @@ import {
     fluxcoreUsageLogs,
     fluxcoreAccountCredits,
     fluxcoreCreditTransactions,
-    type NewFluxcoreUsageLog,
     type FluxcoreAccountCredits,
     type ResourceType,
     type UsageSummary,

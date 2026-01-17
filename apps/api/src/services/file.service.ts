@@ -14,9 +14,7 @@ import { db } from '@fluxcore/db';
 import {
     fluxcoreFiles,
     fluxcoreVectorStoreFiles,
-    fluxcoreVectorStores,
     type FluxcoreFile,
-    type NewFluxcoreFile,
 } from '@fluxcore/db';
 import { eq, and, desc } from 'drizzle-orm';
 import { createHash } from 'crypto';
@@ -318,6 +316,18 @@ export class FileService {
                 status,
                 errorMessage: options?.errorMessage,
                 chunkCount: options?.chunkCount,
+            })
+            .where(eq(fluxcoreVectorStoreFiles.id, linkId));
+    }
+
+    async updateLinkExternalId(
+        linkId: string,
+        externalId: string | null
+    ): Promise<void> {
+        await db
+            .update(fluxcoreVectorStoreFiles)
+            .set({
+                externalId,
             })
             .where(eq(fluxcoreVectorStoreFiles.id, linkId));
     }

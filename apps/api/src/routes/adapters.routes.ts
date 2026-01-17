@@ -6,8 +6,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { 
   getAdapterManager, 
-  type NormalizedMessage,
-  WhatsAppAdapter 
+  type NormalizedMessage
 } from '../../../../packages/adapters/src';
 
 // Inicializar adapter manager con configuración de entorno
@@ -21,7 +20,7 @@ const adapterManager = getAdapterManager({
 });
 
 // Inicializar adapters
-adapterManager.initialize().catch(err => {
+adapterManager.initialize().catch(() => {
   console.log('[adapters] Initialization skipped (no credentials configured)');
 });
 
@@ -69,9 +68,9 @@ export const adaptersRoutes = new Elysia({ prefix: '/adapters' })
     set.status = 403;
     return 'Forbidden';
   })
-
+  
   // POST /adapters/whatsapp/webhook - Recibir mensajes de WhatsApp
-  .post('/whatsapp/webhook', async ({ body, set }) => {
+  .post('/whatsapp/webhook', async ({ body }) => {
     try {
       const message = await adapterManager.handleWebhook('whatsapp', body);
       

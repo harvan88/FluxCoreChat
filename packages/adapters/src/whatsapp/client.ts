@@ -168,11 +168,14 @@ export class WhatsAppClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
-      throw new Error(`WhatsApp API Error: ${error.error?.message || response.statusText}`);
+      const error = (await response
+        .json()
+        .catch(() => ({ error: { message: 'Unknown error' } }))) as unknown;
+      const message = (error as any)?.error?.message as string | undefined;
+      throw new Error(`WhatsApp API Error: ${message || response.statusText}`);
     }
 
-    return response.json();
+    return (await response.json()) as WhatsAppAPIResponse;
   }
 
   /**
