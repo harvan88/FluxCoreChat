@@ -342,7 +342,7 @@ class ExtensionHostService {
     conversationId: string,
     recipientAccountId: string,
     lastMessageContent: string,
-    options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date } = {}
+    options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date; traceId?: string } = {}
   ): Promise<Awaited<ReturnType<typeof aiService.generateResponse>>> {
     return aiService.generateResponse(conversationId, recipientAccountId, lastMessageContent, options);
   }

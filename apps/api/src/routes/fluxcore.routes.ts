@@ -11,6 +11,7 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { fluxcoreService } from '../services/fluxcore.service';
+import { getOpenAIAssistant } from '../services/openai-sync.service';
 
 // ============================================================================
 // ASSISTANTS ROUTES
@@ -74,7 +75,20 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
           set.status = 404;
           return { success: false, message: 'Assistant not found' };
         }
-        return { success: true, data: assistant };
+
+        let instructions: string | null = null;
+        if (assistant.runtime === 'openai' && assistant.externalId) {
+          try {
+            const remoteAssistant = await getOpenAIAssistant(assistant.externalId);
+            if (typeof remoteAssistant?.instructions === 'string') {
+              instructions = remoteAssistant.instructions;
+            }
+          } catch (err) {
+            console.error('[fluxcore] No se pudo obtener instrucciones desde OpenAI:', err);
+          }
+        }
+
+        return { success: true, data: { ...assistant, instructions } };
       } catch (error: any) {
         set.status = 500;
         return { success: false, message: error.message };
@@ -130,6 +144,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
         accountId: t.String(),
         name: t.String(),
         description: t.Optional(t.String()),
+        runtime: t.Optional(t.Union([t.Literal('local'), t.Literal('openai')])),
         status: t.Optional(t.String()),
         instructionId: t.Optional(t.String()),
         instructionIds: t.Optional(t.Array(t.String())),
@@ -199,6 +214,8 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
         accountId: t.String(),
         name: t.Optional(t.String()),
         description: t.Optional(t.String()),
+        instructions: t.Optional(t.String()), // System instructions para OpenAI (256K chars max)
+        runtime: t.Optional(t.Union([t.Literal('local'), t.Literal('openai')])),
         status: t.Optional(t.String()),
         instructionId: t.Optional(t.String()),
         instructionIds: t.Optional(t.Array(t.String())),
@@ -607,6 +624,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
         accountId: t.String(),
         name: t.String(),
         description: t.Optional(t.String()),
+        backend: t.Optional(t.Union([t.Literal('local'), t.Literal('openai')])),
         status: t.Optional(t.String()),
         expirationPolicy: t.Optional(t.String()),
         expirationDays: t.Optional(t.Number()),
@@ -649,6 +667,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
         accountId: t.String(),
         name: t.Optional(t.String()),
         description: t.Optional(t.String()),
+        backend: t.Optional(t.Union([t.Literal('local'), t.Literal('openai')])),
         status: t.Optional(t.String()),
         expirationPolicy: t.Optional(t.String()),
         expirationDays: t.Optional(t.Number()),
@@ -705,14 +724,56 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
   // GET /fluxcore/vector-stores/:id/files
   .get(
     '/:id/files',
-    async ({ user, params, set }) => {
+    async ({ user, params, query, set }) => {
       if (!user) {
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
       }
 
+      const accountId = query.accountId;
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
       try {
+        const store = await fluxcoreService.getVectorStoreById(params.id, accountId);
+        if (!store) {
+          set.status = 404;
+          return { success: false, message: 'Vector store not found' };
+        }
+
         const files = await fluxcoreService.getVectorStoreFiles(params.id);
+
+        if (store.backend === 'openai' && store.externalId) {
+          const { getOpenAIVectorStoreFile } = await import('../services/openai-sync.service');
+          const refreshed = await Promise.all(files.map(async (f: any) => {
+            if (!f.externalId) return f;
+            try {
+              const remote = await getOpenAIVectorStoreFile(store.externalId as string, f.externalId);
+              const status = typeof remote?.status === 'string' ? remote.status : undefined;
+              if (!status) return f;
+
+              let mapped: 'pending' | 'processing' | 'completed' | 'failed' = 'processing';
+              if (status === 'completed') mapped = 'completed';
+              if (status === 'failed' || status === 'cancelled') mapped = 'failed';
+              if (status === 'in_progress') mapped = 'processing';
+
+              // Persistir estado actualizado en DB local si cambió
+              if (mapped !== f.status) {
+                await fluxcoreService.updateVectorStoreFileStatus(f.id, mapped);
+              }
+
+              return { ...f, status: mapped };
+            } catch (err) {
+              console.error(`[fluxcore] Error fetching OpenAI file status for ${f.externalId}:`, err);
+              return f;
+            }
+          }));
+
+          return { success: true, data: refreshed };
+        }
+
         return { success: true, data: files };
       } catch (error: any) {
         set.status = 500;
@@ -723,9 +784,12 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       params: t.Object({
         id: t.String(),
       }),
+      query: t.Object({
+        accountId: t.String(),
+      }),
       detail: {
         tags: ['FluxCore'],
-        summary: 'List files in vector store',
+        summary: 'List vector store files',
       },
     }
   )
@@ -769,13 +833,33 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
   // DELETE /fluxcore/vector-stores/:id/files/:fileId
   .delete(
     '/:id/files/:fileId',
-    async ({ user, params, set }) => {
+    async ({ user, params, query, set }) => {
       if (!user) {
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
       }
 
+      const accountId = query.accountId;
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
       try {
+        const store = await fluxcoreService.getVectorStoreById(params.id, accountId);
+        if (!store) {
+          set.status = 404;
+          return { success: false, message: 'Vector store not found' };
+        }
+
+        if (store.backend === 'openai' && store.externalId) {
+          const link = await fluxcoreService.getVectorStoreFileById(params.fileId, params.id);
+          if (link?.externalId) {
+            const { removeFileFromOpenAIVectorStore } = await import('../services/openai-sync.service');
+            await removeFileFromOpenAIVectorStore(store.externalId as string, link.externalId);
+          }
+        }
+
         const deleted = await fluxcoreService.deleteVectorStoreFile(params.fileId, params.id);
         if (!deleted) {
           set.status = 404;
@@ -792,6 +876,9 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
         id: t.String(),
         fileId: t.String(),
       }),
+      query: t.Object({
+        accountId: t.String(),
+      }),
       detail: {
         tags: ['FluxCore'],
         summary: 'Delete file from vector store',
@@ -801,6 +888,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
 
   // POST /fluxcore/vector-stores/:id/files/upload
   // Endpoint para subir archivo con contenido
+  // ARQUITECTURA: Flujos LOCAL y OPENAI están COMPLETAMENTE SEPARADOS
   .post(
     '/:id/files/upload',
     async ({ user, params, body, set }) => {
@@ -810,10 +898,6 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       }
 
       try {
-        // Importar servicios dinámicamente para evitar dependencia circular
-        const { fileService } = await import('../services/file.service');
-        const { documentProcessingService } = await import('../services/document-processing.service');
-
         const { file, accountId } = body as { file: File; accountId: string };
 
         if (!file || !accountId) {
@@ -821,11 +905,65 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
           return { success: false, message: 'file and accountId are required' };
         }
 
+        const store = await fluxcoreService.getVectorStoreById(params.id, accountId);
+        if (!store) {
+          set.status = 404;
+          return { success: false, message: 'Vector store not found' };
+        }
+
         // Leer contenido del archivo
         const arrayBuffer = await file.arrayBuffer();
         const content = Buffer.from(arrayBuffer);
 
-        // Subir y vincular archivo
+        // ════════════════════════════════════════════════════════════════════
+        // FLUJO OPENAI: Subir a OpenAI, guardar solo referencia local
+        // NO se almacena contenido localmente, NO se procesa localmente
+        // ════════════════════════════════════════════════════════════════════
+        if (store.backend === 'openai') {
+          if (!store.externalId) {
+            set.status = 400;
+            return { success: false, message: 'OpenAI vector store is missing externalId' };
+          }
+
+          const { uploadOpenAIFile, addFileToOpenAIVectorStore } = await import('../services/openai-sync.service');
+          
+          // 1. Subir archivo a OpenAI Files API
+          const openaiFileId = await uploadOpenAIFile(content, file.name);
+          
+          // 2. Asociar archivo al vector store en OpenAI
+          await addFileToOpenAIVectorStore(store.externalId as string, openaiFileId);
+          
+          // 3. Crear SOLO referencia local (sin contenido, sin fileId central)
+          const fileLink = await fluxcoreService.addVectorStoreFile({
+            vectorStoreId: params.id,
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            sizeBytes: file.size,
+            status: 'processing',
+            externalId: openaiFileId,
+            // fileId: null - NO hay archivo central local
+          });
+
+          return {
+            success: true,
+            data: {
+              linkId: fileLink.id,
+              name: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              sizeBytes: file.size,
+              status: 'processing',
+              externalId: openaiFileId,
+            }
+          };
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // FLUJO LOCAL: Guardar contenido + chunking + embeddings
+        // ════════════════════════════════════════════════════════════════════
+        const { fileService } = await import('../services/file.service');
+        const { documentProcessingService } = await import('../services/document-processing.service');
+
+        // 1. Subir y vincular archivo con contenido
         const { file: uploadedFile, linkId } = await fileService.uploadAndLink(
           {
             name: file.name,
@@ -838,7 +976,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
           params.id
         );
 
-        // Iniciar procesamiento asíncrono
+        // 2. Iniciar procesamiento asíncrono (chunking + embeddings)
         documentProcessingService.processDocument(
           linkId,
           params.id,

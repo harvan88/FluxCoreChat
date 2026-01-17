@@ -37,6 +37,22 @@ export interface EmbeddingProviderConfig {
     batchSize?: number;
 }
 
+interface OpenAIEmbeddingsResponse {
+    data: Array<{ embedding: number[]; index: number }>;
+    usage?: { total_tokens?: number };
+}
+
+interface CohereEmbedResponse {
+    embeddings: number[][];
+    meta?: { billed_units?: { input_tokens?: number } };
+}
+
+interface CustomEmbeddingsResponse {
+    embeddings: number[][];
+    tokenCounts?: number[];
+    totalTokens?: number;
+}
+
 /**
  * Interface común para todos los proveedores de embeddings
  */
@@ -106,13 +122,13 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
             throw new Error(`OpenAI API error: ${error}`);
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as OpenAIEmbeddingsResponse;
 
         // Ordenar por index para mantener orden original
-        const sorted = data.data.sort((a: any, b: any) => a.index - b.index);
+        const sorted = data.data.sort((a, b) => a.index - b.index);
 
         return {
-            embeddings: sorted.map((item: any) => item.embedding),
+            embeddings: sorted.map((item) => item.embedding),
             tokenCounts: texts.map(() => 0), // OpenAI no retorna token count por item
             model: config.model || 'text-embedding-3-small',
             provider: this.name,
@@ -174,7 +190,7 @@ export class CohereEmbeddingProvider implements IEmbeddingProvider {
             throw new Error(`Cohere API error: ${error}`);
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as CohereEmbedResponse;
 
         return {
             embeddings: data.embeddings,
@@ -236,7 +252,7 @@ export class CustomEmbeddingProvider implements IEmbeddingProvider {
             throw new Error(`Custom embedding API error: ${error}`);
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as CustomEmbeddingsResponse;
 
         // Expect response format: { embeddings: number[][], tokenCounts?: number[] }
         return {

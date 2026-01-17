@@ -40,6 +40,7 @@ export const fluxcoreAssistants = pgTable('fluxcore_assistants', {
   
   // Estado
   status: varchar('status', { length: 20 }).notNull().default('draft'), // 'draft', 'production', 'disabled'
+  runtime: varchar('runtime', { length: 20 }).notNull().default('local'), // 'local', 'openai'
   
   // NOTA: Las instrucciones y vector stores ahora están en tablas de relación N:M
   // fluxcore_assistant_instructions y fluxcore_assistant_vector_stores

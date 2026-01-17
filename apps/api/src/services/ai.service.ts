@@ -235,6 +235,12 @@ class AIService {
     recipientAccountId: string,
     content: string
   ): Promise<AISuggestion | null> {
+    const traceId = typeof messageId === 'string' && messageId.length > 0
+      ? messageId
+      : `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const tracePrefix = `[ai-service][${traceId}]`;
+    const start = Date.now();
+
     console.log('[ai-service] ========== PROCESANDO MENSAJE ==========');
     console.log('[ai-service] Message ID:', messageId);
     console.log('[ai-service] Conversation ID:', conversationId);
@@ -292,6 +298,11 @@ class AIService {
 
       // Construir contexto
       const context = await this.buildContext(recipientAccountId, conversationId);
+
+    console.log(`${tracePrefix} context built`, {
+      messagesCount: Array.isArray((context as any)?.messages) ? (context as any).messages.length : undefined,
+      elapsedMs: Date.now() - start,
+    });
 
       // 🔧 NUEVO: Construir system prompt desde instructions del asistente
       let systemPrompt = '';
@@ -366,7 +377,125 @@ class AIService {
         providerOrderProviders: finalProviderOrder?.map((p: any) => p.provider),
       });
 
-      // Generar sugerencia
+      // ════════════════════════════════════════════════════════════════════════
+      // FLUJO DIFERENCIADO: Asistentes OpenAI vs Local
+      // ════════════════════════════════════════════════════════════════════════
+      
+      const assistantRuntime = composition?.assistant?.runtime;
+      const assistantExternalId = composition?.assistant?.externalId;
+
+      console.log(`${tracePrefix} assistant resolved`, {
+        assistantId: composition?.assistant?.id,
+        runtime: assistantRuntime,
+        externalId: assistantExternalId,
+        elapsedMs: Date.now() - start,
+      });
+      
+      console.log('[ai-service] Assistant runtime:', assistantRuntime);
+      console.log('[ai-service] Assistant externalId:', assistantExternalId);
+
+      // Si es un asistente OpenAI con externalId, usar la API de Assistants
+      if (assistantRuntime === 'openai' && assistantExternalId) {
+        console.log('[ai-service] 🚀 Usando flujo de OpenAI Assistants API');
+        
+        const { runAssistantWithMessages } = await import('./openai-sync.service');
+        
+        // Construir mensajes para el thread de OpenAI
+        const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+        
+        // Agregar mensajes del historial (context.messages)
+        if (Array.isArray(context.messages)) {
+          for (const msg of context.messages) {
+            const role = msg.isFromMe ? 'assistant' : 'user';
+            threadMessages.push({
+              role,
+              content: msg.content || '',
+            });
+          }
+        }
+        
+        // Agregar el mensaje actual si no está en el historial
+        const currentMsgInHistory = threadMessages.some(m => 
+          m.content.includes(content) || content.includes(m.content)
+        );
+        if (!currentMsgInHistory) {
+          threadMessages.push({
+            role: 'user',
+            content,
+          });
+        }
+
+        // Ejecutar el asistente de OpenAI
+        const result = await runAssistantWithMessages({
+          assistantExternalId,
+          messages: threadMessages,
+          traceId,
+        });
+
+        console.log(`${tracePrefix} openai result`, {
+          success: result.success,
+          hasContent: !!result.content,
+          threadId: result.threadId,
+          runId: result.runId,
+          error: result.error,
+          elapsedMs: Date.now() - start,
+        });
+
+        if (!result.success || !result.content) {
+          console.log('[ai-service] ❌ Error en OpenAI Assistants API:', result.error);
+          return null;
+        }
+
+        console.log('[ai-service] ✓ Respuesta de OpenAI Assistants API recibida');
+
+        // Crear sugerencia compatible con el formato existente
+        const suggestion: AISuggestion = {
+          id: crypto.randomUUID(),
+          conversationId,
+          content: result.content,
+          generatedAt: new Date(),
+          model: assistantModel || 'gpt-4o',
+          provider: 'openai',
+          usage: result.usage ? {
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            totalTokens: result.usage.totalTokens,
+          } : {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+          },
+          status: 'pending',
+        };
+
+        // Consumir créditos si aplica
+        if (
+          gated.sessionId &&
+          result.usage?.totalTokens &&
+          typeof result.usage.totalTokens === 'number'
+        ) {
+          await creditsService.consumeSessionTokens({
+            sessionId: gated.sessionId,
+            tokens: result.usage.totalTokens,
+          });
+        }
+
+        this.suggestions.set(suggestion.id, suggestion);
+        this.emitSuggestion(suggestion);
+
+        return suggestion;
+      } else {
+        console.log('[ai-service] 🚫 No se puede usar OpenAI Assistants API. Razon:', {
+          assistantRuntime,
+          assistantExternalId,
+        });
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // FLUJO LOCAL: Usar FluxCore Extension con Chat Completions
+      // ════════════════════════════════════════════════════════════════════════
+      
+      console.log('[ai-service] 📦 Usando flujo local FluxCore (Chat Completions)');
       console.log('[ai-service] Llamando extension.onMessage()...');
       const suggestion = await extension.onMessage(event, context, recipientAccountId);
       console.log('[ai-service] Resultado onMessage:', suggestion ? 'SUGERENCIA GENERADA' : 'null');
@@ -1100,8 +1229,18 @@ class AIService {
     conversationId: string,
     recipientAccountId: string,
     lastMessageContent: string,
-    options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date } = {}
+    options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date; traceId?: string } = {}
   ): Promise<AISuggestion | null> {
+    const tracePrefix = options.traceId ? `[ai-service][${options.traceId}]` : '[ai-service]';
+    const start = Date.now();
+
+    console.log(`${tracePrefix} generateResponse start`, {
+      conversationId,
+      recipientAccountId,
+      mode: options.mode,
+      triggerMessageId: options.triggerMessageId,
+    });
+
     const extension = await this.getFluxCoreExtension();
     if (!extension) return null;
 
@@ -1141,6 +1280,117 @@ class AIService {
       messageType: 'text',
       createdAt: options.triggerMessageCreatedAt || new Date(),
     };
+
+    try {
+      const { fluxcoreService } = await import('./fluxcore.service');
+      const composition = await fluxcoreService.resolveActiveAssistant(recipientAccountId);
+
+      const assistantRuntime = composition?.assistant?.runtime;
+      const assistantExternalId = composition?.assistant?.externalId;
+
+      if (assistantRuntime === 'openai' && assistantExternalId) {
+        const assistantModelConfig = (composition?.assistant?.modelConfig as Record<string, any>) || {};
+        const assistantModel = typeof assistantModelConfig.model === 'string' ? assistantModelConfig.model : null;
+        const { runAssistantWithMessages } = await import('./openai-sync.service');
+
+        const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+        if (Array.isArray((context as any)?.messages)) {
+          for (const msg of (context as any).messages) {
+            const role = msg.senderAccountId === recipientAccountId ? 'assistant' : 'user';
+
+            const ts = msg.createdAt instanceof Date
+              ? msg.createdAt.toISOString()
+              : new Date(msg.createdAt as any).toISOString();
+
+            const content = typeof msg.content === 'string' ? msg.content : String(msg.content);
+            const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(content);
+
+            threadMessages.push({
+              role,
+              content: alreadyPrefixed ? content : `[${ts}] ${content}`,
+            });
+          }
+        }
+
+        const currentTs = event.createdAt instanceof Date
+          ? event.createdAt.toISOString()
+          : new Date(event.createdAt as any).toISOString();
+
+        const currentContent = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(lastMessageContent)
+          ? lastMessageContent
+          : `[${currentTs}] ${lastMessageContent}`;
+
+        const currentMsgInHistory = threadMessages.some((m) =>
+          m.content.includes(lastMessageContent) || lastMessageContent.includes(m.content)
+        );
+        if (!currentMsgInHistory) {
+          threadMessages.push({
+            role: 'user',
+            content: currentContent,
+          });
+        }
+
+        const result = await runAssistantWithMessages({
+          assistantExternalId,
+          messages: threadMessages,
+          traceId: options.traceId,
+        });
+
+        if (!result.success || !result.content) {
+          return null;
+        }
+
+        const suggestion: AISuggestion = {
+          id: crypto.randomUUID(),
+          conversationId,
+          content: result.content,
+          generatedAt: new Date(),
+          model: assistantModel || 'gpt-4o',
+          provider: 'openai',
+          usage: result.usage
+            ? {
+              promptTokens: result.usage.promptTokens,
+              completionTokens: result.usage.completionTokens,
+              totalTokens: result.usage.totalTokens,
+            }
+            : {
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+            },
+          status: 'pending',
+        };
+
+        this.suggestions.set(suggestion.id, suggestion);
+
+        if (
+          gated.sessionId &&
+          suggestion.usage.totalTokens &&
+          typeof suggestion.usage.totalTokens === 'number'
+        ) {
+          await creditsService.consumeSessionTokens({
+            sessionId: gated.sessionId,
+            tokens: suggestion.usage.totalTokens,
+          });
+        }
+
+        return suggestion;
+      }
+
+      console.log(`${tracePrefix} fallback to local runtime`, {
+        reason: assistantRuntime !== 'openai' ? 'runtime_not_openai' : 'missing_externalId',
+        runtime: assistantRuntime,
+        externalId: assistantExternalId,
+        elapsedMs: Date.now() - start,
+      });
+    } catch (error: any) {
+      console.warn(`${tracePrefix} Failed to resolve assistant runtime for generateResponse`, {
+        message: error?.message || String(error),
+        stack: error?.stack,
+        elapsedMs: Date.now() - start,
+      });
+    }
 
     const suggestion = await extension.generateSuggestion(event, context, recipientAccountId);
 

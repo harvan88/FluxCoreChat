@@ -29,6 +29,7 @@ import { useAuthStore } from '../../../store/authStore';
 import { Button, Badge, Checkbox } from '../../ui';
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
 import { SliderInput } from '../../ui/SliderInput';
+import { OpenAIIcon } from '../../../lib/icon-library';
 
 const PROVIDER_MODELS: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
@@ -44,6 +45,8 @@ interface Assistant {
   vectorStoreIds?: string[];
   toolIds?: string[];
   status: 'draft' | 'active' | 'disabled';
+  runtime?: 'local' | 'openai';
+  externalId?: string;
   modelConfig: {
     provider: string;
     model: string;
@@ -69,6 +72,8 @@ interface Instruction {
 interface VectorStore {
   id: string;
   name: string;
+  backend?: 'local' | 'openai';
+  externalId?: string;
 }
 
 interface Tool {
@@ -94,6 +99,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
   const [activateConfirm, setActivateConfirm] = useState<string | null>(null);
   const [selectedAssistant, setSelectedAssistant] = useState<Assistant | null>(null);
   const [isCopyingActiveConfig, setIsCopyingActiveConfig] = useState(false);
+  const [showRuntimeModal, setShowRuntimeModal] = useState(false);
   const [enabledSections, setEnabledSections] = useState({
     initial: true,
     provider: true,
@@ -403,12 +409,22 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
     }
   };
 
-  const handleCreateNew = async () => {
-    if (!token) return;
+  const handleCreateNew = () => {
+    setShowRuntimeModal(true);
+  };
+
+  const handleCreateAssistantWithRuntime = async (runtime: 'local' | 'openai') => {
+    setShowRuntimeModal(false);
+    if (!token) {
+      console.error('Cannot create assistant: missing auth token');
+      return;
+    }
+
     const newAssistantData = {
       accountId,
-      name: 'Nuevo asistente',
+      name: runtime === 'openai' ? 'Nuevo asistente OpenAI' : 'Nuevo asistente',
       status: 'draft',
+      runtime,
       modelConfig: {
         provider: 'openai',
         model: 'gpt-4o',
@@ -431,17 +447,27 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
         },
         body: JSON.stringify(newAssistantData),
       });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('Error creating assistant:', res.status, text);
+        return;
+      }
       
       if (res.ok) {
         const created = await res.json();
         if (created.success && created.data) {
           await loadData();
           if (onOpenTab) {
+            // ARQUITECTURA: Asistentes OpenAI abren vista EXCLUSIVA OpenAI
+            const tabType = runtime === 'openai' ? 'openai-assistant' : 'assistant';
             onOpenTab(created.data.id, created.data.name, {
-              type: 'assistant',
+              type: tabType,
               assistantId: created.data.id,
+              runtime,
             });
-          } else {
+          } else if (runtime !== 'openai') {
+            // Solo seleccionar localmente si es local
             handleSelectAssistant(created.data);
           }
         }
@@ -497,6 +523,17 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
   };
 
   const handleSelectAssistant = async (assistant: Assistant) => {
+    // ARQUITECTURA: Asistentes OpenAI abren vista EXCLUSIVA OpenAI
+    if (assistant.runtime === 'openai' && onOpenTab) {
+      onOpenTab(assistant.id, assistant.name, {
+        type: 'openai-assistant',
+        assistantId: assistant.id,
+        runtime: 'openai',
+      });
+      return;
+    }
+    
+    // Solo asistentes locales se muestran en esta vista
     setSelectedAssistant(assistant);
     setIsSaving(false);
     setDeleteConfirm(null);
@@ -719,10 +756,20 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                     );
                   })}
                 </div>
+                {selectedAssistant.runtime === 'openai' && (
+                  <div className="mb-2 p-2 bg-accent/5 border border-accent/20 rounded text-xs text-secondary">
+                    Asistente OpenAI: solo se pueden asociar vector stores de OpenAI
+                  </div>
+                )}
                 <div className="relative">
                   {(() => {
                     const used = new Set(selectedAssistant.vectorStoreIds || []);
-                    const selectable = vectorStores.filter((vs) => !used.has(vs.id));
+                    let selectable = vectorStores.filter((vs) => !used.has(vs.id));
+                    
+                    if (selectedAssistant.runtime === 'openai') {
+                      selectable = selectable.filter((vs) => vs.backend === 'openai');
+                    }
+                    
                     return (
                       <select
                         className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
@@ -740,7 +787,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                         <option value="">{selectable.length === 0 ? 'No hay más bases disponibles' : 'Agregar base de conocimiento...'}</option>
                         {selectable.map((vs) => (
                           <option key={vs.id} value={vs.id}>
-                            {vs.name}
+                            {vs.name} {vs.backend === 'openai' ? '(OpenAI)' : ''}
                           </option>
                         ))}
                       </select>
@@ -813,10 +860,16 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
             <div className={`space-y-4 ${!enabledSections.provider ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
               <div>
                 <label className="block text-sm text-muted mb-1">Empresa proveedora</label>
+                {selectedAssistant.runtime === 'openai' && (
+                  <div className="mb-2 p-2 bg-accent/5 border border-accent/20 rounded text-xs text-secondary">
+                    Asistente OpenAI: el proveedor está fijado a OpenAI
+                  </div>
+                )}
                 <div className="relative">
                   <select
                     className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
                     value={selectedAssistant.modelConfig.provider}
+                    disabled={selectedAssistant.runtime === 'openai'}
                     onChange={(e) => {
                       const nextProvider = e.target.value;
                       const allowedModels = PROVIDER_MODELS[nextProvider] || [];
@@ -1126,6 +1179,12 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                           title="Asistente activo"
                         />
                       )}
+                      {assistant.runtime === 'openai' && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded font-medium" title="Asistente OpenAI">
+                          <OpenAIIcon size={14} className="text-accent" />
+                          OpenAI
+                        </span>
+                      )}
                       <span className="font-medium text-primary">{assistant.name}</span>
                     </div>
                   </td>
@@ -1238,6 +1297,50 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
           </table>
         )}
       </div>
+
+      {/* Modal de selección de runtime */}
+      {showRuntimeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRuntimeModal(false)}>
+          <div className="bg-surface border border-subtle rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-primary mb-4">Selecciona el tipo de asistente</h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => handleCreateAssistantWithRuntime('local')}
+                className="w-full p-4 bg-hover border border-subtle rounded-lg hover:bg-active transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <Bot size={24} className="text-accent" />
+                  <div>
+                    <div className="font-medium text-primary">Asistente Local</div>
+                    <div className="text-sm text-secondary">Ejecutado en tu infraestructura FluxCore</div>
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleCreateAssistantWithRuntime('openai')}
+                className="w-full p-4 bg-accent/5 border border-accent/20 rounded-lg hover:bg-accent/10 transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <Bot size={24} className="text-accent" />
+                  <div>
+                    <div className="font-medium text-primary flex items-center gap-2">
+                      Asistente OpenAI
+                      <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded">Externo</span>
+                    </div>
+                    <div className="text-sm text-secondary">Sincronizado con la plataforma OpenAI</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowRuntimeModal(false)}
+              className="mt-4 w-full px-4 py-2 text-sm text-muted hover:text-primary transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

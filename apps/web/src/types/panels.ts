@@ -22,6 +22,7 @@ export type TabContextType =
   | 'settings'        // Sección de settings
   | 'extension'       // Extensión específica
   | 'editor'          // Editor específico
+  | 'openai-assistant-editor' // Editor dedicado para asistentes OpenAI
   | 'custom';         // Custom
 
 export type SplitDirection = 'horizontal' | 'vertical';

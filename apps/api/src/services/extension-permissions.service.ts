@@ -8,7 +8,7 @@
  * - Permisos son heredables si canSharePermissions=true
  */
 
-import { db, extensionInstallations, accounts, workspaceMembers } from '@fluxcore/db';
+import { db, extensionInstallations, workspaceMembers } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
 
 export interface GrantPermissionsParams {

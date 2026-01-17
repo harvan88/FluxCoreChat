@@ -14,6 +14,7 @@ import { ProfileSection } from '../settings/ProfileSection';
 import { AccountsSection } from '../accounts';
 import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
+import { OpenAIAssistantEditor } from '../editors/OpenAIAssistantEditor';
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
 import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
 import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
@@ -22,6 +23,8 @@ import { AssistantsView } from '../fluxcore/views/AssistantsView';
 import { InstructionsView } from '../fluxcore/views/InstructionsView';
 import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
 import { ToolsView } from '../fluxcore/views/ToolsView';
+import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConfigView';
+import { OpenAIVectorStoresView } from '../fluxcore/views/OpenAIVectorStoresView';
 import { CreditsSection } from '../settings/CreditsSection';
 import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
@@ -240,6 +243,13 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   const onOpenFluxCoreItemTab = (tabId: string, title: string, data: any) => {
     if (!selectedAccountId) return;
 
+    // ARQUITECTURA: Asistentes OpenAI usan vista EXCLUSIVA OpenAI
+    if (data?.type === 'openai-assistant') {
+      const id = data?.assistantId || data?.assistant?.id || tabId;
+      openOrFocusFluxCoreTab('openai-assistant', title, 'Bot', { assistantId: id, runtime: 'openai' });
+      return;
+    }
+
     if (data?.type === 'assistant') {
       const id = data?.assistantId || data?.assistant?.id || tabId;
       openOrFocusFluxCoreTab('assistant', title, 'Bot', { assistantId: id });
@@ -249,6 +259,13 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     if (data?.type === 'instruction') {
       const id = data?.instructionId || data?.instruction?.id || tabId;
       openOrFocusFluxCoreTab('instruction', title, 'FileText', { instructionId: id });
+      return;
+    }
+
+    // ARQUITECTURA: Vector stores OpenAI usan vista EXCLUSIVA OpenAI
+    if (data?.type === 'openai-vector-store') {
+      const id = data?.vectorStoreId || data?.store?.id || tabId;
+      openOrFocusFluxCoreTab('openai-vector-store', title, 'Database', { vectorStoreId: id, backend: 'openai' });
       return;
     }
 
@@ -280,6 +297,39 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             accountId={accountId}
             assistantId={tab.context.assistantId}
             onOpenTab={onOpenFluxCoreItemTab}
+          />
+        );
+      // ARQUITECTURA: Vista EXCLUSIVA para asistentes OpenAI
+      case 'openai-assistant':
+        return (
+          <OpenAIAssistantConfigView
+            key={tab.id}
+            assistantId={tab.context.assistantId}
+            accountId={accountId}
+            onClose={() => closeTab(containerId, tab.id)}
+            onSave={() => {
+              // Refrescar lista si es necesario
+            }}
+            onDelete={() => {
+              closeTab(containerId, tab.id);
+            }}
+          />
+        );
+      // ARQUITECTURA: Vista EXCLUSIVA para vector stores OpenAI (lista)
+      case 'openai-vector-stores':
+        return (
+          <OpenAIVectorStoresView
+            key={tab.id}
+            accountId={accountId}
+          />
+        );
+      // ARQUITECTURA: Vista EXCLUSIVA para vector store OpenAI (individual)
+      case 'openai-vector-store':
+        return (
+          <OpenAIVectorStoresView
+            key={tab.id}
+            accountId={accountId}
+            vectorStoreId={tab.context.vectorStoreId}
           />
         );
       case 'instructions':
@@ -416,6 +466,23 @@ function TabContent({ tab, containerId }: TabContentProps) {
           maxLength={tab.context.maxLength || 5000}
           placeholder={tab.context.placeholder || 'Escribe aquí...'}
           onSave={tab.context.onSave || (() => {})}
+          onChange={tab.context.onChange || (() => {})}
+          onClose={tab.context.onClose || (() => {})}
+        />
+      );
+
+    case 'openai-assistant-editor':
+      return (
+        <OpenAIAssistantEditor
+          assistantId={tab.context.assistantId || ''}
+          assistantName={tab.context.assistantName || 'Asistente'}
+          externalId={tab.context.externalId || ''}
+          accountId={tab.context.accountId || ''}
+          content={tab.context.content || ''}
+          maxLength={tab.context.maxLength || 256000}
+          placeholder={tab.context.placeholder || 'Escribe las instrucciones del asistente...'}
+          onSave={tab.context.onSave || (async () => {})}
+          onChange={tab.context.onChange || (() => {})}
           onClose={tab.context.onClose || (() => {})}
         />
       );

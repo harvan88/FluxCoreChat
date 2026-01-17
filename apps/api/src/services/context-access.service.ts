@@ -6,7 +6,6 @@
 import { db, accounts, relationships, conversations, messages, extensionContexts } from '@fluxcore/db';
 import { eq, and, desc } from 'drizzle-orm';
 import { permissionValidator } from './permission-validator.service';
-import type { ContextPermission } from '@fluxcore/types';
 
 export interface ContextAccessParams {
   extensionId: string;

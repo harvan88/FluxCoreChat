@@ -103,7 +103,6 @@ export class RecursiveChunkingStrategy implements IChunkingStrategy {
     chunk(text: string, config: ChunkingConfig): Chunk[] {
         const separators = config.separators || ['\n\n', '\n', '. ', ' '];
         const targetSize = config.sizeTokens * 4;
-        const overlap = config.overlapTokens * 4;
 
         const rawChunks = this.splitRecursively(text, separators, targetSize);
 

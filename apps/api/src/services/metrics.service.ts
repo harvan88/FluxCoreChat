@@ -271,6 +271,8 @@ export const metricsService = new MetricsService();
 
 export function timed(metricName: string) {
     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+        void target;
+        void propertyKey;
         const originalMethod = descriptor.value;
 
         descriptor.value = async function (...args: any[]) {

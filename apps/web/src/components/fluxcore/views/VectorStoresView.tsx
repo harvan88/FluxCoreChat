@@ -29,6 +29,7 @@ import { DeleteFooter } from '../components/DeleteFooter';
 import { RAGConfigSection } from '../components/RAGConfigSection';
 import { VectorStoreFilesSection } from '../components/VectorStoreFilesSection';
 import { useAuthStore } from '../../../store/authStore';
+import { OpenAIIcon } from '../../../lib/icon-library';
 
 interface VectorStoreFile {
   id: string;
@@ -42,6 +43,8 @@ interface VectorStore {
   name: string;
   description?: string;
   status: 'draft' | 'active' | 'expired';
+  backend?: 'local' | 'openai';
+  externalId?: string;
   updatedAt: string;
   lastModifiedBy?: string;
   sizeBytes: number;
@@ -67,6 +70,7 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   const autoSelectedStoreIdRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showBackendModal, setShowBackendModal] = useState(false);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -142,8 +146,17 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
     }
   };
 
-  const handleCreateNew = async () => {
-    if (!token) return;
+  const handleCreateNew = () => {
+    setShowBackendModal(true);
+  };
+
+  const handleCreateVectorStoreWithBackend = async (backend: 'local' | 'openai') => {
+    setShowBackendModal(false);
+    if (!token) {
+      console.error('Cannot create vector store: missing auth token');
+      return;
+    }
+
     try {
       const res = await fetch('/api/fluxcore/vector-stores', {
         method: 'POST',
@@ -153,11 +166,18 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
         },
         body: JSON.stringify({
           accountId,
-          name: 'Nuevo vector store',
+          name: backend === 'openai' ? 'Nuevo vector store OpenAI' : 'Nuevo vector store',
           status: 'draft',
+          backend,
           expirationPolicy: 'never',
         }),
       });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('Error creating vector store:', res.status, text);
+        return;
+      }
 
       const created = await res.json();
       if (created.success && created.data) {
@@ -178,6 +198,17 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
 
   const handleSelectStore = (store: VectorStore) => {
     setDeleteConfirm(null);
+    
+    // ARQUITECTURA: Vector stores OpenAI abren vista EXCLUSIVA OpenAI
+    if (store.backend === 'openai' && onOpenTab) {
+      onOpenTab(store.id, store.name, {
+        type: 'openai-vector-store',
+        vectorStoreId: store.id,
+        backend: 'openai',
+      });
+      return;
+    }
+    
     if (onOpenTab) {
       onOpenTab(store.id, store.name, {
         type: 'vectorStore',
@@ -482,6 +513,12 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <Database size={16} className="text-accent flex-shrink-0 min-w-[16px] min-h-[16px]" />
+                          {store.backend === 'openai' && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded font-medium" title="Vector Store OpenAI">
+                              <OpenAIIcon size={14} className="text-accent" />
+                              OpenAI
+                            </span>
+                          )}
                           <span className="font-medium text-primary truncate">{store.name}</span>
                         </div>
 
@@ -612,6 +649,50 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
           </div>
         )}
       </div>
+
+      {/* Modal de selección de backend */}
+      {showBackendModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowBackendModal(false)}>
+          <div className="bg-surface border border-subtle rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-primary mb-4">Selecciona el tipo de vector store</h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => handleCreateVectorStoreWithBackend('local')}
+                className="w-full p-4 bg-hover border border-subtle rounded-lg hover:bg-active transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <Database size={24} className="text-accent" />
+                  <div>
+                    <div className="font-medium text-primary">Vector Store Local</div>
+                    <div className="text-sm text-secondary">Almacenado en tu infraestructura FluxCore</div>
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleCreateVectorStoreWithBackend('openai')}
+                className="w-full p-4 bg-accent/5 border border-accent/20 rounded-lg hover:bg-accent/10 transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <Database size={24} className="text-accent" />
+                  <div>
+                    <div className="font-medium text-primary flex items-center gap-2">
+                      Vector Store OpenAI
+                      <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded">Externo</span>
+                    </div>
+                    <div className="text-sm text-secondary">Sincronizado con la plataforma OpenAI</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowBackendModal(false)}
+              className="mt-4 w-full px-4 py-2 text-sm text-muted hover:text-primary transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

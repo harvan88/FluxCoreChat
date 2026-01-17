@@ -9,8 +9,7 @@ import type {
   NormalizedMessage, 
   OutgoingMessage, 
   SendResult, 
-  AdapterStatus,
-  AdapterConfig 
+  AdapterStatus
 } from './types';
 import { WhatsAppAdapter } from './whatsapp';
 import type { WhatsAppConfig } from './whatsapp';
