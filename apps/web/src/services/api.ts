@@ -235,6 +235,44 @@ class ApiService {
     return this.request<any>(`/ai/traces/${encodeURIComponent(params.traceId)}?${query.toString()}`);
   }
 
+  async downloadAITraces(params: {
+    accountId: string;
+    conversationId?: string;
+    limit?: number;
+  }): Promise<ApiResponse<string>> {
+    const query = new URLSearchParams();
+    query.set('accountId', params.accountId);
+    if (params.conversationId) query.set('conversationId', params.conversationId);
+    if (typeof params.limit === 'number') query.set('limit', String(params.limit));
+
+    const token = this.getToken();
+    try {
+      const response = await fetch(`${API_URL}/ai/traces/export?${query.toString()}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: 'application/jsonl',
+        },
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        return {
+          success: false,
+          error: text || `Error ${response.status}: ${response.statusText}`,
+        };
+      }
+
+      return {
+        success: true,
+        data: text,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.message || 'Error de conexión',
+      };
+    }
+  }
+
   async getCreditsBalance(accountId: string): Promise<ApiResponse<{ balance: number }>> {
     const query = new URLSearchParams();
     query.set('accountId', accountId);

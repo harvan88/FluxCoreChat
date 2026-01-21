@@ -16,18 +16,16 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   FileText,
-  Check,
   Share2,
   Download,
   Copy,
   Eye,
   Code,
-  X,
   RotateCcw,
   Pencil,
-  Trash2,
+  X,
 } from 'lucide-react';
-import { Button, Badge } from '../../ui';
+import { Button, Badge, DoubleConfirmationDeleteButton } from '../../ui';
 import { useAuthStore } from '../../../store/authStore';
 import { usePanelStore } from '../../../store/panelStore';
 
@@ -161,7 +159,6 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
   const { openTab } = usePanelStore();
   const [instructions, setInstructions] = useState<Instruction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedInstruction, setSelectedInstruction] = useState<Instruction | null>(null);
   const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
@@ -251,7 +248,6 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
   };
 
   const handleSelectInstruction = (instruction: Instruction) => {
-    setDeleteConfirm(null);
     setDeleteError(null);
     if (onOpenTab) {
       onOpenTab(instruction.id, instruction.name, {
@@ -279,7 +275,6 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
       if (response.ok) {
         setInstructions((prev) => prev.filter((i) => i.id !== id));
         setSelectedInstruction((prev) => (prev?.id === id ? null : prev));
-        setDeleteConfirm(null);
         setDeleteError(null);
         return;
       }
@@ -287,7 +282,6 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
       const data = await response.json().catch(() => null);
       const msg = typeof data?.message === 'string' ? data.message : 'No se pudo eliminar la instrucción';
       setDeleteError(msg);
-      setDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting instruction:', error);
       setDeleteError('Error de conexión');
@@ -295,7 +289,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
   };
 
   const handleDeleteInstruction = async () => {
-    if (!selectedInstruction || deleteConfirm !== selectedInstruction.id) return;
+    if (!selectedInstruction) return;
     await deleteInstructionById(selectedInstruction.id);
   };
 
@@ -542,18 +536,16 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('code')}
-              className={`px-3 py-1.5 text-sm rounded flex items-center gap-1 ${
-                viewMode === 'code' ? 'text-primary' : 'text-muted hover:text-primary'
-              }`}
+              className={`px-3 py-1.5 text-sm rounded flex items-center gap-1 ${viewMode === 'code' ? 'text-primary' : 'text-muted hover:text-primary'
+                }`}
             >
               <Code size={14} />
               Código
             </button>
             <button
               onClick={() => setViewMode('preview')}
-              className={`px-3 py-1.5 text-sm rounded flex items-center gap-1 ${
-                viewMode === 'preview' ? 'text-primary' : 'text-muted hover:text-primary'
-              }`}
+              className={`px-3 py-1.5 text-sm rounded flex items-center gap-1 ${viewMode === 'preview' ? 'text-primary' : 'text-muted hover:text-primary'
+                }`}
             >
               <Eye size={14} />
               Vista previa
@@ -655,33 +647,14 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
               </span>
             </div>
           </div>
-          <div className="border-t border-subtle p-4 flex items-center justify-between gap-3 bg-surface">
+          <div className="px-6 py-3 border-t border-subtle flex items-center justify-between gap-3 bg-surface">
             {deleteError && <span className="text-xs text-red-500">{deleteError}</span>}
-            {deleteConfirm === selectedInstruction.id ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted">¿Confirmar eliminación?</span>
-                <button
-                  onClick={handleDeleteInstruction}
-                  className="px-3 py-1.5 bg-error text-inverse rounded text-sm font-medium hover:bg-error/90 transition-colors"
-                >
-                  Eliminar definitivamente
-                </button>
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="px-3 py-1.5 bg-elevated text-secondary rounded text-sm hover:bg-hover transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setDeleteConfirm(selectedInstruction.id)}
-                className="p-2 text-muted hover:text-error hover:bg-error/10 rounded transition-colors"
-                title="Eliminar instrucción"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
+            {deleteError && <span className="text-xs text-red-500">{deleteError}</span>}
+            <DoubleConfirmationDeleteButton
+              onConfirm={handleDeleteInstruction}
+              className="ml-auto"
+              size={16}
+            />
           </div>
         </div>
       </div>
@@ -763,41 +736,20 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
                             <Download size={16} className="text-muted" />
                           </button>
 
-                          {deleteConfirm === instruction.id ? (
-                            <>
-                              <button
-                                className="p-1 hover:bg-elevated rounded"
-                                title="Eliminar definitivamente"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void deleteInstructionById(instruction.id);
-                                }}
-                              >
-                                <Check size={16} className="text-error" />
-                              </button>
-                              <button
-                                className="p-1 hover:bg-elevated rounded"
-                                title="Cancelar"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeleteConfirm(null);
-                                }}
-                              >
-                                <X size={16} className="text-muted" />
-                              </button>
-                            </>
-                          ) : (
+                          <div className="flex items-center gap-3 justify-end opacity-60 group-hover:opacity-100 transition-opacity">
                             <button
                               className="p-1 hover:bg-elevated rounded"
-                              title="Eliminar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm(instruction.id);
-                              }}
+                              title="Descargar"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <Trash2 size={16} className="text-muted hover:text-error" />
+                              <Download size={16} className="text-muted flex-shrink-0" />
                             </button>
-                          )}
+
+                            <DoubleConfirmationDeleteButton
+                              onConfirm={() => deleteInstructionById(instruction.id)}
+                              size={16}
+                            />
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -834,41 +786,10 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
                           <RotateCcw size={16} className="text-muted flex-shrink-0" />
                         </button>
 
-                        {deleteConfirm === instruction.id ? (
-                          <>
-                            <button
-                              className="p-1 hover:bg-elevated rounded"
-                              title="Eliminar definitivamente"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void deleteInstructionById(instruction.id);
-                              }}
-                            >
-                              <Check size={16} className="text-error flex-shrink-0" />
-                            </button>
-                            <button
-                              className="p-1 hover:bg-elevated rounded"
-                              title="Cancelar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm(null);
-                              }}
-                            >
-                              <X size={16} className="text-muted flex-shrink-0" />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            className="p-1 hover:bg-elevated rounded"
-                            title="Eliminar"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirm(instruction.id);
-                            }}
-                          >
-                            <Trash2 size={16} className="text-muted hover:text-error flex-shrink-0" />
-                          </button>
-                        )}
+                        <DoubleConfirmationDeleteButton
+                          onConfirm={() => deleteInstructionById(instruction.id)}
+                          size={16}
+                        />
                       </div>
                     </td>
                   </tr>

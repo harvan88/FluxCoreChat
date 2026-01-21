@@ -15,17 +15,13 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Database,
   Plus,
-  Trash2,
   Pencil,
   Share2,
   RotateCcw,
-  Check,
-  X,
   Copy,
 } from 'lucide-react';
-import { Button, Badge } from '../../ui';
+import { Button, Badge, DoubleConfirmationDeleteButton } from '../../ui';
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
-import { DeleteFooter } from '../components/DeleteFooter';
 import { RAGConfigSection } from '../components/RAGConfigSection';
 import { VectorStoreFilesSection } from '../components/VectorStoreFilesSection';
 import { useAuthStore } from '../../../store/authStore';
@@ -66,7 +62,6 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   const [stores, setStores] = useState<VectorStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStore, setSelectedStore] = useState<VectorStore | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const autoSelectedStoreIdRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -197,18 +192,6 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   };
 
   const handleSelectStore = (store: VectorStore) => {
-    setDeleteConfirm(null);
-    
-    // ARQUITECTURA: Vector stores OpenAI abren vista EXCLUSIVA OpenAI
-    if (store.backend === 'openai' && onOpenTab) {
-      onOpenTab(store.id, store.name, {
-        type: 'openai-vector-store',
-        vectorStoreId: store.id,
-        backend: 'openai',
-      });
-      return;
-    }
-    
     if (onOpenTab) {
       onOpenTab(store.id, store.name, {
         type: 'vectorStore',
@@ -233,7 +216,6 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
       if (response.ok) {
         setStores((prev) => prev.filter((s) => s.id !== id));
         setSelectedStore((prev) => (prev?.id === id ? null : prev));
-        setDeleteConfirm(null);
         setSaveError(null);
         return;
       }
@@ -241,7 +223,6 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
       const data = await response.json().catch(() => null);
       const msg = typeof data?.message === 'string' ? data.message : 'No se pudo eliminar el vector store';
       setSaveError(msg);
-      setDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting vector store:', error);
       setSaveError('Error de conexión');
@@ -249,7 +230,7 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   };
 
   const handleDeleteStore = async () => {
-    if (!selectedStore || deleteConfirm !== selectedStore.id) return;
+    if (!selectedStore) return;
     await deleteStoreById(selectedStore.id);
   };
 
@@ -383,7 +364,10 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
                 <div className="flex justify-between">
                   <span className="text-secondary">Uso estimado</span>
                   <span className="text-primary">
-                    0 KB hours so far this month · $0.1 / GB per day
+                    {selectedStore.backend === 'openai'
+                      ? `$${((selectedStore.sizeBytes / (1024 * 1024 * 1024)) * 0.10).toFixed(5)} / día (OpenAI)`
+                      : 'N/A'
+                    }
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -426,11 +410,13 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
               />
             </CollapsibleSection>
 
-            {/* Configuración RAG */}
-            <RAGConfigSection
-              vectorStoreId={selectedStore.id}
-              accountId={accountId}
-            />
+            {/* Configuración RAG - SOLO para Local */}
+            {selectedStore.backend !== 'openai' && (
+              <RAGConfigSection
+                vectorStoreId={selectedStore.id}
+                accountId={accountId}
+              />
+            )}
           </div>
         </div>
 
@@ -444,12 +430,9 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
             <Copy size={16} />
             <span>Copiar JSON</span>
           </button>
-          <DeleteFooter
-            isConfirming={deleteConfirm === selectedStore.id}
-            actionLabel="Eliminar vector store"
-            onRequestDelete={() => setDeleteConfirm(selectedStore.id)}
+          <DoubleConfirmationDeleteButton
             onConfirm={handleDeleteStore}
-            onCancel={() => setDeleteConfirm(null)}
+            size={16}
           />
         </div>
       </div>
@@ -538,41 +521,10 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
                             <RotateCcw size={16} className="text-muted" />
                           </button>
 
-                          {deleteConfirm === store.id ? (
-                            <>
-                              <button
-                                className="p-1 hover:bg-elevated rounded"
-                                title="Eliminar definitivamente"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void deleteStoreById(store.id);
-                                }}
-                              >
-                                <Check size={16} className="text-error" />
-                              </button>
-                              <button
-                                className="p-1 hover:bg-elevated rounded"
-                                title="Cancelar"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeleteConfirm(null);
-                                }}
-                              >
-                                <X size={16} className="text-muted" />
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              className="p-1 hover:bg-elevated rounded"
-                              title="Eliminar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm(store.id);
-                              }}
-                            >
-                              <Trash2 size={16} className="text-muted hover:text-error" />
-                            </button>
-                          )}
+                          <DoubleConfirmationDeleteButton
+                            onConfirm={() => deleteStoreById(store.id)}
+                            size={16}
+                          />
                         </div>
                       </div>
                     </td>
@@ -605,41 +557,10 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
                           <RotateCcw size={16} className="text-muted flex-shrink-0" />
                         </button>
 
-                        {deleteConfirm === store.id ? (
-                          <>
-                            <button
-                              className="p-1 hover:bg-elevated rounded"
-                              title="Eliminar definitivamente"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void deleteStoreById(store.id);
-                              }}
-                            >
-                              <Check size={16} className="text-error flex-shrink-0" />
-                            </button>
-                            <button
-                              className="p-1 hover:bg-elevated rounded"
-                              title="Cancelar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm(null);
-                              }}
-                            >
-                              <X size={16} className="text-muted flex-shrink-0" />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            className="p-1 hover:bg-elevated rounded"
-                            title="Eliminar"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirm(store.id);
-                            }}
-                          >
-                            <Trash2 size={16} className="text-muted hover:text-error flex-shrink-0" />
-                          </button>
-                        )}
+                        <DoubleConfirmationDeleteButton
+                          onConfirm={() => deleteStoreById(store.id)}
+                          size={16}
+                        />
                       </div>
                     </td>
                   </tr>

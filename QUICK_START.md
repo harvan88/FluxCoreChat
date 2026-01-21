@@ -39,7 +39,15 @@ bunx drizzle-kit push:pg
 bun run src/seed-fluxi.ts
 cd ../..
 
-# 6. Iniciar API + Web
+# 6. Aplicar migración de embeddings
+docker exec fluxcore-db psql -U postgres -d fluxcore -c "
+BEGIN;
+ALTER TABLE fluxcore_document_chunks ADD COLUMN embedding vector(1536);
+CREATE INDEX idx_fluxcore_document_chunks_embedding ON fluxcore_document_chunks USING hnsw (embedding vector_cosine_ops);
+COMMIT;
+"
+
+# 7. Iniciar API + Web
 bun run dev
 ```
 

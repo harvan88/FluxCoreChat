@@ -126,6 +126,51 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     }),
   })
 
+  // GET /ai/traces/export - Download traces as JSONL (requires account ownership)
+  .get('/traces/export', async ({ user, query, set }) => {
+    if (!user) {
+      set.status = 401;
+      return 'Unauthorized';
+    }
+
+    try {
+      const accountId = (query as any)?.accountId as string | undefined;
+      const conversationId = (query as any)?.conversationId as string | undefined;
+      const limitRaw = (query as any)?.limit as string | undefined;
+      const limitParsed = typeof limitRaw === 'string' && limitRaw.trim().length > 0 ? Number(limitRaw) : undefined;
+      const limit = Number.isFinite(limitParsed as any) ? (limitParsed as number) : undefined;
+
+      if (!accountId) {
+        set.status = 400;
+        return 'accountId is required';
+      }
+
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === accountId);
+      if (!allowed) {
+        set.status = 403;
+        return 'Account does not belong to user';
+      }
+
+      const traces = await aiService.exportTraces({ accountId, conversationId, limit });
+      const jsonl = traces.map((trace) => JSON.stringify(trace)).join('\n');
+
+      set.headers['content-type'] = 'application/jsonl; charset=utf-8';
+      const safeConversation = conversationId ? `-${conversationId}` : '';
+      set.headers['content-disposition'] = `attachment; filename="prompt-traces-${accountId}${safeConversation}-${Date.now()}.jsonl"`;
+      return jsonl;
+    } catch (error: any) {
+      set.status = 500;
+      return error.message || 'Error exporting traces';
+    }
+  }, {
+    query: t.Object({
+      accountId: t.String(),
+      conversationId: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
+    }),
+  })
+
   // GET /ai/traces/:traceId - Get trace detail (requires account ownership)
   .get('/traces/:traceId', async ({ user, params, query, set }) => {
     if (!user) {
