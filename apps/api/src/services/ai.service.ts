@@ -968,6 +968,29 @@ class AIService {
     return extension.clearTraces(params as any);
   }
 
+  async exportTraces(params: { accountId: string; conversationId?: string; limit?: number }): Promise<any[]> {
+    const extension = await this.getFluxCoreExtension();
+    if (
+      !extension ||
+      typeof extension.listTraces !== 'function' ||
+      typeof extension.getTrace !== 'function'
+    ) {
+      return [];
+    }
+
+    const summaries = extension.listTraces(params as any) || [];
+    const traces: any[] = [];
+
+    for (const summary of summaries) {
+      const detail = extension.getTrace({ accountId: params.accountId, traceId: summary.id });
+      if (detail) {
+        traces.push(detail);
+      }
+    }
+
+    return traces;
+  }
+
   /**
    * Verificar si la API está configurada
    */
@@ -1291,6 +1314,13 @@ class AIService {
       if (assistantRuntime === 'openai' && assistantExternalId) {
         const assistantModelConfig = (composition?.assistant?.modelConfig as Record<string, any>) || {};
         const assistantModel = typeof assistantModelConfig.model === 'string' ? assistantModelConfig.model : null;
+        const assistantMaxTokens = typeof assistantModelConfig.maxTokens === 'number'
+          ? assistantModelConfig.maxTokens
+          : gated.config.maxTokens || this.config.maxTokens || 256;
+        const assistantTemperature = typeof assistantModelConfig.temperature === 'number'
+          ? assistantModelConfig.temperature
+          : gated.config.temperature || this.config.temperature || 0.7;
+
         const { runAssistantWithMessages } = await import('./openai-sync.service');
 
         const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -1324,18 +1354,199 @@ class AIService {
         const currentMsgInHistory = threadMessages.some((m) =>
           m.content.includes(lastMessageContent) || lastMessageContent.includes(m.content)
         );
+        let appendedCurrentMessage = false;
         if (!currentMsgInHistory) {
           threadMessages.push({
             role: 'user',
             content: currentContent,
           });
+          appendedCurrentMessage = true;
         }
 
+        const instructionIds = Array.isArray(composition?.instructions)
+          ? composition!.instructions
+            .map((i: any) => (typeof i?.id === 'string' ? i.id : ''))
+            .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
+          : undefined;
+
+        const instructionLinks = Array.isArray(composition?.instructions)
+          ? composition!.instructions
+            .map((i: any) => ({
+              id: typeof i?.id === 'string' ? i.id : '',
+              name: typeof i?.name === 'string' ? i.name : undefined,
+              order: typeof i?.order === 'number' ? i.order : undefined,
+              versionId: typeof i?.versionId === 'string' ? i.versionId : null,
+            }))
+            .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
+          : undefined;
+
+        const instructionContents = Array.isArray(composition?.instructions)
+          ? composition!.instructions
+            .map((i: any) => (typeof i?.content === 'string' ? i.content : ''))
+            .filter((x: string) => x.trim().length > 0)
+          : [];
+
+        const vectorStoreIds = Array.isArray(composition?.vectorStores)
+          ? composition!.vectorStores
+            .map((vs: any) => (typeof vs?.id === 'string' ? vs.id : ''))
+            .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
+          : undefined;
+
+        const vectorStores = Array.isArray(composition?.vectorStores)
+          ? composition!.vectorStores
+            .map((vs: any) => ({
+              id: typeof vs?.id === 'string' ? vs.id : '',
+              name: typeof vs?.name === 'string' ? vs.name : undefined,
+            }))
+            .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
+          : undefined;
+
+        const toolIds = Array.isArray(composition?.tools)
+          ? composition!.tools
+            .map((t: any) => (typeof t?.connectionId === 'string' ? t.connectionId : (typeof t?.id === 'string' ? t.id : '')))
+            .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
+          : undefined;
+
+        const tools = Array.isArray(composition?.tools)
+          ? composition!.tools
+            .map((t: any) => ({
+              id: typeof t?.connectionId === 'string' ? t.connectionId : (typeof t?.id === 'string' ? t.id : ''),
+              name: typeof t?.name === 'string' ? t.name : undefined,
+            }))
+            .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
+          : undefined;
+
+        const assistantMeta = composition?.assistant ? {
+          assistantId: composition.assistant.id,
+          assistantName: typeof composition.assistant?.name === 'string' ? composition.assistant.name : undefined,
+          instructionIds,
+          instructionLinks,
+          vectorStoreIds,
+          vectorStores,
+          toolIds,
+          tools,
+          modelConfig: composition.assistant?.modelConfig
+            ? {
+              provider: composition.assistant.modelConfig.provider,
+              model: composition.assistant.modelConfig.model,
+              temperature: composition.assistant.modelConfig.temperature,
+              topP: composition.assistant.modelConfig.topP,
+              responseFormat: (composition.assistant.modelConfig as any)?.responseFormat,
+            }
+            : undefined,
+        } : undefined;
+
+        const traceContext = {
+          ...context,
+          assistantMeta,
+        };
+
+        const systemPromptSections: string[] = [];
+        if (instructionContents.length > 0) {
+          systemPromptSections.push(instructionContents.join('\n\n'));
+        } else {
+          systemPromptSections.push('Instrucciones gestionadas en OpenAI Assistants.');
+        }
+        systemPromptSections.push(`assistantExternalId: ${assistantExternalId}`);
+        const systemPromptText = systemPromptSections.join('\n\n');
+
+        const baseMessages = appendedCurrentMessage
+          ? threadMessages.slice(0, -1)
+          : [...threadMessages];
+        const messagesWithCurrent = [...threadMessages];
+
+        const requestBodyForTrace = {
+          model: assistantModel || 'openai-assistant',
+          messages: [
+            { role: 'system', content: systemPromptText },
+            ...messagesWithCurrent,
+          ],
+          max_tokens: assistantMaxTokens,
+          temperature: assistantTemperature,
+        };
+
+        const attemptStartedAt = Date.now();
         const result = await runAssistantWithMessages({
           assistantExternalId,
           messages: threadMessages,
           traceId: options.traceId,
         });
+
+        const traceAttempt: any = {
+          provider: 'openai',
+          baseUrl: 'assistants://api.openai.com',
+          keySource: 'openai_assistants_api',
+          attempt: 1,
+          startedAt: new Date(attemptStartedAt).toISOString(),
+          durationMs: Date.now() - attemptStartedAt,
+          requestBody: requestBodyForTrace,
+          ok: result.success && !!result.content,
+        };
+
+        if (traceAttempt.ok && result.usage) {
+          traceAttempt.response = {
+            content: result.content,
+            usage: {
+              prompt_tokens: result.usage.promptTokens,
+              completion_tokens: result.usage.completionTokens,
+              total_tokens: result.usage.totalTokens,
+            },
+          };
+        } else if (!traceAttempt.ok) {
+          traceAttempt.error = {
+            type: 'unknown',
+            message: result.error || 'Assistant run failed',
+          };
+        }
+
+        if (assistantMeta) {
+          assistantMeta.effective = {
+            provider: 'openai',
+            baseUrl: 'assistants://api.openai.com',
+            model: assistantModel || 'openai-assistant',
+            maxTokens: assistantMaxTokens,
+            temperature: assistantTemperature,
+          };
+        }
+
+        const traceEntry = {
+          id: options.traceId || crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          accountId: recipientAccountId,
+          conversationId,
+          messageId: event.messageId,
+          mode: modeForPrompt === 'auto' ? 'auto' : 'suggest',
+          model: assistantModel || 'openai-assistant',
+          maxTokens: assistantMaxTokens,
+          temperature: assistantTemperature,
+          context: traceContext,
+          builtPrompt: {
+            systemPrompt: systemPromptText,
+            messages: baseMessages,
+            messagesWithCurrent,
+          },
+          attempts: [traceAttempt],
+          final: traceAttempt.ok && result.usage
+            ? {
+              provider: 'openai',
+              baseUrl: 'assistants://api.openai.com',
+              usage: {
+                prompt_tokens: result.usage.promptTokens,
+                completion_tokens: result.usage.completionTokens,
+                total_tokens: result.usage.totalTokens,
+              },
+            }
+            : undefined,
+        };
+
+        try {
+          const extension = await this.getFluxCoreExtension();
+          if (extension && typeof extension.recordTrace === 'function') {
+            extension.recordTrace(traceEntry);
+          }
+        } catch (traceError) {
+          console.warn('[ai-service] Failed to record OpenAI trace', traceError);
+        }
 
         if (!result.success || !result.content) {
           return null;

@@ -23,6 +23,7 @@ export type { BadgeProps, BadgeVariant, BadgeSize, BadgeStyle } from './Badge';
 
 // FC-408: Table Component
 export { Table } from './Table';
+export * from './DoubleConfirmationDeleteButton';
 export type { TableProps, Column, SortDirection } from './Table';
 
 // FC-409: Select Component

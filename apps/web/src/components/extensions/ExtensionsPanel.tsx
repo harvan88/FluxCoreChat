@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { Search, RefreshCw, Package, Sparkles } from 'lucide-react';
+import { Search, RefreshCw, Package, Sparkles, Settings } from 'lucide-react';
 import clsx from 'clsx';
 import { ExtensionCard } from './ExtensionCard';
 import { useExtensions } from '../../hooks/useExtensions';
@@ -16,10 +16,69 @@ type TabType = 'all' | 'installed' | 'available';
 
 interface ExtensionsPanelProps {
   accountId: string;
+  variant?: 'full' | 'sidebar';
 }
 
-export function ExtensionsPanel({ 
-  accountId
+function ExtensionSidebarItem({
+  extension,
+  onToggle,
+  onConfigure
+}: {
+  extension: any;
+  onToggle: (enabled: boolean) => void;
+  onConfigure?: () => void;
+}) {
+  const isEnabled = extension.status === 'enabled';
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-lg bg-elevated hover:bg-hover border border-subtle transition-colors group">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="p-2 rounded-md bg-surface text-accent">
+          <Package size={16} />
+        </div>
+        <div className="min-w-0">
+          <div className="font-medium text-sm text-primary truncate">{extension.name}</div>
+          <div className="text-xs text-secondary truncate">{extension.author}</div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onConfigure && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onConfigure();
+            }}
+            className="p-1.5 text-secondary hover:text-primary rounded-md hover:bg-surface"
+            title="Configurar"
+          >
+            <Settings size={14} />
+          </button>
+        )}
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle(!isEnabled);
+          }}
+          className={clsx(
+            "w-8 h-4 rounded-full relative cursor-pointer transition-colors",
+            isEnabled ? "bg-accent" : "bg-subtle"
+          )}
+          title={isEnabled ? "Desactivar" : "Activar"}
+        >
+          <div className={clsx(
+            "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all shadow-sm",
+            isEnabled ? "left-4.5" : "left-0.5"
+          )} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ExtensionsPanel({
+  accountId,
+  variant = 'full'
 }: ExtensionsPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,60 +159,97 @@ export function ExtensionsPanel({
   return (
     <div className="h-full flex flex-col bg-surface">
       {/* Header */}
-      <div className="p-4 border-b border-subtle">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Package className="text-accent" size={24} />
-            <h2 className="text-lg font-semibold text-primary">Extensiones</h2>
-          </div>
-          <button
-            onClick={refresh}
-            disabled={isLoading}
-            className={clsx(
-              'p-2 rounded-lg transition-colors',
-              isLoading 
-                ? 'text-muted cursor-not-allowed' 
-                : 'text-secondary hover:text-primary hover:bg-hover'
-            )}
-            title="Actualizar"
-          >
-            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-        </div>
+      {variant === 'full' && (
+        <div className="p-4 border-b border-subtle">
+          <div className="flex items-center justify-between mb-4">
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar extensiones..."
-            className="w-full bg-elevated text-primary pl-10 pr-4 py-2 rounded-lg border border-subtle focus:border-accent focus:outline-none text-sm"
-          />
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 mt-4">
-          {(['all', 'installed', 'available'] as TabType[]).map((tab) => (
+            <div className="flex items-center gap-2">
+              <Package className="text-accent" size={24} />
+              <h2 className="text-lg font-semibold text-primary">Extensiones</h2>
+            </div>
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={refresh}
+              disabled={isLoading}
               className={clsx(
-                'px-3 py-1.5 text-sm rounded-lg transition-colors',
-                activeTab === tab
-                  ? 'bg-accent text-inverse'
+                'p-2 rounded-lg transition-colors',
+                isLoading
+                  ? 'text-muted cursor-not-allowed'
                   : 'text-secondary hover:text-primary hover:bg-hover'
               )}
+              title="Actualizar"
             >
-              {tab === 'all' && 'Todas'}
-              {tab === 'installed' && 'Instaladas'}
-              {tab === 'available' && 'Disponibles'}
-              <span className="ml-1.5 text-xs opacity-70">({counts[tab]})</span>
+              <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
             </button>
-          ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar extensiones..."
+              className="w-full bg-elevated text-primary pl-10 pr-4 py-2 rounded-lg border border-subtle focus:border-accent focus:outline-none text-sm"
+            />
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-4">
+            {(['all', 'installed', 'available'] as TabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={clsx(
+                  'px-3 py-1.5 text-sm rounded-lg transition-colors',
+                  activeTab === tab
+                    ? 'bg-accent text-inverse'
+                    : 'text-secondary hover:text-primary hover:bg-hover'
+                )}
+              >
+                {tab === 'all' && 'Todas'}
+                {tab === 'installed' && 'Instaladas'}
+                {tab === 'available' && 'Disponibles'}
+                <span className="ml-1.5 text-xs opacity-70">({counts[tab]})</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Sidebar Header (Compact) */}
+      {variant === 'sidebar' && (
+        <div className="p-4 border-b border-subtle space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar..."
+              className="w-full bg-elevated text-primary pl-9 pr-3 py-1.5 rounded-md border border-subtle focus:border-accent focus:outline-none text-xs"
+            />
+          </div>
+          <div className="flex gap-1 bg-elevated p-1 rounded-lg">
+            {(['all', 'installed', 'available'] as TabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={clsx(
+                  'flex-1 py-1 text-[10px] font-medium rounded-md transition-all',
+                  activeTab === tab
+                    ? 'bg-surface text-primary shadow-sm'
+                    : 'text-secondary hover:text-primary'
+                )}
+              >
+                {tab === 'all' && 'Todas'}
+                {tab === 'installed' && 'Mis Ext.'}
+                {tab === 'available' && 'Tienda'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -168,24 +264,23 @@ export function ExtensionsPanel({
           <div className="text-center py-12">
             <Sparkles className="mx-auto text-muted mb-3" size={48} />
             <p className="text-secondary">
-              {searchQuery 
+              {searchQuery
                 ? 'No se encontraron extensiones'
-                : activeTab === 'installed' 
+                : activeTab === 'installed'
                   ? 'No tienes extensiones instaladas'
                   : 'No hay extensiones disponibles'}
             </p>
           </div>
         ) : (
           filteredExtensions.map((extension) => (
-            <ExtensionCard
-              key={extension.id}
-              extension={extension}
-              onInstall={() => install(extension.id)}
-              onUninstall={() => uninstall(extension.id)}
-              onToggle={(enabled) => toggle(extension.id, enabled)}
-              onConfigure={
-                extension.status !== 'available'
-                  ? () => {
+            variant === 'sidebar' ? (
+              <ExtensionSidebarItem
+                key={extension.id}
+                extension={extension}
+                onToggle={(enabled) => toggle(extension.id, enabled)}
+                onConfigure={
+                  extension.status !== 'available'
+                    ? () => {
                       const panelComponent = extension.installation?.manifest?.ui?.panel?.component;
                       const isFluxCore = panelComponent === 'FluxCorePanel';
                       const hasSidebarUI = Boolean(extension.installation?.manifest?.ui?.sidebar);
@@ -202,10 +297,40 @@ export function ExtensionsPanel({
 
                       handleOpenConfigure(extension.id, extension.name);
                     }
-                  : undefined
-              }
-              isLoading={isLoading}
-            />
+                    : undefined
+                }
+              />
+            ) : (
+              <ExtensionCard
+                key={extension.id}
+                extension={extension}
+                onInstall={() => install(extension.id)}
+                onUninstall={() => uninstall(extension.id)}
+                onToggle={(enabled) => toggle(extension.id, enabled)}
+                onConfigure={
+                  extension.status !== 'available'
+                    ? () => {
+                      const panelComponent = extension.installation?.manifest?.ui?.panel?.component;
+                      const isFluxCore = panelComponent === 'FluxCorePanel';
+                      const hasSidebarUI = Boolean(extension.installation?.manifest?.ui?.sidebar);
+
+                      if (isFluxCore) {
+                        handleActivateExtension(extension.id);
+                        return;
+                      }
+
+                      if (hasSidebarUI) {
+                        handleActivateExtension(extension.id);
+                        return;
+                      }
+
+                      handleOpenConfigure(extension.id, extension.name);
+                    }
+                    : undefined
+                }
+                isLoading={isLoading}
+              />
+            )
           ))
         )}
       </div>
@@ -214,8 +339,8 @@ export function ExtensionsPanel({
       <div className="p-4 border-t border-subtle text-xs text-muted">
         <div className="flex items-center justify-between">
           <span>{counts.installed} extensiones activas</span>
-          <a 
-            href="#" 
+          <a
+            href="#"
             className="text-accent hover:text-accent/80 transition-colors"
           >
             Explorar marketplace

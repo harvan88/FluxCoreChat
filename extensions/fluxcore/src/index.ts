@@ -5,6 +5,7 @@
  * con tres modos de operación: suggest, auto y off.
  */
 
+import crypto from 'node:crypto';
 import { PromptBuilder, type ContextData, type BuiltPrompt } from './prompt-builder';
 import { OpenAICompatibleClient, AIClientError, type AIErrorType } from './openai-compatible-client';
 
@@ -89,6 +90,20 @@ export interface AITraceAttempt {
   };
 }
 
+export type AIToolExecutionStatus = 'not_invoked' | 'success' | 'error';
+
+export interface AIToolExecutionRecord {
+  id?: string;
+  name?: string;
+  connectionId?: string;
+  status: AIToolExecutionStatus;
+  startedAt?: string;
+  durationMs?: number;
+  input?: any;
+  output?: any;
+  error?: any;
+}
+
 export interface AITraceEntry {
   id: string;
   createdAt: string;
@@ -111,6 +126,7 @@ export interface AITraceEntry {
     baseUrl: string;
     usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   };
+  toolsUsed?: AIToolExecutionRecord[];
 }
 
 // Cola de respuestas pendientes
@@ -544,6 +560,7 @@ export class FluxCoreExtension {
           messagesWithCurrent,
         },
         attempts: [],
+        toolsUsed: this.createToolUsageSnapshot(assistantMeta?.tools),
       };
 
       let response: ChatCompletionResult;
@@ -666,6 +683,121 @@ export class FluxCoreExtension {
       }
     }
     return before - traces.length;
+  }
+
+  /**
+   * Permite registrar trazas externas (por ejemplo, runtime OpenAI Assistants)
+   */
+  recordTrace(entry: AITraceEntry): AITraceEntry {
+    const normalized: AITraceEntry = {
+      ...entry,
+      id: entry.id || crypto.randomUUID(),
+      createdAt: entry.createdAt || new Date().toISOString(),
+      accountId: entry.accountId,
+      conversationId: entry.conversationId,
+      messageId: entry.messageId,
+      mode: entry.mode || 'suggest',
+      model: entry.model,
+      maxTokens: entry.maxTokens,
+      temperature: entry.temperature,
+      context: entry.context,
+      builtPrompt: entry.builtPrompt,
+      attempts: Array.isArray(entry.attempts) ? entry.attempts : [],
+      final: entry.final,
+      toolsUsed: this.ensureToolUsage(entry.toolsUsed, entry.context),
+    };
+
+    addTrace(normalized);
+    return normalized;
+  }
+
+  private createToolUsageSnapshot(tools?: Array<{ id?: string; name?: string }>): AIToolExecutionRecord[] | undefined {
+    if (!Array.isArray(tools) || tools.length === 0) {
+      return undefined;
+    }
+    return tools.map((tool) => ({
+      id: tool?.id,
+      name: tool?.name,
+      connectionId: tool?.id,
+      status: 'not_invoked' as const,
+    }));
+  }
+
+  private ensureToolUsage(
+    existing: AIToolExecutionRecord[] | undefined,
+    context?: ContextData
+  ): AIToolExecutionRecord[] | undefined {
+    if (Array.isArray(existing) && existing.length > 0) {
+      return existing;
+    }
+    const toolsFromContext = context?.assistantMeta?.tools;
+    return this.createToolUsageSnapshot(toolsFromContext);
+  }
+
+  recordToolExecution(params: {
+    traceId: string;
+    toolId?: string;
+    connectionId?: string;
+    name?: string;
+    status: AIToolExecutionStatus;
+    startedAt?: Date | string;
+    durationMs?: number;
+    input?: any;
+    output?: any;
+    error?: any;
+  }): AIToolExecutionRecord | null {
+    const trace = traces.find((t) => t.id === params.traceId);
+    if (!trace) {
+      return null;
+    }
+
+    if (!Array.isArray(trace.toolsUsed)) {
+      trace.toolsUsed = [];
+    }
+
+    const key = params.connectionId || params.toolId;
+    let record: AIToolExecutionRecord | undefined;
+
+    if (key) {
+      record = trace.toolsUsed.find(
+        (t) => (typeof t.connectionId === 'string' && t.connectionId === key) || (typeof t.id === 'string' && t.id === key)
+      );
+    }
+
+    if (!record) {
+      record = {
+        id: params.toolId || key,
+        name: params.name,
+        connectionId: params.connectionId,
+        status: params.status,
+      };
+      trace.toolsUsed.push(record);
+    }
+
+    record.status = params.status;
+    if (params.name) {
+      record.name = params.name;
+    }
+    if (params.connectionId) {
+      record.connectionId = params.connectionId;
+    }
+    if (params.startedAt) {
+      record.startedAt = typeof params.startedAt === 'string' ? params.startedAt : params.startedAt.toISOString();
+    }
+    if (typeof params.durationMs === 'number') {
+      record.durationMs = params.durationMs;
+    }
+    if (params.input !== undefined) {
+      record.input = params.input;
+    }
+    if (params.output !== undefined) {
+      record.output = params.output;
+    }
+    if (params.error !== undefined) {
+      record.error = params.error;
+    }
+
+    return record;
   }
 
   /**

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Copy, RefreshCw, Trash2 } from 'lucide-react';
+import { Copy, RefreshCw, Trash2, Download, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 
@@ -51,6 +51,19 @@ type TraceDetail = {
     response?: any;
   }>;
   final?: any;
+  toolsUsed?: ToolExecutionRecord[];
+};
+
+type ToolExecutionRecord = {
+  id?: string;
+  name?: string;
+  connectionId?: string;
+  status: 'not_invoked' | 'success' | 'error';
+  startedAt?: string;
+  durationMs?: number;
+  input?: any;
+  output?: any;
+  error?: any;
 };
 
 function shortId(id: string) {
@@ -80,6 +93,7 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<TraceDetail | null>(null);
   const [isCopyingAll, setIsCopyingAll] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const effectiveConversationFilter = useMemo(() => {
     const trimmed = conversationFilter.trim();
@@ -199,6 +213,40 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTraceId]);
 
+  const handleExport = async () => {
+    if (!effectiveAccountId || isExporting) return;
+
+    setIsExporting(true);
+    try {
+      const res = await api.downloadAITraces({
+        accountId: effectiveAccountId,
+        conversationId: effectiveConversationFilter || undefined,
+        limit: 200,
+      });
+
+      if (!res.success || !res.data) {
+        setError(res.error || 'Error al exportar trazas');
+        return;
+      }
+
+      const blob = new Blob([res.data], { type: 'application/jsonl;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const suffix = effectiveConversationFilter ? `-${effectiveConversationFilter}` : '';
+      const filename = `prompt-traces-${effectiveAccountId}${suffix}-${Date.now()}.jsonl`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e?.message || 'Error al exportar trazas');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleClear = async () => {
     if (!effectiveAccountId) return;
 
@@ -240,6 +288,17 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
         </div>
 
         <div className="flex items-center gap-1">
+          <button
+            onClick={handleExport}
+            className={clsx(
+              'w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors',
+              (isExporting || isCopyingAll || isLoading) && 'opacity-50 cursor-not-allowed'
+            )}
+            disabled={isExporting || isCopyingAll || isLoading}
+            title="Exportar JSONL"
+          >
+            <Download size={16} className={isExporting ? 'animate-pulse' : ''} />
+          </button>
           <button
             onClick={handleCopyAll}
             className={clsx(
@@ -455,6 +514,14 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
                   value={detail.context}
                 />
 
+                {detail.context?.ragContext && detail.context.ragContext.context && (
+                  <RagSection rag={detail.context.ragContext} />
+                )}
+
+                {Array.isArray(detail.toolsUsed) && detail.toolsUsed.length > 0 && (
+                  <ToolsSection tools={detail.toolsUsed} />
+                )}
+
                 {detail.attempts?.map((a, idx) => (
                   <div key={`${a.startedAt}-${idx}`} className="bg-elevated border border-subtle rounded p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -537,4 +604,159 @@ function JsonSection(props: { title: string; value: any; onCopy: () => void }) {
       </pre>
     </div>
   );
+}
+
+function RagSection({
+  rag,
+}: {
+  rag: {
+    context: string;
+    sources?: Array<{ content: string; source: string; similarity?: number }>;
+    totalTokens?: number;
+    chunksUsed?: number;
+    vectorStoreIds?: string[];
+  };
+}) {
+  const sources = Array.isArray(rag.sources) ? rag.sources : [];
+  return (
+    <div className="bg-elevated border border-subtle rounded p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm text-primary font-medium">Base de conocimiento</div>
+        <button
+          onClick={() => copyToClipboard(rag.context || '')}
+          className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+          title="Copiar contexto"
+        >
+          <Copy size={16} />
+        </button>
+      </div>
+      <div className="mt-2 text-xs text-secondary space-y-1">
+        {typeof rag.totalTokens === 'number' && (
+          <div>Total tokens: {rag.totalTokens}</div>
+        )}
+        {typeof rag.chunksUsed === 'number' && (
+          <div>Chunks usados: {rag.chunksUsed}</div>
+        )}
+        {Array.isArray(rag.vectorStoreIds) && rag.vectorStoreIds.length > 0 && (
+          <div>Vector stores: {rag.vectorStoreIds.join(', ')}</div>
+        )}
+      </div>
+      <pre className="mt-2 text-[11px] text-secondary whitespace-pre-wrap break-words">
+        {rag.context || '(sin contexto)'}
+      </pre>
+      {sources.length > 0 && (
+        <div className="mt-3">
+          <div className="text-xs text-muted mb-1">Fuentes ({sources.length})</div>
+          <div className="space-y-2">
+            {sources.map((source, idx) => (
+              <div key={`${source.source}-${idx}`} className="bg-base border border-subtle rounded p-2 text-[11px] space-y-1">
+                <div className="flex items-center gap-2 text-secondary">
+                  <span className="font-medium">{source.source || 'Fuente desconocida'}</span>
+                  {typeof source.similarity === 'number' && (
+                    <span className="text-muted flex items-center gap-1">
+                      <Clock size={10} />
+                      sim {source.similarity.toFixed(3)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-muted whitespace-pre-wrap break-words">{source.content || '(sin contenido)'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolsSection({ tools }: { tools: Array<any> }) {
+  return (
+    <div className="bg-elevated border border-subtle rounded p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm text-primary font-medium">Herramientas ejecutadas</div>
+        <button
+          onClick={() => copyToClipboard(JSON.stringify(tools, null, 2))}
+          className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+          title="Copiar toolsUsed"
+        >
+          <Copy size={16} />
+        </button>
+      </div>
+      <div className="mt-3 space-y-2">
+        {tools.map((tool, idx) => {
+          const status = tool?.status || 'not_invoked';
+          const isError = status === 'error';
+          const isPending = status === 'not_invoked';
+          return (
+            <div key={idx} className="border border-subtle rounded p-2 text-xs space-y-1">
+              <div className="flex items-center gap-2 text-primary">
+                <span className="font-medium">{tool?.name || tool?.connectionId || 'Herramienta'}</span>
+                <StatusBadge status={status} />
+              </div>
+              {tool?.connectionId && (
+                <div className="text-muted">connectionId: {tool.connectionId}</div>
+              )}
+              {tool?.startedAt && (
+                <div className="text-muted">startedAt: {tool.startedAt}</div>
+              )}
+              {typeof tool?.durationMs === 'number' && (
+                <div className="text-muted">duration: {tool.durationMs} ms</div>
+              )}
+              {tool?.input && (
+                <div>
+                  <div className="text-muted">input:</div>
+                  <pre className="text-[11px] text-secondary whitespace-pre-wrap break-words">
+                    {JSON.stringify(tool.input, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {tool?.output && (
+                <div>
+                  <div className="text-muted">output:</div>
+                  <pre className="text-[11px] text-secondary whitespace-pre-wrap break-words">
+                    {JSON.stringify(tool.output, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {tool?.error && (
+                <div className="text-error text-[11px] whitespace-pre-wrap break-words">
+                  {JSON.stringify(tool.error, null, 2)}
+                </div>
+              )}
+              {isPending && (
+                <div className="flex items-center gap-1 text-muted text-[11px]">
+                  <Clock size={10} /> Pendiente de ejecución
+                </div>
+              )}
+              {isError && !tool?.error && (
+                <div className="flex items-center gap-1 text-error text-[11px]">
+                  <AlertTriangle size={10} /> Error sin detalle
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  switch (status) {
+    case 'success':
+      return <span className="text-green-400 text-[11px]">success</span>;
+    case 'error':
+      return (
+        <span className="text-red-400 text-[11px] flex items-center gap-1">
+          <AlertTriangle size={10} /> error
+        </span>
+      );
+    case 'not_invoked':
+    default:
+      return (
+        <span className="text-muted text-[11px] flex items-center gap-1">
+          <Clock size={10} /> sin uso
+        </span>
+      );
+  }
 }

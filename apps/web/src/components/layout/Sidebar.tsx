@@ -31,9 +31,9 @@ const extensionComponents: Record<string, ComponentType> = {
 };
 
 export function Sidebar() {
-  const { 
-    activeActivity, 
-    sidebarOpen, 
+  const {
+    activeActivity,
+    sidebarOpen,
     sidebarPinned,
     selectedAccountId,
     toggleSidebarPinned,
@@ -41,7 +41,7 @@ export function Sidebar() {
   } = useUIStore();
 
   const [fluxCoreActiveView, setFluxCoreActiveView] = useState<'usage' | 'assistants' | 'instructions' | 'knowledge-base' | 'tools' | 'debug' | 'billing'>('usage');
-  
+
   const { installations } = useExtensions(selectedAccountId);
 
   useEffect(() => {
@@ -194,7 +194,7 @@ export function Sidebar() {
       case 'contacts':
         return <ContactsList />;
       case 'extensions':
-        return <ExtensionsPanel accountId={selectedAccountId || ''} />;
+        return <ExtensionsPanel accountId={selectedAccountId || ''} variant="sidebar" />;
       case 'settings':
         return <SettingsMenu />;
       default:
@@ -234,7 +234,7 @@ export function Sidebar() {
             {getTitle()}
           </h2>
         </div>
-        
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {renderContent()}
@@ -245,7 +245,7 @@ export function Sidebar() {
 
   // Desktop: sidebar con animaciones y controles completos
   return (
-    <div 
+    <div
       className={clsx(
         'bg-surface border-r border-subtle flex flex-col transition-all duration-300 ease-in-out overflow-hidden',
         sidebarOpen ? 'w-80 opacity-100' : 'w-0 opacity-0'
@@ -256,7 +256,7 @@ export function Sidebar() {
         <h2 className="text-lg font-semibold text-primary truncate">
           {getTitle()}
         </h2>
-        
+
         {/* Controls */}
         <div className="flex items-center gap-1">
           {/* Pin/Lock toggle */}

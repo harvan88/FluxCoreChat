@@ -14,8 +14,9 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Bot,
   Plus,
+  Play,
+  RotateCw,
   Copy,
-  Check,
   Zap,
   ChevronDown,
   X,
@@ -23,13 +24,14 @@ import {
   Share2,
   RotateCcw,
   Pencil,
-  Trash2,
+  Check,
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { Button, Badge, Checkbox } from '../../ui';
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
 import { SliderInput } from '../../ui/SliderInput';
 import { OpenAIIcon } from '../../../lib/icon-library';
+import { DoubleConfirmationDeleteButton } from '../../ui/DoubleConfirmationDeleteButton';
 
 const PROVIDER_MODELS: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
@@ -95,7 +97,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
   const [vectorStores, setVectorStores] = useState<VectorStore[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
   const [activateConfirm, setActivateConfirm] = useState<string | null>(null);
   const [selectedAssistant, setSelectedAssistant] = useState<Assistant | null>(null);
   const [isCopyingActiveConfig, setIsCopyingActiveConfig] = useState(false);
@@ -322,7 +324,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
         fetch(`/api/fluxcore/tools/connections?accountId=${accountId}`, { headers }),
         fetch(`/api/fluxcore/tools/definitions`, { headers }),
       ]);
-      
+
       const [assistantsData, instructionsData, vectorStoresData, connectionsData, definitionsData] = await Promise.all([
         assistantsRes.json(),
         instructionsRes.json(),
@@ -334,7 +336,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
       if (assistantsData.success) setAssistants(assistantsData.data || []);
       if (instructionsData.success) setInstructions(instructionsData.data || []);
       if (vectorStoresData.success) setVectorStores(vectorStoresData.data || []);
-      
+
       if (connectionsData.success && definitionsData.success) {
         // Map connections to include names from definitions
         const definitions = definitionsData.data || [];
@@ -453,7 +455,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
         console.error('Error creating assistant:', res.status, text);
         return;
       }
-      
+
       if (res.ok) {
         const created = await res.json();
         if (created.success && created.data) {
@@ -532,11 +534,10 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
       });
       return;
     }
-    
+
     // Solo asistentes locales se muestran en esta vista
     setSelectedAssistant(assistant);
     setIsSaving(false);
-    setDeleteConfirm(null);
     setActivateConfirm(null);
   };
 
@@ -553,7 +554,8 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
       if (response.ok) {
         setAssistants((prev) => prev.filter((a) => a.id !== id));
         setSelectedAssistant((prev) => (prev?.id === id ? null : prev));
-        setDeleteConfirm(null);
+        setAssistants((prev) => prev.filter((a) => a.id !== id));
+        setSelectedAssistant((prev) => (prev?.id === id ? null : prev));
         setActivateConfirm(null);
       }
     } catch (error) {
@@ -562,7 +564,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
   };
 
   const handleDeleteAssistant = async () => {
-    if (!selectedAssistant || deleteConfirm !== selectedAssistant.id) return;
+    if (!selectedAssistant) return;
     await deleteAssistantById(selectedAssistant.id);
   };
 
@@ -616,7 +618,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
             >
               <Pencil size={16} />
             </button>
-            <input 
+            <input
               ref={nameInputRef}
               type="text"
               className="text-xl font-semibold text-primary bg-transparent border-none focus:outline-none focus:ring-0 w-full p-0"
@@ -633,7 +635,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
             />
           </div>
           {selectedAssistant.id && (
-            <div 
+            <div
               className="text-xs text-muted mt-1 cursor-pointer hover:text-accent flex items-center gap-1 group"
               onClick={() => copyToClipboard(selectedAssistant.id)}
               title="Click para copiar ID"
@@ -646,9 +648,9 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
 
         <div className="flex-1 min-h-0 overflow-auto p-6 space-y-6">
           {/* Configuración inicial - Referencias a otros activos */}
-          <CollapsibleSection 
-            title="Configuración inicial" 
-            defaultExpanded={true} 
+          <CollapsibleSection
+            title="Configuración inicial"
+            defaultExpanded={true}
             showToggle={true}
             isCustomized={enabledSections.initial}
             onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, initial: enabled }))}
@@ -740,7 +742,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                         onClick={() => openVectorStoreReference(id)}
                       >
                         {vs?.name || id}
-                        <button 
+                        <button
                           type="button"
                           className="ml-1 hover:text-red-400"
                           onClick={(e) => {
@@ -765,11 +767,11 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                   {(() => {
                     const used = new Set(selectedAssistant.vectorStoreIds || []);
                     let selectable = vectorStores.filter((vs) => !used.has(vs.id));
-                    
+
                     if (selectedAssistant.runtime === 'openai') {
                       selectable = selectable.filter((vs) => vs.backend === 'openai');
                     }
-                    
+
                     return (
                       <select
                         className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
@@ -806,7 +808,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                     return tool ? (
                       <Badge key={toolId} variant="info" className="flex items-center gap-1">
                         {tool.name}
-                        <button 
+                        <button
                           className="ml-1 hover:text-red-400"
                           onClick={() => updateAssistantState({
                             toolIds: selectedAssistant.toolIds?.filter(id => id !== toolId)
@@ -850,9 +852,9 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
           </CollapsibleSection>
 
           {/* Proveedor IA */}
-          <CollapsibleSection 
-            title="Proveedor IA" 
-            defaultExpanded={true} 
+          <CollapsibleSection
+            title="Proveedor IA"
+            defaultExpanded={true}
             showToggle={true}
             isCustomized={enabledSections.provider}
             onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, provider: enabled }))}
@@ -918,9 +920,9 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
           </CollapsibleSection>
 
           {/* Tiempo de espera de respuesta */}
-          <CollapsibleSection 
-            title="Tiempo de espera de respuesta" 
-            defaultExpanded={true} 
+          <CollapsibleSection
+            title="Tiempo de espera de respuesta"
+            defaultExpanded={true}
             showToggle={true}
             isCustomized={enabledSections.timing}
             onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, timing: enabled }))}
@@ -939,8 +941,8 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                     })}
                   />
                   <span className="text-muted text-sm">
-                    {selectedAssistant.timingConfig.smartDelay 
-                      ? 'Desactivado por Smart Delay' 
+                    {selectedAssistant.timingConfig.smartDelay
+                      ? 'Desactivado por Smart Delay'
                       : 'Tiempo de espera antes de responder automáticamente'}
                   </span>
                 </div>
@@ -967,9 +969,9 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
           </CollapsibleSection>
 
           {/* Configuración de modelo */}
-          <CollapsibleSection 
-            title="Configuración de modelo" 
-            defaultExpanded={false} 
+          <CollapsibleSection
+            title="Configuración de modelo"
+            defaultExpanded={false}
             showToggle={true}
             isCustomized={enabledSections.model}
             onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, model: enabled }))}
@@ -1017,7 +1019,7 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
           </CollapsibleSection>
         </div>
 
-        <div className="border-t border-subtle p-4 bg-surface flex flex-wrap items-center gap-3 justify-start">
+        <div className="px-6 py-3 border-t border-subtle bg-surface flex flex-wrap items-center gap-3 justify-start">
           {selectedAssistant.status !== 'active' && (
             activateConfirm === selectedAssistant.id ? (
               <>
@@ -1044,7 +1046,6 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
               <button
                 onClick={() => {
                   setActivateConfirm(selectedAssistant.id);
-                  setDeleteConfirm(null);
                 }}
                 className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
                 title="Activar asistente"
@@ -1067,41 +1068,11 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
             {isCopyingActiveConfig ? 'Copiando…' : 'Copiar config activa'}
           </button>
 
-          <span className="flex-1" />
-
-          {deleteConfirm === selectedAssistant.id ? (
-            <>
-              <span className="text-sm text-muted">¿Confirmar eliminación?</span>
-              <button
-                onClick={handleDeleteAssistant}
-                className="inline-flex items-center gap-1.5 rounded-md bg-error px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-error/90"
-                type="button"
-              >
-                <Trash2 size={16} className="text-inverse" />
-                Eliminar definitivamente
-              </button>
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
-                type="button"
-              >
-                Cancelar
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => {
-                setDeleteConfirm(selectedAssistant.id);
-                setActivateConfirm(null);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md bg-error px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-error/90"
-              title="Eliminar asistente"
-              type="button"
-            >
-              <Trash2 size={16} className="text-inverse" />
-              Eliminar asistente
-            </button>
-          )}
+          <DoubleConfirmationDeleteButton
+            onConfirm={handleDeleteAssistant}
+            className="ml-auto"
+            size={16}
+          />
 
           {isSaving && <span className="text-xs text-muted">Guardando...</span>}
           {saveError && <span className="text-xs text-red-500">{saveError}</span>}
@@ -1109,6 +1080,8 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
       </div>
     );
   }
+
+
 
   // Vista de lista (tabla)
   return (
@@ -1171,20 +1144,22 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                   }}
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Bot size={16} className="text-accent flex-shrink-0 min-w-[16px] min-h-[16px]" />
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                        {assistant.runtime === 'openai' ? (
+                          <OpenAIIcon size={16} className="text-primary" />
+                        ) : (
+                          <Bot size={16} className="text-accent" />
+                        )}
+                      </div>
+
                       {assistant.status === 'active' && (
                         <span
                           className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"
                           title="Asistente activo"
                         />
                       )}
-                      {assistant.runtime === 'openai' && (
-                        <span className="inline-flex items-center gap-1 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded font-medium" title="Asistente OpenAI">
-                          <OpenAIIcon size={14} className="text-accent" />
-                          OpenAI
-                        </span>
-                      )}
+
                       <span className="font-medium text-primary">{assistant.name}</span>
                     </div>
                   </td>
@@ -1245,7 +1220,6 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                             onClick={(e) => {
                               e.stopPropagation();
                               setActivateConfirm(assistant.id);
-                              setDeleteConfirm(null);
                             }}
                           >
                             <Zap size={14} className="text-muted hover:text-success flex-shrink-0" />
@@ -1253,42 +1227,10 @@ export function AssistantsView({ accountId, onOpenTab, assistantId }: Assistants
                         )
                       )}
 
-                      {deleteConfirm === assistant.id ? (
-                        <>
-                          <button
-                            className="p-1 hover:bg-active rounded"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void deleteAssistantById(assistant.id);
-                            }}
-                            title="Eliminar definitivamente"
-                          >
-                            <Check size={14} className="text-error" />
-                          </button>
-                          <button
-                            className="p-1 hover:bg-active rounded"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirm(null);
-                            }}
-                            title="Cancelar"
-                          >
-                            <X size={14} className="text-muted" />
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="p-1 hover:bg-active rounded"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirm(assistant.id);
-                            setActivateConfirm(null);
-                          }}
-                          title="Eliminar"
-                        >
-                          <Trash2 size={14} className="text-muted hover:text-error flex-shrink-0" />
-                        </button>
-                      )}
+                      <DoubleConfirmationDeleteButton
+                        onConfirm={() => deleteAssistantById(assistant.id)}
+                        size={14}
+                      />
                     </div>
                   </td>
                 </tr>
