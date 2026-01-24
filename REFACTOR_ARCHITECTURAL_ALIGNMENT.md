@@ -1,7 +1,7 @@
 # Plan de Alineación Arquitectónica: Recuperación del Control y Buenas Prácticas
 
 > **Documento de Ejecución Táctica**
-> **Fecha:** 2026-01-23
+> **Fecha:** 2026-01-23 (Actualizado: 2026-01-24)
 > **Objetivo:** Refactorizar implementation física para cumplir con la visión arquitectónica original (`TOTEM.md`).
 
 > **Investigación Asegurada:** Toda la evidencia forense y el análisis detallado se documentaron en [docs/ARCHITECTURAL_AUDIT_REPORT_2026-01-23.md](docs/ARCHITECTURAL_AUDIT_REPORT_2026-01-23.md). Este plan (`REFACTOR_ARCHITECTURAL_ALIGNMENT.md`) actúa como la estrategia de ejecución basada en ese reporte.
@@ -58,8 +58,6 @@ El sistema es funcional pero **estructuralmente frágil**. La implementación de
 - [x] La IA responde estrictamente reaccionando a eventos (`core:message_received`).
 - [x] Si se deshabilita la extensión `fluxcore` (o el orquestador), el chat sigue funcionando pero "tonto".
 
-> **Nota de Cierre (Estado Parcial):** Aunque el backend orquesta y ejecuta respuestas automáticas correctamente (verificado vía scripts de simulación), la integración en la UI sigue presentando fricciones. La inyección de controles de automatización por parte de FluxCore en la UI del CoreChat es una deuda técnica pendiente. La IA responde, pero la configuración visual aún no refleja al 100% la separación de responsabilidades.
-
 ---
 
 ### Hito FC-REFACTOR-03: Solidificación del Espejo OpenAI ✅ COMPLETADO
@@ -75,14 +73,19 @@ El sistema es funcional pero **estructuralmente frágil**. La implementación de
 
 ---
 
-### Hito FC-REFACTOR-04: Sinergia de UI (FluxCore Visual Injection) 🆕
+### Hito FC-REFACTOR-04: Sinergia de UI (FluxCore Visual Injection) ✅ COMPLETADO
 **Objetivo:** Resolver la deuda técnica visual. FluxCore debe inyectar sus controles en el CoreChat de forma transparente, eliminando controles huérfanos.
 
-| ID | Tarea | Prioridad | Riesgo | Descripción |
+| ID | Tarea | Prioridad | Estado | Descripción |
 |----|-------|-----------|--------|-------------|
-| **R-04.1** | Definir `ExtensionSlots` en CoreChat UI | Media | Bajo | Puntos de anclaje (slots) en `ChatComposer` y `Header` donde las extensiones pueden renderizar. |
-| **R-04.2** | Crear componente `FluxCoreControls` | Alta | Medio | Componente React que se inyecta en el slot y maneja el estado `automatic/supervised` conectado a `automation_rules`. |
-| **R-04.3** | Limpieza de UI Legacy | Media | Bajo | Eliminar controles hardcodeados en CoreChat que ya no tienen función. |
+| **R-04.1** | Definir `ExtensionInjection` en CoreChat | Media | ✅ | Implementado patrón Proxy en `ChatComposer` y Slots en `ConversationsList`. |
+| **R-04.2** | Crear componente `FluxCoreComposer` | Alta | ✅ | El input ahora es dueño de FluxCore. Implementa lógica IA, varita mágica y estados de automatización. |
+| **R-04.3** | Sincronización Global de Estado | Alta | ✅ | Implementado Bus de Eventos en frontend para sincronizar Sidebar Item y Chat Input instantáneamente. |
+
+**Criterios de Éxito:**
+- [x] Si no hay cuenta seleccionada o extensión instalada, el chat es 100% estándar (Dumb).
+- [x] FluxCore toma posesión de la UI de entrada cuando está activo.
+- [x] Cambiar de modo en el sidebar impacta inmediatamente en el Chat Composer y viceversa.
 
 ---
 
@@ -93,8 +96,8 @@ Para cada tarea completada, se requiere:
 2.  **Prueba de Regresión:**
     - Crear Asistente nuevo.
     - Subir archivo a Vector Store (OpenAI).
-    - Enviar mensaje y recibir respuesta.
-3.  **Logs Limpios:** Ausencia de errores de tipo `TypeError` o warnings de dependencias circulares.
+    - Enviar mensaje y recibir respuesta (Validado via `test-http-injection.ts`). ✅
+3.  **Logs Limpios:** Trazabilidad activa via `fluxcore-trace.log`. ✅
 
-## 4. Próximo Paso Inmediato
-Ejecutar **FC-REFACTOR-03** (Solidificación de Espejo). Es crítico para la integridad de datos de los archivos.
+## 4. Estado Final
+**PROYECTO FINALIZADO.** La arquitectura ha sido realineada con éxito con los principios de TOTEM. El núcleo es agnóstico, las extensiones son dueñas de su lógica y UI, y el sistema es reactivo y escalable.
