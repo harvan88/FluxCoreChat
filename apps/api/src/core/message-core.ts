@@ -3,7 +3,7 @@ import { conversationService } from '../services/conversation.service';
 import { relationshipService } from '../services/relationship.service';
 import { extensionHost, type ProcessMessageResult } from '../services/extension-host.service';
 import { automationController, type TriggerEvaluation } from '../services/automation-controller.service';
-import type { MessageContent } from '@fluxcore/db';
+
 import { coreEventBus } from './events';
 import type { MessageEnvelope, ReceiveResult } from './types';
 
@@ -27,7 +27,7 @@ export { MessageEnvelope, ReceiveResult }; // Re-export para compatibilidad (opc
  */
 export class MessageCore {
   private notificationCallbacks: Map<string, (data: any) => void> = new Map();
-  private autoReplyQueue: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  // R-02.3: autoReplyQueue movida a AIOrchestrator
   private conversations = new Map<string, { relationshipId: string }>();
   private rooms: Map<string, any[]> = new Map();
 
@@ -83,6 +83,9 @@ export class MessageCore {
               ? relationship.accountBId
               : relationship.accountAId);
 
+          // Asegurar que el envelope tenga el target para consumidores downstream (EventBus)
+          envelope.targetAccountId = targetAccountId;
+
           if (envelope.generatedBy === 'ai') {
             automationResult = {
               shouldProcess: false,
@@ -120,62 +123,7 @@ export class MessageCore {
               automationMode: automationResult.mode,
             });
 
-            if (
-              automationResult.mode === 'automatic' &&
-              typeof messageText === 'string' &&
-              messageText.trim().length > 0
-            ) {
-              const debounceKey = envelope.conversationId;
-              const existingTimeout = this.autoReplyQueue.get(debounceKey);
-              if (existingTimeout) {
-                clearTimeout(existingTimeout);
-                this.autoReplyQueue.delete(debounceKey);
-              }
-
-              // Mapeo de modo de automatización a modo de IA
-              const aiMode = automationResult.mode === 'automatic' ? 'auto' : 'suggest';
-
-              const delayMs = await extensionHost.getAIAutoReplyDelayMs(targetAccountId);
-
-              const timeout = setTimeout(async () => {
-                try {
-                  const suggestion = await extensionHost.generateAIResponse(
-                    envelope.conversationId,
-                    targetAccountId,
-                    messageText,
-                    {
-                      mode: aiMode,
-                      triggerMessageId: message.id,
-                      triggerMessageCreatedAt: (message as any).createdAt,
-                      traceId: message.id,
-                    }
-                  );
-
-                  if (suggestion?.content) {
-                    const stripped = extensionHost.stripFluxCorePromoMarker(suggestion.content);
-                    const finalText = stripped.promo
-                      ? extensionHost.appendFluxCoreBrandingFooter(stripped.text)
-                      : stripped.text;
-
-                    const content: any = stripped.promo
-                      ? { text: finalText, __fluxcore: { branding: true } }
-                      : { text: finalText };
-
-                    await this.send({
-                      conversationId: envelope.conversationId,
-                      senderAccountId: targetAccountId,
-                      content,
-                      type: 'outgoing',
-                      generatedBy: 'ai',
-                    });
-                  }
-                } finally {
-                  this.autoReplyQueue.delete(debounceKey);
-                }
-              }, delayMs);
-
-              this.autoReplyQueue.set(debounceKey, timeout);
-            }
+            // R-02.2: Lógica de respuesta automática movida a AIOrchestrator (via eventos)
           } else {
             // Notificar que automation está deshabilitado
             console.log(`[MessageCore] Automation disabled for ${targetAccountId}: ${automationResult.reason}`);

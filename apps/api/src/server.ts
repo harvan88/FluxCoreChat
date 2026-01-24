@@ -35,6 +35,7 @@ import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
+import { aiOrchestrator } from './services/ai-orchestrator.service';
 import * as path from 'path';
 import * as fs from 'fs';
 
