@@ -8,6 +8,11 @@ export interface CoreEventMap {
 }
 
 export class CoreEventBus extends EventEmitter {
+    constructor() {
+        super();
+        console.log('🔌 CoreEventBus initialized (Singleton Check)');
+    }
+
     emit<K extends keyof CoreEventMap>(event: K, payload: Parameters<CoreEventMap[K]>[0]): boolean {
         return super.emit(event, payload);
     }

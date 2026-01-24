@@ -27,6 +27,7 @@ class AIOrchestratorService {
     }
 
     private async handleMessageReceived(payload: { envelope: MessageEnvelope; result: ReceiveResult }) {
+        console.log('[AIOrchestrator] 📨 Event received. Success?', payload.result.success, 'Mode:', payload.result.automation?.mode);
         const { envelope, result } = payload;
 
         // 1. Validaciones básicas: éxito y automatización activa
