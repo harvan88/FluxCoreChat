@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
-import type { VectorStore, VectorStoreCreate, VectorStoreUpdate } from '../../types/fluxcore';
+import type { VectorStore, VectorStoreCreate } from '../../types/fluxcore';
 
 /**
  * useVectorStores Hook
@@ -12,11 +12,12 @@ export function useVectorStores(accountId: string) {
     const [vectorStores, setVectorStores] = useState<VectorStore[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     /**
      * Cargar lista de vector stores
      */
-    const loadVectorStores = useCallback(async () => {
+    const loadStores = useCallback(async () => {
         if (!accountId || !token) return;
         setLoading(true);
         setError(null);
@@ -28,10 +29,10 @@ export function useVectorStores(accountId: string) {
             if (data.success) {
                 setVectorStores(data.data || []);
             } else {
-                setError(data.message || 'Error al cargar vector stores');
+                setError(data.message || 'Error al cargar bases de conocimiento');
             }
         } catch (err) {
-            console.error('Error loading vector stores:', err);
+            console.error('[useVectorStores] Error loading stores:', err);
             setError('Error de conexión');
         } finally {
             setLoading(false);
@@ -50,7 +51,7 @@ export function useVectorStores(accountId: string) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify({ ...data, accountId })
             });
             const result = await res.json();
             if (result.success && result.data) {
@@ -59,34 +60,45 @@ export function useVectorStores(accountId: string) {
             }
             return null;
         } catch (err) {
-            console.error('Error creating vector store:', err);
+            console.error('[useVectorStores] Error creating store:', err);
             return null;
         }
-    }, [token]);
+    }, [token, accountId]);
 
     /**
      * Actualizar vector store
      */
-    const updateVectorStore = useCallback(async (id: string, updates: Partial<VectorStoreUpdate>) => {
+    const updateVectorStore = useCallback(async (id: string, updates: Partial<VectorStore>) => {
         if (!token) return null;
+        setIsSaving(true);
         try {
+            const payload: any = { ...updates, accountId };
+            // ZOD FIX: Ensure description/name is never null, always use undefined or string
+            if (payload.description === null) delete payload.description;
+            if (payload.name === null) delete payload.name;
+
             const res = await fetch(`/api/fluxcore/vector-stores/${id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ ...updates, accountId })
+                body: JSON.stringify(payload)
             });
             const result = await res.json();
-            if (result.success && result.data) {
-                setVectorStores(prev => prev.map(vs => vs.id === id ? result.data : vs));
+            if (result.success) {
+                // Actualización optimista se maneja en la vista
                 return result.data as VectorStore;
+            } else {
+                setError(result.message || 'Error al guardar cambios');
+                return null;
             }
-            return null;
         } catch (err) {
-            console.error('Error updating vector store:', err);
+            console.error('[useVectorStores] Error updating store:', err);
+            setError('Error de conexión');
             return null;
+        } finally {
+            setIsSaving(false);
         }
     }, [token, accountId]);
 
@@ -102,29 +114,39 @@ export function useVectorStores(accountId: string) {
             });
             const result = await res.json();
             if (result.success) {
-                setVectorStores(prev => prev.filter(vs => vs.id !== id));
+                setVectorStores(prev => prev.filter(s => s.id !== id));
                 return true;
             }
             return false;
         } catch (err) {
-            console.error('Error deleting vector store:', err);
+            console.error('[useVectorStores] Error deleting store:', err);
             return false;
         }
     }, [token, accountId]);
 
+    /**
+     * Actualización Local (Solo UI)
+     */
+    const updateLocalStore = useCallback((id: string, updates: Partial<VectorStore>) => {
+        setVectorStores(prev => prev.map(s => s.id === id ? { ...s, ...updates } as VectorStore : s));
+    }, []);
+
     // Carga inicial
     useEffect(() => {
-        loadVectorStores();
-    }, [loadVectorStores]);
+        loadStores();
+    }, [loadStores]);
 
     return {
         vectorStores,
         loading,
         error,
+        isSaving,
         createVectorStore,
         updateVectorStore,
+        updateLocalStore,
         deleteVectorStore,
-        refresh: loadVectorStores
+        refresh: loadStores,
+        setError
     };
 }
 

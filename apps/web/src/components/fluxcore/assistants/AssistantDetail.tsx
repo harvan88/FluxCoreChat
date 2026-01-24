@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import { Copy, Zap, ChevronDown } from 'lucide-react';
-import { Button, Checkbox, SliderInput, CollapsibleSection } from '../../ui';
-import { DetailHeader } from '../detail';
-import { ResourceSelector } from '../forms/ResourceSelector';
+import { Pencil, Copy, Zap, ChevronDown, X, Plus } from 'lucide-react';
+import { Button, Badge, Checkbox, SliderInput, CollapsibleSection } from '../../ui';
+import { DoubleConfirmationDeleteButton } from '../../ui/DoubleConfirmationDeleteButton';
 import {
     PROVIDER_MODELS,
-    PROVIDER_NAMES,
 } from '../../../lib/fluxcore';
 import type {
     Assistant,
@@ -20,7 +18,7 @@ interface AssistantDetailProps {
     instructions: Instruction[];
     vectorStores: VectorStore[];
     tools: Tool[];
-    onUpdate: (updates: Partial<Assistant>, immediate?: boolean) => void;
+    onUpdate: (updates: Partial<Assistant>, saveStrategy: 'none' | 'debounce' | 'immediate') => void;
     onDelete: () => void;
     onActivate: () => void;
     onCopyConfig: () => void;
@@ -34,7 +32,7 @@ interface AssistantDetailProps {
 }
 
 /**
- * AssistantDetail - Panel de configuración de un asistente
+ * AssistantDetail - Restaurada lógica y estética exacta 1:1 (Source of Truth)
  */
 export function AssistantDetail({
     assistant,
@@ -60,38 +58,69 @@ export function AssistantDetail({
         model: false
     });
 
-    // Local state update helper
-    const updateModel = (updates: Partial<Assistant['modelConfig']>) => {
-        onUpdate({
-            modelConfig: { ...assistant.modelConfig, ...updates }
-        });
+    const handleNameSave = (newName: string) => {
+        onUpdate({ name: newName }, 'immediate');
     };
 
-    const updateTiming = (updates: Partial<Assistant['timingConfig']>) => {
-        onUpdate({
-            timingConfig: { ...assistant.timingConfig, ...updates }
-        });
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
     };
 
     return (
         <div className="h-full flex flex-col bg-background overflow-hidden">
-            {/* Header */}
-            <DetailHeader
-                preTitle="Asistente"
-                name={assistant.name}
-                id={assistant.id}
-                onNameChange={(name) => onUpdate({ name }, false)}
-                onNameSave={(name) => onUpdate({ name }, true)}
-                onClose={onClose}
-                isSaving={isSaving}
-                saveError={saveError}
-                idPrefix="asst_"
-            />
+            {/* Header original EXACTO con botón Cerrar opcional */}
+            <div className="px-6 py-4 border-b border-subtle flex items-center justify-between">
+                <div className="flex-1">
+                    <div className="text-xs text-muted mb-1 flex items-center justify-between">
+                        <span>Configuración de asistente</span>
+                        <div className="flex items-center gap-2">
+                            {isSaving && <span className="animate-pulse text-accent">Guardando...</span>}
+                            {saveError && <span className="text-red-500">{saveError}</span>}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded border border-transparent bg-transparent hover:border-[var(--text-primary)] focus-within:border-[var(--text-primary)] transition-colors">
+                        <button
+                            type="button"
+                            className="p-1 text-muted hover:text-primary transition-colors flex-shrink-0"
+                            aria-label="Editar"
+                        >
+                            <Pencil size={16} />
+                        </button>
+                        <input
+                            type="text"
+                            className="text-xl font-semibold text-primary bg-transparent border-none focus:outline-none focus:ring-0 w-full p-0"
+                            value={assistant.name}
+                            onChange={(e) => onUpdate({ name: e.target.value }, 'none')}
+                            onBlur={(e) => handleNameSave(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                            placeholder="Nombre del asistente"
+                        />
+                    </div>
+                    {assistant.id && (
+                        <div
+                            className="text-xs text-muted mt-1 cursor-pointer hover:text-accent flex items-center gap-1 group w-fit"
+                            onClick={() => copyToClipboard(assistant.id)}
+                        >
+                            Id: {assistant.id}
+                            <span className="opacity-0 group-hover:opacity-100"><Copy size={12} /></span>
+                        </div>
+                    )}
+                </div>
+                {onClose && (
+                    <button
+                        onClick={onClose}
+                        className="p-2 hover:bg-hover rounded text-muted hover:text-primary transition-colors ml-4"
+                        title="Cerrar"
+                    >
+                        <X size={20} />
+                    </button>
+                )}
+            </div>
 
             <div className="flex-1 min-h-0 overflow-auto p-6 space-y-6">
-                {/* Configuración inicial - Referencias a otros activos */}
+                {/* Lógica de composición exacta (IIFE Pattern from original) */}
                 <CollapsibleSection
-                    title="Composición de Activos"
+                    title="Configuración inicial"
                     defaultExpanded={true}
                     showToggle={true}
                     isCustomized={enabledSections.initial}
@@ -99,52 +128,188 @@ export function AssistantDetail({
                 >
                     <div className={`space-y-6 ${!enabledSections.initial ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                         {/* Sistema de instrucciones */}
-                        <ResourceSelector
-                            label="Sistema de instrucciones"
-                            resources={instructions}
-                            selectedIds={assistant.instructionIds || []}
-                            maxItems={1}
-                            onCreate={() => onCreateResource('instruction')}
-                            onSelect={(id) => onUpdate({ instructionIds: [id] }, true)}
-                            onRemove={() => onUpdate({ instructionIds: [] }, true)}
-                            onReferenceClick={(id) => onOpenResource(id, 'instruction')}
-                            placeholder="Vincular instrucciones..."
-                        />
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="block text-sm text-muted">Sistema de instrucciones</label>
+                                <Button variant="secondary" size="sm" onClick={() => onCreateResource('instruction')}>
+                                    <Plus size={16} className="mr-1" /> Crear
+                                </Button>
+                            </div>
+
+                            {(() => {
+                                const currentId = assistant.instructionIds?.[0];
+                                const current = currentId ? (instructions || []).find((i) => i.id === currentId) : null;
+                                const selectable = (instructions || []).filter((i) => i.id !== currentId);
+
+                                return (
+                                    <>
+                                        {currentId && (
+                                            <div className="flex flex-wrap gap-2 mb-2">
+                                                <Badge
+                                                    variant="info"
+                                                    className="flex items-center gap-1 cursor-pointer hover:bg-accent/20 transition-colors"
+                                                    onClick={() => onOpenResource(currentId, 'instruction')}
+                                                >
+                                                    {current?.name || currentId}
+                                                    <button
+                                                        type="button"
+                                                        className="ml-1 hover:text-red-400"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onUpdate({ instructionIds: [] }, 'immediate');
+                                                        }}
+                                                        aria-label="Quitar instrucción"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </Badge>
+                                            </div>
+                                        )}
+
+                                        {!currentId && selectable.length > 0 && (
+                                            <div className="relative">
+                                                <select
+                                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
+                                                    value=""
+                                                    onChange={(e) => {
+                                                        const id = e.target.value;
+                                                        if (id) onUpdate({ instructionIds: [id] }, 'immediate');
+                                                    }}
+                                                >
+                                                    <option value="">Seleccionar instrucción...</option>
+                                                    {selectable.map((inst) => (
+                                                        <option key={inst.id} value={inst.id}>{inst.name}</option>
+                                                    ))}
+                                                </select>
+                                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
 
                         {/* Base de conocimiento */}
-                        <ResourceSelector
-                            label="Bases de conocimiento (RAG)"
-                            resources={assistant.runtime === 'openai'
-                                ? vectorStores.filter(vs => vs.backend === 'openai')
-                                : vectorStores
-                            }
-                            selectedIds={assistant.vectorStoreIds || []}
-                            onCreate={() => onCreateResource('vectorStore')}
-                            onSelect={(id) => onUpdate({
-                                vectorStoreIds: [...(assistant.vectorStoreIds || []), id]
-                            }, true)}
-                            onRemove={(id) => onUpdate({
-                                vectorStoreIds: assistant.vectorStoreIds?.filter(vid => vid !== id)
-                            }, true)}
-                            onReferenceClick={(id) => onOpenResource(id, 'vectorStore')}
-                            placeholder={assistant.runtime === 'openai' ? "Agregar base (OpenAI)..." : "Agregar base de conocimiento..."}
-                        />
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="block text-sm text-muted">Base de conocimiento</label>
+                                <Button variant="secondary" size="sm" onClick={() => onCreateResource('vectorStore')}>
+                                    <Plus size={16} className="mr-1" /> Crear
+                                </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {(assistant.vectorStoreIds || []).map((id) => {
+                                    const vs = (vectorStores || []).find(v => v.id === id);
+                                    return (
+                                        <Badge
+                                            key={id}
+                                            variant="info"
+                                            className="flex items-center gap-1 cursor-pointer hover:bg-accent/20 transition-colors"
+                                            onClick={() => onOpenResource(id, 'vectorStore')}
+                                        >
+                                            {vs?.name || id}
+                                            <button
+                                                type="button"
+                                                className="ml-1 hover:text-red-400"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onUpdate({
+                                                        vectorStoreIds: assistant.vectorStoreIds?.filter(vid => vid !== id)
+                                                    }, 'immediate');
+                                                }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </Badge>
+                                    );
+                                })}
+                            </div>
+                            <div className="relative">
+                                {(() => {
+                                    const used = new Set(assistant.vectorStoreIds || []);
+                                    let selectable = (vectorStores || []).filter((vs) => !used.has(vs.id));
+
+                                    if (assistant.runtime === 'openai') {
+                                        selectable = selectable.filter((vs) => vs.backend === 'openai');
+                                    }
+
+                                    return (
+                                        <select
+                                            className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
+                                            value=""
+                                            onChange={(e) => {
+                                                const id = e.target.value;
+                                                if (id && !assistant.vectorStoreIds?.includes(id)) {
+                                                    onUpdate({
+                                                        vectorStoreIds: [...(assistant.vectorStoreIds || []), id]
+                                                    }, 'immediate');
+                                                }
+                                            }}
+                                            disabled={selectable.length === 0}
+                                        >
+                                            <option value="">{selectable.length === 0 ? 'No hay más bases disponibles' : 'Agregar base de conocimiento...'}</option>
+                                            {selectable.map((vs) => (
+                                                <option key={vs.id} value={vs.id}>
+                                                    {vs.name} {vs.backend === 'openai' ? '(OpenAI)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    );
+                                })()}
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                            </div>
+                        </div>
 
                         {/* Herramientas */}
-                        <ResourceSelector
-                            label="Capacidades y Herramientas"
-                            resources={tools}
-                            selectedIds={assistant.toolIds || []}
-                            onCreate={() => onCreateResource('tool')}
-                            onSelect={(id) => onUpdate({
-                                toolIds: [...(assistant.toolIds || []), id]
-                            }, true)}
-                            onRemove={(id) => onUpdate({
-                                toolIds: assistant.toolIds?.filter(tid => tid !== id)
-                            }, true)}
-                            onReferenceClick={(id) => onOpenResource(id, 'tool')}
-                            placeholder="Vincular herramienta..."
-                        />
+                        <div>
+                            <label className="block text-sm text-muted mb-1">Herramientas</label>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {(assistant.toolIds || []).map((id) => {
+                                    const tool = (tools || []).find(t => t.id === id);
+                                    return tool ? (
+                                        <Badge key={id} variant="info" className="flex items-center gap-1">
+                                            {tool.name}
+                                            <button
+                                                type="button"
+                                                className="ml-1 hover:text-red-400"
+                                                onClick={() => onUpdate({
+                                                    toolIds: assistant.toolIds?.filter(tid => tid !== id)
+                                                }, 'immediate')}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </Badge>
+                                    ) : null;
+                                })}
+                            </div>
+                            <div className="relative">
+                                {(() => {
+                                    const used = new Set(assistant.toolIds || []);
+                                    const selectable = (tools || []).filter((t) => !used.has(t.id));
+                                    return (
+                                        <select
+                                            className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
+                                            value=""
+                                            onChange={(e) => {
+                                                const id = e.target.value;
+                                                if (id && !assistant.toolIds?.includes(id)) {
+                                                    onUpdate({
+                                                        toolIds: [...(assistant.toolIds || []), id]
+                                                    }, 'immediate');
+                                                }
+                                            }}
+                                            disabled={selectable.length === 0}
+                                        >
+                                            <option value="">{selectable.length === 0 ? 'No hay más herramientas' : 'Agregar herramienta...'}</option>
+                                            {selectable.map((tool) => (
+                                                <option key={tool.id} value={tool.id}>{tool.name}</option>
+                                            ))}
+                                        </select>
+                                    );
+                                })()}
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                            </div>
+                        </div>
                     </div>
                 </CollapsibleSection>
 
@@ -161,191 +326,130 @@ export function AssistantDetail({
                             <label className="block text-sm text-muted mb-1">Empresa proveedora</label>
                             <div className="relative">
                                 <select
-                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8 text-sm focus:border-accent"
+                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
                                     value={assistant.modelConfig.provider}
                                     disabled={assistant.runtime === 'openai'}
                                     onChange={(e) => {
                                         const provider = e.target.value as AIProvider;
                                         const models = PROVIDER_MODELS[provider] || [];
-                                        updateModel({
-                                            provider: provider,
-                                            model: models[0] || assistant.modelConfig.model
-                                        });
+                                        onUpdate({ modelConfig: { ...assistant.modelConfig, provider, model: models[0] || assistant.modelConfig.model } }, 'immediate');
                                     }}
                                 >
-                                    <option value="openai">{PROVIDER_NAMES.openai}</option>
-                                    <option value="groq">{PROVIDER_NAMES.groq}</option>
-                                    <option value="anthropic">{PROVIDER_NAMES.anthropic}</option>
+                                    <option value="openai">Open IA</option>
+                                    <option value="groq">Groq</option>
+                                    <option value="anthropic">Anthropic</option>
                                 </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                             </div>
                         </div>
-
                         <div>
-                            <label className="block text-sm text-muted mb-1">Modelo de lenguaje</label>
+                            <label className="block text-sm text-muted mb-1">Modelo disponible</label>
                             <div className="relative">
                                 <select
-                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8 text-sm focus:border-accent"
+                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
                                     value={assistant.modelConfig.model}
-                                    onChange={(e) => updateModel({ model: e.target.value })}
+                                    onChange={(e) => onUpdate({ modelConfig: { ...assistant.modelConfig, model: e.target.value } }, 'immediate')}
                                 >
-                                    {(PROVIDER_MODELS[assistant.modelConfig.provider as AIProvider] || []).map((m: string) => (
+                                    {(PROVIDER_MODELS[assistant.modelConfig.provider as AIProvider] || []).map(m => (
                                         <option key={m} value={m}>{m}</option>
                                     ))}
                                 </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                             </div>
                         </div>
                     </div>
                 </CollapsibleSection>
 
-                {/* Tiempo de espera de respuesta */}
+                {/* Timing */}
                 <CollapsibleSection
-                    title="Timing y Automatización"
+                    title="Tiempo de espera de respuesta"
                     defaultExpanded={true}
                     showToggle={true}
                     isCustomized={enabledSections.timing}
                     onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, timing: enabled }))}
                 >
-                    <div className={`space-y-6 ${!enabledSections.timing ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                    <div className={`space-y-4 ${!enabledSections.timing ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                         <div>
-                            <label className="block text-sm text-muted mb-2">Delay de respuesta (segundos)</label>
+                            <label className="block text-sm text-muted mb-1">Segundos de espera</label>
                             <div className="flex items-center gap-4">
                                 <input
                                     type="number"
-                                    className="w-24 bg-input border border-subtle rounded px-3 py-2 text-primary text-sm disabled:opacity-50"
+                                    className="w-24 bg-input border border-subtle rounded px-3 py-2 text-primary disabled:opacity-50"
                                     value={assistant.timingConfig.responseDelaySeconds}
                                     disabled={assistant.timingConfig.smartDelay}
-                                    min={0}
-                                    max={60}
-                                    onChange={(e) => updateTiming({
-                                        responseDelaySeconds: parseInt(e.target.value) || 0
-                                    })}
+                                    onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, responseDelaySeconds: parseInt(e.target.value) || 0 } }, 'debounce')}
                                 />
-                                <span className="text-muted text-xs">
-                                    {assistant.timingConfig.smartDelay
-                                        ? 'Bloqueado por Smart Delay'
-                                        : 'Tiempo base antes de iniciar generación automática'}
+                                <span className="text-muted text-sm">
+                                    {assistant.timingConfig.smartDelay ? 'Desactivado por Smart Delay' : 'Tiempo de espera antes de responder automáticamente'}
                                 </span>
                             </div>
                         </div>
-
                         <Checkbox
-                            label="Activar Smart Delay"
-                            description="Ajusta el tiempo de respuesta dinámicamente según la detección de actividad en el chat para una experiencia más humana."
+                            label="Smart delay"
+                            description="Permite que el delay se ajuste según la actividad detectada en el chat"
                             checked={assistant.timingConfig.smartDelay}
-                            onChange={(e) => updateTiming({ smartDelay: e.target.checked })}
-                            className="bg-active/30 p-4 rounded-lg border border-subtle"
+                            onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, smartDelay: e.target.checked } }, 'immediate')}
                         />
                     </div>
                 </CollapsibleSection>
 
-                {/* Parámetros avanzados del modelo */}
                 <CollapsibleSection
-                    title="Parámetros Avanzados"
+                    title="Configuración de modelo"
                     defaultExpanded={false}
                     showToggle={true}
                     isCustomized={enabledSections.model}
                     onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, model: enabled }))}
                 >
-                    <div className={`space-y-6 p-2 ${!enabledSections.model ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-                        <div>
-                            <label className="block text-sm text-muted mb-1">Formato de salida</label>
-                            <div className="relative">
-                                <select
-                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8 text-sm focus:border-accent"
-                                    value={assistant.modelConfig.responseFormat}
-                                    onChange={(e) => updateModel({ responseFormat: e.target.value })}
-                                >
-                                    <option value="text">Texto enriquecido</option>
-                                    <option value="json">JSON estructurado</option>
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                            </div>
-                        </div>
-
-                        <SliderInput
-                            label="Creatividad (Temperature)"
-                            value={assistant.modelConfig.temperature}
-                            onChange={(val) => updateModel({ temperature: val })}
-                            min={0}
-                            max={2}
-                            step={0.1}
-                        />
-
-                        <SliderInput
-                            label="Nucleus Sampling (Top P)"
-                            value={assistant.modelConfig.topP}
-                            onChange={(val) => updateModel({ topP: val })}
-                            min={0}
-                            max={1}
-                            step={0.05}
-                        />
+                    <div className={`space-y-4 ${!enabledSections.model ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                        <select
+                            className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none"
+                            value={assistant.modelConfig.responseFormat}
+                            onChange={(e) => onUpdate({ modelConfig: { ...assistant.modelConfig, responseFormat: e.target.value } }, 'immediate')}
+                        >
+                            <option value="text">Text</option>
+                            <option value="json">JSON</option>
+                        </select>
+                        <SliderInput label="Temperatura" value={assistant.modelConfig.temperature} onChange={(val) => onUpdate({ modelConfig: { ...assistant.modelConfig, temperature: val } }, 'debounce')} min={0} max={2} step={0.01} />
+                        <SliderInput label="Top P" value={assistant.modelConfig.topP} onChange={(val) => onUpdate({ modelConfig: { ...assistant.modelConfig, topP: val } }, 'debounce')} min={0} max={1} step={0.01} />
                     </div>
                 </CollapsibleSection>
             </div>
 
-            {/* Footer de Acciones de Estado */}
-            <div className="px-6 py-4 border-t border-subtle bg-surface flex flex-wrap items-center gap-3 justify-between">
-                <div className="flex items-center gap-3">
-                    {assistant.status !== 'active' ? (
-                        activateConfirm ? (
-                            <div className="flex items-center gap-2 bg-success/5 border border-success/30 px-3 py-1.5 rounded-lg animate-in fade-in slide-in-from-bottom-2">
-                                <span className="text-xs font-medium text-success mr-2">¿Confirmar activación?</span>
-                                <Button
-                                    onClick={onActivate}
-                                    size="sm"
-                                    variant="primary"
-                                    className="h-8 bg-success hover:bg-success/80 border-none text-white"
-                                >
-                                    <Zap size={14} className="mr-1.5" />
-                                    Activar ahora
-                                </Button>
-                                <Button
-                                    onClick={() => setActivateConfirm(false)}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8"
-                                >
-                                    Cancelar
-                                </Button>
-                            </div>
-                        ) : (
-                            <Button
-                                onClick={() => setActivateConfirm(true)}
-                                variant="primary"
-                                className="bg-success hover:bg-success/80 border-none text-white shadow-lg shadow-success/20"
+            {/* Footer original EXACTO */}
+            <div className="px-6 py-3 border-t border-subtle bg-surface flex flex-wrap items-center gap-3 justify-start">
+                {assistant.status !== 'active' && (
+                    activateConfirm ? (
+                        <>
+                            <span className="text-sm text-muted">¿Confirmar activación?</span>
+                            <button
+                                onClick={onActivate}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
                             >
-                                <Zap size={16} className="mr-2" />
-                                Establecer como Activo
-                            </Button>
-                        )
+                                <Zap size={16} className="text-inverse" /> Activar ahora
+                            </button>
+                            <button
+                                onClick={() => setActivateConfirm(false)}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
+                            >
+                                Cancelar
+                            </button>
+                        </>
                     ) : (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-success/10 text-success rounded-lg border border-success/20">
-                            <Zap size={16} fill="currentColor" />
-                            <span className="text-sm font-semibold">Este asistente está en producción</span>
-                        </div>
-                    )}
-
-                    <Button
-                        onClick={onCopyConfig}
-                        variant="secondary"
-                        className="group"
-                    >
-                        <Copy size={16} className="mr-2 group-hover:scale-110 transition-transform" />
-                        Copiar config activa
-                    </Button>
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <Button
-                        onClick={onDelete}
-                        variant="ghost"
-                        className="text-error hover:bg-error/10 hover:text-error"
-                    >
-                        Eliminar asistente
-                    </Button>
-                </div>
+                        <button
+                            onClick={() => setActivateConfirm(true)}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
+                        >
+                            <Zap size={16} className="text-inverse" /> Activar asistente
+                        </button>
+                    )
+                )}
+                <button
+                    onClick={onCopyConfig}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
+                >
+                    <Copy size={16} /> Copiar config activa
+                </button>
+                <DoubleConfirmationDeleteButton onConfirm={onDelete} className="ml-auto" size={16} />
             </div>
         </div>
     );
