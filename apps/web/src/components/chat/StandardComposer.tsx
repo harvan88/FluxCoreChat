@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
-    File,
-    Images,
     Loader2,
     Mic,
     MoveUp,
     Paperclip,
     SmilePlus,
     X,
-    AudioLines
 } from 'lucide-react';
 import clsx from 'clsx';
 import { AttachmentPanel, type AttachmentAction } from './AttachmentPanel';
