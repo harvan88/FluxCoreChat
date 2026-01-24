@@ -58,6 +58,8 @@ El sistema es funcional pero **estructuralmente frágil**. La implementación de
 - [x] La IA responde estrictamente reaccionando a eventos (`core:message_received`).
 - [x] Si se deshabilita la extensión `fluxcore` (o el orquestador), el chat sigue funcionando pero "tonto".
 
+> **Nota de Cierre (Estado Parcial):** Aunque el backend orquesta y ejecuta respuestas automáticas correctamente (verificado vía scripts de simulación), la integración en la UI sigue presentando fricciones. La inyección de controles de automatización por parte de FluxCore en la UI del CoreChat es una deuda técnica pendiente. La IA responde, pero la configuración visual aún no refleja al 100% la separación de responsabilidades.
+
 ---
 
 ### Hito FC-REFACTOR-03: Solidificación del Espejo OpenAI
