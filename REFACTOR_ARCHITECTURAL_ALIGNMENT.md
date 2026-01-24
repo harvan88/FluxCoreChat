@@ -44,19 +44,19 @@ El sistema es funcional pero **estructuralmente frágil**. La implementación de
 
 ---
 
-### Hito FC-REFACTOR-02: MessageCore Agnóstico (Event-Driven)
+### Hito FC-REFACTOR-02: MessageCore Agnóstico (Event-Driven) ✅ COMPLETADO
 **Objetivo:** Limpiar `MessageCore` para que no tenga conocimiento explícito de la IA, restaurando la "santidad del núcleo".
 
-| ID | Tarea | Prioridad | Riesgo | Descripción |
+| ID | Tarea | Prioridad | Estado | Descripción |
 |----|-------|-----------|--------|-------------|
-| **R-02.1** | Definir Eventos `core:message_received` | Alta | ✅ | Implementado en `core/events.ts` y utilizado en `MessageCore`. |
-| **R-02.2** | Refactorizar `ExtensionHost` | Alta | Alto | Eliminar `generateAIResponse` hardcodeado. Reemplazar por listener de eventos. |
-| **R-02.3** | Mover lógica Smart Delay | Media | Medio | Mover colas de espera y typing indicators a la extensión `fluxcore` (dentro de `extensions/fluxcore`). |
+| **R-02.1** | Definir Eventos `core:message_received` | Alta | ✅ | Implementado en `core/events.ts`. |
+| **R-02.2** | Refactorizar `ExtensionHost` | Alta | ✅ | Se implementó `AIOrchestratorService` para reemplazar la lógica hardcodeada. |
+| **R-02.3** | Mover lógica Smart Delay | Media | ✅ | Lógica movida exitosamente a `ai-orchestrator.service.ts`. |
 
 **Criterios de Éxito:**
-- [ ] `MessageCore.ts` no importa ni llama a nada llamado "AI", "SmartDelay" o "Generate".
-- [ ] La IA responde estrictamente reaccionando a eventos.
-- [ ] Si se deshabilita la extensión `fluxcore`, el chat sigue funcionando (persiste mensajes) pero "tonto" (sin respuestas automáticas).
+- [x] `MessageCore.ts` no importa ni llama a nada llamado "AI", "SmartDelay" o "Generate".
+- [x] La IA responde estrictamente reaccionando a eventos (`core:message_received`).
+- [x] Si se deshabilita la extensión `fluxcore` (o el orquestador), el chat sigue funcionando pero "tonto".
 
 ---
 
