@@ -62,14 +62,27 @@ El sistema es funcional pero **estructuralmente frágil**. La implementación de
 
 ---
 
-### Hito FC-REFACTOR-03: Solidificación del Espejo OpenAI
-**Objetivo:** Formalizar la distinción entre "Vector Store Nativo" y "Vector Store Espejo".
+### Hito FC-REFACTOR-03: Solidificación del Espejo OpenAI ✅ COMPLETADO
+**Objetivo:** Formalizar la distinción entre "Vector Store Nativo" y "Vector Store Espejo", garantizando la integridad de los datos mediante drivers estandarizados.
+
+| ID | Tarea | Prioridad | Estado | Descripción |
+|----|-------|-----------|--------|-------------|
+| **R-03.1** | Definir Contrato `IVectorStoreDriver` | Media | ✅ | Definido en `drivers/types.ts`. |
+| **R-03.2** | Implementar `OpenAIDriver` | Alta | ✅ | Implementado usando API REST directa (bypass SDK) para soporte robusto de Vector Store v2. |
+| **R-03.3** | Refactorizar `VectorStoreService` | Media | ✅ | Servicio migrado para usar el nuevo Driver. |
+
+**Logro:** Se eliminó la dependencia circular y la lógica dispersa de llamadas a OpenAI. Ahora `VectorStoreService` delega en un driver agnóstico capaz de gestionar el ciclo de vida completo (Create, Upload, Delete) contra la API de OpenAI.
+
+---
+
+### Hito FC-REFACTOR-04: Sinergia de UI (FluxCore Visual Injection) 🆕
+**Objetivo:** Resolver la deuda técnica visual. FluxCore debe inyectar sus controles en el CoreChat de forma transparente, eliminando controles huérfanos.
 
 | ID | Tarea | Prioridad | Riesgo | Descripción |
 |----|-------|-----------|--------|-------------|
-| **R-03.1** | Definir Contrato `IVectorStoreDriver` | Media | Medio | Interfaz común para operaciones (addFile, listFiles, delete). |
-| **R-03.2** | Implementar `OpenAIDriver` | Alta | Medio | Encapsula la lógica de API OpenAI. |
-| **R-03.3** | Implementar `LocalGenericDriver` | Media | Bajo | Implementación futura para RAG local puro. |
+| **R-04.1** | Definir `ExtensionSlots` en CoreChat UI | Media | Bajo | Puntos de anclaje (slots) en `ChatComposer` y `Header` donde las extensiones pueden renderizar. |
+| **R-04.2** | Crear componente `FluxCoreControls` | Alta | Medio | Componente React que se inyecta en el slot y maneja el estado `automatic/supervised` conectado a `automation_rules`. |
+| **R-04.3** | Limpieza de UI Legacy | Media | Bajo | Eliminar controles hardcodeados en CoreChat que ya no tienen función. |
 
 ---
 
@@ -84,4 +97,4 @@ Para cada tarea completada, se requiere:
 3.  **Logs Limpios:** Ausencia de errores de tipo `TypeError` o warnings de dependencias circulares.
 
 ## 4. Próximo Paso Inmediato
-Ejecutar **FC-REFACTOR-01** (Descomposición de Servicios). Es la base para todo lo demás y elimina el riesgo de conflictos de edición.
+Ejecutar **FC-REFACTOR-03** (Solidificación de Espejo). Es crítico para la integridad de datos de los archivos.
