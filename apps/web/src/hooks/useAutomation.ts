@@ -13,6 +13,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
  */
 export type AutomationMode = 'automatic' | 'supervised' | 'disabled';
 
+const AUTOMATION_UPDATE_EVENT = 'fluxcore:automation-update';
+
 /**
  * Regla de automatización
  */
@@ -69,7 +71,7 @@ export interface TriggerEvaluation {
 /**
  * Hook para gestionar automatización
  */
-export function useAutomation(accountId: string | null) {
+export function useAutomation(accountId: string | null, relationshipId?: string) {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [currentMode, setCurrentMode] = useState<AutomationMode>('disabled');
   const [isLoading, setIsLoading] = useState(false);
@@ -104,13 +106,13 @@ export function useAutomation(accountId: string | null) {
         setRules([]);
         return;
       }
-      
+
       if (response.status === 403) {
         setError('No tienes permiso para ver las reglas de automatización.');
         setRules([]);
         return;
       }
-      
+
       if (response.status === 404) {
         // No hay reglas configuradas - no es un error
         setRules([]);
@@ -138,13 +140,14 @@ export function useAutomation(accountId: string | null) {
     }
   }, [accountId]);
 
-  // Obtener modo efectivo
-  const loadMode = useCallback(async (relationshipId?: string) => {
+  // Obtener modo efectivo (Prioridad: argumento -> prop del hook)
+  const loadMode = useCallback(async (specificRelId?: string) => {
     if (!accountId) return;
 
     try {
-      const url = relationshipId 
-        ? `${API_URL}/automation/mode/${accountId}?relationshipId=${relationshipId}`
+      const targetRelId = specificRelId || relationshipId;
+      const url = targetRelId
+        ? `${API_URL}/automation/mode/${accountId}?relationshipId=${targetRelId}`
         : `${API_URL}/automation/mode/${accountId}`;
 
       const response = await fetch(url, {
@@ -201,6 +204,10 @@ export function useAutomation(accountId: string | null) {
       }
 
       const result = await response.json();
+
+      // Notificar cambio global
+      window.dispatchEvent(new CustomEvent(AUTOMATION_UPDATE_EVENT, { detail: { accountId } }));
+
       await loadRules();
       return result.data;
     } catch (err: any) {
@@ -351,11 +358,22 @@ export function useAutomation(accountId: string | null) {
     }
   }, [accountId]);
 
-  // Cargar datos iniciales
+  // Cargar datos iniciales y escuchar eventos globales
   useEffect(() => {
     loadRules();
     loadMode();
-  }, [loadRules, loadMode]);
+
+    const handleUpdate = (e: any) => {
+      // Recargar si el evento corresponde a esta cuenta (o global)
+      if (e.detail?.accountId === accountId) {
+        loadRules();
+        loadMode(relationshipId); // Recargar contexto específico
+      }
+    };
+
+    window.addEventListener(AUTOMATION_UPDATE_EVENT, handleUpdate);
+    return () => window.removeEventListener(AUTOMATION_UPDATE_EVENT, handleUpdate);
+  }, [loadRules, loadMode, accountId, relationshipId]);
 
   // Obtener regla global (sin relationship)
   const globalRule = rules.find(r => r.relationshipId === null);

@@ -32,6 +32,7 @@ import { uploadRoutes } from './routes/upload.routes';
 import { websiteRoutes } from './routes/website.routes';
 import { fluxcoreRoutes } from './routes/fluxcore.routes';
 import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
+import { testRoutes } from './routes/test.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
@@ -193,7 +194,8 @@ const elysiaApp = new Elysia()
   .use(uploadRoutes)
   .use(websiteRoutes)
   .use(fluxcoreRuntimeRoutes)
-  .use(fluxcoreRoutes);
+  .use(fluxcoreRoutes)
+  .use(testRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: ReturnType<typeof Bun.serve>;
@@ -424,5 +426,6 @@ console.log(`📚 Swagger docs at http://localhost:${server.port}/swagger`);
 console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
 
 automationScheduler.init();
+aiOrchestrator.init();
 
 export type App = typeof elysiaApp;

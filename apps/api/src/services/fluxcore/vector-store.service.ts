@@ -13,8 +13,15 @@ import {
 } from '@fluxcore/db';
 import { OpenAIDriver } from '../drivers/openai.driver';
 
-// Driver singleton (podría inyectarse)
-const openaiDriver = new OpenAIDriver();
+// Driver singleton lazy (para evitar crash al inicio si falta env)
+let openaiDriverInstance: OpenAIDriver | null = null;
+
+function getOpenAIDriver(): OpenAIDriver {
+    if (!openaiDriverInstance) {
+        openaiDriverInstance = new OpenAIDriver();
+    }
+    return openaiDriverInstance;
+}
 
 type FluxcoreConflictError = Error & {
     statusCode?: number;
@@ -50,8 +57,9 @@ export async function createVectorStore(data: NewFluxcoreVectorStore): Promise<F
     let openaiData: any = {};
 
     if (data.backend === 'openai') {
+        const driver = getOpenAIDriver();
         // Hito 3: Usar Driver
-        externalId = await openaiDriver.createStore(data.name, data.metadata as any);
+        externalId = await driver.createStore(data.name, data.metadata as any);
 
         // Defaults para nuevo store
         openaiData = {
@@ -186,7 +194,7 @@ export async function deleteVectorStore(id: string, accountId: string): Promise<
 
     if (existing.backend === 'openai' && typeof existing.externalId === 'string' && existing.externalId.length > 0) {
         try {
-            await openaiDriver.deleteStore(existing.externalId);
+            await getOpenAIDriver().deleteStore(existing.externalId);
         } catch (e) {
             console.warn('[VectorStore] Error deleting external store:', e);
         }

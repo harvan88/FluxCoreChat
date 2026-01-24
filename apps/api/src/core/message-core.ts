@@ -126,7 +126,7 @@ export class MessageCore {
             // R-02.2: Lógica de respuesta automática movida a AIOrchestrator (via eventos)
           } else {
             // Notificar que automation está deshabilitado
-            console.log(`[MessageCore] Automation disabled for ${targetAccountId}: ${automationResult.reason}`);
+            console.log(`[FluxCoreTrace] ⚠️ Automation DISABLED for ${targetAccountId}: ${automationResult.reason}`);
           }
         }
       }
@@ -139,6 +139,7 @@ export class MessageCore {
       };
 
       // R-02.1: Emitir evento para desacoplar lógica (IA, Analytics)
+      console.log(`[FluxCoreTrace] 📤 Emitting core:message_received. Target: ${envelope.targetAccountId}, Auto: ${automationResult?.mode}`);
       coreEventBus.emit('core:message_received', { envelope, result });
 
       return result;

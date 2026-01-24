@@ -86,7 +86,7 @@ class AutomationControllerService {
    * Obtener la regla efectiva (relationship-specific o global)
    */
   async getEffectiveRule(
-    accountId: string, 
+    accountId: string,
     relationshipId?: string
   ): Promise<AutomationRule | null> {
     // Primero buscar regla específica del relationship
@@ -129,9 +129,10 @@ class AutomationControllerService {
    */
   async evaluateTrigger(context: TriggerContext): Promise<TriggerEvaluation> {
     let rule: AutomationRule | null = null;
-    
+
     try {
       rule = await this.getEffectiveRule(context.accountId, context.relationshipId);
+      console.log(`[FluxCoreTrace] 🧠 Evaluating Rule for Account ${context.accountId} (Rel: ${context.relationshipId})`);
     } catch (error: any) {
       // Table may not exist, use default behavior
       console.warn('[AutomationController] Could not fetch rules:', error.message);
@@ -142,7 +143,7 @@ class AutomationControllerService {
         reason: 'Rules unavailable, using default disabled mode',
       };
     }
-    
+
     // Sin regla = modo supervised por defecto
     if (!rule) {
       return {
@@ -198,6 +199,13 @@ class AutomationControllerService {
       rule,
       reason: `Processing in ${mode} mode`,
     };
+    console.log(`[FluxCoreTrace]    ✔️ Evaluation Result: ${mode}`);
+    return {
+      shouldProcess: true,
+      mode,
+      rule,
+      reason: `Processing in ${mode} mode`,
+    };
   }
 
   /**
@@ -219,7 +227,7 @@ class AutomationControllerService {
           // Siempre coincide para mensajes incoming
           if (context.messageType === 'incoming') return true;
           break;
-          
+
         case 'keyword':
           // Verificar si el mensaje contiene la keyword
           if (trigger.value && context.messageContent) {
@@ -227,12 +235,12 @@ class AutomationControllerService {
             if (pattern.test(context.messageContent)) return true;
           }
           break;
-          
+
         case 'schedule':
           // Schedule triggers se ejecutan exclusivamente vía cron scheduler
           // Si llegamos aquí sin trigger explícito, no corresponde procesar
           break;
-          
+
         case 'webhook':
           if (trigger.value && context.payload) {
             return true;
@@ -247,12 +255,12 @@ class AutomationControllerService {
    * Evaluar condiciones
    */
   private evaluateConditions(
-    conditions: NonNullable<AutomationConfig['conditions']>, 
+    conditions: NonNullable<AutomationConfig['conditions']>,
     context: TriggerContext
   ): boolean {
     for (const condition of conditions) {
       let value: string | undefined;
-      
+
       switch (condition.field) {
         case 'message_type':
           value = context.messageType;
@@ -270,8 +278,8 @@ class AutomationControllerService {
 
       if (!value) continue;
 
-      const conditionValue = Array.isArray(condition.value) 
-        ? condition.value 
+      const conditionValue = Array.isArray(condition.value)
+        ? condition.value
         : [condition.value];
 
       switch (condition.operator) {
@@ -311,13 +319,13 @@ class AutomationControllerService {
 
     const condition = relationshipId
       ? and(
-          eq(automationRules.accountId, accountId),
-          eq(automationRules.relationshipId, relationshipId)
-        )
+        eq(automationRules.accountId, accountId),
+        eq(automationRules.relationshipId, relationshipId)
+      )
       : and(
-          eq(automationRules.accountId, accountId),
-          isNull(automationRules.relationshipId)
-        );
+        eq(automationRules.accountId, accountId),
+        isNull(automationRules.relationshipId)
+      );
 
     const [existing] = await db
       .select()
@@ -385,7 +393,7 @@ class AutomationControllerService {
       })
       .where(eq(automationRules.id, ruleId))
       .returning();
-    
+
     return updated || null;
   }
 
@@ -488,7 +496,7 @@ class AutomationControllerService {
     const match = rawMatch === 'minute' ? 'minute' : 'cron';
 
     try {
-      const cron = new Cron(value, { timezone }, () => {});
+      const cron = new Cron(value, { timezone }, () => { });
       cron.stop();
     } catch (error: any) {
       throw new AutomationTriggerError(`Invalid cron expression: ${error?.message ?? String(error)}`);

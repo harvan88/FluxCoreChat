@@ -3,6 +3,7 @@ import { coreEventBus } from '../core/events';
 import { messageCore } from '../core/message-core';
 import { extensionHost } from './extension-host.service';
 import type { MessageEnvelope, ReceiveResult } from '../core/types';
+import { logTrace } from '../utils/file-logger';
 
 /**
  * AI Orchestrator Service
@@ -27,8 +28,13 @@ class AIOrchestratorService {
     }
 
     private async handleMessageReceived(payload: { envelope: MessageEnvelope; result: ReceiveResult }) {
-        console.log('[AIOrchestrator] 📨 Event received. Success?', payload.result.success, 'Mode:', payload.result.automation?.mode);
         const { envelope, result } = payload;
+
+        logTrace(`📨 1. Event Received. Conversation: ${envelope.conversationId}`, {
+            success: result.success,
+            mode: result.automation?.mode,
+            targetAccount: envelope.targetAccountId
+        });
 
         // 1. Validaciones básicas: éxito y automatización activa
         if (
@@ -36,12 +42,14 @@ class AIOrchestratorService {
             !result.automation ||
             result.automation.mode !== 'automatic'
         ) {
+            logTrace(`⏹️ Ignoring: Not automatic or not success.`);
             return;
         }
 
         // 2. Validar contenido
         const messageText = typeof envelope.content?.text === 'string' ? envelope.content.text : '';
         if (!messageText || messageText.trim().length === 0) {
+            logTrace(`⏹️ Ignoring: Empty text.`);
             return;
         }
 
@@ -49,12 +57,12 @@ class AIOrchestratorService {
         // El envelope DEBE tener targetAccountId poblado por MessageCore antes de emitir
         const targetAccountId = envelope.targetAccountId;
         if (!targetAccountId) {
-            // Si falta, no podemos saber qué IA activar.
-            // Esto ocurrirá hasta que actualicemos MessageCore en el próximo paso.
+            logTrace(`❌ ABORT: Missing targetAccountId. MessageCore did not populate it.`);
             return;
         }
 
         // 4. Programar respuesta
+        logTrace(`✅ Scheduling Auto-Reply for Account ${targetAccountId}`);
         this.scheduleAutoReply(envelope, messageText, targetAccountId, result.automation.mode, result.messageId);
     }
 
@@ -119,14 +127,19 @@ class AIOrchestratorService {
                         targetAccountId: envelope.senderAccountId // Opcional, contexto
                     });
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error('[AIOrchestrator] Error generating/sending reply:', err);
+                logTrace(`❌ Error generating reply: ${err.message}`);
             } finally {
                 this.autoReplyQueue.delete(debounceKey);
             }
         }, delayMs);
 
         this.autoReplyQueue.set(debounceKey, timeout);
+    }
+    public init() {
+        // Simplemente referenciar la instancia dispara el constructor si no se ha hecho
+        console.log('[AIOrchestrator] Explicit initialization called');
     }
 }
 

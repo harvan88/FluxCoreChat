@@ -4,13 +4,16 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Loader2, MessageSquare, Trash2, Check, X, Bot, BotMessageSquare, BotOff } from 'lucide-react';
+import { Search, Plus, Loader2, MessageSquare, Trash2, Check, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import { Avatar } from '../ui/Avatar';
 import { useScroll } from '../../hooks/useScroll';
 import { useAutomation, type AutomationMode } from '../../hooks/useAutomation';
+import { useExtensions } from '../../hooks/useExtensions';
+import { AIStatusHeader } from './AIStatusHeader';
+import { AIStatusIndicator } from './AIStatusIndicator';
 
 export function ConversationsList() {
   const {
@@ -28,6 +31,10 @@ export function ConversationsList() {
     isLoading: isAutomationLoading,
   } = useAutomation(selectedAccountId);
 
+  // Check extensions
+  const { installations } = useExtensions(selectedAccountId);
+  const isFluxCoreEnabled = installations.some(i => i.extensionId === '@fluxcore/fluxcore' && i.enabled);
+
   const listRef = useRef<HTMLDivElement>(null);
   const lastLoadedAccountIdRef = useRef<string | null>(null);
 
@@ -36,7 +43,7 @@ export function ConversationsList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingConvId, setDeletingConvId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  
+
   // UI-201: Dynamic scroll height
   const { maxHeight } = useScroll({ offset: 160 }); // Search (56) + Button (48) + Padding (56)
 
@@ -53,12 +60,12 @@ export function ConversationsList() {
 
       setIsLoading(true);
       setError(null);
-      
+
       try {
         console.log('[ConversationsList] Loading conversations for account:', selectedAccountId);
         // MA-203: Pasar accountId para filtrar por cuenta específica
         const response = await api.getConversations(selectedAccountId);
-        
+
         if (response.success && response.data) {
           console.log('[ConversationsList] Loaded conversations:', response.data.length);
           setConversations(response.data);
@@ -75,7 +82,7 @@ export function ConversationsList() {
         setIsLoading(false);
       }
     }
-    
+
     loadConversations();
   }, [selectedAccountId, setConversations]);
 
@@ -94,7 +101,7 @@ export function ConversationsList() {
     if (!searchQuery) return true;
     const search = searchQuery.toLowerCase();
     return conv.lastMessageText?.toLowerCase().includes(search) ||
-           conv.channel.toLowerCase().includes(search);
+      conv.channel.toLowerCase().includes(search);
   });
 
   const globalAIMode: AutomationMode = (globalRule?.mode as AutomationMode) || 'disabled';
@@ -104,29 +111,19 @@ export function ConversationsList() {
     return (relationshipRule?.mode as AutomationMode) || globalAIMode;
   };
 
-  const getAIModePresentation = (mode: AutomationMode) => {
-    if (mode === 'automatic') {
-      return { Icon: Bot, colorClassName: 'text-success', label: 'Automático' };
-    }
-
-    if (mode === 'supervised') {
-      return { Icon: BotMessageSquare, colorClassName: 'text-warning', label: 'Supervisado' };
-    }
-
-    return { Icon: BotOff, colorClassName: 'text-muted', label: 'Apagado' };
-  };
-
   const toggleConversationAIMode = async (relationshipId: string, currentMode: AutomationMode) => {
     const nextMode: AutomationMode = currentMode === 'automatic' ? 'disabled' : 'automatic';
     await setRule(nextMode, { relationshipId });
   };
+
+  // getAIModePresentation y toggleConversationAIMode movidos a AIStatusIndicator
 
   const formatTime = (dateString?: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    
+
     if (diff < 86400000) {
       return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     }
@@ -195,7 +192,7 @@ export function ConversationsList() {
 
       {/* New conversation button */}
       <div className="px-3 pb-3">
-        <button 
+        <button
           onClick={handleNewConversation}
           className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 text-inverse py-2 px-4 rounded-lg transition-colors text-sm font-medium"
         >
@@ -205,53 +202,7 @@ export function ConversationsList() {
       </div>
 
       {selectedAccountId && (
-        <div className="px-3 pb-3">
-          <div className="bg-elevated border border-subtle rounded-lg p-3">
-            <div className="text-xs text-secondary">Respuesta IA</div>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => void setRule('automatic')}
-                disabled={isAutomationLoading}
-                className={clsx(
-                  'rounded-lg px-3 py-2 text-xs border transition-colors',
-                  globalAIMode === 'automatic'
-                    ? 'bg-active border-strong text-primary'
-                    : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
-                )}
-              >
-                Automático
-              </button>
-              <button
-                type="button"
-                onClick={() => void setRule('supervised')}
-                disabled
-                className={clsx(
-                  'rounded-lg px-3 py-2 text-xs border transition-colors opacity-50 cursor-not-allowed',
-                  globalAIMode === 'supervised'
-                    ? 'bg-active border-strong text-primary'
-                    : 'bg-surface border-subtle text-secondary'
-                )}
-                title="Solo Premium"
-              >
-                Supervisado
-              </button>
-              <button
-                type="button"
-                onClick={() => void setRule('disabled')}
-                disabled={isAutomationLoading}
-                className={clsx(
-                  'rounded-lg px-3 py-2 text-xs border transition-colors',
-                  globalAIMode === 'disabled'
-                    ? 'bg-active border-strong text-primary'
-                    : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
-                )}
-              >
-                Apagado
-              </button>
-            </div>
-          </div>
-        </div>
+        <AIStatusHeader accountId={selectedAccountId} />
       )}
 
       {/* Error state */}
@@ -280,124 +231,115 @@ export function ConversationsList() {
         ) : (
           filteredConversations.map((conversation) => {
             const aiMode = getEffectiveAIMode(conversation.relationshipId);
-            const { Icon: AIIcon, colorClassName: aiColorClassName, label: aiLabel } =
-              getAIModePresentation(aiMode);
 
             return (
               <div
                 key={conversation.id}
-              onClick={() => setSelectedConversation(conversation.id)}
-              onKeyDown={(e) => {
-                if (e.target !== e.currentTarget) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setSelectedConversation(conversation.id);
-                }
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label={`Abrir conversación ${(conversation as any).contactName || conversation.id}`}
-              className={clsx(
-                'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left group',
-                selectedConversationId === conversation.id && 'bg-active'
-              )}
-            >
-              {/* Avatar */}
-              <div className="relative">
-                <Avatar 
-                  src={(conversation as any).contactAvatar}
-                  name={(conversation as any).contactName}
-                  size="lg"
-                />
-                <div
-                  className={clsx(
-                    'absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-surface',
-                    getChannelBadge(conversation.channel)
-                  )}
-                />
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-center">
-                  <span className="text-primary font-medium truncate">
-                    {(conversation as any).contactName || `Chat ${conversation.id.slice(0, 8)}`}
-                  </span>
-                  <span className="text-xs text-muted">
-                    {formatTime(conversation.lastMessageAt)}
-                  </span>
+                onClick={() => setSelectedConversation(conversation.id)}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedConversation(conversation.id);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Abrir conversación ${(conversation as any).contactName || conversation.id}`}
+                className={clsx(
+                  'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left group',
+                  selectedConversationId === conversation.id && 'bg-active'
+                )}
+              >
+                {/* Avatar */}
+                <div className="relative">
+                  <Avatar
+                    src={(conversation as any).contactAvatar}
+                    name={(conversation as any).contactName}
+                    size="lg"
+                  />
+                  <div
+                    className={clsx(
+                      'absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-surface',
+                      getChannelBadge(conversation.channel)
+                    )}
+                  />
                 </div>
-                <div className="mt-1 flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm text-secondary truncate">
-                      {conversation.lastMessageText || 'Sin mensajes'}
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-center">
+                    <span className="text-primary font-medium truncate">
+                      {(conversation as any).contactName || `Chat ${conversation.id.slice(0, 8)}`}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {formatTime(conversation.lastMessageAt)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-secondary truncate">
+                        {conversation.lastMessageText || 'Sin mensajes'}
+                      </div>
+                      <AIStatusIndicator
+                        mode={aiMode}
+                        isFluxCoreEnabled={isFluxCoreEnabled}
+                        isLoading={isAutomationLoading}
+                        onToggle={(e) => {
+                          e.stopPropagation();
+                          void toggleConversationAIMode(conversation.relationshipId, aiMode);
+                        }}
+                      />
                     </div>
+                    {conversation.unreadCountA > 0 && (
+                      <span className="ml-2 bg-accent text-inverse text-xs px-2 py-0.5 rounded-full">
+                        {conversation.unreadCountA}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Delete button */}
+                {confirmDeleteId === conversation.id ? (
+                  <div className="flex items-center gap-1">
                     <button
-                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void toggleConversationAIMode(conversation.relationshipId, aiMode);
+                        handleDeleteConversation(conversation.id);
                       }}
-                      disabled={isAutomationLoading}
-                      className={clsx(
-                        'mt-1 inline-flex items-center gap-1 text-xs transition-colors',
-                        'hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed'
-                      )}
-                      title="Cambiar modo de IA para este chat"
+                      disabled={deletingConvId === conversation.id}
+                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                      title="Confirmar eliminación"
                     >
-                      <AIIcon size={14} className={aiColorClassName} />
-                      <span className={clsx('text-xs', aiColorClassName)}>{`IA: ${aiLabel}`}</span>
+                      {deletingConvId === conversation.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Check size={14} />
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDeleteId(null);
+                      }}
+                      className="p-1.5 bg-elevated hover:bg-hover text-muted rounded transition-colors"
+                      title="Cancelar"
+                    >
+                      <X size={14} />
                     </button>
                   </div>
-                  {conversation.unreadCountA > 0 && (
-                    <span className="ml-2 bg-accent text-inverse text-xs px-2 py-0.5 rounded-full">
-                      {conversation.unreadCountA}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Delete button */}
-              {confirmDeleteId === conversation.id ? (
-                <div className="flex items-center gap-1">
+                ) : (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteConversation(conversation.id);
+                      setConfirmDeleteId(conversation.id);
                     }}
-                    disabled={deletingConvId === conversation.id}
-                    className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
-                    title="Confirmar eliminación"
+                    className="p-1.5 text-muted hover:text-red-500 hover:bg-hover rounded transition-colors opacity-0 group-hover:opacity-100"
+                    title="Eliminar conversación"
                   >
-                    {deletingConvId === conversation.id ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Check size={14} />
-                    )}
+                    <Trash2 size={16} />
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmDeleteId(null);
-                    }}
-                    className="p-1.5 bg-elevated hover:bg-hover text-muted rounded transition-colors"
-                    title="Cancelar"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConfirmDeleteId(conversation.id);
-                  }}
-                  className="p-1.5 text-muted hover:text-red-500 hover:bg-hover rounded transition-colors opacity-0 group-hover:opacity-100"
-                  title="Eliminar conversación"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
+                )}
               </div>
             );
           })
