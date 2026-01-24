@@ -1,4 +1,3 @@
-
 import { IVectorStoreDriver, VectorStoreFile } from './types';
 
 export class OpenAIDriver implements IVectorStoreDriver {
@@ -82,7 +81,7 @@ export class OpenAIDriver implements IVectorStoreDriver {
         });
 
         return {
-            id: vsFileResult.id,
+            id: fileResult.id,
             filename: filename,
             bytes: fileResult.bytes,
             createdAt: fileResult.created_at,
@@ -149,5 +148,21 @@ export class OpenAIDriver implements IVectorStoreDriver {
             createdAt: f.created_at,
             status: f.status
         }));
+    }
+
+    async updateStore(storeId: string, data: { expires_after?: any; name?: string }) {
+        const client = getOpenAIClient();
+        const candidates = getVectorStoresCandidates(client);
+        let lastError: unknown;
+        for (const api of candidates) {
+          if (!api?.update) continue;
+          try {
+            const updatedStore = await api.update(storeId, data);
+            return updatedStore;
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        throw lastError instanceof Error ? lastError : new Error('Failed to update vector store on OpenAI');
     }
 }

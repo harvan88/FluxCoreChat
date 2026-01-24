@@ -230,7 +230,11 @@ En algunos módulos (ej. Base de conocimiento), existe una sección inferior fij
 
 - **OpenAI**: El asistente se ejecuta mediante la API de Asistentes de OpenAI.
   - Los activos se almacenan en OpenAI (espejo de los activos locales) y se referencian por `externalId`.
-  - La ejecución se realiza mediante la creación de threads y runs en la API de OpenAI.
+  - La base de datos local mantiene:
+    - Referencias a activos externos (`externalId`)
+    - Metadatos de composición
+    - Configuraciones locales
+  - La ejecución depende de la API de OpenAI
 
 **Estructura de composición:**
 ```
@@ -636,17 +640,10 @@ File {
 
 ##### Archivos Adjuntos
 
-**Lista de Documentos:**
-- Tabla con archivos del vector store
-- Columnas:
-  - Nombre del archivo
-  - Tipo (PDF, DOCX, TXT, etc.)
-  - Tamaño
-  - Fecha de carga
-  - Estado de indexación
-  - Acción: Eliminar (solo si owner)
-
-**Nota:** Los archivos son referencias a `File` entities independientes
+**Lista de Documentos**:
+- Ahora muestra todos los archivos asociados al vector store
+- Incluye acciones de eliminación con cascada completa
+- Estado de sincronización con OpenAI (si aplica)
 
 ##### Usado en (Asistentes)
 - Lista de asistentes que referencian este Vector Store
@@ -685,6 +682,12 @@ File {
      4. Creación de referencia `VectorStoreFile`
      5. Indexación asíncrona
    - Feedback: Barra de progreso y estado de indexación
+
+### 6.5. Políticas de Expiración
+
+**Formato unificado**:
+- Conversión automática entre días ↔ formato OpenAI
+- Soporte para: `never`, `after_days`, `specific_date`
 
 ---
 

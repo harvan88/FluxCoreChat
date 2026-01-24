@@ -445,6 +445,17 @@ class ApiService {
       body: formData,
     });
   }
+
+  // Vector store files
+  async getVectorStoreFiles(storeId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/fluxcore/vector-stores/${storeId}/files`);
+  }
+
+  async deleteVectorStoreFile(storeId: string, fileId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/fluxcore/vector-stores/${storeId}/files/${fileId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new ApiService();

@@ -1,0 +1,172 @@
+[
+  {
+    "id": "542882b4-7b8b-41ed-b2f7-9d58688dca10",
+    "accountId": "a9611c11-70f2-46cd-baef-6afcde715f3a",
+    "name": "vs prueba amc computadoras",
+    "description": null,
+    "externalId": "vs_697418cea3688191a825d0c3e10e4b19",
+    "visibility": "private",
+    "status": "in_progress",
+    "backend": "openai",
+    "metadata": {},
+    "fileCounts": {
+      "in_progress": 2,
+      "completed": 1,
+      "failed": 0,
+      "cancelled": 0,
+      "total": 3
+    },
+    "expiresAfter": null,
+    "lastActiveAt": "2026-01-24T00:57:56.000Z",
+    "usageBytes": 46970,
+    "expirationPolicy": "never",
+    "expirationDays": null,
+    "expiresAt": null,
+    "usage": {
+      "bytesUsed": 0,
+      "costPerGBPerDay": 0.1,
+      "hoursUsedThisMonth": 0
+    },
+    "sizeBytes": 0,
+    "fileCount": 3,
+    "lastModifiedBy": null,
+    "createdAt": "2026-01-24T00:56:48.000Z",
+    "updatedAt": "2026-01-24T00:57:59.000Z"
+  },
+  {
+    "id": "cdfd18bf-a12d-46e9-a57f-77f153c32a79",
+    "accountId": "a9611c11-70f2-46cd-baef-6afcde715f3a",
+    "name": "Heiver",
+    "description": null,
+    "externalId": "vs_6973e3125f6081919169cda48f2f3d6c",
+    "visibility": "private",
+    "status": "production",
+    "backend": "openai",
+    "metadata": {},
+    "fileCounts": {
+      "in_progress": 0,
+      "completed": 0,
+      "failed": 0,
+      "cancelled": 0,
+      "total": 0
+    },
+    "expiresAfter": null,
+    "lastActiveAt": "2026-01-23T21:07:30.000Z",
+    "usageBytes": 0,
+    "expirationPolicy": "never",
+    "expirationDays": null,
+    "expiresAt": null,
+    "usage": {
+      "bytesUsed": 0,
+      "costPerGBPerDay": 0.1,
+      "hoursUsedThisMonth": 0
+    },
+    "sizeBytes": 0,
+    "fileCount": 2,
+    "lastModifiedBy": null,
+    "createdAt": "2026-01-23T21:07:31.000Z",
+    "updatedAt": "2026-01-23T21:07:47.000Z"
+  },
+  {
+    "id": "1a3d4f13-fba7-4a27-bd4b-f7794675e9a3",
+    "accountId": "a9611c11-70f2-46cd-baef-6afcde715f3a",
+    "name": "Nuevo vector store local vanitory",
+    "description": null,
+    "externalId": null,
+    "visibility": "private",
+    "status": "draft",
+    "backend": "local",
+    "metadata": {},
+    "fileCounts": {
+      "total": 0,
+      "failed": 0,
+      "cancelled": 0,
+      "completed": 0,
+      "in_progress": 0
+    },
+    "expiresAfter": null,
+    "lastActiveAt": null,
+    "usageBytes": 0,
+    "expirationPolicy": "never",
+    "expirationDays": null,
+    "expiresAt": null,
+    "usage": {
+      "bytesUsed": 0,
+      "costPerGBPerDay": 0.1,
+      "hoursUsedThisMonth": 0
+    },
+    "sizeBytes": 0,
+    "fileCount": 0,
+    "lastModifiedBy": null,
+    "createdAt": "2026-01-24T00:43:56.000Z",
+    "updatedAt": "2026-01-24T01:09:26.000Z"
+  },
+  {
+    "id": "dc5aafe9-4221-4d00-9ae3-4d06a1778f6f",
+    "accountId": "4c3a23e2-3c48-4ed6-afbf-21c47e59bc00",
+    "name": "Vector Store de Validación (Local)",
+    "description": "Creado automáticamente para validar refactorización",
+    "externalId": null,
+    "visibility": "private",
+    "status": "draft",
+    "backend": "local",
+    "metadata": {},
+    "fileCounts": {
+      "total": 0,
+      "failed": 0,
+      "cancelled": 0,
+      "completed": 0,
+      "in_progress": 0
+    },
+    "expiresAfter": null,
+    "lastActiveAt": null,
+    "usageBytes": 0,
+    "expirationPolicy": "never",
+    "expirationDays": null,
+    "expiresAt": null,
+    "usage": {
+      "bytesUsed": 0,
+      "costPerGBPerDay": 0.1,
+      "hoursUsedThisMonth": 0
+    },
+    "sizeBytes": 0,
+    "fileCount": 0,
+    "lastModifiedBy": null,
+    "createdAt": "2026-01-24T01:13:43.000Z",
+    "updatedAt": "2026-01-24T01:13:43.000Z"
+  },
+  {
+    "id": "9a405f10-fc23-4679-a3d7-581bb5420376",
+    "accountId": "cadcb892-c4d1-42e5-bbac-6655047cbb56",
+    "name": "Nuevo vector store",
+    "description": null,
+    "externalId": null,
+    "visibility": "private",
+    "status": "draft",
+    "backend": "local",
+    "metadata": {},
+    "fileCounts": {
+      "total": 0,
+      "failed": 0,
+      "cancelled": 0,
+      "completed": 0,
+      "in_progress": 0
+    },
+    "expiresAfter": null,
+    "lastActiveAt": null,
+    "usageBytes": 0,
+    "expirationPolicy": "never",
+    "expirationDays": null,
+    "expiresAt": null,
+    "usage": {
+      "bytesUsed": 0,
+      "costPerGBPerDay": 0.1,
+      "hoursUsedThisMonth": 0
+    },
+    "sizeBytes": 0,
+    "fileCount": 0,
+    "lastModifiedBy": null,
+    "createdAt": "2026-01-22T12:58:05.000Z",
+    "updatedAt": "2026-01-22T12:58:05.000Z"
+  }
+]
