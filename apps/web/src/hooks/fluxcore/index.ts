@@ -7,14 +7,18 @@
  * import { useAutoSave, useClipboard, useEntitySelection } from '@/hooks/fluxcore';
  */
 
-// Auto-save hook
+// UI & Logic hooks
 export { useAutoSave } from './useAutoSave';
 export type { UseAutoSaveOptions, UseAutoSaveReturn } from './useAutoSave';
 
-// Clipboard hook
 export { useClipboard } from './useClipboard';
 export type { UseClipboardOptions, UseClipboardReturn } from './useClipboard';
 
-// Entity selection hook
 export { useEntitySelection } from './useEntitySelection';
 export type { UseEntitySelectionOptions, UseEntitySelectionReturn } from './useEntitySelection';
+
+// Business hooks
+export { useAssistants } from './useAssistants';
+export { useInstructions } from './useInstructions';
+export { useVectorStores } from './useVectorStores';
+export { useTools } from './useTools';

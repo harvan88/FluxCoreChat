@@ -12,7 +12,7 @@ import type { AuditFields } from './common.types';
 // ============================================================================
 
 /** Tipos de herramientas disponibles */
-export type ToolType = 'mcp' | 'http' | 'internal' | 'system';
+export type ToolType = 'mcp' | 'http' | 'internal' | 'system' | 'unknown';
 
 /** Estado de una herramienta */
 export type ToolStatus = 'active' | 'inactive' | 'deprecated';
