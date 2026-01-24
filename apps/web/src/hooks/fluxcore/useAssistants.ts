@@ -71,10 +71,14 @@ export function useAssistants(accountId: string) {
     }, [token]);
 
     /**
-     * Actualizar asistente
+     * Actualizar asistente (Optimista)
      */
     const updateAssistant = useCallback(async (id: string, updates: Partial<AssistantUpdate>) => {
         if (!token) return null;
+
+        // Actualización local inmediata
+        setAssistants(prev => prev.map(a => a.id === id ? { ...a, ...updates } as Assistant : a));
+
         setIsSaving(true);
         setError(null);
         try {
@@ -87,11 +91,15 @@ export function useAssistants(accountId: string) {
                 body: JSON.stringify({ ...updates, accountId })
             });
             const result = await res.json();
-            if (result.success && result.data) {
-                setAssistants(prev => prev.map(a => a.id === id ? result.data : a));
+            if (result.success) {
+                // En el original NO se sincronizaba con result.data porque el PUT 
+                // para asistentes en este backend puede no devolver relaciones.
+                // Confiamos en la actualización optimista de arriba.
                 return result.data as Assistant;
             } else {
                 setError(result.message || 'Error al guardar cambios');
+                // Revertir optimismo si falla
+                await loadAssistants();
                 return null;
             }
         } catch (err) {
@@ -196,6 +204,13 @@ export function useAssistants(accountId: string) {
         loadAssistants();
     }, [loadAssistants]);
 
+    /**
+     * Actualizar asistente localmente (Solo UI)
+     */
+    const updateLocalAssistant = useCallback((id: string, updates: Partial<Assistant>) => {
+        setAssistants(prev => prev.map(a => a.id === id ? { ...a, ...updates } as Assistant : a));
+    }, []);
+
     return {
         assistants: sortedAssistants,
         loading,
@@ -203,6 +218,7 @@ export function useAssistants(accountId: string) {
         isSaving,
         createAssistant,
         updateAssistant,
+        updateLocalAssistant,
         deleteAssistant,
         activateAssistant,
         getActiveConfig,

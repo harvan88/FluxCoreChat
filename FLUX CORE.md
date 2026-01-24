@@ -222,8 +222,17 @@ En algunos módulos (ej. Base de conocimiento), existe una sección inferior fij
 
 ### 4.2. Arquitectura Conceptual
 
-**Un Asistente es una COMPOSICIÓN de referencias:**
+**Un Asistente es una COMPOSICIÓN de referencias y puede ejecutarse en dos modos (runtimes):**
 
+- **Local (FluxCore)**: El asistente se ejecuta localmente usando la API de Chat Completions. 
+  - Los activos (instrucciones, vector stores, herramientas) se almacenan y gestionan localmente.
+  - La ejecución se realiza a través de la extensión FluxCore (`extension.onMessage`).
+
+- **OpenAI**: El asistente se ejecuta mediante la API de Asistentes de OpenAI.
+  - Los activos se almacenan en OpenAI (espejo de los activos locales) y se referencian por `externalId`.
+  - La ejecución se realiza mediante la creación de threads y runs en la API de OpenAI.
+
+**Estructura de composición:**
 ```
 Assistant {
   id: "asst_abc123"
@@ -252,6 +261,7 @@ Assistant {
   top_p: 0.9
   smart_delay: false
   response_timeout: 30
+  runtime: "local" | "openai"
 }
 ```
 
@@ -276,14 +286,29 @@ Assistant {
 #### Encabezado Estático
 - Pre-título: "Configuración de asistente"
 - Nombre editable con auto-save
-- ID con formato `asst_...` y funcionalidad click-to-copy
+- ID con formato `asst_...` y click-to-copy
 - Owner: Cuenta propietaria
 - Visibilidad: Selector (Private/Shared/Public)
-- Versión: Si aplica versionado de la composición completa
+- Versión actual + selector de versiones históricas
+- Usado en: Lista de asistentes que referencian esta instrucción
 
 #### Secciones Colapsables
 
 ##### Configuración Inicial
+
+**Runtime del Asistente**:
+- Selector entre "Local (FluxCore)" y "OpenAI"
+- Determina el flujo de ejecución y persistencia
+
+**Para runtime OpenAI**:
+- Campo `externalId` (requerido)
+- Sincronización automática con OpenAI
+- Los vector stores deben ser tipo "openai"
+
+**Para runtime Local**:
+- Sin `externalId` requerido
+- Ejecución mediante extensión FluxCore
+- Los vector stores pueden ser locales o remotos
 
 **Instrucciones del Sistema:**
 - **Tipo:** Selector multi-referencia (puede tener múltiples instrucciones)
@@ -349,6 +374,22 @@ Los siguientes parámetros NO pueden estar activos simultáneamente:
 - **Tipo:** Slider (barra deslizante)
 - **Rango:** 0 a 1 (con precisión decimal)
 - **Función:** Control de aleatoriedad
+### 4.5. Modelos de Persistencia
+
+**Flujo Local (FluxCore)**:
+- Todos los activos (instrucciones, vector stores, herramientas) se persisten en la base de datos local
+- Los metadatos de composición (referencias) se almacenan en tablas de relación
+- La ejecución no depende de servicios externos
+
+**Flujo OpenAI**:
+- La definición del asistente se persiste en OpenAI
+- Los vector stores se sincronizan con OpenAI
+- La base de datos local mantiene:
+  - Referencias a activos externos (`externalId`)
+  - Metadatos de composición
+  - Configuraciones locales
+- La ejecución depende de la API de OpenAI
+
   - Valores cercanos a **0**: Respuestas deterministas y precisas
   - Valores cercanos a **1**: Respuestas creativas y variables
 

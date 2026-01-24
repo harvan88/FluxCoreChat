@@ -96,9 +96,14 @@ Creado: src/hooks/fluxcore/
 | FC-REF-123 | Crear `useEntitySelection.ts` | ✅ | `hooks/fluxcore/useEntitySelection.ts` |
 | FC-REF-124 | Crear `index.ts` con exports | ✅ | `hooks/fluxcore/index.ts` |
 
+> **Estado al 2026-01-24 16:58**
+> - Avance detenido por bug crítico en `InstructionsView` / `InstructionDetail`: al modificar el contenido o presionar "Guardar" la vista se queda en negro.
+> - Se integró `react-markdown` + `remark-gfm`, `useAutoSave` y se modernizó el footer, pero el editor continúa inutilizable por la pérdida de selección.
+> - Sin resolución, el hito no puede cerrarse. Requiere nueva investigación del editor antes de continuar.
+
 ---
 
-### Fase 2: Componentes Compartidos ⬜ PENDIENTE
+### Fase 2: Componentes Compartidos ⬜ EN PROGRESO
 
 **Prioridad:** Alta
 **Riesgo:** Bajo
@@ -115,6 +120,12 @@ Crear: src/components/fluxcore/shared/
 ├── EntityActions.tsx           # Acciones comunes
 └── index.ts
 ```
+
+**Avance 2026-01-24:**
+- ✅ `InstructionList.tsx` (apps/web/src/components/fluxcore/instructions/InstructionList.tsx) replica la tabla original de la vista sin cambios visuales.
+- ✅ `InstructionDetail.tsx` (apps/web/src/components/fluxcore/instructions/InstructionDetail.tsx) extrae el editor completo (toolbar, banner managed, estadísticas y footer) manteniendo la UI original.
+- ✅ `InstructionsView.tsx` ahora actúa solo como orquestador usando `useInstructions` + los componentes anteriores.
+- 📌 Pendiente: extraer componentes genéricos en `shared/` y `detail/` para reutilizarlos también en asistentes/vector stores.
 
 #### 2.2 Componentes de Detalle
 
@@ -202,7 +213,7 @@ src/
 | Bug | Archivo | Línea | Descripción |
 |-----|---------|-------|-------------|
 | FC-BUG-001 | AssistantsView.tsx | 553-556 | Código duplicado en deleteAssistantById |
-| FC-BUG-002 | InstructionsView.tsx | 652 | Renderizado duplicado de deleteError |
+| FC-BUG-002 | InstructionsView.tsx | 652 | Renderizado duplicado de deleteError (resuelto al mover a `InstructionDetail`, pendiente de verificación final) |
 
 ---
 

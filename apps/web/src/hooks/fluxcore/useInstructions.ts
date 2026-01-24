@@ -79,11 +79,15 @@ export function useInstructions(accountId: string) {
                 body: JSON.stringify({ ...updates, accountId })
             });
             const result = await res.json();
-            if (result.success && result.data) {
-                setInstructions(prev => prev.map(i => i.id === id ? result.data : i));
+            if (result.success) {
+                // No sobreescribimos con result.data para evitar parpadeos si faltan campos
                 return result.data as Instruction;
+            } else {
+                setError(result.message || 'Error al guardar cambios');
+                // Revertir optimismo si falla
+                await loadInstructions();
+                return null;
             }
-            return null;
         } catch (err) {
             console.error('Error updating instruction:', err);
             return null;
@@ -117,12 +121,20 @@ export function useInstructions(accountId: string) {
         loadInstructions();
     }, [loadInstructions]);
 
+    /**
+     * Actualizar instrucción localmente (Solo UI)
+     */
+    const updateLocalInstruction = useCallback((id: string, updates: Partial<Instruction>) => {
+        setInstructions(prev => prev.map(i => i.id === id ? { ...i, ...updates } as Instruction : i));
+    }, []);
+
     return {
         instructions,
         loading,
         error,
         createInstruction,
         updateInstruction,
+        updateLocalInstruction,
         deleteInstruction,
         refresh: loadInstructions
     };

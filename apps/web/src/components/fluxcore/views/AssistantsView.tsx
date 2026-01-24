@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   useAssistants,
   useInstructions,
@@ -15,11 +15,7 @@ import {
 import type { Assistant, AssistantsViewProps } from '../../../types/fluxcore';
 
 /**
- * AssistantsView - Orquestador del módulo de Asistentes IA
- * 
- * Este componente ha sido refactorizado para utilizar composición de componentes
- * y hooks de negocio especializados. Reduce el monolito original de 1,289 líneas
- * a menos de 150 líneas de pura orquestación.
+ * AssistantsView - Orquestador con lógica original de guardado restaurada.
  */
 export function AssistantsView({
   accountId,
@@ -31,12 +27,14 @@ export function AssistantsView({
     assistants,
     loading: loadingAssistants,
     error: assistantError,
-    isSaving,
+    isSaving: isBackendSaving,
     createAssistant,
     updateAssistant,
+    updateLocalAssistant,
     deleteAssistant,
     activateAssistant,
     getActiveConfig,
+    refresh,
     setError
   } = useAssistants(accountId);
 
@@ -49,30 +47,49 @@ export function AssistantsView({
   const [showRuntimeModal, setShowRuntimeModal] = useState(false);
   const [activateConfirmId, setActivateConfirmId] = useState<string | null>(null);
   const [detailActivateConfirm, setDetailActivateConfirm] = useState(false);
+  const [isLocalSaving, setIsLocalSaving] = useState(false);
+  const [localSelectedAssistant, setLocalSelectedAssistant] = useState<Assistant | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 3. Manejo de selección y navegación (Sincronizado con assistantId de props)
-  const {
-    selectedEntity: selectedAssistant,
-    selectEntity,
-    clearSelection
-  } = useEntitySelection<Assistant>({
+  // 3. Manejo de selección y navegación (Sincronizado con reactive list)
+  const selectionOptions = useMemo(() => ({
     entities: assistants,
     urlId: assistantId,
-    onSelect: (assistant) => {
-      // Si es un agente externo de OpenAI, abrir en tab exclusivo
+    onSelect: (assistant: Assistant) => {
+      // SOLO actualizamos el estado local si el asistente es distinto al actual o es una selección inicial
+      setLocalSelectedAssistant(prev => {
+        if (prev?.id === assistant.id) return prev;
+        return assistant;
+      });
+
       if (assistant.runtime === 'openai' && onOpenTab) {
         onOpenTab(assistant.id, assistant.name, {
           type: 'openai-assistant',
           assistantId: assistant.id,
           runtime: 'openai',
         });
-        return;
       }
     }
-  });
+  }), [assistants, assistantId, onOpenTab]);
+
+  const { selectEntity, clearSelection } = useEntitySelection<Assistant>(selectionOptions);
+
+  // Filtrado estricto de campos para el backend (Evita error 'Unexpected property')
+  const buildAssistantPayload = useCallback((assistant: Assistant) => ({
+    accountId,
+    name: assistant.name,
+    description: assistant.description ?? undefined,
+    status: assistant.status,
+    instructionIds: assistant.instructionIds?.slice(0, 1) ?? undefined,
+    vectorStoreIds: assistant.vectorStoreIds ?? undefined,
+    toolIds: assistant.toolIds ?? undefined,
+    modelConfig: assistant.modelConfig,
+    timingConfig: assistant.timingConfig,
+  }), [accountId]);
 
   // 4. Handlers de acción
   const handleSelect = useCallback((assistant: Assistant) => {
+    setLocalSelectedAssistant(assistant);
     if (onOpenTab) {
       onOpenTab(assistant.id, assistant.name, {
         type: 'assistant',
@@ -83,11 +100,48 @@ export function AssistantsView({
     }
   }, [onOpenTab, selectEntity]);
 
+  // 4. Lógica de Guardado Original EXACTA (Restaurada de original.tsx)
+  const scheduleSave = useCallback((assistant: Assistant, immediate = false) => {
+    if (!assistant.id) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    const performSave = async () => {
+      setIsLocalSaving(true);
+      const payload = buildAssistantPayload(assistant);
+      await updateAssistant(assistant.id, payload as any);
+      setIsLocalSaving(false);
+    };
+
+    if (immediate) {
+      void performSave();
+    } else {
+      saveTimeoutRef.current = setTimeout(performSave, 500);
+    }
+  }, [updateAssistant, buildAssistantPayload]);
+
+  const handleUpdate = useCallback((updates: Partial<Assistant>, saveStrategy: 'none' | 'debounce' | 'immediate') => {
+    if (!localSelectedAssistant) return;
+
+    // 1. Actualización local inmediata (Para estabilidad del Form)
+    const next = { ...localSelectedAssistant, ...updates };
+    setLocalSelectedAssistant(next);
+
+    // 2. Sincronizar optimísticamente con la lista global
+    updateLocalAssistant(localSelectedAssistant.id, updates);
+
+    if (saveStrategy === 'none') return;
+    scheduleSave(next, saveStrategy === 'immediate');
+  }, [localSelectedAssistant, updateLocalAssistant, scheduleSave]);
+
   const handleCreate = useCallback(async (runtime: 'local' | 'openai') => {
     setShowRuntimeModal(false);
     const newAssistant = await createAssistant({
       accountId,
-      name: runtime === 'openai' ? 'Nuevo Agente OpenAI' : 'Nuevo Asistente',
+      name: runtime === 'openai' ? 'Nuevo asistente OpenAI' : 'Nuevo asistente',
       runtime,
       status: 'draft',
       modelConfig: {
@@ -103,13 +157,18 @@ export function AssistantsView({
       }
     });
 
-    if (newAssistant) {
-      handleSelect(newAssistant);
+    if (newAssistant && !onOpenTab) {
+      setLocalSelectedAssistant(newAssistant);
+      selectEntity(newAssistant);
     }
-  }, [accountId, createAssistant, handleSelect]);
+  }, [accountId, createAssistant, onOpenTab, selectEntity]);
 
   const handleOpenResource = useCallback((id: string, type: 'instruction' | 'vectorStore' | 'tool') => {
-    onOpenTab?.(id, 'Cargando...', { type, [`${type}Id`]: id });
+    onOpenTab?.(id, 'Payload...', { type, [`${type}Id`]: id });
+  }, [onOpenTab]);
+
+  const handleCreateResource = useCallback((type: 'instruction' | 'vectorStore' | 'tool') => {
+    onOpenTab?.('new', 'Nuevo', { type, [`${type}Id`]: 'new' });
   }, [onOpenTab]);
 
   const handleCopyActiveConfig = async () => {
@@ -117,36 +176,46 @@ export function AssistantsView({
     if (config) {
       await copy(JSON.stringify(config, null, 2));
     } else {
-      setError('No se pudo obtener la configuración activa');
+      setError('Error al obtener la configuración activa');
     }
   };
 
-  // 5. Renderizado
+  // Cleanup cleanup cleanup
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
-  // Modal de creación
+  // 5. Renderizado
   if (showRuntimeModal) {
     return <RuntimeSelectorModal onSelect={handleCreate} onClose={() => setShowRuntimeModal(false)} />;
   }
 
-  // Vista de detalle (Configuración)
-  if (selectedAssistant) {
+  if (localSelectedAssistant) {
     return (
       <AssistantDetail
-        assistant={selectedAssistant}
+        assistant={localSelectedAssistant}
         instructions={instructions}
         vectorStores={vectorStores}
         tools={tools}
-        onUpdate={(updates) => updateAssistant(selectedAssistant.id, updates)}
-        onDelete={() => deleteAssistant(selectedAssistant.id)}
+        onUpdate={handleUpdate}
+        onDelete={() => deleteAssistant(localSelectedAssistant.id)}
         onActivate={async () => {
-          await activateAssistant(selectedAssistant.id);
+          await activateAssistant(localSelectedAssistant.id);
           setDetailActivateConfirm(false);
+          // Al activar, otros asistentes cambian, recargamos lista
+          refresh();
         }}
         onCopyConfig={handleCopyActiveConfig}
-        onClose={onOpenTab ? clearSelection : () => selectEntity(null as any)} // Depende de si estamos en modo tabs o vista única
+        onClose={() => {
+          setLocalSelectedAssistant(null);
+          if (onOpenTab) clearSelection();
+          else selectEntity(null as any);
+        }}
         onOpenResource={handleOpenResource}
-        onCreateResource={(type) => handleOpenResource('new', type)}
-        isSaving={isSaving}
+        onCreateResource={handleCreateResource}
+        isSaving={isLocalSaving || isBackendSaving}
         saveError={assistantError}
         activateConfirm={detailActivateConfirm}
         setActivateConfirm={setDetailActivateConfirm}
@@ -154,7 +223,6 @@ export function AssistantsView({
     );
   }
 
-  // Vista de lista (Dashboard)
   return (
     <AssistantList
       assistants={assistants}
@@ -162,7 +230,10 @@ export function AssistantsView({
       loading={loadingAssistants}
       onSelect={handleSelect}
       onCreate={() => setShowRuntimeModal(true)}
-      onActivate={activateAssistant}
+      onActivate={async (id) => {
+        await activateAssistant(id);
+        refresh();
+      }}
       onDelete={deleteAssistant}
       activateConfirm={activateConfirmId}
       setActivateConfirm={setActivateConfirmId}
@@ -171,3 +242,4 @@ export function AssistantsView({
 }
 
 export default AssistantsView;
+

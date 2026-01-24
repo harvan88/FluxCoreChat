@@ -55,7 +55,7 @@ export const DEFAULT_TIMING_CONFIG = {
 /**
  * Límite de caracteres para instrucciones del sistema
  */
-export const MAX_INSTRUCTION_CHARS = 5000;
+export const MAX_INSTRUCTION_CHARS = 35000;
 
 /**
  * Límites de OpenAI según documentación oficial
