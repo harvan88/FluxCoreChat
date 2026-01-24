@@ -14,8 +14,6 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Bot,
   Plus,
-  Play,
-  RotateCw,
   Copy,
   Zap,
   ChevronDown,
