@@ -1,1287 +1,172 @@
-/**
- * Assistants View - Plataforma de Composición de Asistentes IA
- * 
- * Los asistentes son COMPOSICIONES DECLARATIVAS que referencian:
- * - Instructions (sistema de instrucciones)
- * - Vector Stores (base de conocimiento)
- * - Tools (herramientas/capacidades)
- * 
- * Arquitectura: Los activos existen en bibliotecas centrales.
- * El asistente REFERENCIA estos activos, no los contiene.
- */
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
-  Bot,
-  Plus,
-  Copy,
-  Zap,
-  ChevronDown,
-  X,
-  Download,
-  Share2,
-  RotateCcw,
-  Pencil,
-  Check,
-} from 'lucide-react';
-import { useAuthStore } from '../../../store/authStore';
-import { Button, Badge, Checkbox } from '../../ui';
-import { CollapsibleSection } from '../../ui/CollapsibleSection';
-import { SliderInput } from '../../ui/SliderInput';
-import { OpenAIIcon } from '../../../lib/icon-library';
-import { DoubleConfirmationDeleteButton } from '../../ui/DoubleConfirmationDeleteButton';
+  useAssistants,
+  useInstructions,
+  useVectorStores,
+  useTools,
+  useEntitySelection,
+  useClipboard
+} from '../../../hooks/fluxcore';
+import {
+  AssistantList,
+  AssistantDetail,
+  RuntimeSelectorModal
+} from '../assistants';
+import type { Assistant, AssistantsViewProps } from '../../../types/fluxcore';
 
-const PROVIDER_MODELS: Record<string, string[]> = {
-  openai: ['gpt-4o', 'gpt-4o-mini'],
-  groq: ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile'],
-  anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
-};
+/**
+ * AssistantsView - Orquestador del módulo de Asistentes IA
+ * 
+ * Este componente ha sido refactorizado para utilizar composición de componentes
+ * y hooks de negocio especializados. Reduce el monolito original de 1,289 líneas
+ * a menos de 150 líneas de pura orquestación.
+ */
+export function AssistantsView({
+  accountId,
+  onOpenTab,
+  assistantId
+}: AssistantsViewProps) {
+  // 1. Hooks de negocio (Data & CRUD)
+  const {
+    assistants,
+    loading: loadingAssistants,
+    error: assistantError,
+    isSaving,
+    createAssistant,
+    updateAssistant,
+    deleteAssistant,
+    activateAssistant,
+    getActiveConfig,
+    setError
+  } = useAssistants(accountId);
 
-interface Assistant {
-  id: string;
-  name: string;
-  description?: string;
-  instructionIds?: string[];
-  vectorStoreIds?: string[];
-  toolIds?: string[];
-  status: 'draft' | 'active' | 'disabled';
-  runtime?: 'local' | 'openai';
-  externalId?: string;
-  modelConfig: {
-    provider: string;
-    model: string;
-    temperature: number;
-    topP: number;
-    responseFormat: string;
-  };
-  timingConfig: {
-    responseDelaySeconds: number;
-    smartDelay: boolean;
-  };
-  updatedAt: string;
-  lastModifiedBy?: string;
-  sizeBytes: number;
-  tokensUsed: number;
-}
+  const { instructions } = useInstructions(accountId);
+  const { vectorStores } = useVectorStores(accountId);
+  const { tools } = useTools(accountId);
+  const { copy } = useClipboard();
 
-interface Instruction {
-  id: string;
-  name: string;
-}
-
-interface VectorStore {
-  id: string;
-  name: string;
-  backend?: 'local' | 'openai';
-  externalId?: string;
-}
-
-interface Tool {
-  id: string;
-  name: string;
-  type: string;
-}
-
-interface AssistantsViewProps {
-  accountId: string;
-  onOpenTab?: (tabId: string, title: string, data: any) => void;
-  assistantId?: string;
-}
-
-export function AssistantsView({ accountId, onOpenTab, assistantId }: AssistantsViewProps) {
-  const { token } = useAuthStore();
-  const [assistants, setAssistants] = useState<Assistant[]>([]);
-  const [instructions, setInstructions] = useState<Instruction[]>([]);
-  const [vectorStores, setVectorStores] = useState<VectorStore[]>([]);
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [activateConfirm, setActivateConfirm] = useState<string | null>(null);
-  const [selectedAssistant, setSelectedAssistant] = useState<Assistant | null>(null);
-  const [isCopyingActiveConfig, setIsCopyingActiveConfig] = useState(false);
+  // 2. Estado de UI local
   const [showRuntimeModal, setShowRuntimeModal] = useState(false);
-  const [enabledSections, setEnabledSections] = useState({
-    initial: true,
-    provider: true,
-    timing: true,
-    model: false
+  const [activateConfirmId, setActivateConfirmId] = useState<string | null>(null);
+  const [detailActivateConfirm, setDetailActivateConfirm] = useState(false);
+
+  // 3. Manejo de selección y navegación (Sincronizado con assistantId de props)
+  const {
+    selectedEntity: selectedAssistant,
+    selectEntity,
+    clearSelection
+  } = useEntitySelection<Assistant>({
+    entities: assistants,
+    urlId: assistantId,
+    onSelect: (assistant) => {
+      // Si es un agente externo de OpenAI, abrir en tab exclusivo
+      if (assistant.runtime === 'openai' && onOpenTab) {
+        onOpenTab(assistant.id, assistant.name, {
+          type: 'openai-assistant',
+          assistantId: assistant.id,
+          runtime: 'openai',
+        });
+        return;
+      }
+    }
   });
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const autoSelectedAssistantIdRef = useRef<string | null>(null);
-
-  const sortedAssistants = assistants
-    .slice()
-    .sort((a, b) => {
-      const aActive = a.status === 'active' ? 1 : 0;
-      const bActive = b.status === 'active' ? 1 : 0;
-      if (aActive !== bActive) return bActive - aActive;
-
-      const aTs = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-      const bTs = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-      return bTs - aTs;
-    });
-
-  const buildAssistantPayload = (assistant: Assistant) => ({
-    accountId,
-    name: assistant.name,
-    description: assistant.description ?? undefined,
-    status: assistant.status,
-    instructionIds: assistant.instructionIds?.slice(0, 1) ?? undefined,
-    vectorStoreIds: assistant.vectorStoreIds ?? undefined,
-    toolIds: assistant.toolIds ?? undefined,
-    modelConfig: assistant.modelConfig,
-    timingConfig: assistant.timingConfig,
-  });
-
-  const saveAssistant = async (assistant: Assistant) => {
-    if (!token) return;
-    if (!assistant.id) return;
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      const res = await fetch(`/api/fluxcore/assistants/${assistant.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(buildAssistantPayload(assistant)),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('Error saving assistant:', text);
-        setSaveError('Error al guardar cambios');
-      }
-    } catch (e) {
-      console.error('Error saving assistant', e);
-      setSaveError('Error de conexión');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCreateInstruction = async () => {
-    if (!token) return;
-    if (!selectedAssistant) return;
-
-    try {
-      const res = await fetch('/api/fluxcore/instructions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          accountId,
-          name: 'Nuevas instrucciones',
-          content: '',
-          status: 'draft',
-        }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('Error creating instruction:', text);
-        return;
-      }
-
-      const created = await res.json();
-      if (created.success && created.data) {
-        await loadData();
-        updateAssistantState({ instructionIds: [created.data.id] }, { immediate: true });
-        onOpenTab?.(created.data.id, created.data.name, {
-          type: 'instruction',
-          instructionId: created.data.id,
-        });
-      }
-    } catch (e) {
-      console.error('Error creating instruction', e);
-    }
-  };
-
-  const handleCreateVectorStore = async () => {
-    if (!token) return;
-    if (!selectedAssistant) return;
-
-    try {
-      const res = await fetch('/api/fluxcore/vector-stores', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          accountId,
-          name: 'Nuevo vector store',
-          status: 'draft',
-          expirationPolicy: 'never',
-        }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('Error creating vector store:', text);
-        return;
-      }
-
-      const created = await res.json();
-      if (created.success && created.data) {
-        await loadData();
-        updateAssistantState(
-          { vectorStoreIds: [...(selectedAssistant.vectorStoreIds || []), created.data.id] },
-          { immediate: true }
-        );
-        onOpenTab?.(created.data.id, created.data.name, {
-          type: 'vectorStore',
-          vectorStoreId: created.data.id,
-        });
-      }
-    } catch (e) {
-      console.error('Error creating vector store', e);
-    }
-  };
-
-  const openInstructionReference = (instructionId: string) => {
-    if (!instructionId) return;
-    const instruction = instructions.find((inst) => inst.id === instructionId);
+  // 4. Handlers de acción
+  const handleSelect = useCallback((assistant: Assistant) => {
     if (onOpenTab) {
-      onOpenTab(
-        instructionId,
-        instruction?.name ?? 'Sistema de instrucciones',
-        {
-          type: 'instruction',
-          instructionId,
-        }
-      );
-    }
-  };
-
-  const openVectorStoreReference = (vectorStoreId: string) => {
-    if (!vectorStoreId) return;
-    const vectorStore = vectorStores.find((vs) => vs.id === vectorStoreId);
-    if (onOpenTab) {
-      onOpenTab(
-        vectorStoreId,
-        vectorStore?.name ?? 'Base de conocimiento',
-        {
-          type: 'vectorStore',
-          vectorStoreId,
-        }
-      );
-    }
-  };
-
-  const scheduleSave = (assistant: Assistant, immediate = false) => {
-    if (!assistant.id) return;
-    if (!token) return;
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-
-    if (immediate) {
-      void saveAssistant(assistant);
-      return;
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      void saveAssistant(assistant);
-    }, 500);
-  };
-
-  const updateAssistantState = (updates: Partial<Assistant>, opts?: { immediate?: boolean }) => {
-    if (!selectedAssistant) return;
-    const next = { ...selectedAssistant, ...updates };
-    setSelectedAssistant(next);
-    scheduleSave(next, !!opts?.immediate);
-  };
-
-  useEffect(() => {
-    if (accountId && token) {
-      loadData();
-    }
-  }, [accountId, token]);
-
-  const loadData = async () => {
-    if (!accountId || !token) return;
-    setLoading(true);
-    try {
-      const headers = { 'Authorization': `Bearer ${token}` };
-      const [assistantsRes, instructionsRes, vectorStoresRes, connectionsRes, definitionsRes] = await Promise.all([
-        fetch(`/api/fluxcore/assistants?accountId=${accountId}`, { headers }),
-        fetch(`/api/fluxcore/instructions?accountId=${accountId}`, { headers }),
-        fetch(`/api/fluxcore/vector-stores?accountId=${accountId}`, { headers }),
-        fetch(`/api/fluxcore/tools/connections?accountId=${accountId}`, { headers }),
-        fetch(`/api/fluxcore/tools/definitions`, { headers }),
-      ]);
-
-      const [assistantsData, instructionsData, vectorStoresData, connectionsData, definitionsData] = await Promise.all([
-        assistantsRes.json(),
-        instructionsRes.json(),
-        vectorStoresRes.json(),
-        connectionsRes.json(),
-        definitionsRes.json(),
-      ]);
-
-      if (assistantsData.success) setAssistants(assistantsData.data || []);
-      if (instructionsData.success) setInstructions(instructionsData.data || []);
-      if (vectorStoresData.success) setVectorStores(vectorStoresData.data || []);
-
-      if (connectionsData.success && definitionsData.success) {
-        // Map connections to include names from definitions
-        const definitions = definitionsData.data || [];
-        const joinedTools = (connectionsData.data || []).map((conn: any) => {
-          const def = definitions.find((d: any) => d.id === conn.toolDefinitionId);
-          return {
-            id: conn.id,
-            name: def?.name || 'Herramienta desconocida',
-            type: def?.type || 'unknown',
-          };
-        });
-        setTools(joinedTools);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setSaveError('Error al cargar datos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const activateAssistantById = async (id: string) => {
-    if (!token) return;
-    try {
-      const res = await fetch(`/api/fluxcore/assistants/${id}/activate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ accountId }),
+      onOpenTab(assistant.id, assistant.name, {
+        type: 'assistant',
+        assistantId: assistant.id,
       });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        const msg = typeof data?.message === 'string' ? data.message : 'Error al activar asistente';
-        setSaveError(msg);
-        return;
-      }
-
-      setActivateConfirm(null);
-      await loadData();
-      setSelectedAssistant((prev) => (prev?.id === id ? { ...prev, status: 'active' } : prev));
-    } catch (e) {
-      console.error('Error activating assistant', e);
-      setSaveError('Error de conexión');
+    } else {
+      selectEntity(assistant);
     }
-  };
+  }, [onOpenTab, selectEntity]);
 
-
-  const formatSize = (bytes: number): string => {
-    if (!bytes) return '0 B';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const formatDate = (dateStr: string): string => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('es', { day: 'numeric', month: 'short' });
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge variant="success">Activo</Badge>;
-      case 'disabled':
-        return <Badge variant="warning">Desactivado</Badge>;
-      default:
-        return <Badge variant="warning">Borrador</Badge>;
-    }
-  };
-
-  const handleCreateNew = () => {
-    setShowRuntimeModal(true);
-  };
-
-  const handleCreateAssistantWithRuntime = async (runtime: 'local' | 'openai') => {
+  const handleCreate = useCallback(async (runtime: 'local' | 'openai') => {
     setShowRuntimeModal(false);
-    if (!token) {
-      console.error('Cannot create assistant: missing auth token');
-      return;
-    }
-
-    const newAssistantData = {
+    const newAssistant = await createAssistant({
       accountId,
-      name: runtime === 'openai' ? 'Nuevo asistente OpenAI' : 'Nuevo asistente',
-      status: 'draft',
+      name: runtime === 'openai' ? 'Nuevo Agente OpenAI' : 'Nuevo Asistente',
       runtime,
+      status: 'draft',
       modelConfig: {
         provider: 'openai',
         model: 'gpt-4o',
         temperature: 0.7,
         topP: 1.0,
-        responseFormat: 'text',
+        responseFormat: 'text'
       },
       timingConfig: {
         responseDelaySeconds: 2,
-        smartDelay: true,
-      },
-    };
-
-    try {
-      const res = await fetch(`/api/fluxcore/assistants`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(newAssistantData),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error('Error creating assistant:', res.status, text);
-        return;
+        smartDelay: true
       }
+    });
 
-      if (res.ok) {
-        const created = await res.json();
-        if (created.success && created.data) {
-          await loadData();
-          if (onOpenTab) {
-            // ARQUITECTURA: Asistentes OpenAI abren vista EXCLUSIVA OpenAI
-            const tabType = runtime === 'openai' ? 'openai-assistant' : 'assistant';
-            onOpenTab(created.data.id, created.data.name, {
-              type: tabType,
-              assistantId: created.data.id,
-              runtime,
-            });
-          } else if (runtime !== 'openai') {
-            // Solo seleccionar localmente si es local
-            handleSelectAssistant(created.data);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error creating assistant', e);
+    if (newAssistant) {
+      handleSelect(newAssistant);
     }
-  };
+  }, [accountId, createAssistant, handleSelect]);
 
-  const handleNameSave = (newName: string) => {
-    if (!selectedAssistant) return;
-    if (!token) return;
-    updateAssistantState({ name: newName }, { immediate: true });
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    // TODO: Toast notification
-  };
+  const handleOpenResource = useCallback((id: string, type: 'instruction' | 'vectorStore' | 'tool') => {
+    onOpenTab?.(id, 'Cargando...', { type, [`${type}Id`]: id });
+  }, [onOpenTab]);
 
   const handleCopyActiveConfig = async () => {
-    if (!accountId) return;
-    if (isCopyingActiveConfig) return;
-
-    setIsCopyingActiveConfig(true);
-    setSaveError(null);
-
-    try {
-      const res = await fetch(`/api/fluxcore/runtime/active-assistant?accountId=${encodeURIComponent(accountId)}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        console.error('Error fetching active assistant composition:', text);
-        setSaveError('Error al obtener la configuración activa');
-        return;
-      }
-
-      const data = await res.json().catch(() => null);
-      if (!data) {
-        setSaveError('Respuesta inválida del servidor');
-        return;
-      }
-
-      copyToClipboard(JSON.stringify(data, null, 2));
-    } catch (e) {
-      console.error('Error copying active config', e);
-      setSaveError('Error de conexión');
-    } finally {
-      setIsCopyingActiveConfig(false);
+    const config = await getActiveConfig();
+    if (config) {
+      await copy(JSON.stringify(config, null, 2));
+    } else {
+      setError('No se pudo obtener la configuración activa');
     }
   };
 
-  const handleSelectAssistant = async (assistant: Assistant) => {
-    // ARQUITECTURA: Asistentes OpenAI abren vista EXCLUSIVA OpenAI
-    if (assistant.runtime === 'openai' && onOpenTab) {
-      onOpenTab(assistant.id, assistant.name, {
-        type: 'openai-assistant',
-        assistantId: assistant.id,
-        runtime: 'openai',
-      });
-      return;
-    }
+  // 5. Renderizado
 
-    // Solo asistentes locales se muestran en esta vista
-    setSelectedAssistant(assistant);
-    setIsSaving(false);
-    setActivateConfirm(null);
-  };
+  // Modal de creación
+  if (showRuntimeModal) {
+    return <RuntimeSelectorModal onSelect={handleCreate} onClose={() => setShowRuntimeModal(false)} />;
+  }
 
-  const deleteAssistantById = async (id: string) => {
-    if (!token) return;
-    try {
-      const response = await fetch(`/api/fluxcore/assistants/${id}?accountId=${accountId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        setAssistants((prev) => prev.filter((a) => a.id !== id));
-        setSelectedAssistant((prev) => (prev?.id === id ? null : prev));
-        setAssistants((prev) => prev.filter((a) => a.id !== id));
-        setSelectedAssistant((prev) => (prev?.id === id ? null : prev));
-        setActivateConfirm(null);
-      }
-    } catch (error) {
-      console.error('Error deleting assistant:', error);
-    }
-  };
-
-  const handleDeleteAssistant = async () => {
-    if (!selectedAssistant) return;
-    await deleteAssistantById(selectedAssistant.id);
-  };
-
-  const handleActivateAssistant = async () => {
-    if (!selectedAssistant || activateConfirm !== selectedAssistant.id) return;
-    await activateAssistantById(selectedAssistant.id);
-  };
-
-  useEffect(() => {
-    if (!assistantId) return;
-    if (!token) return;
-    if (selectedAssistant?.id === assistantId) return;
-    if (autoSelectedAssistantIdRef.current === assistantId) return;
-
-    const summary = assistants.find((a) => a.id === assistantId);
-    if (!summary) return;
-
-    autoSelectedAssistantIdRef.current = assistantId;
-    void handleSelectAssistant(summary);
-  }, [assistantId, assistants, selectedAssistant?.id, token]);
-
-  useEffect(() => {
-    if (!onOpenTab) return;
-    if (assistantId) return;
-    if (!selectedAssistant) return;
-    setSelectedAssistant(null);
-  }, [assistantId, onOpenTab, selectedAssistant]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  // Vista de configuración de asistente (composición de activos)
+  // Vista de detalle (Configuración)
   if (selectedAssistant) {
     return (
-      <div className="h-full flex flex-col bg-background overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-subtle">
-          <div className="text-xs text-muted mb-1">Configuración de asistente</div>
-          <div className="flex items-center gap-2 px-3 py-2 rounded border border-transparent bg-transparent hover:border-[var(--text-primary)] focus-within:border-[var(--text-primary)] transition-colors">
-            <button
-              type="button"
-              onClick={() => nameInputRef.current?.focus()}
-              className="p-1 text-muted hover:text-primary transition-colors flex-shrink-0"
-              aria-label="Editar nombre del asistente"
-            >
-              <Pencil size={16} />
-            </button>
-            <input
-              ref={nameInputRef}
-              type="text"
-              className="text-xl font-semibold text-primary bg-transparent border-none focus:outline-none focus:ring-0 w-full p-0"
-              value={selectedAssistant.name}
-              onChange={(e) => setSelectedAssistant({ ...selectedAssistant, name: e.target.value })}
-              onBlur={(e) => handleNameSave(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.currentTarget.blur();
-                }
-              }}
-              placeholder="Nombre del asistente"
-              aria-label="Nombre del asistente"
-            />
-          </div>
-          {selectedAssistant.id && (
-            <div
-              className="text-xs text-muted mt-1 cursor-pointer hover:text-accent flex items-center gap-1 group"
-              onClick={() => copyToClipboard(selectedAssistant.id)}
-              title="Click para copiar ID"
-            >
-              Id: {selectedAssistant.id}
-              <span className="opacity-0 group-hover:opacity-100"><Copy size={12} /></span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-auto p-6 space-y-6">
-          {/* Configuración inicial - Referencias a otros activos */}
-          <CollapsibleSection
-            title="Configuración inicial"
-            defaultExpanded={true}
-            showToggle={true}
-            isCustomized={enabledSections.initial}
-            onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, initial: enabled }))}
-          >
-            <div className={`space-y-6 ${!enabledSections.initial ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-              {/* Sistema de instrucciones (referencia a biblioteca) */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm text-muted">Sistema de instrucciones</label>
-                  <Button variant="secondary" size="sm" onClick={handleCreateInstruction}>
-                    <Plus size={16} className="mr-1" />
-                    Crear
-                  </Button>
-                </div>
-
-                {(() => {
-                  const currentId = selectedAssistant.instructionIds?.[0];
-                  const current = currentId ? instructions.find((i) => i.id === currentId) : null;
-                  const selectable = instructions.filter((i) => i.id !== currentId);
-
-                  return (
-                    <>
-                      {currentId && (
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          <Badge
-                            variant="info"
-                            className="flex items-center gap-1 cursor-pointer hover:bg-accent/20 transition-colors"
-                            onClick={() => openInstructionReference(currentId)}
-                          >
-                            {current?.name || currentId}
-                            <button
-                              type="button"
-                              className="ml-1 hover:text-red-400"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateAssistantState({ instructionIds: [] }, { immediate: true });
-                              }}
-                              aria-label="Quitar instrucción"
-                            >
-                              <X size={12} />
-                            </button>
-                          </Badge>
-                        </div>
-                      )}
-
-                      {!currentId && selectable.length > 0 && (
-                        <div className="relative">
-                          <select
-                            className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                            value=""
-                            onChange={(e) => {
-                              const id = e.target.value;
-                              if (!id) return;
-                              updateAssistantState({ instructionIds: [id] }, { immediate: true });
-                            }}
-                          >
-                            <option value="">Seleccionar instrucción...</option>
-                            {selectable.map((inst) => (
-                              <option key={inst.id} value={inst.id}>
-                                {inst.name}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-
-              {/* Base de conocimiento (referencia a vector store) */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm text-muted">Base de conocimiento</label>
-                  <Button variant="secondary" size="sm" onClick={handleCreateVectorStore}>
-                    <Plus size={16} className="mr-1" />
-                    Crear
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {(selectedAssistant.vectorStoreIds || []).map((id) => {
-                    const vs = vectorStores.find(v => v.id === id);
-                    return (
-                      <Badge
-                        key={id}
-                        variant="info"
-                        className="flex items-center gap-1 cursor-pointer hover:bg-accent/20 transition-colors"
-                        onClick={() => openVectorStoreReference(id)}
-                      >
-                        {vs?.name || id}
-                        <button
-                          type="button"
-                          className="ml-1 hover:text-red-400"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateAssistantState({
-                              vectorStoreIds: selectedAssistant.vectorStoreIds?.filter(vid => vid !== id)
-                            }, { immediate: true });
-                          }}
-                        >
-                          <X size={12} />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-                {selectedAssistant.runtime === 'openai' && (
-                  <div className="mb-2 p-2 bg-accent/5 border border-accent/20 rounded text-xs text-secondary">
-                    Asistente OpenAI: solo se pueden asociar vector stores de OpenAI
-                  </div>
-                )}
-                <div className="relative">
-                  {(() => {
-                    const used = new Set(selectedAssistant.vectorStoreIds || []);
-                    let selectable = vectorStores.filter((vs) => !used.has(vs.id));
-
-                    if (selectedAssistant.runtime === 'openai') {
-                      selectable = selectable.filter((vs) => vs.backend === 'openai');
-                    }
-
-                    return (
-                      <select
-                        className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                        value=""
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          if (id && !selectedAssistant.vectorStoreIds?.includes(id)) {
-                            updateAssistantState({
-                              vectorStoreIds: [...(selectedAssistant.vectorStoreIds || []), id]
-                            }, { immediate: true });
-                          }
-                        }}
-                        disabled={selectable.length === 0}
-                      >
-                        <option value="">{selectable.length === 0 ? 'No hay más bases disponibles' : 'Agregar base de conocimiento...'}</option>
-                        {selectable.map((vs) => (
-                          <option key={vs.id} value={vs.id}>
-                            {vs.name} {vs.backend === 'openai' ? '(OpenAI)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  })()}
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Herramientas (referencias a biblioteca de tools) */}
-              <div>
-                <label className="block text-sm text-muted mb-1">Herramientas</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {(selectedAssistant.toolIds || []).map((toolId) => {
-                    const tool = tools.find(t => t.id === toolId);
-                    return tool ? (
-                      <Badge key={toolId} variant="info" className="flex items-center gap-1">
-                        {tool.name}
-                        <button
-                          className="ml-1 hover:text-red-400"
-                          onClick={() => updateAssistantState({
-                            toolIds: selectedAssistant.toolIds?.filter(id => id !== toolId)
-                          }, { immediate: true })}
-                        ><X size={12} /></button>
-                      </Badge>
-                    ) : null;
-                  })}
-                </div>
-                <div className="relative">
-                  {(() => {
-                    const used = new Set(selectedAssistant.toolIds || []);
-                    const selectable = tools.filter((t) => !used.has(t.id));
-                    return (
-                      <select
-                        className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                        value=""
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          if (id && !selectedAssistant.toolIds?.includes(id)) {
-                            updateAssistantState({
-                              toolIds: [...(selectedAssistant.toolIds || []), id]
-                            }, { immediate: true });
-                          }
-                        }}
-                        disabled={selectable.length === 0}
-                      >
-                        <option value="">{selectable.length === 0 ? 'No hay más herramientas disponibles' : 'Agregar herramienta...'}</option>
-                        {selectable.map((tool) => (
-                          <option key={tool.id} value={tool.id}>
-                            {tool.name}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  })()}
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                </div>
-              </div>
-            </div>
-          </CollapsibleSection>
-
-          {/* Proveedor IA */}
-          <CollapsibleSection
-            title="Proveedor IA"
-            defaultExpanded={true}
-            showToggle={true}
-            isCustomized={enabledSections.provider}
-            onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, provider: enabled }))}
-          >
-            <div className={`space-y-4 ${!enabledSections.provider ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-              <div>
-                <label className="block text-sm text-muted mb-1">Empresa proveedora</label>
-                {selectedAssistant.runtime === 'openai' && (
-                  <div className="mb-2 p-2 bg-accent/5 border border-accent/20 rounded text-xs text-secondary">
-                    Asistente OpenAI: el proveedor está fijado a OpenAI
-                  </div>
-                )}
-                <div className="relative">
-                  <select
-                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                    value={selectedAssistant.modelConfig.provider}
-                    disabled={selectedAssistant.runtime === 'openai'}
-                    onChange={(e) => {
-                      const nextProvider = e.target.value;
-                      const allowedModels = PROVIDER_MODELS[nextProvider] || [];
-                      const currentModel = selectedAssistant.modelConfig.model;
-                      const nextModel = allowedModels.includes(currentModel)
-                        ? currentModel
-                        : (allowedModels[0] || currentModel);
-
-                      updateAssistantState({
-                        modelConfig: { ...selectedAssistant.modelConfig, provider: nextProvider, model: nextModel }
-                      }, { immediate: true });
-                    }}
-                  >
-                    <option value="openai">Open IA</option>
-                    <option value="groq">Groq</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-muted mb-1">Modelo disponible</label>
-                <div className="relative">
-                  {(() => {
-                    const allowed = PROVIDER_MODELS[selectedAssistant.modelConfig.provider] || [];
-                    const options = allowed.length > 0 ? allowed : [selectedAssistant.modelConfig.model].filter(Boolean);
-                    return (
-                      <select
-                        className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                        value={selectedAssistant.modelConfig.model}
-                        onChange={(e) => updateAssistantState({
-                          modelConfig: { ...selectedAssistant.modelConfig, model: e.target.value }
-                        }, { immediate: true })}
-                      >
-                        {options.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    );
-                  })()}
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                </div>
-              </div>
-            </div>
-          </CollapsibleSection>
-
-          {/* Tiempo de espera de respuesta */}
-          <CollapsibleSection
-            title="Tiempo de espera de respuesta"
-            defaultExpanded={true}
-            showToggle={true}
-            isCustomized={enabledSections.timing}
-            onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, timing: enabled }))}
-          >
-            <div className={`space-y-4 ${!enabledSections.timing ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-              <div>
-                <label className="block text-sm text-muted mb-1">Segundos de espera</label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="number"
-                    className="w-24 bg-input border border-subtle rounded px-3 py-2 text-primary disabled:opacity-50"
-                    value={selectedAssistant.timingConfig.responseDelaySeconds}
-                    disabled={selectedAssistant.timingConfig.smartDelay}
-                    onChange={(e) => updateAssistantState({
-                      timingConfig: { ...selectedAssistant.timingConfig, responseDelaySeconds: parseInt(e.target.value) || 0 }
-                    })}
-                  />
-                  <span className="text-muted text-sm">
-                    {selectedAssistant.timingConfig.smartDelay
-                      ? 'Desactivado por Smart Delay'
-                      : 'Tiempo de espera antes de responder automáticamente'}
-                  </span>
-                </div>
-              </div>
-
-              <Checkbox
-                label="Smart delay"
-                description="Permite que el delay se ajuste según la actividad detectada en el chat"
-                checked={selectedAssistant.timingConfig.smartDelay}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  updateAssistantState(
-                    {
-                      timingConfig: {
-                        ...selectedAssistant.timingConfig,
-                        smartDelay: checked,
-                      },
-                    },
-                    { immediate: true }
-                  );
-                }}
-              />
-            </div>
-          </CollapsibleSection>
-
-          {/* Configuración de modelo */}
-          <CollapsibleSection
-            title="Configuración de modelo"
-            defaultExpanded={false}
-            showToggle={true}
-            isCustomized={enabledSections.model}
-            onToggleCustomized={(enabled) => setEnabledSections(prev => ({ ...prev, model: enabled }))}
-          >
-            <div className={`space-y-4 ${!enabledSections.model ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-              <div>
-                <label className="block text-sm text-muted mb-1">Formato de respuesta</label>
-                <div className="relative">
-                  <select
-                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                    value={selectedAssistant.modelConfig.responseFormat}
-                    onChange={(e) => updateAssistantState({
-                      modelConfig: { ...selectedAssistant.modelConfig, responseFormat: e.target.value }
-                    }, { immediate: true })}
-                  >
-                    <option value="text">Text</option>
-                    <option value="json">JSON</option>
-                  </select>
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                </div>
-              </div>
-
-              <SliderInput
-                label="Temperatura"
-                value={selectedAssistant.modelConfig.temperature}
-                onChange={(val) => updateAssistantState({
-                  modelConfig: { ...selectedAssistant.modelConfig, temperature: val }
-                })}
-                min={0}
-                max={2}
-                step={0.01}
-              />
-
-              <SliderInput
-                label="Top P"
-                value={selectedAssistant.modelConfig.topP}
-                onChange={(val) => updateAssistantState({
-                  modelConfig: { ...selectedAssistant.modelConfig, topP: val }
-                })}
-                min={0}
-                max={1}
-                step={0.01}
-              />
-            </div>
-          </CollapsibleSection>
-        </div>
-
-        <div className="px-6 py-3 border-t border-subtle bg-surface flex flex-wrap items-center gap-3 justify-start">
-          {selectedAssistant.status !== 'active' && (
-            activateConfirm === selectedAssistant.id ? (
-              <>
-                <span className="text-sm text-muted">¿Confirmar activación?</span>
-                <button
-                  onClick={handleActivateAssistant}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
-                  title="Activar ahora"
-                  type="button"
-                >
-                  <Zap size={16} className="text-inverse" />
-                  Activar ahora
-                </button>
-                <button
-                  onClick={() => setActivateConfirm(null)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
-                  type="button"
-                >
-                  Cancelar
-                </button>
-                <span className="text-xs text-muted">Esto desactivará cualquier otro asistente activo.</span>
-              </>
-            ) : (
-              <button
-                onClick={() => {
-                  setActivateConfirm(selectedAssistant.id);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-success/90"
-                title="Activar asistente"
-                type="button"
-              >
-                <Zap size={16} className="text-inverse" />
-                Activar asistente
-              </button>
-            )
-          )}
-
-          <button
-            onClick={handleCopyActiveConfig}
-            className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"
-            title="Copiar configuración activa (runtime)"
-            type="button"
-            disabled={isCopyingActiveConfig}
-          >
-            <Copy size={16} />
-            {isCopyingActiveConfig ? 'Copiando…' : 'Copiar config activa'}
-          </button>
-
-          <DoubleConfirmationDeleteButton
-            onConfirm={handleDeleteAssistant}
-            className="ml-auto"
-            size={16}
-          />
-
-          {isSaving && <span className="text-xs text-muted">Guardando...</span>}
-          {saveError && <span className="text-xs text-red-500">{saveError}</span>}
-        </div>
-      </div>
+      <AssistantDetail
+        assistant={selectedAssistant}
+        instructions={instructions}
+        vectorStores={vectorStores}
+        tools={tools}
+        onUpdate={(updates) => updateAssistant(selectedAssistant.id, updates)}
+        onDelete={() => deleteAssistant(selectedAssistant.id)}
+        onActivate={async () => {
+          await activateAssistant(selectedAssistant.id);
+          setDetailActivateConfirm(false);
+        }}
+        onCopyConfig={handleCopyActiveConfig}
+        onClose={onOpenTab ? clearSelection : () => selectEntity(null as any)} // Depende de si estamos en modo tabs o vista única
+        onOpenResource={handleOpenResource}
+        onCreateResource={(type) => handleOpenResource('new', type)}
+        isSaving={isSaving}
+        saveError={assistantError}
+        activateConfirm={detailActivateConfirm}
+        setActivateConfirm={setDetailActivateConfirm}
+      />
     );
   }
 
-
-
-  // Vista de lista (tabla)
+  // Vista de lista (Dashboard)
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header con botón crear */}
-      <div className="flex items-center justify-end px-6 py-3">
-        <Button variant="secondary" size="sm" onClick={handleCreateNew}>
-          <Plus size={16} className="mr-1" />
-          Nuevo asistente
-        </Button>
-      </div>
-
-      {/* Tabla */}
-      <div className="flex-1 min-h-0 overflow-auto px-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-64 text-muted">
-            Cargando asistentes...
-          </div>
-        ) : assistants.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <Bot size={48} className="text-muted mb-4" />
-            <h3 className="text-lg font-medium text-primary mb-2">
-              No hay asistentes configurados
-            </h3>
-            <p className="text-secondary mb-4">
-              Crea tu primer asistente para comenzar
-            </p>
-            <Button onClick={handleCreateNew}>
-              <Plus size={16} className="mr-1" />
-              Crear asistente
-            </Button>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-subtle text-left">
-                <th className="px-4 py-3 text-xs font-medium text-muted">Nombre</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted hidden md:table-cell">Instrucciones</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted">Estado</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted hidden lg:table-cell">Última modificación</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted hidden lg:table-cell">Tamaño</th>
-                <th className="px-4 py-3 text-xs font-medium text-muted sticky right-0 bg-surface"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedAssistants.map((assistant) => (
-                <tr
-                  key={assistant.id}
-                  className="border-b border-subtle hover:bg-hover cursor-pointer group"
-                  onClick={() => {
-                    if (onOpenTab) {
-                      onOpenTab(assistant.id, assistant.name, {
-                        type: 'assistant',
-                        assistantId: assistant.id,
-                      });
-                      return;
-                    }
-
-                    void handleSelectAssistant(assistant);
-                  }}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-                        {assistant.runtime === 'openai' ? (
-                          <OpenAIIcon size={16} className="text-primary" />
-                        ) : (
-                          <Bot size={16} className="text-accent" />
-                        )}
-                      </div>
-
-                      {assistant.status === 'active' && (
-                        <span
-                          className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"
-                          title="Asistente activo"
-                        />
-                      )}
-
-                      <span className="font-medium text-primary">{assistant.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="text-muted text-xs">
-                      {(assistant.instructionIds || []).length > 0
-                        ? ((assistant.instructionIds || []).slice(0, 1).map(id => instructions.find(i => i.id === id)?.name || 'Desconocido').join(', '))
-                        : '-'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{getStatusBadge(assistant.status)}</td>
-                  <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
-                    {formatDate(assistant.updatedAt)} {assistant.lastModifiedBy}
-                  </td>
-                  <td className="px-4 py-3 text-secondary text-sm hidden lg:table-cell">
-                    {formatSize(assistant.sizeBytes)} - {assistant.tokensUsed || 0} tokens
-                  </td>
-                  <td className="px-4 py-3 sticky right-0 bg-surface group-hover:bg-hover">
-                    <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1 hover:bg-active rounded" onClick={(e) => e.stopPropagation()}>
-                        <Share2 size={14} className="text-muted flex-shrink-0" />
-                      </button>
-                      <button className="p-1 hover:bg-active rounded" onClick={(e) => e.stopPropagation()}>
-                        <Download size={14} className="text-muted flex-shrink-0" />
-                      </button>
-                      <button className="p-1 hover:bg-active rounded" onClick={(e) => e.stopPropagation()}>
-                        <RotateCcw size={14} className="text-muted flex-shrink-0" />
-                      </button>
-
-                      {assistant.status !== 'active' && (
-                        activateConfirm === assistant.id ? (
-                          <>
-                            <button
-                              className="p-1 hover:bg-active rounded"
-                              title="Activar ahora"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void activateAssistantById(assistant.id);
-                              }}
-                            >
-                              <Check size={14} className="text-success flex-shrink-0" />
-                            </button>
-                            <button
-                              className="p-1 hover:bg-active rounded"
-                              title="Cancelar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActivateConfirm(null);
-                              }}
-                            >
-                              <X size={14} className="text-muted flex-shrink-0" />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            className="p-1 hover:bg-active rounded"
-                            title="Activar"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivateConfirm(assistant.id);
-                            }}
-                          >
-                            <Zap size={14} className="text-muted hover:text-success flex-shrink-0" />
-                          </button>
-                        )
-                      )}
-
-                      <DoubleConfirmationDeleteButton
-                        onConfirm={() => deleteAssistantById(assistant.id)}
-                        size={14}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Modal de selección de runtime */}
-      {showRuntimeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowRuntimeModal(false)}>
-          <div className="bg-surface border border-subtle rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-primary mb-4">Selecciona el tipo de asistente</h3>
-            <div className="space-y-3">
-              <button
-                onClick={() => handleCreateAssistantWithRuntime('local')}
-                className="w-full p-4 bg-hover border border-subtle rounded-lg hover:bg-active transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <Bot size={24} className="text-accent" />
-                  <div>
-                    <div className="font-medium text-primary">Asistente Local</div>
-                    <div className="text-sm text-secondary">Ejecutado en tu infraestructura FluxCore</div>
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleCreateAssistantWithRuntime('openai')}
-                className="w-full p-4 bg-accent/5 border border-accent/20 rounded-lg hover:bg-accent/10 transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <Bot size={24} className="text-accent" />
-                  <div>
-                    <div className="font-medium text-primary flex items-center gap-2">
-                      Asistente OpenAI
-                      <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded">Externo</span>
-                    </div>
-                    <div className="text-sm text-secondary">Sincronizado con la plataforma OpenAI</div>
-                  </div>
-                </div>
-              </button>
-            </div>
-            <button
-              onClick={() => setShowRuntimeModal(false)}
-              className="mt-4 w-full px-4 py-2 text-sm text-muted hover:text-primary transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+    <AssistantList
+      assistants={assistants}
+      instructions={instructions}
+      loading={loadingAssistants}
+      onSelect={handleSelect}
+      onCreate={() => setShowRuntimeModal(true)}
+      onActivate={activateAssistant}
+      onDelete={deleteAssistant}
+      activateConfirm={activateConfirmId}
+      setActivateConfirm={setActivateConfirmId}
+    />
   );
 }
 
