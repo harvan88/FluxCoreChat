@@ -19,6 +19,7 @@ cd ../..
 
 # 3. Iniciar API + Web
 bun run dev
+
 ```
 
 ### OPCIÓN B: Primera vez / Setup completo

@@ -4,28 +4,10 @@ import { relationshipService } from '../services/relationship.service';
 import { extensionHost, type ProcessMessageResult } from '../services/extension-host.service';
 import { automationController, type TriggerEvaluation } from '../services/automation-controller.service';
 import type { MessageContent } from '@fluxcore/db';
+import { coreEventBus } from './events';
+import type { MessageEnvelope, ReceiveResult } from './types';
 
-export interface MessageEnvelope {
-  id?: string;
-  conversationId: string;
-  senderAccountId: string;
-  content: MessageContent;
-  type: 'incoming' | 'outgoing' | 'system';
-  generatedBy?: 'human' | 'ai';
-  timestamp?: Date;
-  // Contexto adicional para extensiones
-  targetAccountId?: string;  // La cuenta que recibe el mensaje (para extensiones)
-}
-
-export interface ReceiveResult {
-  success: boolean;
-  messageId?: string;
-  error?: string;
-  // Resultados del procesamiento de extensiones
-  extensionResults?: ProcessMessageResult[];
-  // COR-007: Información de automatización
-  automation?: TriggerEvaluation;
-}
+export { MessageEnvelope, ReceiveResult }; // Re-export para compatibilidad (opcional)
 
 /**
  * MessageCore - El corazón del sistema de mensajería
@@ -96,9 +78,9 @@ export class MessageCore {
 
         if (relationship) {
           // El targetAccountId es la cuenta que RECIBE el mensaje (no el sender)
-          const targetAccountId = envelope.targetAccountId || 
-            (envelope.senderAccountId === relationship.accountAId 
-              ? relationship.accountBId 
+          const targetAccountId = envelope.targetAccountId ||
+            (envelope.senderAccountId === relationship.accountAId
+              ? relationship.accountBId
               : relationship.accountAId);
 
           if (envelope.generatedBy === 'ai') {
@@ -201,12 +183,17 @@ export class MessageCore {
         }
       }
 
-      return {
+      const result: ReceiveResult = {
         success: true,
         messageId: message.id,
         extensionResults,
         automation: automationResult,
       };
+
+      // R-02.1: Emitir evento para desacoplar lógica (IA, Analytics)
+      coreEventBus.emit('core:message_received', { envelope, result });
+
+      return result;
     } catch (error: any) {
       console.error('MessageCore.receive error:', error);
       return {

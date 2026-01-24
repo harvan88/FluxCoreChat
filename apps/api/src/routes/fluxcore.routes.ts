@@ -743,36 +743,19 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
           return { success: false, message: 'Vector store not found' };
         }
 
-        const files = await fluxcoreService.getVectorStoreFiles(params.id);
-
         if (store.backend === 'openai' && store.externalId) {
-          const { getOpenAIVectorStoreFile } = await import('../services/openai-sync.service');
-          const refreshed = await Promise.all(files.map(async (f: any) => {
-            if (!f.externalId) return f;
-            try {
-              const remote = await getOpenAIVectorStoreFile(store.externalId as string, f.externalId);
-              const status = typeof remote?.status === 'string' ? remote.status : undefined;
-              if (!status) return f;
-
-              let mapped: 'pending' | 'processing' | 'completed' | 'failed' = 'processing';
-              if (status === 'completed') mapped = 'completed';
-              if (status === 'failed' || status === 'cancelled') mapped = 'failed';
-              if (status === 'in_progress') mapped = 'processing';
-
-              // Persistir estado actualizado en DB local si cambió
-              if (mapped !== f.status) {
-                await fluxcoreService.updateVectorStoreFileStatus(f.id, mapped);
-              }
-
-              return { ...f, status: mapped };
-            } catch (err) {
-              console.error(`[fluxcore] Error fetching OpenAI file status for ${f.externalId}:`, err);
-              return f;
-            }
-          }));
-
-          return { success: true, data: refreshed };
+          // REGLA: OpenAI es fuente de verdad. Sincronizar LISTA COMPLETA antes de responder.
+          const { syncVectorStoreFromOpenAI } = await import('../services/openai-sync.service');
+          try {
+            await syncVectorStoreFromOpenAI(store.id, store.externalId, accountId);
+          } catch (syncErr) {
+            console.error('[fluxcore] Error syncing vector store files on list:', syncErr);
+            // Continuamos para devolver lo que haya localmente al menos
+          }
         }
+
+        // Obtener archivos (ahora sincronizados si fue posible)
+        const files = await fluxcoreService.getVectorStoreFiles(params.id);
 
         return { success: true, data: files };
       } catch (error: any) {
@@ -926,22 +909,35 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
           }
 
           const { uploadOpenAIFile, addFileToOpenAIVectorStore } = await import('../services/openai-sync.service');
-          
+
           // 1. Subir archivo a OpenAI Files API
           const openaiFileId = await uploadOpenAIFile(content, file.name);
-          
+
+          // Obtener params opcionales
+          const requestBody = body as any;
+          const chunkingStrategy = requestBody.chunkingStrategy ? JSON.parse(requestBody.chunkingStrategy) : undefined;
+          const attributes = requestBody.attributes ? JSON.parse(requestBody.attributes) : undefined;
+
           // 2. Asociar archivo al vector store en OpenAI
-          await addFileToOpenAIVectorStore(store.externalId as string, openaiFileId);
-          
+          const openaiFileResult = await addFileToOpenAIVectorStore({
+            vectorStoreId: store.externalId as string,
+            fileId: openaiFileId,
+            chunkingStrategy,
+            attributes,
+          });
+
           // 3. Crear SOLO referencia local (sin contenido, sin fileId central)
           const fileLink = await fluxcoreService.addVectorStoreFile({
             vectorStoreId: params.id,
             name: file.name,
             mimeType: file.type || 'application/octet-stream',
             sizeBytes: file.size,
-            status: 'processing',
+            status: openaiFileResult.status, // Leer status real
             externalId: openaiFileId,
-            // fileId: null - NO hay archivo central local
+            chunkingStrategy: openaiFileResult.chunkingStrategy,
+            attributes: openaiFileResult.attributes as any,
+            usageBytes: openaiFileResult.usageBytes,
+            lastError: openaiFileResult.lastError,
           });
 
           return {
@@ -951,9 +947,12 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
               name: file.name,
               mimeType: file.type || 'application/octet-stream',
               sizeBytes: file.size,
-              status: 'processing',
+              status: openaiFileResult.status,
               externalId: openaiFileId,
-            }
+              chunkingStrategy: openaiFileResult.chunkingStrategy,
+              attributes: openaiFileResult.attributes,
+            },
+            syncedFrom: 'openai',
           };
         }
 
@@ -1088,6 +1087,191 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       detail: {
         tags: ['FluxCore'],
         summary: 'Reprocess an existing file in vector store',
+      },
+    }
+  )
+
+  // POST /fluxcore/vector-stores/:id/search
+  // Búsqueda semántica en Vector Store de OpenAI
+  // REGLA 6.1: Solo para QA/debugging/testing, NO reemplaza al Assistant
+  .post(
+    '/:id/search',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const { accountId, query, maxNumResults, rankingOptions, filters } = body;
+
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      try {
+        const store = await fluxcoreService.getVectorStoreById(params.id, accountId);
+        if (!store) {
+          set.status = 404;
+          return { success: false, message: 'Vector store not found' };
+        }
+
+        // Solo disponible para Vector Stores de OpenAI
+        if (store.backend !== 'openai') {
+          set.status = 400;
+          return {
+            success: false,
+            message: 'Search is only available for OpenAI vector stores. Use retrieval service for local.',
+          };
+        }
+
+        if (!store.externalId) {
+          set.status = 400;
+          return {
+            success: false,
+            message: 'OpenAI vector store is missing externalId. It may not be synced yet.',
+          };
+        }
+
+        const { searchOpenAIVectorStore } = await import(
+          '../services/openai-sync.service'
+        );
+
+        const results = await searchOpenAIVectorStore(store.externalId, {
+          query,
+          maxNumResults: maxNumResults ?? 10,
+          rewriteQuery: false,
+          rankingOptions: rankingOptions
+            ? {
+              ranker: (rankingOptions.ranker as any) || 'auto',
+              scoreThreshold: rankingOptions.scoreThreshold,
+            }
+            : undefined,
+          filters,
+        });
+
+        return {
+          success: true,
+          data: {
+            results,
+            query,
+            totalResults: results.length,
+            note: 'This search is for QA/debugging only. Use the Assistant for production RAG.',
+          },
+        };
+      } catch (error: any) {
+        console.error('[fluxcore] Error searching vector store:', error);
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      body: t.Object({
+        accountId: t.String(),
+        query: t.Union([t.String(), t.Array(t.String())]),
+        maxNumResults: t.Optional(t.Number()),
+        rankingOptions: t.Optional(
+          t.Object({
+            ranker: t.Optional(t.String()),
+            scoreThreshold: t.Optional(t.Number()),
+          })
+        ),
+        filters: t.Optional(t.Any()),
+      }),
+      detail: {
+        tags: ['FluxCore'],
+        summary: 'Search OpenAI vector store (QA/debugging only)',
+        description:
+          'Performs semantic search on an OpenAI Vector Store. For QA/debugging/testing only. Do NOT use as replacement for the Assistant.',
+      },
+    }
+  )
+
+  // POST /fluxcore/vector-stores/:id/sync
+  // Sincroniza el estado del Vector Store desde OpenAI (fuente de verdad)
+  .post(
+    '/:id/sync',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const { accountId } = body;
+
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      try {
+        const store = await fluxcoreService.getVectorStoreById(params.id, accountId);
+        if (!store) {
+          set.status = 404;
+          return { success: false, message: 'Vector store not found' };
+        }
+
+        if (store.backend !== 'openai') {
+          set.status = 400;
+          return {
+            success: false,
+            message: 'Sync is only available for OpenAI vector stores.',
+          };
+        }
+
+        if (!store.externalId) {
+          set.status = 400;
+          return {
+            success: false,
+            message: 'OpenAI vector store is missing externalId.',
+          };
+        }
+
+        const { syncVectorStoreFromOpenAI } = await import(
+          '../services/openai-sync.service'
+        );
+
+        // Leer estado real desde OpenAI (fuente de verdad)
+        const remoteData = await syncVectorStoreFromOpenAI(store.externalId);
+
+        // Actualizar registro local con datos de OpenAI
+        const updated = await fluxcoreService.updateVectorStoreFromOpenAI(params.id, accountId, {
+          status: remoteData.status === 'completed' ? 'production' : 'draft',
+          fileCounts: remoteData.fileCounts,
+          usageBytes: remoteData.usageBytes,
+          lastActiveAt: remoteData.lastActiveAt
+            ? new Date(remoteData.lastActiveAt * 1000)
+            : null,
+          metadata: remoteData.metadata || {},
+        });
+
+        return {
+          success: true,
+          data: updated,
+          syncedFrom: 'openai',
+          message: 'Vector store synced from OpenAI (source of truth)',
+        };
+      } catch (error: any) {
+        console.error('[fluxcore] Error syncing vector store:', error);
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      body: t.Object({
+        accountId: t.String(),
+      }),
+      detail: {
+        tags: ['FluxCore'],
+        summary: 'Sync vector store from OpenAI (source of truth)',
+        description:
+          'Reads the current state from OpenAI and updates the local reference. OpenAI is the source of truth.',
       },
     }
   );

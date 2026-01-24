@@ -1,8 +1,19 @@
 /**
  * OpenAI Sync Service
  * 
- * Servicio para sincronizar asistentes y vector stores con la plataforma OpenAI.
- * FluxCore es la fuente de verdad, este servicio hace push unidireccional a OpenAI.
+ * Servicio para interactuar con la plataforma OpenAI.
+ * 
+ * CONFORMIDAD CON REGLAS ARQUITECTÓNICAS:
+ * - Regla 2.1: vs.openai es la ÚNICA fuente de verdad
+ * - Regla 3.1: FluxCore almacena registro referencial derivado
+ * - Regla 4.1: Toda mutación se ejecuta PRIMERO en OpenAI
+ * - Regla 5.1: Ante discrepancias, vs.openai GANA SIEMPRE
+ * - Regla 6.1: Búsqueda directa es solo para QA/debugging/testing
+ * 
+ * Este servicio:
+ * - Ejecuta operaciones en OpenAI
+ * - Lee estados desde OpenAI (fuente de verdad)
+ * - Retorna datos para que FluxCore los refleje localmente
  */
 
 import OpenAI from 'openai';
@@ -46,6 +57,10 @@ function getVectorStoresCandidates(client: OpenAI): any[] {
   return [stable, beta].filter(Boolean);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// INTERFACES - Assistants
+// ════════════════════════════════════════════════════════════════════════════
+
 export interface CreateOpenAIAssistantParams {
   name: string;
   description?: string;
@@ -63,15 +78,119 @@ export interface UpdateOpenAIAssistantParams {
   vectorStoreIds?: string[];
 }
 
-export interface CreateOpenAIVectorStoreParams {
-  name: string;
-  fileIds?: string[]; // IDs externos de archivos OpenAI
+// ════════════════════════════════════════════════════════════════════════════
+// INTERFACES - Vector Stores (Alineadas con OpenAI API)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Estrategia de chunking en formato OpenAI
+ */
+export interface ChunkingStrategy {
+  type: 'auto' | 'static';
+  static?: {
+    max_chunk_size_tokens: number;  // 100-4096
+    chunk_overlap_tokens: number;    // <= max/2
+  };
 }
 
+/**
+ * File counts en formato OpenAI (LEÍDO desde OpenAI)
+ */
+export interface OpenAIFileCounts {
+  in_progress: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  total: number;
+}
+
+/**
+ * Parámetros para crear Vector Store en OpenAI
+ */
+export interface CreateOpenAIVectorStoreParams {
+  name: string;
+  description?: string;
+  fileIds?: string[];
+  chunkingStrategy?: ChunkingStrategy;
+  expiresAfter?: { anchor: 'last_active_at'; days: number };
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Parámetros para actualizar Vector Store en OpenAI
+ */
 export interface UpdateOpenAIVectorStoreParams {
   externalId: string;
   name?: string;
-  fileIds?: string[];
+  expiresAfter?: { anchor: 'last_active_at'; days: number } | null;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Parámetros para agregar archivo a Vector Store
+ */
+export interface AddFileToVectorStoreParams {
+  vectorStoreId: string;
+  fileId: string;
+  chunkingStrategy?: ChunkingStrategy;
+  attributes?: Record<string, string | number | boolean>;
+}
+
+/**
+ * Datos de Vector Store LEÍDOS desde OpenAI (fuente de verdad)
+ */
+export interface OpenAIVectorStoreData {
+  id: string;
+  status: 'expired' | 'in_progress' | 'completed';
+  usageBytes: number;
+  fileCounts: OpenAIFileCounts;
+  lastActiveAt: number | null;
+  expiresAt: number | null;
+  name: string;
+  metadata: Record<string, string> | null;
+}
+
+/**
+ * Datos de archivo LEÍDOS desde OpenAI (fuente de verdad)
+ */
+export interface OpenAIFileData {
+  id: string;
+  status: string;
+  usageBytes: number;
+  attributes: Record<string, any>;
+  chunkingStrategy: any;
+  lastError: { code: string; message: string } | null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INTERFACES - Búsqueda (solo para QA/debugging/testing - Regla 6.1)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Parámetros para búsqueda en Vector Store
+ * NOTA: Esta búsqueda NO reemplaza al Assistant. Es solo para QA/debugging.
+ */
+export interface VectorStoreSearchParams {
+  query: string | string[];
+  maxNumResults?: number;  // 1-50, default 10
+  rewriteQuery?: boolean;
+  rankingOptions?: {
+    ranker?: 'none' | 'auto' | 'default-2024-11-15';
+    scoreThreshold?: number;
+  };
+  filters?: SearchFilter;
+}
+
+export type SearchFilter =
+  | { type: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte'; key: string; value: string | number }
+  | { type: 'and' | 'or'; filters: SearchFilter[] };
+
+export interface VectorStoreSearchResult {
+  fileId: string;
+  filename: string;
+  score: number;
+  attributes: Record<string, string | number | boolean>;
+  content: Array<{ type: 'text'; text: string }>;
 }
 
 /**
@@ -81,7 +200,7 @@ export async function createOpenAIAssistant(params: CreateOpenAIAssistantParams)
   const client = getOpenAIClient();
 
   const tools: any[] = [];
-  
+
   // Si hay vector stores, agregar file_search
   if (params.vectorStoreIds && params.vectorStoreIds.length > 0) {
     tools.push({ type: 'file_search' });
@@ -95,12 +214,12 @@ export async function createOpenAIAssistant(params: CreateOpenAIAssistantParams)
     temperature: params.modelConfig.temperature,
     top_p: params.modelConfig.topP,
     tools: tools.length > 0 ? tools : undefined,
-    tool_resources: params.vectorStoreIds && params.vectorStoreIds.length > 0 
+    tool_resources: params.vectorStoreIds && params.vectorStoreIds.length > 0
       ? {
-          file_search: {
-            vector_store_ids: params.vectorStoreIds
-          }
+        file_search: {
+          vector_store_ids: params.vectorStoreIds
         }
+      }
       : undefined,
   });
 
@@ -114,20 +233,20 @@ export async function updateOpenAIAssistant(params: UpdateOpenAIAssistantParams)
   const client = getOpenAIClient();
 
   const updateData: any = {};
-  
+
   if (params.name !== undefined) updateData.name = params.name;
   if (params.description !== undefined) updateData.description = params.description;
   if (params.instructions !== undefined) updateData.instructions = params.instructions;
-  
+
   if (params.modelConfig) {
     if (params.modelConfig.model !== undefined) updateData.model = params.modelConfig.model;
     if (params.modelConfig.temperature !== undefined) updateData.temperature = params.modelConfig.temperature;
     if (params.modelConfig.topP !== undefined) updateData.top_p = params.modelConfig.topP;
   }
-  
+
   if (params.vectorStoreIds !== undefined) {
     const tools: any[] = [];
-    
+
     if (params.vectorStoreIds.length > 0) {
       tools.push({ type: 'file_search' });
       updateData.tool_resources = {
@@ -142,7 +261,7 @@ export async function updateOpenAIAssistant(params: UpdateOpenAIAssistantParams)
         }
       };
     }
-    
+
     if (tools.length > 0) {
       updateData.tools = tools;
     }
@@ -170,13 +289,39 @@ export async function deleteOpenAIAssistant(externalId: string): Promise<void> {
 
 /**
  * Crea un vector store en OpenAI
+ * Retorna el ID y los datos de OpenAI para que FluxCore los refleje localmente
  */
-export async function createOpenAIVectorStore(params: CreateOpenAIVectorStoreParams): Promise<string> {
+export async function createOpenAIVectorStore(params: CreateOpenAIVectorStoreParams): Promise<{
+  id: string;
+  externalData: OpenAIVectorStoreData;
+}> {
   const client = getOpenAIClient();
 
   const payload: any = { name: params.name };
+
+  // Descripción
+  if (params.description) {
+    payload.description = params.description;
+  }
+
+  // Archivos iniciales
   if (params.fileIds && params.fileIds.length > 0) {
     payload.file_ids = params.fileIds;
+  }
+
+  // Estrategia de chunking (solo aplica si hay file_ids)
+  if (params.chunkingStrategy) {
+    payload.chunking_strategy = params.chunkingStrategy;
+  }
+
+  // Política de expiración
+  if (params.expiresAfter) {
+    payload.expires_after = params.expiresAfter;
+  }
+
+  // Metadata
+  if (params.metadata && Object.keys(params.metadata).length > 0) {
+    payload.metadata = params.metadata;
   }
 
   const candidates = getVectorStoresCandidates(client);
@@ -189,7 +334,27 @@ export async function createOpenAIVectorStore(params: CreateOpenAIVectorStorePar
     if (!api?.create) continue;
     try {
       const vectorStore = await api.create(payload);
-      return vectorStore.id;
+
+      // Retornar datos LEÍDOS desde OpenAI (fuente de verdad)
+      return {
+        id: vectorStore.id,
+        externalData: {
+          id: vectorStore.id,
+          status: vectorStore.status,
+          usageBytes: vectorStore.usage_bytes || 0,
+          fileCounts: vectorStore.file_counts || {
+            in_progress: 0,
+            completed: 0,
+            failed: 0,
+            cancelled: 0,
+            total: 0,
+          },
+          lastActiveAt: vectorStore.last_active_at,
+          expiresAt: vectorStore.expires_at,
+          name: vectorStore.name,
+          metadata: vectorStore.metadata,
+        },
+      };
     } catch (err) {
       lastError = err;
     }
@@ -210,7 +375,7 @@ export async function updateOpenAIVectorStore(params: UpdateOpenAIVectorStorePar
   }
 
   const updateData: any = {};
-  
+
   if (params.name !== undefined) {
     updateData.name = params.name;
   }
@@ -250,8 +415,11 @@ export async function uploadOpenAIFile(file: Buffer, filename: string): Promise<
 
 /**
  * Agrega un archivo a un vector store en OpenAI
+ * Soporta chunkingStrategy y attributes
  */
-export async function addFileToOpenAIVectorStore(vectorStoreId: string, fileId: string): Promise<void> {
+export async function addFileToOpenAIVectorStore(
+  params: AddFileToVectorStoreParams
+): Promise<OpenAIFileData> {
   const client = getOpenAIClient();
 
   const vectorStores: any = getVectorStoresApi(client);
@@ -259,9 +427,41 @@ export async function addFileToOpenAIVectorStore(vectorStoreId: string, fileId: 
     throw new Error('OpenAI SDK: vectorStores.files.create no disponible');
   }
 
-  await vectorStores.files.create(vectorStoreId, {
-    file_id: fileId,
-  });
+  const payload: any = {
+    file_id: params.fileId,
+  };
+
+  // Estrategia de chunking
+  if (params.chunkingStrategy) {
+    payload.chunking_strategy = params.chunkingStrategy;
+  }
+
+  // Atributos para filtrado en búsquedas
+  if (params.attributes && Object.keys(params.attributes).length > 0) {
+    payload.attributes = params.attributes;
+  }
+
+  const file = await vectorStores.files.create(params.vectorStoreId, payload);
+
+  // Retornar datos LEÍDOS desde OpenAI (fuente de verdad)
+  return {
+    id: file.id,
+    status: file.status,
+    usageBytes: file.usage_bytes || 0,
+    attributes: file.attributes || {},
+    chunkingStrategy: file.chunking_strategy,
+    lastError: file.last_error || null,
+  };
+}
+
+/**
+ * Agrega un archivo a un vector store (firma legacy para compatibilidad)
+ */
+export async function addFileToOpenAIVectorStoreLegacy(
+  vectorStoreId: string,
+  fileId: string
+): Promise<void> {
+  await addFileToOpenAIVectorStore({ vectorStoreId, fileId });
 }
 
 /**
@@ -366,7 +566,7 @@ export async function runAssistantWithMessages(
   const client = getOpenAIClient();
   const tracePrefix = params.traceId ? `[openai-sync][${params.traceId}]` : '[openai-sync]';
   const start = Date.now();
-  
+
   try {
     console.log(`${tracePrefix} Starting assistant run`, {
       assistantExternalId: params.assistantExternalId,
@@ -503,7 +703,7 @@ async function waitForRunCompletion(
       run = await (client.beta.threads.runs as any).retrieve(runId, { thread_id: threadId });
     }
     polls += 1;
-    
+
     // Estados terminales
     if (['completed', 'failed', 'cancelled', 'expired', 'incomplete'].includes(run.status)) {
       console.log(`${tracePrefix} Polling finished`, {
@@ -518,7 +718,7 @@ async function waitForRunCompletion(
 
     // Esperar antes del siguiente poll
     await new Promise(resolve => setTimeout(resolve, pollInterval));
-    
+
     // Incrementar el intervalo (exponential backoff)
     pollInterval = Math.min(pollInterval * 1.5, maxPollInterval);
   }
@@ -548,3 +748,275 @@ export async function deleteThread(threadId: string): Promise<void> {
   }
   throw new Error('OpenAI SDK: threads.delete no disponible');
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// NUEVAS FUNCIONES - Alineación con OpenAI API
+// Conformidad con Reglas Arquitectónicas
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Lee el estado de un Vector Store desde OpenAI (fuente de verdad)
+ * 
+ * REGLA 2.1: vs.openai es la ÚNICA fuente de verdad
+ * REGLA 5.1: Ante discrepancias, vs.openai GANA SIEMPRE
+ * 
+ * Esta función debe usarse para actualizar el registro local con datos reales.
+ */
+
+
+/**
+ * Lista archivos de un Vector Store con paginación
+ * Lee datos desde OpenAI (fuente de verdad)
+ */
+/**
+ * Sincroniza un Vector Store local con el estado real de OpenAI
+ * - Actualiza metadatos del VS
+ * - Sincroniza lista completa de archivos (Updates/Deletes)
+ */
+export async function syncVectorStoreFromOpenAI(
+  vectorStoreId: string,
+  externalId: string,
+  accountId: string
+): Promise<void> {
+  const { fluxcoreService } = await import('./fluxcore.service');
+
+  // 1. Obtener lista completa de archivos desde OpenAI
+  const remoteFiles: OpenAIFileData[] = [];
+  let hasMore = true;
+  let after: string | undefined = undefined;
+  let pages = 0;
+
+  while (hasMore && pages < 100) { // Safety limit
+    const page = await listOpenAIVectorStoreFiles(externalId, { limit: 50, after });
+    remoteFiles.push(...page.files);
+    hasMore = page.hasMore;
+    after = page.lastId;
+    pages++;
+  }
+
+  // 2. Sincronizar archivos usando FluxCoreService
+  await fluxcoreService.syncVectorStoreFiles(vectorStoreId, remoteFiles);
+
+  // 3. Actualizar metadatos del VS (file counts, uso, expiración)
+  try {
+    const client = getOpenAIClient();
+    const vectorStores: any = getVectorStoresApi(client);
+
+    if (vectorStores?.retrieve) {
+      const vs = await vectorStores.retrieve(externalId);
+      await fluxcoreService.updateVectorStoreFromOpenAI(vectorStoreId, accountId, {
+        status: vs.status,
+        usageBytes: vs.usage_bytes || 0,
+        fileCounts: vs.file_counts,
+        lastActiveAt: vs.last_active_at ? new Date(vs.last_active_at * 1000) : null,
+        expiresAt: vs.expires_at ? new Date(vs.expires_at * 1000) : null,
+        metadata: vs.metadata,
+        name: vs.name,
+      });
+    }
+  } catch (err) {
+    console.warn('[openai-sync] Error updating vector store metadata:', err);
+    // No lanzar error si falla metadata, ya que los archivos era lo crítico
+  }
+}
+
+export async function listOpenAIVectorStoreFiles(
+  vectorStoreId: string,
+  options?: {
+    limit?: number;
+    after?: string;
+    filter?: 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  }
+): Promise<{
+  files: OpenAIFileData[];
+  hasMore: boolean;
+  lastId?: string;
+}> {
+  const client = getOpenAIClient();
+  const vectorStores: any = getVectorStoresApi(client);
+
+  if (!vectorStores?.files?.list) {
+    throw new Error('OpenAI SDK: vectorStores.files.list no disponible');
+  }
+
+  const params: any = {
+    limit: options?.limit ?? 20,
+  };
+  if (options?.after) params.after = options.after;
+  if (options?.filter) params.filter = options.filter;
+
+  const response = await vectorStores.files.list(vectorStoreId, params);
+
+  const files: OpenAIFileData[] = [];
+
+  // Iterar sobre los resultados (puede ser async iterator o array)
+  if (Symbol.asyncIterator in response) {
+    for await (const file of response) {
+      files.push({
+        id: file.id,
+        status: file.status,
+        usageBytes: file.usage_bytes || 0,
+        attributes: file.attributes || {},
+        chunkingStrategy: file.chunking_strategy,
+        lastError: file.last_error || null,
+      });
+    }
+  } else if (Array.isArray(response.data)) {
+    for (const file of response.data) {
+      files.push({
+        id: file.id,
+        status: file.status,
+        usageBytes: file.usage_bytes || 0,
+        attributes: file.attributes || {},
+        chunkingStrategy: file.chunking_strategy,
+        lastError: file.last_error || null,
+      });
+    }
+  }
+
+  return {
+    files,
+    hasMore: response.has_more ?? false,
+    lastId: files.length > 0 ? files[files.length - 1].id : undefined,
+  };
+}
+
+/**
+ * Búsqueda semántica en un Vector Store de OpenAI
+ * 
+ * REGLA 6.1: Esta búsqueda NO reemplaza al Assistant.
+ * Su propósito es: QA, debugging, testing de embeddings, habilitar modelos no-OpenAI.
+ */
+export async function searchOpenAIVectorStore(
+  vectorStoreId: string,
+  params: VectorStoreSearchParams
+): Promise<VectorStoreSearchResult[]> {
+  const client = getOpenAIClient();
+  const vectorStores: any = getVectorStoresApi(client);
+
+  if (!vectorStores?.search) {
+    throw new Error('OpenAI SDK: vectorStores.search no disponible');
+  }
+
+  const payload: any = {
+    query: params.query,
+    max_num_results: params.maxNumResults ?? 10,
+    rewrite_query: params.rewriteQuery ?? false,
+  };
+
+  if (params.rankingOptions) {
+    payload.ranking_options = {
+      ranker: params.rankingOptions.ranker,
+      score_threshold: params.rankingOptions.scoreThreshold,
+    };
+  }
+
+  if (params.filters) {
+    payload.filters = params.filters;
+  }
+
+  const response = await vectorStores.search(vectorStoreId, payload);
+
+  const results: VectorStoreSearchResult[] = [];
+
+  // Iterar sobre los resultados
+  if (Symbol.asyncIterator in response) {
+    for await (const result of response) {
+      results.push({
+        fileId: result.file_id,
+        filename: result.filename,
+        score: result.score,
+        attributes: result.attributes || {},
+        content: result.content || [],
+      });
+    }
+  } else if (Array.isArray(response.data)) {
+    for (const result of response.data) {
+      results.push({
+        fileId: result.file_id,
+        filename: result.filename,
+        score: result.score,
+        attributes: result.attributes || {},
+        content: result.content || [],
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Crea un batch de archivos en un Vector Store
+ * Retorna el ID del batch para tracking
+ */
+export async function createOpenAIFileBatch(
+  vectorStoreId: string,
+  files: Array<{
+    file_id: string;
+    attributes?: Record<string, string | number | boolean>;
+    chunking_strategy?: ChunkingStrategy;
+  }>
+): Promise<{
+  batchId: string;
+  status: string;
+  fileCounts: OpenAIFileCounts;
+}> {
+  const client = getOpenAIClient();
+  const vectorStores: any = getVectorStoresApi(client);
+
+  if (!vectorStores?.fileBatches?.create) {
+    throw new Error('OpenAI SDK: vectorStores.fileBatches.create no disponible');
+  }
+
+  const batch = await vectorStores.fileBatches.create(vectorStoreId, {
+    files: files.map((f) => ({
+      file_id: f.file_id,
+      attributes: f.attributes,
+      chunking_strategy: f.chunking_strategy,
+    })),
+  });
+
+  return {
+    batchId: batch.id,
+    status: batch.status,
+    fileCounts: batch.file_counts || {
+      in_progress: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      total: 0,
+    },
+  };
+}
+
+/**
+ * Obtiene el estado de un batch de archivos
+ */
+export async function getOpenAIFileBatchStatus(
+  vectorStoreId: string,
+  batchId: string
+): Promise<{
+  status: string;
+  fileCounts: OpenAIFileCounts;
+}> {
+  const client = getOpenAIClient();
+  const vectorStores: any = getVectorStoresApi(client);
+
+  if (!vectorStores?.fileBatches?.retrieve) {
+    throw new Error('OpenAI SDK: vectorStores.fileBatches.retrieve no disponible');
+  }
+
+  const batch = await vectorStores.fileBatches.retrieve(vectorStoreId, batchId);
+
+  return {
+    status: batch.status,
+    fileCounts: batch.file_counts || {
+      in_progress: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      total: 0,
+    },
+  };
+}
+
