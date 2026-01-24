@@ -22,14 +22,7 @@ import {
   Lock,
 } from 'lucide-react';
 
-export type FluxCoreView = 
-  | 'usage'
-  | 'assistants'
-  | 'instructions'
-  | 'knowledge-base'
-  | 'tools'
-  | 'debug'
-  | 'billing';
+import { FluxCoreView } from '@/types/fluxcore/views.types';
 
 interface FluxCoreSidebarProps {
   activeView: FluxCoreView;

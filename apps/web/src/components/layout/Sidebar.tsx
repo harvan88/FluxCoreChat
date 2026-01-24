@@ -24,6 +24,7 @@ import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
 import { WebsiteBuilderSidebar } from '../extensions/WebsiteBuilderSidebar';
 import { FluxCoreSidebar } from '../fluxcore/FluxCoreSidebar';
 import { useExtensions } from '../../hooks/useExtensions';
+import { FluxCoreView } from '@/types/fluxcore/views.types';
 
 // Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
 const extensionComponents: Record<string, ComponentType> = {
@@ -40,7 +41,7 @@ export function Sidebar() {
     isMobile,
   } = useUIStore();
 
-  const [fluxCoreActiveView, setFluxCoreActiveView] = useState<'usage' | 'assistants' | 'instructions' | 'knowledge-base' | 'tools' | 'debug' | 'billing'>('usage');
+  const [fluxCoreActiveView, setFluxCoreActiveView] = useState<FluxCoreView>('usage');
 
   const { installations } = useExtensions(selectedAccountId);
 

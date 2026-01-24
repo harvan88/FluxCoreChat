@@ -6,13 +6,14 @@
  */
 
 import { useState } from 'react';
-import { FluxCoreSidebar, type FluxCoreView } from './FluxCoreSidebar';
+import { FluxCoreSidebar } from './FluxCoreSidebar';
 import { AssistantsView } from './views/AssistantsView';
 import { InstructionsView } from './views/InstructionsView';
 import { VectorStoresView } from './views/VectorStoresView';
 import { ToolsView } from './views/ToolsView';
 import { UsageView } from './views/UsageView';
 import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
+import { FluxCoreView } from '@/types/fluxcore/views.types';
 
 interface FluxCorePanelProps {
   accountId: string;
@@ -32,6 +33,7 @@ export function FluxCorePanel({ accountId, accountName, onOpenTab }: FluxCorePan
       case 'instructions':
         return <InstructionsView accountId={accountId} onOpenTab={onOpenTab} />;
       case 'knowledge-base':
+      case 'vector-stores':
         return <VectorStoresView accountId={accountId} onOpenTab={onOpenTab} />;
       case 'tools':
         return <ToolsView accountId={accountId} />;

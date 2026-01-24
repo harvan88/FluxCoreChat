@@ -12,11 +12,13 @@ import {
     type NewFluxcoreVectorStoreFile,
 } from '@fluxcore/db';
 import { OpenAIDriver } from '../drivers/openai.driver';
+import { deleteVectorStoreCascade } from '../vector-store-deletion.service';
+import { convertToOpenAIExpiration } from '../../utils/expiration-converter';
 
 // Driver singleton lazy (para evitar crash al inicio si falta env)
 let openaiDriverInstance: OpenAIDriver | null = null;
 
-function getOpenAIDriver(): OpenAIDriver {
+export function getOpenAIDriver(): OpenAIDriver {
     if (!openaiDriverInstance) {
         openaiDriverInstance = new OpenAIDriver();
     }
@@ -55,12 +57,25 @@ export async function getVectorStoreById(id: string, accountId: string): Promise
 export async function createVectorStore(data: NewFluxcoreVectorStore): Promise<FluxcoreVectorStore> {
     let externalId = data.externalId;
     let openaiData: any = {};
+    let source = 'primary'; // Default for local
 
     if (data.backend === 'openai') {
         const driver = getOpenAIDriver();
-        // Hito 3: Usar Driver
-        externalId = await driver.createStore(data.name, data.metadata as any);
+        
+        // Convert expiration policy
+        const expiration = convertToOpenAIExpiration(
+          data.expirationPolicy || 'never', 
+          data.expirationDays
+        );
 
+        externalId = await driver.createStore(data.name, {
+          ...(data.metadata as any),
+          expires_after: expiration
+        });
+
+        // Mark as cache
+        source = 'cache';
+        
         // Defaults para nuevo store
         openaiData = {
             status: 'production', // Recien creado está vacío y listo
@@ -78,6 +93,7 @@ export async function createVectorStore(data: NewFluxcoreVectorStore): Promise<F
             ...data,
             ...openaiData,
             externalId,
+            source,
         })
         .returning();
     return store;
@@ -100,7 +116,22 @@ export async function updateVectorStore(
 
     if (!existing) return null;
 
+    // Enforce read-only for cache stores
+    if (existing.source === 'cache') {
+        throw new Error('Cannot update a vector store that is a cache of an external source');
+    }
+
     if (existing.backend === 'openai' && typeof existing.externalId === 'string' && existing.externalId.length > 0) {
+        const driver = getOpenAIDriver();
+        // Convert expiration policy
+        if (data.expirationPolicy || data.expirationDays) {
+          const expiration = convertToOpenAIExpiration(
+            data.expirationPolicy || existing.expirationPolicy || 'never',
+            data.expirationDays || existing.expirationDays
+          );
+          // Update OpenAI store with new expiration
+          await driver.updateStore(existing.externalId, { expires_after: expiration });
+        }
         // Si cambia el nombre o expiresAfter, actualizar en OpenAI primero
         // Si cambia el nombre, actualizar en OpenAI (Driver no soporta update directo aun, implementar si necesario)
         // Por ahora, solo soportamos rename si el driver lo soportara. El driver actual no tiene updateStore.
@@ -161,53 +192,8 @@ export async function updateVectorStoreFromOpenAI(
 }
 
 export async function deleteVectorStore(id: string, accountId: string): Promise<boolean> {
-    const [existing] = await db
-        .select()
-        .from(fluxcoreVectorStores)
-        .where(and(
-            eq(fluxcoreVectorStores.id, id),
-            eq(fluxcoreVectorStores.accountId, accountId)
-        ))
-        .limit(1);
-
-    if (!existing) return false;
-
-    const usedBy = await db
-        .select({ id: fluxcoreAssistants.id, name: fluxcoreAssistants.name })
-        .from(fluxcoreAssistantVectorStores)
-        .innerJoin(
-            fluxcoreAssistants,
-            eq(fluxcoreAssistantVectorStores.assistantId, fluxcoreAssistants.id)
-        )
-        .where(and(
-            eq(fluxcoreAssistantVectorStores.vectorStoreId, id),
-            eq(fluxcoreAssistants.accountId, accountId)
-        ))
-        .limit(1);
-
-    if (usedBy.length > 0) {
-        const err = new Error('No se puede eliminar: este vector store está siendo usado por un asistente') as FluxcoreConflictError;
-        err.statusCode = 409;
-        err.details = { usedByAssistants: usedBy };
-        throw err;
-    }
-
-    if (existing.backend === 'openai' && typeof existing.externalId === 'string' && existing.externalId.length > 0) {
-        try {
-            await getOpenAIDriver().deleteStore(existing.externalId);
-        } catch (e) {
-            console.warn('[VectorStore] Error deleting external store:', e);
-        }
-    }
-
-    const result = await db
-        .delete(fluxcoreVectorStores)
-        .where(and(
-            eq(fluxcoreVectorStores.id, id),
-            eq(fluxcoreVectorStores.accountId, accountId)
-        ))
-        .returning();
-    return result.length > 0;
+    await deleteVectorStoreCascade(id, accountId);
+    return true;
 }
 
 // Vector Store Files
