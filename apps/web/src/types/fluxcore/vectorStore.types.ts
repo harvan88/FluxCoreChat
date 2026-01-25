@@ -31,9 +31,20 @@ export interface VectorStore extends AuditFields, SizeFields {
     // Archivos
     fileCount: number;
     files?: VectorStoreFile[];
+    fileCounts?: {
+        in_progress: number;
+        completed: number;
+        failed: number;
+        cancelled: number;
+        total: number;
+    };
+
+    // Uso
+    usageBytes?: number;
 
     // Expiración
     expirationPolicy: ExpirationPolicy;
+    expirationDays?: number;
     expiresAt?: string;
 
     // Relaciones
@@ -48,6 +59,7 @@ export interface VectorStoreCreate {
     status?: VectorStoreStatus;
     backend?: VectorStoreBackend;
     expirationPolicy?: ExpirationPolicy;
+    expirationDays?: number;
 }
 
 /** Datos para actualizar un vector store */
@@ -57,6 +69,7 @@ export interface VectorStoreUpdate {
     description?: string;
     status?: VectorStoreStatus;
     expirationPolicy?: ExpirationPolicy;
+    expirationDays?: number;
 }
 
 // ============================================================================

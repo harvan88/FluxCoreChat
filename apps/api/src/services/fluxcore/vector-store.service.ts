@@ -3,8 +3,6 @@ import {
     db,
     fluxcoreVectorStores,
     fluxcoreVectorStoreFiles,
-    fluxcoreAssistantVectorStores,
-    fluxcoreAssistants,
     fluxcoreFiles,
     type FluxcoreVectorStore,
     type NewFluxcoreVectorStore,
@@ -25,10 +23,6 @@ export function getOpenAIDriver(): OpenAIDriver {
     return openaiDriverInstance;
 }
 
-type FluxcoreConflictError = Error & {
-    statusCode?: number;
-    details?: any;
-};
 
 // ============================================================================
 // VECTOR STORES
@@ -61,21 +55,21 @@ export async function createVectorStore(data: NewFluxcoreVectorStore): Promise<F
 
     if (data.backend === 'openai') {
         const driver = getOpenAIDriver();
-        
+
         // Convert expiration policy
         const expiration = convertToOpenAIExpiration(
-          data.expirationPolicy || 'never', 
-          data.expirationDays
+            data.expirationPolicy || 'never',
+            data.expirationDays ?? undefined
         );
 
         externalId = await driver.createStore(data.name, {
-          ...(data.metadata as any),
-          expires_after: expiration
+            ...(data.metadata as any),
+            expires_after: expiration
         });
 
         // Mark as cache
         source = 'cache';
-        
+
         // Defaults para nuevo store
         openaiData = {
             status: 'production', // Recien creado está vacío y listo
@@ -116,31 +110,25 @@ export async function updateVectorStore(
 
     if (!existing) return null;
 
-    // Enforce read-only for cache stores
-    if (existing.source === 'cache') {
-        throw new Error('Cannot update a vector store that is a cache of an external source');
-    }
-
-    if (existing.backend === 'openai' && typeof existing.externalId === 'string' && existing.externalId.length > 0) {
+    if ((existing as any).source === 'cache' && existing.backend === 'openai' && existing.externalId) {
         const driver = getOpenAIDriver();
-        // Convert expiration policy
+        const openaiUpdates: any = {};
+
+        if (data.name) openaiUpdates.name = data.name;
+
         if (data.expirationPolicy || data.expirationDays) {
-          const expiration = convertToOpenAIExpiration(
-            data.expirationPolicy || existing.expirationPolicy || 'never',
-            data.expirationDays || existing.expirationDays
-          );
-          // Update OpenAI store with new expiration
-          await driver.updateStore(existing.externalId, { expires_after: expiration });
+            const expiration = convertToOpenAIExpiration(
+                (data.expirationPolicy as any) || (existing as any).expirationPolicy || 'never',
+                data.expirationDays ?? (existing as any).expirationDays ?? undefined
+            );
+            openaiUpdates.expires_after = expiration;
         }
-        // Si cambia el nombre o expiresAfter, actualizar en OpenAI primero
-        // Si cambia el nombre, actualizar en OpenAI (Driver no soporta update directo aun, implementar si necesario)
-        // Por ahora, solo soportamos rename si el driver lo soportara. El driver actual no tiene updateStore.
-        // TODO: Agregar updateStore a IVectorStoreDriver
-        // Por consistencia, implementamos update manual o ignoramos sync de nombre por ahora.
-        // OpenAI Beta Vector Store Update endpoint existe.
-        // Dejaremos esto pendiente para R-03.X o implementamos updateStore en Driver ahora.
-        // Dado que interface no lo tiene, saltamos sync por ahora.
-        // await openaiDriver.updateStore(...)
+
+        if (Object.keys(openaiUpdates).length > 0) {
+            await driver.updateStore(existing.externalId as string, openaiUpdates);
+        }
+    } else if ((existing as any).source === 'cache') {
+        throw new Error('Cannot update a vector store that is a cache of an external source');
     }
 
     const [store] = await db
@@ -164,6 +152,7 @@ export async function updateVectorStoreFromOpenAI(
         usageBytes: number;
         lastActiveAt: Date | null;
         expiresAt?: Date | null;
+        expiresAfter?: any;
         metadata: Record<string, any>;
         name?: string;
     }
@@ -178,6 +167,16 @@ export async function updateVectorStoreFromOpenAI(
     };
 
     if (data.expiresAt !== undefined) updatePayload.expiresAt = data.expiresAt;
+    if (data.expiresAfter !== undefined) {
+        updatePayload.expiresAfter = data.expiresAfter;
+        // Convertir de vuelta a campos legibles por la UI local (Legacy sync)
+        if (data.expiresAfter) {
+            updatePayload.expirationPolicy = 'after_days';
+            updatePayload.expirationDays = data.expiresAfter.days;
+        } else {
+            updatePayload.expirationPolicy = 'never';
+        }
+    }
     if (data.name !== undefined) updatePayload.name = data.name;
 
     const [store] = await db
@@ -295,12 +294,10 @@ export async function syncVectorStoreFiles(
 
         if (!remote) {
             // CASE 1: DELETE - Archivo local tiene externalId pero no está en OpenAI
-            // Significa que fue borrado en OpenAI. Borrar localmente para reflejar verdad.
             await db.delete(fluxcoreVectorStoreFiles)
                 .where(eq(fluxcoreVectorStoreFiles.id, local.id));
         } else {
             // CASE 2: UPDATE - Sincronizar estado
-            // Se podría optimizar checking diffs, pero update es seguro
             await db.update(fluxcoreVectorStoreFiles)
                 .set({
                     status: remote.status,
@@ -321,26 +318,38 @@ export async function syncVectorStoreFiles(
         .where(eq(fluxcoreVectorStores.id, vectorStoreId));
 
     if (store) {
-        // Optimización: Crear Set de externalIds locales para búsqueda rápida
         const localExternalIds = new Set(localFiles.map(f => f.externalId));
 
         for (const remote of remoteFiles) {
             if (!localExternalIds.has(remote.id)) {
-                // Nuevo archivo detectado en OpenAI. Crear referencia local.
+                // Nuevo archivo detectado en OpenAI.
+                let resolvedName = `Archivo OpenAI ${remote.id.substring(0, 8)}`;
+                let resolvedMime = 'application/openai-external';
+
+                try {
+                    const { getOpenAIFileMetadata } = await import('../openai-sync.service');
+                    const meta = await getOpenAIFileMetadata(remote.id);
+                    if (meta?.filename) {
+                        resolvedName = meta.filename;
+                    }
+                } catch (err) {
+                    console.warn(`[fluxcore] No se pudo resolver nombre para archivo ${remote.id}`);
+                }
 
                 // 1. Crear registro en tabla files (placeholder)
                 const [newFile] = await db.insert(fluxcoreFiles).values({
                     accountId: store.accountId,
-                    name: `OpenAI File ${remote.id.substring(0, 8)}`, // Nombre temporal
-                    mimeType: 'application/openai-external',
+                    name: resolvedName,
+                    mimeType: resolvedMime,
                     sizeBytes: remote.usageBytes,
-                    uploadedBy: null, // Sistema
+                    uploadedBy: null,
                 }).returning();
 
                 // 2. Vincular al Vector Store
                 await db.insert(fluxcoreVectorStoreFiles).values({
                     vectorStoreId,
                     fileId: newFile.id,
+                    name: resolvedName,
                     externalId: remote.id,
                     status: remote.status,
                     usageBytes: remote.usageBytes,

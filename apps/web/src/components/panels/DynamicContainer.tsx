@@ -3,7 +3,7 @@
  * TOTEM PARTE 11: Dynamic Container
  */
 
-import { useMemo, Component, type ReactNode, type ComponentType } from 'react';
+import { useMemo, useCallback, Component, type ReactNode, type ComponentType } from 'react';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
 import { TabBar } from './TabBar';
@@ -24,7 +24,6 @@ import { InstructionsView } from '../fluxcore/views/InstructionsView';
 import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
 import { ToolsView } from '../fluxcore/views/ToolsView';
 import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConfigView';
-import { OpenAIVectorStoresView } from '../fluxcore/views/OpenAIVectorStoresView';
 import { CreditsSection } from '../settings/CreditsSection';
 import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
@@ -51,7 +50,7 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
   // Si está minimizado, mostrar solo la barra
   if (container.minimized) {
     return (
-      <div 
+      <div
         className={`
           flex flex-col bg-surface border border-subtle rounded-t
           ${isActive ? 'ring-1 ring-[var(--accent-primary)]' : ''}
@@ -64,7 +63,7 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
   }
 
   return (
-    <div 
+    <div
       className={`
         flex flex-col h-full bg-surface border border-subtle rounded overflow-hidden
         ${isActive ? 'ring-1 ring-[var(--accent-primary)]' : ''}
@@ -147,8 +146,7 @@ interface ExtensionTabContentProps {
 
 function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   const { selectedAccountId } = useUIStore();
-  const { openTab, activateTab, closeTab, focusContainer } = usePanelStore();
-  const layout = usePanelStore((s) => s.layout);
+  const { openTab, closeTab } = usePanelStore();
   const { installations, updateConfig } = useExtensions(selectedAccountId || null);
 
   const extensionId = typeof tab.context.extensionId === 'string' ? tab.context.extensionId : '';
@@ -158,6 +156,67 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     if (!extensionId) return null;
     return installations.find((i) => i.extensionId === extensionId) || null;
   }, [installations, extensionId]);
+
+  const openOrFocusFluxCoreTab = useCallback((
+    viewId: string,
+    title: string,
+    icon: string,
+    extraContext: Record<string, any>
+  ) => {
+    // 1. Construir identidad del recurso
+    let identity = `extension:${extensionId}:${viewId}:${selectedAccountId}`;
+
+    // Si es un recurso específico (assistant, vector-store, etc), agregar su ID a la identidad
+    const resourceId = extraContext.assistantId || extraContext.vectorStoreId || extraContext.instructionId || extraContext.toolId;
+    if (resourceId) {
+      identity += `:${resourceId}`;
+    }
+
+    // 2. Abrir o enfocar usando la identidad centralizada
+    openTab('extensions', {
+      type: 'extension',
+      identity,
+      title,
+      icon,
+      closable: true,
+      context: {
+        extensionId,
+        extensionName,
+        view: viewId,
+        accountId: selectedAccountId,
+        ...extraContext,
+      },
+    });
+  }, [extensionId, selectedAccountId, extensionName, openTab]);
+
+  const onOpenFluxCoreItemTab = useCallback((tabId: string, title: string, data: any) => {
+    if (!selectedAccountId) return;
+
+    // ARQUITECTURA: Asistentes OpenAI usan vista EXCLUSIVA OpenAI
+    if (data?.type === 'openai-assistant') {
+      const id = data?.assistantId || data?.assistant?.id || tabId;
+      openOrFocusFluxCoreTab('openai-assistant', title, 'Bot', { assistantId: id, runtime: 'openai' });
+      return;
+    }
+
+    if (data?.type === 'assistant') {
+      const id = data?.assistantId || data?.assistant?.id || tabId;
+      openOrFocusFluxCoreTab('assistant', title, 'Bot', { assistantId: id });
+      return;
+    }
+
+    if (data?.type === 'instruction') {
+      const id = data?.instructionId || data?.instruction?.id || tabId;
+      openOrFocusFluxCoreTab('instruction', title, 'FileText', { instructionId: id });
+      return;
+    }
+
+    if (data?.type === 'openai-vector-store' || data?.type === 'vectorStore') {
+      const id = data?.vectorStoreId || data?.store?.id || tabId;
+      openOrFocusFluxCoreTab('vector-store', title, 'Database', { vectorStoreId: id });
+      return;
+    }
+  }, [selectedAccountId, openOrFocusFluxCoreTab]);
 
   const panelComponent = installation?.manifest?.ui?.panel?.component;
   const isFluxCore = panelComponent === 'FluxCorePanel';
@@ -192,93 +251,11 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       ? 'assistants'
       : (requestedView || (isFluxCore ? 'assistants' : 'config'));
 
-  const openOrFocusFluxCoreTab = (
-    viewId: string,
-    title: string,
-    icon: string,
-    extraContext: Record<string, any>
-  ) => {
-    const existing = layout.containers
-      .flatMap((c) => c.tabs.map((t) => ({ containerId: c.id, tab: t, container: c })))
-      .find(({ tab: t }) => {
-        if (t.type !== 'extension') return false;
-        if (t.context?.extensionId !== extensionId) return false;
-        if (t.context?.accountId !== selectedAccountId) return false;
-        if (t.context?.view !== viewId) return false;
-        for (const [k, v] of Object.entries(extraContext)) {
-          if (t.context?.[k] !== v) return false;
-        }
-        return true;
-      });
-
-    if (existing) {
-      const isAlreadyActive = existing.container.activeTabId === existing.tab.id;
-      const isAlreadyFocused = layout.focusedContainerId === existing.containerId;
-
-      if (isAlreadyActive && isAlreadyFocused) {
-        closeTab(existing.containerId, existing.tab.id);
-        return;
-      }
-
-      activateTab(existing.containerId, existing.tab.id);
-      focusContainer(existing.containerId);
-      return;
-    }
-
-    openTab('extensions', {
-      type: 'extension',
-      title,
-      icon,
-      closable: true,
-      context: {
-        extensionId,
-        extensionName,
-        view: viewId,
-        accountId: selectedAccountId,
-        ...extraContext,
-      },
-    });
-  };
-
-  const onOpenFluxCoreItemTab = (tabId: string, title: string, data: any) => {
-    if (!selectedAccountId) return;
-
-    // ARQUITECTURA: Asistentes OpenAI usan vista EXCLUSIVA OpenAI
-    if (data?.type === 'openai-assistant') {
-      const id = data?.assistantId || data?.assistant?.id || tabId;
-      openOrFocusFluxCoreTab('openai-assistant', title, 'Bot', { assistantId: id, runtime: 'openai' });
-      return;
-    }
-
-    if (data?.type === 'assistant') {
-      const id = data?.assistantId || data?.assistant?.id || tabId;
-      openOrFocusFluxCoreTab('assistant', title, 'Bot', { assistantId: id });
-      return;
-    }
-
-    if (data?.type === 'instruction') {
-      const id = data?.instructionId || data?.instruction?.id || tabId;
-      openOrFocusFluxCoreTab('instruction', title, 'FileText', { instructionId: id });
-      return;
-    }
-
-    // ARQUITECTURA: Vector stores OpenAI usan vista EXCLUSIVA OpenAI
-    if (data?.type === 'openai-vector-store') {
-      const id = data?.vectorStoreId || data?.store?.id || tabId;
-      openOrFocusFluxCoreTab('openai-vector-store', title, 'Database', { vectorStoreId: id, backend: 'openai' });
-      return;
-    }
-
-    if (data?.type === 'vectorStore') {
-      const id = data?.vectorStoreId || data?.store?.id || tabId;
-      openOrFocusFluxCoreTab('vector-store', title, 'Database', { vectorStoreId: id });
-    }
-  };
 
   // FluxCore Views - Vistas específicas de la plataforma de orquestación de IA
   if (isFluxCore) {
     const accountId = selectedAccountId || '';
-    
+
     switch (view) {
       case 'usage':
         return <UsageView key={tab.id} accountId={accountId} />;
@@ -288,6 +265,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             key={tab.id}
             accountId={accountId}
             onOpenTab={onOpenFluxCoreItemTab}
+            initialData={tab.context.initialData}
           />
         );
       case 'assistant':
@@ -297,6 +275,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             accountId={accountId}
             assistantId={tab.context.assistantId}
             onOpenTab={onOpenFluxCoreItemTab}
+            initialData={tab.context.initialData}
           />
         );
       // ARQUITECTURA: Vista EXCLUSIVA para asistentes OpenAI
@@ -315,23 +294,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             }}
           />
         );
-      // ARQUITECTURA: Vista EXCLUSIVA para vector stores OpenAI (lista)
-      case 'openai-vector-stores':
-        return (
-          <OpenAIVectorStoresView
-            key={tab.id}
-            accountId={accountId}
-          />
-        );
-      // ARQUITECTURA: Vista EXCLUSIVA para vector store OpenAI (individual)
-      case 'openai-vector-store':
-        return (
-          <OpenAIVectorStoresView
-            key={tab.id}
-            accountId={accountId}
-            vectorStoreId={tab.context.vectorStoreId}
-          />
-        );
+
       case 'instructions':
         return (
           <InstructionsView
@@ -355,6 +318,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             key={tab.id}
             accountId={accountId}
             onOpenTab={onOpenFluxCoreItemTab}
+            onClose={() => closeTab(containerId, tab.id)}
           />
         );
       case 'vector-store':
@@ -364,6 +328,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             accountId={accountId}
             vectorStoreId={tab.context.vectorStoreId}
             onOpenTab={onOpenFluxCoreItemTab}
+            onClose={() => closeTab(containerId, tab.id)}
           />
         );
       case 'tools':
@@ -429,13 +394,13 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
 
 function TabContent({ tab, containerId }: TabContentProps) {
   const { selectedAccountId } = useUIStore();
-  
+
   switch (tab.type) {
     case 'chat':
       return tab.context.chatId ? (
         <ChatViewErrorBoundary>
-          <ChatView 
-            conversationId={tab.context.chatId} 
+          <ChatView
+            conversationId={tab.context.chatId}
             accountId={selectedAccountId || undefined}
           />
         </ChatViewErrorBoundary>
@@ -465,9 +430,9 @@ function TabContent({ tab, containerId }: TabContentProps) {
           content={tab.context.content || ''}
           maxLength={tab.context.maxLength || 5000}
           placeholder={tab.context.placeholder || 'Escribe aquí...'}
-          onSave={tab.context.onSave || (() => {})}
-          onChange={tab.context.onChange || (() => {})}
-          onClose={tab.context.onClose || (() => {})}
+          onSave={tab.context.onSave || (() => { })}
+          onChange={tab.context.onChange || (() => { })}
+          onClose={tab.context.onClose || (() => { })}
         />
       );
 
@@ -481,9 +446,9 @@ function TabContent({ tab, containerId }: TabContentProps) {
           content={tab.context.content || ''}
           maxLength={tab.context.maxLength || 256000}
           placeholder={tab.context.placeholder || 'Escribe las instrucciones del asistente...'}
-          onSave={tab.context.onSave || (async () => {})}
-          onChange={tab.context.onChange || (() => {})}
-          onClose={tab.context.onClose || (() => {})}
+          onSave={tab.context.onSave || (async () => { })}
+          onChange={tab.context.onChange || (() => { })}
+          onClose={tab.context.onClose || (() => { })}
         />
       );
 

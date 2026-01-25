@@ -577,11 +577,25 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
       }
 
       try {
-        const store = await fluxcoreService.getVectorStoreById(params.id, accountId);
+        const store = (await fluxcoreService.getVectorStoreById(params.id, accountId)) as any;
         if (!store) {
           set.status = 404;
           return { success: false, message: 'Vector store not found' };
         }
+
+        // REGLA: OpenAI es fuente de verdad. Sincronizar METADATA antes de responder.
+        if (store.backend === 'openai' && store.externalId) {
+          const { syncVectorStoreFromOpenAI } = await import('../services/openai-sync.service');
+          try {
+            await syncVectorStoreFromOpenAI(store.id, store.externalId, accountId);
+            // Volver a obtener de DB para tener data fresca si el sync la actualizó
+            const freshStore = await fluxcoreService.getVectorStoreById(params.id, accountId);
+            if (freshStore) return { success: true, data: freshStore };
+          } catch (syncErr) {
+            console.error('[fluxcore] Error syncing vector store metadata on get:', syncErr);
+          }
+        }
+
         return { success: true, data: store };
       } catch (error: any) {
         set.status = 500;
@@ -1234,19 +1248,12 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
           '../services/openai-sync.service'
         );
 
-        // Leer estado real desde OpenAI (fuente de verdad)
-        const remoteData = await syncVectorStoreFromOpenAI(store.externalId);
+        // Ejecutar sincronización completa (Archivos + Metadata)
+        // REGLA: vs.openai es la fuente de verdad.
+        await syncVectorStoreFromOpenAI(store.id, store.externalId, accountId);
 
-        // Actualizar registro local con datos de OpenAI
-        const updated = await fluxcoreService.updateVectorStoreFromOpenAI(params.id, accountId, {
-          status: remoteData.status === 'completed' ? 'production' : 'draft',
-          fileCounts: remoteData.fileCounts,
-          usageBytes: remoteData.usageBytes,
-          lastActiveAt: remoteData.lastActiveAt
-            ? new Date(remoteData.lastActiveAt * 1000)
-            : null,
-          metadata: remoteData.metadata || {},
-        });
+        // Obtener el registro actualizado
+        const updated = await fluxcoreService.getVectorStoreById(params.id, accountId);
 
         return {
           success: true,

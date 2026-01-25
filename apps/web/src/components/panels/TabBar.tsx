@@ -21,11 +21,11 @@ interface TabBarProps {
 }
 
 export function TabBar({ container }: TabBarProps) {
-  const { 
-    activateTab, 
-    closeTab, 
-    moveTab, 
-    pinContainer, 
+  const {
+    activateTab,
+    closeTab,
+    moveTab,
+    pinContainer,
     closeContainer,
     minimizeContainer,
   } = usePanelStore();
@@ -96,7 +96,7 @@ export function TabBar({ container }: TabBarProps) {
   };
 
   return (
-    <div 
+    <div
       className="flex items-center bg-elevated border-b border-subtle h-9 min-h-[36px] max-h-[36px]"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -229,30 +229,33 @@ function TabItem({
       onClick={onClick}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      data-tab-id={tab.id}
+      data-identity={tab.identity}
+      data-active={isActive}
       className={clsx(
         'group flex items-center gap-2 px-3 py-1.5 min-w-0 max-w-[180px]',
         'border-r border-subtle cursor-pointer select-none',
         'transition-all duration-200',
-        isActive 
-          ? 'bg-surface text-primary border-b-2 border-b-[var(--accent-primary)]' 
+        isActive
+          ? 'bg-surface text-primary border-b-2 border-b-[var(--accent-primary)]'
           : 'text-secondary hover:text-primary hover:bg-hover',
         isDragging && 'opacity-50'
       )}
-      title={tab.title}
+      title={`${tab.title}${tab.identity ? `\nIdentity: ${tab.identity}` : ''}\nID: ${tab.id}`}
     >
       {/* Icon */}
       {displayIcon && (
         <span className="text-sm flex-shrink-0">{displayIcon}</span>
       )}
-      
+
       {/* Title */}
       <span className="truncate text-sm" title={tab.title}>{displayTitle}</span>
-      
+
       {/* Dirty Indicator */}
       {tab.dirty && (
         <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
       )}
-      
+
       {/* Close Button - visible on hover */}
       {tab.closable && (
         <button

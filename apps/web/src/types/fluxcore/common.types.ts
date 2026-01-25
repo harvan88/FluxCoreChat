@@ -17,7 +17,7 @@ export type AssistantStatus = 'draft' | 'active' | 'disabled';
 export type InstructionStatus = 'draft' | 'active' | 'disabled';
 
 /** Estados posibles de un vector store */
-export type VectorStoreStatus = 'draft' | 'active' | 'expired';
+export type VectorStoreStatus = 'draft' | 'active' | 'expired' | 'in_progress' | 'completed';
 
 /** Estados posibles de archivos en vector store */
 export type FileProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';

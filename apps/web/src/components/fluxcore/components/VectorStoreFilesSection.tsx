@@ -110,12 +110,32 @@ export function VectorStoreFilesSection({
 
     // Auto-refresh para archivos en procesamiento
     useEffect(() => {
-        const hasProcessing = files.some(f => f.status === 'processing' || f.status === 'pending');
+        const hasProcessing = files.some(f => (f.status as string) === 'processing' || (f.status as string) === 'pending' || (f.status as string) === 'in_progress');
         if (!hasProcessing) return;
 
         const interval = setInterval(loadFiles, 5000);
         return () => clearInterval(interval);
-    }, [files.length, files.some?.(f => f.status === 'processing' || f.status === 'pending'), loadFiles]);
+    }, [files, loadFiles]);
+
+    const handleSync = async () => {
+        if (!token || !vectorStoreId) return;
+        setLoading(true);
+        try {
+            await fetch(`/api/fluxcore/vector-stores/${vectorStoreId}/sync`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ accountId })
+            });
+            await loadFiles();
+        } catch (err) {
+            console.error('Error syncing:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Subir archivos
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,6 +156,8 @@ export function VectorStoreFilesSection({
                 setUploadProgress(Math.round((completed / totalFiles) * 100));
             }
 
+            // Refresco automático obligatorio al completar 100%
+            await handleSync();
             await loadFiles();
         } catch (err: any) {
             setError(err.message || 'Error al subir archivos');
@@ -235,9 +257,12 @@ export function VectorStoreFilesSection({
             case 'completed':
                 return <Badge variant="success"><Check size={12} className="mr-1" />Indexado</Badge>;
             case 'processing':
+            case 'in_progress':
                 return <Badge variant="info"><Loader2 size={12} className="mr-1 animate-spin" />Procesando</Badge>;
             case 'failed':
                 return <Badge variant="error"><AlertCircle size={12} className="mr-1" />Error</Badge>;
+            case 'cancelled':
+                return <Badge variant="neutral"><AlertCircle size={12} className="mr-1" />Cancelado</Badge>;
             default:
                 return <Badge variant="warning">Pendiente</Badge>;
         }
@@ -260,7 +285,7 @@ export function VectorStoreFilesSection({
                     <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => loadFiles()}
+                        onClick={handleSync}
                         disabled={loading}
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
