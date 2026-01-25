@@ -471,15 +471,28 @@ export async function removeFileFromOpenAIVectorStore(vectorStoreId: string, fil
   const client = getOpenAIClient();
 
   const vectorStores: any = getVectorStoresApi(client);
-  if (vectorStores?.files?.delete) {
-    await vectorStores.files.delete(vectorStoreId, fileId);
-    return;
+
+  // 1. Desvincular del vector store (Unlink)
+  const vsFilesApi = vectorStores?.files;
+  if (vsFilesApi) {
+    try {
+      if (vsFilesApi.del) await vsFilesApi.del(vectorStoreId, fileId);
+      else if (vsFilesApi.delete) await vsFilesApi.delete(vectorStoreId, fileId);
+    } catch (e) {
+      console.warn(`[openai-sync] Error detaching file ${fileId} from VS ${vectorStoreId}:`, e);
+    }
   }
-  if (vectorStores?.files?.del) {
-    await vectorStores.files.del(vectorStoreId, fileId);
-    return;
+
+  // 2. Eliminar objeto de archivo físicamente de OpenAI (REGLA: Limpieza absoluta)
+  const filesApi: any = (client as any).files;
+  if (filesApi) {
+    try {
+      if (filesApi.del) await filesApi.del(fileId);
+      else if (filesApi.delete) await filesApi.delete(fileId);
+    } catch (e) {
+      console.error(`[openai-sync] Error physically deleting file ${fileId} from OpenAI:`, e);
+    }
   }
-  throw new Error('OpenAI SDK: vectorStores.files.delete no disponible');
 }
 
 export async function getOpenAIVectorStoreFile(vectorStoreId: string, fileId: string): Promise<any> {
@@ -489,6 +502,15 @@ export async function getOpenAIVectorStoreFile(vectorStoreId: string, fileId: st
     throw new Error('OpenAI SDK: vectorStores.files.retrieve no disponible');
   }
   return vectorStores.files.retrieve(vectorStoreId, fileId);
+}
+
+export async function getOpenAIFileMetadata(fileId: string): Promise<any> {
+  const client = getOpenAIClient();
+  const filesApi: any = client.files;
+  if (!filesApi?.retrieve) {
+    throw new Error('OpenAI SDK: files.retrieve no disponible');
+  }
+  return filesApi.retrieve(fileId);
 }
 
 /**
@@ -810,6 +832,7 @@ export async function syncVectorStoreFromOpenAI(
         fileCounts: vs.file_counts,
         lastActiveAt: vs.last_active_at ? new Date(vs.last_active_at * 1000) : null,
         expiresAt: vs.expires_at ? new Date(vs.expires_at * 1000) : null,
+        expiresAfter: vs.expires_after, // Pasamos el objeto real de OpenAI
         metadata: vs.metadata,
         name: vs.name,
       });

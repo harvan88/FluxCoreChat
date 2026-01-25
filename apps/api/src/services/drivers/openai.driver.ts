@@ -12,7 +12,7 @@ export class OpenAIDriver implements IVectorStoreDriver {
         }
     }
 
-    private async request(method: string, path: string, body?: any, isMultipart = false) {
+    private async request<T = any>(method: string, path: string, body?: any, isMultipart = false): Promise<T> {
         const headers: Record<string, string> = {
             'Authorization': `Bearer ${this.apiKey}`,
             'OpenAI-Beta': 'assistants=v2' // Header necesario para Vector Stores
@@ -39,7 +39,7 @@ export class OpenAIDriver implements IVectorStoreDriver {
             throw new Error(`OpenAI API Error (${response.status} ${path}): ${errorDetail}`);
         }
 
-        return response.json();
+        return response.json() as Promise<T>;
     }
 
     async createStore(name: string, metadata?: Record<string, any>): Promise<string> {
@@ -150,19 +150,13 @@ export class OpenAIDriver implements IVectorStoreDriver {
         }));
     }
 
-    async updateStore(storeId: string, data: { expires_after?: any; name?: string }) {
-        const client = getOpenAIClient();
-        const candidates = getVectorStoresCandidates(client);
-        let lastError: unknown;
-        for (const api of candidates) {
-          if (!api?.update) continue;
-          try {
-            const updatedStore = await api.update(storeId, data);
-            return updatedStore;
-          } catch (err) {
-            lastError = err;
-          }
-        }
-        throw lastError instanceof Error ? lastError : new Error('Failed to update vector store on OpenAI');
+    async updateStore(storeId: string, data: { expires_after?: any; name?: string }): Promise<void> {
+        const payload: any = {};
+        if (data.name !== undefined) payload.name = data.name;
+        if (data.expires_after !== undefined) payload.expires_after = data.expires_after;
+
+        if (Object.keys(payload).length === 0) return;
+
+        await this.request('POST', `/vector_stores/${storeId}`, payload);
     }
 }

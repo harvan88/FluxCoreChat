@@ -20,9 +20,11 @@ import type { Assistant, AssistantsViewProps } from '../../../types/fluxcore';
 export function AssistantsView({
   accountId,
   onOpenTab,
-  assistantId
+  assistantId,
+  initialData
 }: AssistantsViewProps) {
   // 1. Hooks de negocio (Data & CRUD)
+  // ... (hooks remain same)
   const {
     assistants,
     loading: loadingAssistants,
@@ -50,6 +52,7 @@ export function AssistantsView({
   const [isLocalSaving, setIsLocalSaving] = useState(false);
   const [localSelectedAssistant, setLocalSelectedAssistant] = useState<Assistant | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const creationProcessedRef = useRef(false);
 
   // 3. Manejo de selección y navegación (Sincronizado con reactive list)
   const selectionOptions = useMemo(() => ({
@@ -61,14 +64,6 @@ export function AssistantsView({
         if (prev?.id === assistant.id) return prev;
         return assistant;
       });
-
-      if (assistant.runtime === 'openai' && onOpenTab) {
-        onOpenTab(assistant.id, assistant.name, {
-          type: 'openai-assistant',
-          assistantId: assistant.id,
-          runtime: 'openai',
-        });
-      }
     }
   }), [assistants, assistantId, onOpenTab]);
 
@@ -89,18 +84,31 @@ export function AssistantsView({
 
   // 4. Handlers de acción
   const handleSelect = useCallback((assistant: Assistant) => {
-    setLocalSelectedAssistant(assistant);
     if (onOpenTab) {
+      if (assistant.runtime === 'openai') {
+        const identity = `extension:fluxcore:openai-assistant:${accountId}:${assistant.id}`;
+        onOpenTab(assistant.id, assistant.name, {
+          type: 'openai-assistant',
+          identity,
+          assistantId: assistant.id,
+          runtime: 'openai',
+        });
+        return;
+      }
+
+      const identity = `extension:fluxcore:assistant:${accountId}:${assistant.id}`;
       onOpenTab(assistant.id, assistant.name, {
         type: 'assistant',
+        identity,
         assistantId: assistant.id,
       });
     } else {
+      setLocalSelectedAssistant(assistant);
       selectEntity(assistant);
     }
-  }, [onOpenTab, selectEntity]);
+  }, [onOpenTab, selectEntity, accountId]);
 
-  // 4. Lógica de Guardado Original EXACTA (Restaurada de original.tsx)
+  // ... (scheduleSave and handleUpdate remain same)
   const scheduleSave = useCallback((assistant: Assistant, immediate = false) => {
     if (!assistant.id) return;
 
@@ -137,15 +145,15 @@ export function AssistantsView({
     scheduleSave(next, saveStrategy === 'immediate');
   }, [localSelectedAssistant, updateLocalAssistant, scheduleSave]);
 
-  const handleCreate = useCallback(async (runtime: 'local' | 'openai') => {
+  const handleCreate = useCallback(async (runtime: 'local' | 'openai', customInitialData?: any) => {
     setShowRuntimeModal(false);
-    const newAssistant = await createAssistant({
+    const payload = {
       accountId,
       name: runtime === 'openai' ? 'Nuevo asistente OpenAI' : 'Nuevo asistente',
       runtime,
-      status: 'draft',
+      status: 'draft' as any,
       modelConfig: {
-        provider: 'openai',
+        provider: 'openai' as any,
         model: 'gpt-4o',
         temperature: 0.7,
         topP: 1.0,
@@ -154,14 +162,31 @@ export function AssistantsView({
       timingConfig: {
         responseDelaySeconds: 2,
         smartDelay: true
-      }
-    });
+      },
+      ...customInitialData
+    };
 
-    if (newAssistant && !onOpenTab) {
-      setLocalSelectedAssistant(newAssistant);
-      selectEntity(newAssistant);
+    const newAssistant = await createAssistant(payload);
+
+    if (newAssistant) {
+      if (onOpenTab) {
+        // Recargar el tab actual con el ID real
+        handleSelect(newAssistant);
+      } else {
+        setLocalSelectedAssistant(newAssistant);
+        selectEntity(newAssistant);
+      }
     }
-  }, [accountId, createAssistant, onOpenTab, selectEntity]);
+  }, [accountId, createAssistant, onOpenTab, selectEntity, handleSelect]);
+
+  // 4.1 Manejo de pre-configuración al cargar
+  useEffect(() => {
+    if (assistantId === 'new-assistant' && !creationProcessedRef.current) {
+      creationProcessedRef.current = true;
+      const runtime = initialData?.runtime || 'local';
+      handleCreate(runtime as any, initialData);
+    }
+  }, [assistantId, initialData, handleCreate]);
 
   const handleOpenResource = useCallback((id: string, type: 'instruction' | 'vectorStore' | 'tool') => {
     onOpenTab?.(id, 'Payload...', { type, [`${type}Id`]: id });
@@ -190,6 +215,18 @@ export function AssistantsView({
   // 5. Renderizado
   if (showRuntimeModal) {
     return <RuntimeSelectorModal onSelect={handleCreate} onClose={() => setShowRuntimeModal(false)} />;
+  }
+
+  // Estado de carga si estamos procesando una creación automática
+  if (assistantId === 'new-assistant' && !localSelectedAssistant) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-muted">Configurando nuevo asistente...</p>
+        </div>
+      </div>
+    );
   }
 
   if (localSelectedAssistant) {

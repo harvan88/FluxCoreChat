@@ -135,6 +135,7 @@ export interface AssistantsViewProps {
     accountId: string;
     onOpenTab?: (tabId: string, title: string, data: unknown) => void;
     assistantId?: string;
+    initialData?: Partial<AssistantCreate>;
 }
 
 /** Props para configuración de asistente OpenAI */

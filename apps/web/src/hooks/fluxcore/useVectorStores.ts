@@ -68,9 +68,10 @@ export function useVectorStores(accountId: string) {
     /**
      * Actualizar vector store
      */
-    const updateVectorStore = useCallback(async (id: string, updates: Partial<VectorStore>) => {
+    const updateVectorStore = useCallback(async (id: string, updates: Partial<VectorStore>): Promise<VectorStore | null> => {
         if (!token) return null;
         setIsSaving(true);
+        setError(null);
         try {
             const payload: any = { ...updates, accountId };
             // ZOD FIX: Ensure description/name is never null, always use undefined or string
@@ -87,7 +88,6 @@ export function useVectorStores(accountId: string) {
             });
             const result = await res.json();
             if (result.success) {
-                // Actualización optimista se maneja en la vista
                 return result.data as VectorStore;
             } else {
                 setError(result.message || 'Error al guardar cambios');
@@ -107,6 +107,7 @@ export function useVectorStores(accountId: string) {
      */
     const deleteVectorStore = useCallback(async (id: string) => {
         if (!token) return false;
+        setError(null);
         try {
             const res = await fetch(`/api/fluxcore/vector-stores/${id}?accountId=${accountId}`, {
                 method: 'DELETE',
@@ -116,10 +117,13 @@ export function useVectorStores(accountId: string) {
             if (result.success) {
                 setVectorStores(prev => prev.filter(s => s.id !== id));
                 return true;
+            } else {
+                setError(result.message || 'No se pudo eliminar la base de conocimiento');
+                return false;
             }
-            return false;
         } catch (err) {
             console.error('[useVectorStores] Error deleting store:', err);
+            setError('Error de conexión al eliminar');
             return false;
         }
     }, [token, accountId]);

@@ -65,14 +65,14 @@ interface PanelStore {
   // State
   layout: LayoutState;
   eventListeners: Set<(event: PanelEvent) => void>;
-  
+
   // Getters
   getContainer: (containerId: string) => DynamicContainer | undefined;
   getContainerByType: (type: ContainerType) => DynamicContainer | undefined;
   getActiveContainer: () => DynamicContainer | undefined;
   getTab: (containerId: string, tabId: string) => Tab | undefined;
   canOpenNewContainer: () => boolean;
-  
+
   // Tab Actions
   openTab: (
     containerType: ContainerType,
@@ -83,7 +83,7 @@ interface PanelStore {
   activateTab: (containerId: string, tabId: string) => void;
   moveTab: (tabId: string, fromContainerId: string, toContainerId: string) => boolean;
   updateTabContext: (containerId: string, tabId: string, context: Record<string, any>) => void;
-  
+
   // Container Actions
   openContainer: (
     containerType: ContainerType,
@@ -94,13 +94,13 @@ interface PanelStore {
   focusContainer: (containerId: string) => void;
   duplicateContainer: (containerId: string) => OpenContainerResult;
   minimizeContainer: (containerId: string, minimized: boolean) => void;
-  
+
   // Layout Actions
   resizeContainer: (containerId: string, width?: number, height?: number) => void;
   reorderContainers: (containerIds: string[]) => void;
   setSplitDirection: (direction: SplitDirection) => void;
   resetLayout: () => void;
-  
+
   // Event System
   subscribe: (callback: (event: PanelEvent) => void) => () => void;
   emit: (type: PanelEventType, data?: Partial<PanelEvent>) => void;
@@ -134,7 +134,7 @@ export const usePanelStore = create<PanelStore>()(
       // ========================================
       // Getters
       // ========================================
-      
+
       getContainer: (containerId) => {
         return get().layout.containers.find(c => c.id === containerId);
       },
@@ -166,96 +166,64 @@ export const usePanelStore = create<PanelStore>()(
       // ========================================
 
       openTab: (containerType, tabContext, options = {}) => {
-        const { layout, getContainerByType, openContainer, emit } = get();
+        const { layout, openContainer, emit, activateTab, focusContainer } = get();
         const { focus = true, position = 'end', forceNewContainer = false } = options;
 
-        let targetContainer = getContainerByType(containerType);
-        let isNewContainer = false;
+        // 1. Verificar identidad (Pattern matching tipo VS Code URI)
+        const identity = tabContext.identity;
+        if (identity && !forceNewContainer) {
+          for (const container of layout.containers) {
+            const existingTab = container.tabs.find(t => t.identity === identity);
+            if (existingTab) {
+              if (focus) {
+                activateTab(container.id, existingTab.id);
+                focusContainer(container.id);
+              }
+              return { containerId: container.id, tabId: existingTab.id, isNewContainer: false };
+            }
+          }
+        }
 
-        // ISSUE-002: Verificar si ya existe un tab con el mismo chatId
-        if (tabContext.type === 'chat' && tabContext.context?.chatId) {
+        // 2. Legacy Check: Chats (se mantiene por compatibilidad si no usan identity)
+        if (tabContext.type === 'chat' && tabContext.context?.chatId && !identity) {
           for (const container of layout.containers) {
             const existingTab = container.tabs.find(
               t => t.type === 'chat' && t.context?.chatId === tabContext.context?.chatId
             );
             if (existingTab) {
-              // Activar tab existente en vez de crear duplicado
-              set((state) => ({
-                layout: {
-                  ...state.layout,
-                  containers: state.layout.containers.map(c => 
-                    c.id === container.id 
-                      ? { ...c, activeTabId: existingTab.id }
-                      : c
-                  ),
-                  focusedContainerId: container.id,
-                },
-              }));
-              emit('tab.activated', { containerId: container.id, tabId: existingTab.id });
+              if (focus) {
+                activateTab(container.id, existingTab.id);
+                focusContainer(container.id);
+              }
               return { containerId: container.id, tabId: existingTab.id, isNewContainer: false };
             }
           }
         }
 
-        // Reusar tab de Prompt Inspector para la misma extensión (evitar duplicados)
-        if (
-          tabContext.type === 'extension' &&
-          tabContext.context?.extensionId &&
-          tabContext.context?.view === 'promptInspector'
-        ) {
-          for (const container of layout.containers) {
-            const existingTab = container.tabs.find(
-              (t) =>
-                t.type === 'extension' &&
-                t.context?.extensionId === tabContext.context?.extensionId &&
-                t.context?.view === 'promptInspector'
-            );
-            if (existingTab) {
-              set((state) => ({
-                layout: {
-                  ...state.layout,
-                  containers: state.layout.containers.map((c) =>
-                    c.id === container.id ? { ...c, activeTabId: existingTab.id } : c
-                  ),
-                  focusedContainerId: container.id,
-                },
-              }));
-              emit('tab.activated', { containerId: container.id, tabId: existingTab.id });
-              return { containerId: container.id, tabId: existingTab.id, isNewContainer: false };
-            }
-          }
-        }
+        // 3. Obtener o crear container destino
+        let targetContainer = get().getContainerByType(containerType);
+        let isNewContainer = false;
 
-        // Smart Priority: Si no hay container del tipo o forzamos nuevo
         if (!targetContainer || forceNewContainer) {
-          // Verificar si podemos abrir nuevo container
           if (layout.containers.length >= layout.maxContainers) {
-            // Max reached: abrir como tab en container activo
             targetContainer = layout.containers[0];
             if (!targetContainer) {
-              // Crear primer container
               const result = openContainer(containerType);
-              if (!result.success) {
-                return { containerId: '', tabId: '', isNewContainer: false };
-              }
+              if (!result.success) return { containerId: '', tabId: '', isNewContainer: false };
               targetContainer = get().getContainer(result.containerId)!;
               isNewContainer = true;
             }
           } else {
-            // Crear nuevo container
             const result = openContainer(containerType);
-            if (!result.success) {
-              return { containerId: '', tabId: '', isNewContainer: false };
-            }
+            if (!result.success) return { containerId: '', tabId: '', isNewContainer: false };
             targetContainer = get().getContainer(result.containerId)!;
             isNewContainer = true;
           }
         }
 
-        // Crear tab
+        // 4. Crear y agregar nuevo tab
         const newTab = createTab(tabContext);
 
-        // Agregar tab al container
         set((state) => {
           const containers = state.layout.containers.map(c => {
             if (c.id === targetContainer!.id) {
@@ -301,9 +269,9 @@ export const usePanelStore = create<PanelStore>()(
       closeTab: (containerId, tabId) => {
         const { getContainer, emit } = get();
         const container = getContainer(containerId);
-        
+
         if (!container) return false;
-        
+
         const tab = container.tabs.find(t => t.id === tabId);
         if (!tab || !tab.closable) return false;
 
@@ -312,7 +280,7 @@ export const usePanelStore = create<PanelStore>()(
             if (c.id === containerId) {
               const tabs = c.tabs.filter(t => t.id !== tabId);
               let activeTabId = c.activeTabId;
-              
+
               // Si cerramos el tab activo, activar otro
               if (activeTabId === tabId) {
                 const closedIndex = c.tabs.findIndex(t => t.id === tabId);
@@ -371,12 +339,12 @@ export const usePanelStore = create<PanelStore>()(
 
       moveTab: (tabId, fromContainerId, toContainerId) => {
         const { getContainer, emit } = get();
-        
+
         const fromContainer = getContainer(fromContainerId);
         const toContainer = getContainer(toContainerId);
-        
+
         if (!fromContainer || !toContainer) return false;
-        
+
         const tab = fromContainer.tabs.find(t => t.id === tabId);
         if (!tab) return false;
 
@@ -420,13 +388,13 @@ export const usePanelStore = create<PanelStore>()(
             containers: state.layout.containers.map(c =>
               c.id === containerId
                 ? {
-                    ...c,
-                    tabs: c.tabs.map(t =>
-                      t.id === tabId
-                        ? { ...t, context: { ...t.context, ...context } }
-                        : t
-                    ),
-                  }
+                  ...c,
+                  tabs: c.tabs.map(t =>
+                    t.id === tabId
+                      ? { ...t, context: { ...t.context, ...context } }
+                      : t
+                  ),
+                }
                 : c
             ),
           },
@@ -498,9 +466,9 @@ export const usePanelStore = create<PanelStore>()(
       closeContainer: (containerId, force = false) => {
         const { getContainer, emit, closeContainer: closeChild } = get();
         const container = getContainer(containerId);
-        
+
         if (!container) return false;
-        
+
         // No cerrar si está pinned (a menos que force)
         if (container.pinned && !force) return false;
 
@@ -575,7 +543,7 @@ export const usePanelStore = create<PanelStore>()(
       duplicateContainer: (containerId) => {
         const { getContainer, openContainer } = get();
         const container = getContainer(containerId);
-        
+
         if (!container) {
           return { containerId: '', success: false, error: 'Container not found' };
         }
@@ -615,13 +583,13 @@ export const usePanelStore = create<PanelStore>()(
             containers: state.layout.containers.map(c =>
               c.id === containerId
                 ? {
-                    ...c,
-                    position: {
-                      ...c.position,
-                      ...(width !== undefined && { width }),
-                      ...(height !== undefined && { height }),
-                    },
-                  }
+                  ...c,
+                  position: {
+                    ...c.position,
+                    ...(width !== undefined && { width }),
+                    ...(height !== undefined && { height }),
+                  },
+                }
                 : c
             ),
           },
@@ -675,7 +643,7 @@ export const usePanelStore = create<PanelStore>()(
       subscribe: (callback) => {
         const { eventListeners } = get();
         eventListeners.add(callback);
-        
+
         return () => {
           eventListeners.delete(callback);
         };

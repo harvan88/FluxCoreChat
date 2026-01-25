@@ -7,7 +7,7 @@
 // Core Types
 // ============================================================================
 
-export type ContainerType = 
+export type ContainerType =
   | 'chats'           // Conversaciones y mensajes
   | 'contacts'        // Lista de contactos
   | 'settings'        // Configuración
@@ -16,7 +16,7 @@ export type ContainerType =
   | 'dashboard'       // Dashboard/analytics
   | 'custom';         // Extensiones custom
 
-export type TabContextType = 
+export type TabContextType =
   | 'chat'            // Chat individual
   | 'contact'         // Detalle de contacto
   | 'settings'        // Sección de settings
@@ -32,11 +32,13 @@ export type SplitDirection = 'horizontal' | 'vertical';
 // ============================================================================
 
 export interface Tab {
-  id: string;
+  id: string;                    // Identificador único de instancia
+  identity?: string;            // Identificador de recurso (ej: assistant:123, chat:456)
   type: TabContextType;
   title: string;
   icon?: string;
   context: Record<string, any>;  // chatId, contactId, etc.
+  metadata?: Record<string, any>; // Información extra para identificación
   closable: boolean;
   dirty?: boolean;               // Indica cambios sin guardar
   createdAt: number;
@@ -79,7 +81,7 @@ export interface LayoutState {
 // Panel Stack Manager Events
 // ============================================================================
 
-export type PanelEventType = 
+export type PanelEventType =
   | 'panel.opened'
   | 'panel.closed'
   | 'panel.pinned'
@@ -141,7 +143,7 @@ export interface PanelStackManagerAPI {
   getTab(containerId: string, tabId: string): Tab | undefined;
   getActiveContainer(): DynamicContainer | undefined;
   getContainerByType(type: ContainerType): DynamicContainer | undefined;
-  
+
   // Commands - Tabs
   openTab(
     containerType: ContainerType,
@@ -151,7 +153,7 @@ export interface PanelStackManagerAPI {
   closeTab(containerId: string, tabId: string): boolean;
   activateTab(containerId: string, tabId: string): void;
   moveTab(tabId: string, fromContainerId: string, toContainerId: string): boolean;
-  
+
   // Commands - Containers
   openContainer(
     containerType: ContainerType,
@@ -161,16 +163,16 @@ export interface PanelStackManagerAPI {
   pinContainer(containerId: string, pinned: boolean): void;
   focusContainer(containerId: string): void;
   duplicateContainer(containerId: string): OpenContainerResult;
-  
+
   // Commands - Layout
   resizeContainer(containerId: string, width?: number, height?: number): void;
   reorderContainers(containerIds: string[]): void;
   setSplitDirection(direction: SplitDirection): void;
   resetLayout(): void;
-  
+
   // Events
   subscribe(callback: (event: PanelEvent) => void): () => void;
-  
+
   // Persistence
   saveLayout(): void;
   loadLayout(): boolean;

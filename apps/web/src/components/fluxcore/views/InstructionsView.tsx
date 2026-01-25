@@ -142,8 +142,10 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
     if (!created) return;
 
     if (onOpenTab) {
+      const identity = `extension:fluxcore:instruction:${accountId}:${created.id}`;
       onOpenTab(created.id, created.name, {
         type: 'instruction',
+        identity,
         instructionId: created.id,
       });
     } else {
@@ -154,13 +156,15 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
 
   const handleSelectInstruction = (instruction: Instruction) => {
     setDeleteError(null);
-    setLocalSelectedInstruction(instruction);
     if (onOpenTab) {
+      const identity = `extension:fluxcore:instruction:${accountId}:${instruction.id}`;
       onOpenTab(instruction.id, instruction.name, {
         type: 'instruction',
+        identity,
         instructionId: instruction.id,
       });
     } else {
+      setLocalSelectedInstruction(instruction);
       selectEntity(instruction);
     }
     setIsSaving(false);
@@ -364,6 +368,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
         openProfileTab={() =>
           openTab('settings', {
             type: 'settings',
+            identity: 'settings:profile',
             title: 'Perfil',
             closable: true,
             context: { settingsSection: 'profile' },

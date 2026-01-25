@@ -108,7 +108,7 @@ export function Sidebar() {
             onViewChange={(view) => {
               setFluxCoreActiveView(view);
 
-              const { layout, openTab, activateTab, closeTab, focusContainer } = usePanelStore.getState();
+              const { openTab } = usePanelStore.getState();
               const viewTitles: Record<string, string> = {
                 usage: 'Uso',
                 assistants: 'Asistentes',
@@ -129,32 +129,11 @@ export function Sidebar() {
                 billing: 'CreditCard',
               };
 
-              const existing = layout.containers
-                .flatMap((c) => c.tabs.map((t) => ({ containerId: c.id, tab: t, container: c })))
-                .find(
-                  ({ tab }) =>
-                    tab.type === 'extension' &&
-                    tab.context?.extensionId === extensionId &&
-                    tab.context?.view === view &&
-                    tab.context?.accountId === selectedAccountId
-                );
-
-              if (existing) {
-                const isAlreadyActive = existing.container.activeTabId === existing.tab.id;
-                const isAlreadyFocused = layout.focusedContainerId === existing.containerId;
-
-                if (isAlreadyActive && isAlreadyFocused) {
-                  closeTab(existing.containerId, existing.tab.id);
-                  return;
-                }
-
-                activateTab(existing.containerId, existing.tab.id);
-                focusContainer(existing.containerId);
-                return;
-              }
+              const tabIdentity = `extension:${extensionId}:${view}:${selectedAccountId}`;
 
               openTab('extensions', {
                 type: 'extension',
+                identity: tabIdentity,
                 title: viewTitles[view] || view,
                 icon: viewIcons[view] || 'Settings',
                 closable: true,

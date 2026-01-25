@@ -14,15 +14,17 @@ import {
 } from '../../../hooks/fluxcore';
 import type { VectorStore } from '../../../types/fluxcore';
 import { VectorStoreList } from '../vectorStores/VectorStoreList';
-import { VectorStoreDetail } from '../vectorStores/VectorStoreDetail';
+import { LocalVectorStoreDetail } from '../vectorStores/LocalVectorStoreDetail';
+import { OpenAIVectorStoreDetail } from '../vectorStores/OpenAIVectorStoreDetail';
 
 interface VectorStoresViewProps {
   accountId: string;
   onOpenTab?: (tabId: string, title: string, data: any) => void;
+  onClose?: () => void;
   vectorStoreId?: string;
 }
 
-export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: VectorStoresViewProps) {
+export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId }: VectorStoresViewProps) {
   const { token } = useAuthStore();
   const [showBackendModal, setShowBackendModal] = useState(false);
   const [localSelectedStore, setLocalSelectedStore] = useState<VectorStore | null>(null);
@@ -65,18 +67,18 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
     }
   }), [vectorStores, vectorStoreId, token, accountId]);
 
-  const { selectEntity } = useEntitySelection<VectorStore>(selectionOptions);
+  const { selectEntity, isLoading: isSelectionLoading } = useEntitySelection<VectorStore>(selectionOptions);
 
   // 2. Handlers de Acción
   const handleSelect = (store: VectorStore) => {
     if (onOpenTab) {
-      // En modo Panel, abrimos pestaña y NO cambiamos el estado local de la lista
+      const identity = `extension:fluxcore:vectorStore:${accountId}:${store.id}`;
       onOpenTab(store.id, store.name, {
         type: 'vectorStore',
+        identity,
         vectorStoreId: store.id,
       });
     } else {
-      // En modo Single Page, mostramos detalle localmente
       setLocalSelectedStore(store);
       selectEntity(store);
     }
@@ -94,8 +96,10 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
 
     if (created) {
       if (onOpenTab) {
+        const identity = `extension:fluxcore:vectorStore:${accountId}:${created.id}`;
         onOpenTab(created.id, created.name, {
           type: 'vectorStore',
+          identity,
           vectorStoreId: created.id,
         });
       } else {
@@ -115,15 +119,19 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
     }
   }, [localSelectedStore?.id, updateLocalStore]);
 
-  const handleManualSave = async () => {
+  const handleManualSave = async (updates?: Partial<VectorStore>) => {
     if (!localSelectedStore) return;
+
+    // Combinar estado actual con actualizaciones pendientes (soluciona race condition)
+    const storeToSave = { ...localSelectedStore, ...updates };
 
     setIsSavingGlobal(true);
     const result = await updateVectorStore(localSelectedStore.id, {
-      name: localSelectedStore.name,
-      description: localSelectedStore.description,
-      status: localSelectedStore.status,
-      expirationPolicy: localSelectedStore.expirationPolicy,
+      name: storeToSave.name,
+      description: storeToSave.description,
+      status: storeToSave.status,
+      expirationPolicy: storeToSave.expirationPolicy,
+      expirationDays: storeToSave.expirationDays,
     });
 
     if (result) {
@@ -142,13 +150,51 @@ export function VectorStoresView({ accountId, onOpenTab, vectorStoreId }: Vector
   }, [vectorStoreId, onOpenTab, localSelectedStore]);
 
   // 4. Renderizado
-  if (localSelectedStore) {
+  if (isSelectionLoading || (vectorStoreId && !localSelectedStore)) {
     return (
-      <VectorStoreDetail
+      <div className="h-full flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted">Cargando base de conocimiento...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (localSelectedStore) {
+    if (localSelectedStore.backend === 'openai') {
+      return (
+        <OpenAIVectorStoreDetail
+          store={localSelectedStore}
+          accountId={accountId}
+          onUpdate={handleUpdate}
+          onDelete={async () => {
+            const success = await deleteVectorStore(localSelectedStore.id);
+            if (success) {
+              setLocalSelectedStore(null);
+              if (onClose) onClose();
+            }
+          }}
+          onSave={handleManualSave}
+          onOpenTab={onOpenTab}
+          isSaving={isSaving || isSavingGlobal}
+          saveError={error}
+        />
+      );
+    }
+
+    return (
+      <LocalVectorStoreDetail
         store={localSelectedStore}
         accountId={accountId}
         onUpdate={handleUpdate}
-        onDelete={() => deleteVectorStore(localSelectedStore.id)}
+        onDelete={async () => {
+          const success = await deleteVectorStore(localSelectedStore.id);
+          if (success) {
+            setLocalSelectedStore(null);
+            if (onClose) onClose();
+          }
+        }}
         onSave={handleManualSave}
         isSaving={isSaving || isSavingGlobal}
         saveError={error}

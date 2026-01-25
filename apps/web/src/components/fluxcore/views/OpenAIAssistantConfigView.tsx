@@ -7,8 +7,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { 
-  Atom, Bot, Save, Trash2, Plus, X, Loader2, 
+import {
+  Atom, Bot, Save, Trash2, Plus, X, Loader2,
   Database, ExternalLink, Expand
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
@@ -69,7 +69,7 @@ export function OpenAIAssistantConfigView({
   const { openTab, focusContainer, activateTab, updateTabContext } = usePanelStore();
   const layout = usePanelStore((state) => state.layout);
   const apiBase = `/api/fluxcore`;
-  
+
   const request = async (path: string, options: RequestInit = {}) => {
     if (!token) throw new Error('Falta token de autenticación');
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -90,7 +90,7 @@ export function OpenAIAssistantConfigView({
     }
     return data;
   };
-  
+
   // State
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -153,7 +153,7 @@ export function OpenAIAssistantConfigView({
     }
   };
 
-    useEffect(() => {
+  useEffect(() => {
     let foundLocation: { containerId: string; tabId: string } | null = null;
     for (const container of layout.containers) {
       const tab = container.tabs.find((t) => t.context?.editorKey === instructionsEditorTabId);
@@ -218,6 +218,7 @@ export function OpenAIAssistantConfigView({
   const openInstructionsEditor = () => {
     const result = openTab('editor', {
       type: 'openai-assistant-editor',
+      identity: instructionsEditorTabId,
       title: `Instrucciones · ${name || 'Asistente'}`,
       icon: 'Bot',
       closable: true,
@@ -314,7 +315,7 @@ export function OpenAIAssistantConfigView({
 
   const handleDelete = async () => {
     if (!confirm('¿Eliminar este asistente? Esta acción también lo eliminará de OpenAI.')) return;
-    
+
     try {
       await request(`/assistants/${assistantId}?accountId=${accountId}`, {
         method: 'DELETE',
@@ -407,7 +408,7 @@ export function OpenAIAssistantConfigView({
             <Bot size={16} />
             Información del Asistente
           </h3>
-          
+
           <div className="space-y-3">
             <div>
               <label className="block text-xs text-muted mb-1">Nombre</label>
@@ -488,7 +489,7 @@ export function OpenAIAssistantConfigView({
         {/* Modelo */}
         <section className="space-y-4">
           <h3 className="text-sm font-medium text-secondary">Modelo OpenAI</h3>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-muted mb-1">Modelo</label>
@@ -550,11 +551,10 @@ export function OpenAIAssistantConfigView({
                 <div
                   key={vs.id}
                   onClick={() => toggleVectorStore(vs.id)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedVectorStoreIds.includes(vs.id)
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedVectorStoreIds.includes(vs.id)
                       ? 'border-accent bg-accent/10'
                       : 'border-subtle bg-elevated hover:border-default'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">

@@ -56,6 +56,7 @@ export const fluxcoreVectorStores = pgTable('fluxcore_vector_stores', {
   // Estado
   status: varchar('status', { length: 20 }).notNull().default('draft'), // 'draft', 'production', 'expired'
   backend: varchar('backend', { length: 20 }).notNull().default('local'), // 'local', 'openai'
+  source: varchar('source', { length: 20 }).notNull().default('primary'), // 'primary', 'cache'
 
   // ════════════════════════════════════════════════════════════════════════════
   // CAMPOS ALINEADOS CON OPENAI API

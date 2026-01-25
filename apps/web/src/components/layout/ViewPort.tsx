@@ -13,7 +13,7 @@ export function ViewPort() {
   const { selectedConversationId, activeActivity, selectedAccountId, setSelectedConversation, setActiveConversation, conversations } = useUIStore();
   const containers = useContainers();
   const { layout, openTab, activateTab, focusContainer, closeTab } = usePanelStore();
-  
+
   // FIX: Ref para evitar race condition con tabs duplicados
   const processingRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<string | null>(null);
@@ -45,31 +45,22 @@ export function ViewPort() {
         return;
       }
       processingRef.current = selectedConversationId;
-      
-      // FC-401: Verificar si ya existe un tab para este chat
-      const existingTab = containers
-        .flatMap(c => c.tabs.map(t => ({ tab: t, containerId: c.id })))
-        .find(({ tab }) => tab.type === 'chat' && tab.context.chatId === selectedConversationId);
-      
-      if (existingTab) {
-        // Activar tab existente
-        activateTab(existingTab.containerId, existingTab.tab.id);
-        focusContainer(existingTab.containerId);
-      } else {
-        // Crear nuevo tab
-        openTab('chats', {
-          type: 'chat',
-          title: tabTitle,
-          context: { chatId: selectedConversationId },
-          closable: true,
-        });
-      }
+
+      const tabIdentity = `chat:${selectedConversationId}`;
+
+      openTab('chats', {
+        type: 'chat',
+        identity: tabIdentity,
+        title: tabTitle,
+        context: { chatId: selectedConversationId },
+        closable: true,
+      });
 
       setActiveConversation(selectedConversationId);
 
       // Evitar loops de render: limpiamos la selección una vez manejada
       setSelectedConversation(null);
-      
+
       // FIX: Limpiar ref después de un pequeño delay para permitir re-selección
       setTimeout(() => {
         processingRef.current = null;
@@ -96,19 +87,19 @@ export function ViewPort() {
   );
 
   return (
-    <div 
+    <div
       className={`
         flex-1 flex gap-1 p-1 bg-base overflow-hidden
         ${layout.splitDirection === 'horizontal' ? 'flex-row' : 'flex-col'}
       `}
     >
       {sortedContainers.map((container) => (
-        <div 
+        <div
           key={container.id}
           className="flex-1 min-w-0 min-h-0"
           style={{
-            flex: container.position.width 
-              ? `0 0 ${container.position.width}px` 
+            flex: container.position.width
+              ? `0 0 ${container.position.width}px`
               : '1 1 0%',
           }}
         >
