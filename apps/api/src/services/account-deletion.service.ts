@@ -1,10 +1,9 @@
-import { db } from '@fluxcore/db';
-import { accounts, accountDeletionJobs } from '@fluxcore/db';
+import { db, accountDeletionJobs } from '@fluxcore/db';
 import { and, eq, inArray, desc } from 'drizzle-orm';
 import { accountDeletionGuard } from './account-deletion.guard';
 import { broadcastSystemEvent } from '../websocket/system-events';
-import { systemAdminService } from './system-admin.service';
 import { accountDeletionSnapshotService } from './account-deletion.snapshot.service';
+import type { AccountDeletionAuthMode, AccountDeletionAuthResult } from '../middleware/account-deletion-auth';
 
 const ACTIVE_JOB_STATUSES = ['pending', 'snapshot', 'snapshot_ready', 'external_cleanup', 'local_cleanup'] as const;
 const SNAPSHOT_PHASES = ['snapshot', 'snapshot_ready'] as const;
@@ -12,41 +11,23 @@ const SNAPSHOT_PHASES = ['snapshot', 'snapshot_ready'] as const;
 type ActiveJobStatus = (typeof ACTIVE_JOB_STATUSES)[number];
 type SnapshotPhase = (typeof SNAPSHOT_PHASES)[number];
 
-interface DeletionRequestContext {
+interface DeletionContext {
   accountId: string;
   requesterUserId: string;
-  requesterAccountId?: string;
+  auth: AccountDeletionAuthResult;
 }
 
 class AccountDeletionService {
-  async requestDeletion(context: DeletionRequestContext) {
-    const { accountId, requesterUserId, requesterAccountId } = context;
+  async requestDeletion(context: DeletionContext) {
+    const { accountId, requesterUserId, auth } = context;
+
+    const requesterAccountId = auth.mode === 'owner' ? auth.sessionAccountId ?? undefined : undefined;
 
     await accountDeletionGuard.ensureAllowed(accountId, {
       requesterUserId,
       requesterAccountId,
       details: { phase: 'requestDeletion' },
     });
-
-    const [account] = await db
-      .select({ id: accounts.id, ownerUserId: accounts.ownerUserId })
-      .from(accounts)
-      .where(eq(accounts.id, accountId))
-      .limit(1);
-
-    if (!account) {
-      throw new Error('Account not found');
-    }
-
-    const isOwner = account.ownerUserId === requesterUserId;
-    const sessionMatchesTarget = requesterAccountId ? requesterAccountId === accountId : false;
-    const hasForce = await systemAdminService.hasScope(requesterUserId, 'ACCOUNT_DELETE_FORCE');
-
-    if (!(hasForce || (isOwner && sessionMatchesTarget))) {
-      const error = new Error('Not authorized to delete this account');
-      (error as any).code = 'ACCOUNT_DELETION_UNAUTHORIZED';
-      throw error;
-    }
 
     const existingJob = await this.getActiveJob(accountId);
 
@@ -68,13 +49,14 @@ class AccountDeletionService {
     return job;
   }
 
-  async prepareSnapshot(accountId: string, requesterUserId: string) {
+  async prepareSnapshot(context: DeletionContext) {
+    const { accountId, requesterUserId, auth } = context;
     const job = await this.getActiveJob(accountId);
     if (!job) {
       throw new Error('No deletion job found for this account');
     }
 
-    await this.ensureRequester(job, requesterUserId);
+    await this.ensureRequester(job, requesterUserId, auth.mode);
 
     if ((SNAPSHOT_PHASES as unknown as SnapshotPhase[]).includes(job.phase as SnapshotPhase) && job.status === 'snapshot_ready') {
       return job;
@@ -102,13 +84,14 @@ class AccountDeletionService {
     return updated;
   }
 
-  async confirmDeletion(accountId: string, requesterUserId: string) {
+  async confirmDeletion(context: DeletionContext) {
+    const { accountId, requesterUserId, auth } = context;
     const job = await this.getActiveJob(accountId);
     if (!job) {
       throw new Error('No deletion job found for this account');
     }
 
-    await this.ensureRequester(job, requesterUserId);
+    await this.ensureRequester(job, requesterUserId, auth.mode);
 
     if (job.status !== 'snapshot_ready') {
       throw new Error('Snapshot must be ready before confirmation');
@@ -162,17 +145,18 @@ class AccountDeletionService {
     return existingJob || null;
   }
 
-  private async ensureRequester(job: { requesterUserId: string }, requesterUserId: string) {
+  private ensureRequester(job: { requesterUserId: string }, requesterUserId: string, authMode: AccountDeletionAuthMode) {
     if (job.requesterUserId === requesterUserId) {
       return;
     }
 
-    const hasForce = await systemAdminService.hasScope(requesterUserId, 'ACCOUNT_DELETE_FORCE');
-    if (!hasForce) {
-      const error = new Error('Not authorized to manage this deletion job');
-      (error as any).code = 'ACCOUNT_DELETION_UNAUTHORIZED';
-      throw error;
+    if (authMode === 'force') {
+      return;
     }
+
+    const error = new Error('Not authorized to manage this deletion job');
+    (error as any).code = 'ACCOUNT_DELETION_UNAUTHORIZED';
+    throw error;
   }
 }
 
