@@ -40,6 +40,20 @@ interface WSMessage {
 // Store de conexiones activas por relationshipId
 const subscriptions = new Map<string, Set<any>>();
 
+ // Conexiones WS activas (para broadcast de eventos del sistema)
+ const activeConnections = new Set<any>();
+
+ export function broadcastAll(payload: any): void {
+   const message = JSON.stringify(payload);
+   for (const ws of activeConnections) {
+     try {
+       ws.send(message);
+     } catch {
+       activeConnections.delete(ws);
+     }
+   }
+ }
+
 export function handleWSMessage(ws: any, message: string | Buffer): void {
   try {
     const data = JSON.parse(message.toString()) as WSMessage;
@@ -237,6 +251,7 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 
 export function handleWSOpen(ws: any): void {
   console.log('WebSocket connection opened');
+  activeConnections.add(ws);
   ws.send(JSON.stringify({ 
     type: 'connected', 
     timestamp: new Date().toISOString() 
@@ -245,6 +260,7 @@ export function handleWSOpen(ws: any): void {
 
 export function handleWSClose(ws: any): void {
   console.log('WebSocket connection closed');
+  activeConnections.delete(ws);
   // Limpiar subscripciones de este ws
   for (const [relationshipId, subs] of subscriptions.entries()) {
     if (subs.has(ws)) {

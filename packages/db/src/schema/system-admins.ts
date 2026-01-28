@@ -20,6 +20,7 @@ export const systemAdmins = pgTable('system_admins', {
 export interface SystemAdminScopes {
   credits?: boolean;
   policies?: boolean;
+  ACCOUNT_DELETE_FORCE?: boolean;
   [key: string]: boolean | undefined;
 }
 

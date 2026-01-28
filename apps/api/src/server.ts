@@ -37,6 +37,7 @@ import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-han
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { aiOrchestrator } from './services/ai-orchestrator.service';
+import { accountDeletionWorker } from './workers/account-deletion.worker';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -427,5 +428,6 @@ console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
 
 automationScheduler.init();
 aiOrchestrator.init();
+accountDeletionWorker.start();
 
 export type App = typeof elysiaApp;

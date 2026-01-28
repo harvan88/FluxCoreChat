@@ -46,6 +46,7 @@ interface VectorStoreFilesSectionProps {
     vectorStoreId: string;
     accountId: string;
     onFileCountChange?: (count: number) => void;
+    onFileStatsChange?: (stats: { count: number; sizeBytes: number }) => void;
 }
 
 const ACCEPTED_FILE_TYPES = [
@@ -68,7 +69,8 @@ const MIME_TYPE_ICONS: Record<string, typeof FileText> = {
 export function VectorStoreFilesSection({
     vectorStoreId,
     accountId,
-    onFileCountChange
+    onFileCountChange,
+    onFileStatsChange
 }: VectorStoreFilesSectionProps) {
     const { token } = useAuthStore();
     const [files, setFiles] = useState<VectorStoreFile[]>([]);
@@ -79,6 +81,22 @@ export function VectorStoreFilesSection({
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const onFileCountChangeRef = useRef(onFileCountChange);
+    const onFileStatsChangeRef = useRef(onFileStatsChange);
+
+    useEffect(() => {
+        onFileCountChangeRef.current = onFileCountChange;
+    }, [onFileCountChange]);
+
+    useEffect(() => {
+        onFileStatsChangeRef.current = onFileStatsChange;
+    }, [onFileStatsChange]);
+
+    const emitStats = useCallback((list: VectorStoreFile[]) => {
+        const count = list.length;
+        const sizeBytes = list.reduce((total, file) => total + (file.sizeBytes || 0), 0);
+        onFileCountChangeRef.current?.(count);
+        onFileStatsChangeRef.current?.({ count, sizeBytes });
+    }, []);
 
     // Cargar archivos
     const loadFiles = useCallback(async () => {
@@ -93,8 +111,9 @@ export function VectorStoreFilesSection({
             if (response.ok) {
                 const data = await response.json();
                 if (data.success) {
-                    setFiles(data.data || []);
-                    onFileCountChangeRef.current?.(data.data?.length || 0);
+                    const list = data.data || [];
+                    setFiles(list);
+                    emitStats(list);
                 }
             }
         } catch (err) {
@@ -102,7 +121,7 @@ export function VectorStoreFilesSection({
         } finally {
             setLoading(false);
         }
-    }, [token, vectorStoreId]);
+    }, [token, vectorStoreId, emitStats]);
 
     useEffect(() => {
         loadFiles();
@@ -210,8 +229,11 @@ export function VectorStoreFilesSection({
             );
 
             if (response.ok) {
-                setFiles(prev => prev.filter(f => f.id !== fileId));
-                onFileCountChange?.(files.length - 1);
+                setFiles(prev => {
+                    const next = prev.filter(f => f.id !== fileId);
+                    emitStats(next);
+                    return next;
+                });
             }
         } catch (err) {
             console.error('Error deleting file:', err);

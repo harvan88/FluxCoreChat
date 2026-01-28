@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAccounts } from '../../store/accountStore';
 import { Button, Input, Card } from '../ui';
+import { AccountDeletionWizard } from './AccountDeletionWizard';
 import type { Account } from '../../types';
 
 interface AccountsSectionProps {
@@ -84,6 +85,15 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
                       <span>Cuenta personal</span>
                     </>
                   )}
+
+        {/* Account Deletion Wizard */}
+        {activeAccount && (
+          <AccountDeletionWizard
+            accountId={activeAccount.id}
+            sessionAccountId={activeAccount.id}
+            accountName={activeAccount.displayName}
+          />
+        )}
                 </div>
               </div>
               <div className="px-2 py-1 bg-accent/10 text-accent text-xs rounded font-medium">

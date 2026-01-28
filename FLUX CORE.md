@@ -828,3 +828,36 @@ AssistantTool {
 | **Smart Delay** | Algoritmo de gestión automática de tiempos de respuesta. |
 | **Vector Store** | Repositorio de datos indexados vectorialmente para búsqueda semántica (RAG). |
 | **System Instructions**
+
+---
+
+## Notas Futuras: Expiración de Vector Stores Locales
+
+1. **Regla de datos única:**
+   - `expirationDays = 0` ⇒ nunca expira (estado por defecto).
+   - `expirationDays > 0` ⇒ expira tras X días sin actividad (usar `lastActiveAt` o `updatedAt` hasta instrumentar tracking real).
+
+2. **Comportamiento al expirar:**
+   - Desvincular automáticamente el VectorStore de todos los asistentes (`fluxcore_assistant_vector_stores`).
+   - Ejecutar `deleteVectorStoreCascade` para eliminar archivos asociados y luego el registro del store (sin dejar rastros residuales).
+
+3. **Scheduler:**
+   - Job diario que revise VectorStores locales con `expirationDays > 0` y `lastActiveAt + expirationDays < now`.
+   - Registrar auditoría/log para cada eliminación automática.
+
+4. **Tracking de actividad:**
+   - Actualizar `lastActiveAt` cuando se suben archivos, se reindexa o se hace retrieval desde el store.
+   - Agregar helper `markVectorStoreActive(vectorStoreId)` en servicios RAG para centralizar la actualización.
+
+5. **UI (LocalVectorStoreDetail):**
+   - Checkbox "Nunca expira" (seleccionado por defecto) ⇒ asigna `expirationDays = 0` y deshabilita input numérico.
+   - Campo numérico (entero ≥1) habilitado sólo cuando "Nunca" está apagado; representa días de inactividad antes de la caducidad.
+   - Texto aclaratorio: "Al expirar se elimina el vector store y sus archivos tras desvincularlo de los asistentes".
+
+6. **Validaciones frontend/backend:**
+   - Normalizar para evitar valores negativos o strings.
+   - Persistir `expirationPolicy = 'never'` cuando `expirationDays = 0` y `expirationPolicy = 'inactive_days'` en caso contrario (compatibilidad con OpenAI `expires_after`).
+
+7. **Documentación:**
+   - Actualizar QUICK_START / VECTOR_STORE docs con el nuevo flujo y riesgos de caducidad automática.
+   - Incluir sección de troubleshooting para recuperaciones (recrear store y volver a adjuntar archivos).

@@ -9,6 +9,7 @@ import type { AISuggestion } from '../components/extensions';
 import type { EnrichmentBatch } from '../types/enrichments';
 import { useEnrichmentStore } from '../store/enrichmentStore';
 import { useUIStore } from '../store/uiStore';
+import { clearAccountData, deleteAccountDatabase } from '../db';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
 
@@ -209,6 +210,25 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
                   });
                 }
                 return;
+
+              case 'account:deleted': {
+                const deletedAccountId = (message as any).accountId;
+                if (typeof deletedAccountId === 'string' && deletedAccountId.length > 0) {
+                  const selected = useUIStore.getState().selectedAccountId;
+
+                  if (selected === deletedAccountId) {
+                    Promise.resolve()
+                      .then(() => clearAccountData(deletedAccountId))
+                      .then(() => deleteAccountDatabase(deletedAccountId))
+                      .finally(() => {
+                        useUIStore.getState().resetAccountData();
+                        useUIStore.getState().setSelectedAccount(null);
+                      });
+                  }
+                }
+                onMsg?.(message);
+                return;
+              }
               
               default:
                 onMsg?.(message);

@@ -4,7 +4,7 @@
  */
 
 import { api } from './api';
-import type { Account, ApiResponse } from '../types';
+import type { Account, AccountDeletionJob, ApiResponse } from '../types';
 
 export interface CreateAccountData {
   username: string;
@@ -61,6 +61,22 @@ export const accountsApi = {
    */
   async convertToBusiness(id: string): Promise<ApiResponse<Account>> {
     return api.convertToBusiness(id);
+  },
+
+  async requestDeletion(id: string, sessionAccountId?: string): Promise<ApiResponse<AccountDeletionJob>> {
+    return api.requestAccountDeletion(id, sessionAccountId);
+  },
+
+  async prepareDeletionSnapshot(id: string): Promise<ApiResponse<AccountDeletionJob>> {
+    return api.prepareAccountDeletionSnapshot(id);
+  },
+
+  async confirmDeletion(id: string): Promise<ApiResponse<AccountDeletionJob>> {
+    return api.confirmAccountDeletion(id);
+  },
+
+  async getAccountDeletionJob(id: string): Promise<ApiResponse<AccountDeletionJob | null>> {
+    return api.getAccountDeletionJob(id);
   },
 
   /**
