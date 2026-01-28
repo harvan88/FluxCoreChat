@@ -3,6 +3,7 @@
  */
 
 // Mock IndexedDB for tests
+import '@testing-library/jest-dom';
 import 'fake-indexeddb/auto';
 
 // Mock window.matchMedia

@@ -71,6 +71,17 @@ export const accountsApi = {
     return api.prepareAccountDeletionSnapshot(id);
   },
 
+  async acknowledgeDeletionSnapshot(
+    id: string,
+    payload: { downloaded?: boolean; consent?: boolean }
+  ): Promise<ApiResponse<AccountDeletionJob>> {
+    return api.acknowledgeAccountDeletionSnapshot(id, payload);
+  },
+
+  async downloadDeletionSnapshot(id: string): Promise<Blob> {
+    return api.downloadAccountDeletionSnapshot(id);
+  },
+
   async confirmDeletion(id: string): Promise<ApiResponse<AccountDeletionJob>> {
     return api.confirmAccountDeletion(id);
   },

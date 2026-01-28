@@ -398,6 +398,42 @@ class ApiService {
     });
   }
 
+  async acknowledgeAccountDeletionSnapshot(
+    accountId: string,
+    payload: { downloaded?: boolean; consent?: boolean }
+  ): Promise<ApiResponse<AccountDeletionJob>> {
+    return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/snapshot/ack`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    });
+  }
+
+  async downloadAccountDeletionSnapshot(accountId: string): Promise<Blob> {
+    const token = this.getToken();
+    const response = await fetch(`${API_URL}/accounts/${accountId}/delete/snapshot/download`, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      let message = `Error ${response.status}: ${response.statusText}`;
+      try {
+        const data = await response.json();
+        if (data?.message) {
+          message = data.message;
+        }
+      } catch {
+        // ignore json parse error
+      }
+
+      throw new Error(message);
+    }
+
+    return response.blob();
+  }
+
   async confirmAccountDeletion(accountId: string): Promise<ApiResponse<AccountDeletionJob>> {
     return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/confirm`, {
       method: 'POST',

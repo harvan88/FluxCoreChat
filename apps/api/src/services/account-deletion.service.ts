@@ -17,6 +17,12 @@ interface DeletionContext {
   auth: AccountDeletionAuthResult;
 }
 
+interface SnapshotAckPayload {
+  downloaded?: boolean;
+  consent?: boolean;
+  userAgent?: string;
+}
+
 class AccountDeletionService {
   async requestDeletion(context: DeletionContext) {
     const { accountId, requesterUserId, auth } = context;
@@ -93,6 +99,18 @@ class AccountDeletionService {
 
     await this.ensureRequester(job, requesterUserId, auth.mode);
 
+    if (!job.snapshotAcknowledgedAt) {
+      const error = new Error('Snapshot acknowledgement required before confirmation');
+      (error as any).code = 'ACCOUNT_DELETION_CONSENT_REQUIRED';
+      throw error;
+    }
+
+    if (!job.snapshotDownloadedAt) {
+      const error = new Error('Snapshot download required before confirmation');
+      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_REQUIRED';
+      throw error;
+    }
+
     if (job.status !== 'snapshot_ready') {
       throw new Error('Snapshot must be ready before confirmation');
     }
@@ -105,6 +123,10 @@ class AccountDeletionService {
         metadata: {
           ...job.metadata,
           confirmedAt: new Date().toISOString(),
+          consent: {
+            acknowledgedAt: job.snapshotAcknowledgedAt?.toISOString?.() ?? job.snapshotAcknowledgedAt,
+            downloadedAt: job.snapshotDownloadedAt?.toISOString?.() ?? job.snapshotDownloadedAt,
+          },
         },
       })
       .where(eq(accountDeletionJobs.id, job.id))
@@ -117,6 +139,94 @@ class AccountDeletionService {
     });
 
     return updated;
+  }
+
+  async acknowledgeSnapshot(context: DeletionContext & { payload: SnapshotAckPayload }) {
+    const { accountId, requesterUserId, auth, payload } = context;
+
+    if (!payload.downloaded && !payload.consent) {
+      const error = new Error('Snapshot acknowledgement requires downloaded or consent flag');
+      (error as any).code = 'ACCOUNT_DELETION_ACK_INVALID';
+      throw error;
+    }
+
+    const job = await this.getActiveJob(accountId);
+    if (!job) {
+      throw new Error('No deletion job found for this account');
+    }
+
+    await this.ensureRequester(job, requesterUserId, auth.mode);
+
+    if (job.status !== 'snapshot_ready') {
+      const error = new Error('Snapshot acknowledgement is only available while snapshot is ready');
+      (error as any).code = 'ACCOUNT_DELETION_INVALID_PHASE';
+      throw error;
+    }
+
+    if (payload.consent && !job.snapshotDownloadedAt && !payload.downloaded) {
+      const error = new Error('Snapshot must be downloaded before acknowledging consent');
+      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_REQUIRED';
+      throw error;
+    }
+
+    const now = new Date();
+    const downloadAt = payload.downloaded ? now : undefined;
+    const consentAt = payload.consent ? now : undefined;
+
+    const nextDownloadCount = payload.downloaded ? (job.snapshotDownloadCount ?? 0) + 1 : job.snapshotDownloadCount ?? 0;
+    const acknowledgementEntries = Array.isArray((job.metadata as any)?.snapshotAcknowledgements)
+      ? ([...(job.metadata as any).snapshotAcknowledgements] as any[])
+      : [];
+
+    if (payload.downloaded) {
+      acknowledgementEntries.push({ type: 'download', at: downloadAt?.toISOString(), userAgent: payload.userAgent });
+    }
+
+    if (payload.consent) {
+      acknowledgementEntries.push({ type: 'consent', at: consentAt?.toISOString(), userAgent: payload.userAgent });
+    }
+
+    const [updated] = await db
+      .update(accountDeletionJobs)
+      .set({
+        snapshotDownloadedAt: downloadAt ?? job.snapshotDownloadedAt ?? null,
+        snapshotDownloadCount: nextDownloadCount,
+        snapshotAcknowledgedAt: consentAt ?? job.snapshotAcknowledgedAt ?? null,
+        metadata: {
+          ...job.metadata,
+          snapshotAcknowledgements: acknowledgementEntries,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(accountDeletionJobs.id, job.id))
+      .returning();
+
+    return updated;
+  }
+
+  async getSnapshotArtifact(context: DeletionContext) {
+    const { accountId, requesterUserId, auth } = context;
+    const job = await this.getActiveJob(accountId);
+    if (!job) {
+      throw new Error('No deletion job found for this account');
+    }
+
+    await this.ensureRequester(job, requesterUserId, auth.mode);
+
+    if (job.status !== 'snapshot_ready') {
+      const error = new Error('Snapshot not available for download');
+      (error as any).code = 'ACCOUNT_DELETION_INVALID_PHASE';
+      throw error;
+    }
+
+    const snapshotPath = (job.metadata as any)?.snapshotPath as string | undefined;
+    if (!snapshotPath) {
+      const error = new Error('Snapshot artifact path missing');
+      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_MISSING';
+      throw error;
+    }
+
+    return { job, snapshotPath };
   }
 
   async getJobForAccount(accountId: string) {

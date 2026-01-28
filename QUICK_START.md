@@ -17,7 +17,11 @@ cd packages/db
 bun run db:push
 cd ../..
 
-# 3. Iniciar API + Web
+# 3. (Temporal) Preparar entorno de pruebas
+# Levanta Postgres/Redis (paso 1) y luego ejecuta el seed "test baseline" cuando esté disponible.
+# Mientras tanto, corre sólo los tests de dominio siguiendo la sección "Testing por dominio".
+
+# 4. Iniciar API + Web
 bun run dev
 
 ```
@@ -153,9 +157,18 @@ cd packages/db
 bunx drizzle-kit push:pg
 ```
 
-### Testing
+### Testing por dominio
 ```powershell
-# Tests E2E
+# 1. Tests de Account Deletion (validar AD-130)
+docker-compose up -d postgres redis
+# (Temporal) Ejecutar únicamente los archivos de account deletion mientras se publica el seed global
+bun test apps/api account-deletion.guard account-deletion.service account-deletion.worker
+
+# 2. Suite completa apps/api (requiere seed test baseline)
+# Pendiente: se documentará `bun run seed:test-baseline` cuando el script esté en main.
+# Hasta entonces, evita ejecutar la suite completa en entornos vacíos.
+
+# 3. Tests E2E web
 cd apps/web
 bun run test:e2e
 ```

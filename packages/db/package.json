@@ -22,7 +22,8 @@
     "db:push": "drizzle-kit push:pg",
     "db:studio": "drizzle-kit studio",
     "seed:test": "bun run src/seed-test-users.ts",
-    "seed:fluxi": "bun run src/seed-fluxi.ts"
+    "seed:fluxi": "bun run src/seed-fluxi.ts",
+    "seed:test-baseline": "bun run src/seed-test-baseline.ts"
   },
   "dependencies": {
     "@fluxcore/types": "workspace:*",

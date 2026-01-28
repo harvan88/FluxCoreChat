@@ -16,6 +16,7 @@ import { fluxcoreService } from '../services/fluxcore.service';
 import { deleteVectorStoreCascade } from '../services/vector-store-deletion.service';
 import { broadcastSystemEvent } from '../websocket/system-events';
 import { ensureAccountDeletionAllowed } from '../services/account-deletion.guard';
+import { accountDeletionExternalService } from '../services/account-deletion.external';
 
 type DeletionJobStatus = 'external_cleanup' | 'local_cleanup' | 'completed' | 'failed';
 
@@ -96,47 +97,15 @@ class AccountDeletionWorker {
   private async processExternalCleanup(job: DeletionJob) {
     const startedAt = job.metadata?.externalCleanupStartedAt ?? new Date().toISOString();
 
-    const externalState = { ...(job.externalState || {}) };
+    await accountDeletionExternalService.run(job);
 
-    // Eliminar asistentes (incluye OpenAI si aplica)
-    const assistants = await db
-      .select({ id: fluxcoreAssistants.id })
-      .from(fluxcoreAssistants)
-      .where(eq(fluxcoreAssistants.accountId, job.accountId));
-
-    for (const assistant of assistants) {
-      try {
-        await fluxcoreService.deleteAssistant(assistant.id, job.accountId);
-      } catch (error) {
-        console.error('[AccountDeletionWorker] Failed to delete assistant', assistant.id, error);
-        throw error;
-      }
-    }
-
-    externalState.assistantsRemoved = true;
-
-    // Eliminar vector stores en cascada (incluye OpenAI)
-    const vectorStores = await db
-      .select({ id: fluxcoreVectorStores.id })
-      .from(fluxcoreVectorStores)
-      .where(eq(fluxcoreVectorStores.accountId, job.accountId));
-
-    for (const store of vectorStores) {
-      try {
-        await deleteVectorStoreCascade(store.id, job.accountId);
-      } catch (error) {
-        console.error('[AccountDeletionWorker] Failed to delete vector store', store.id, error);
-        throw error;
-      }
-    }
-
-    externalState.vectorStoresRemoved = true;
-
+    const refreshedJob = await this.getJobById(job.id);
     const metadata = {
-      ...(job.metadata || {}),
+      ...((refreshedJob?.metadata ?? job.metadata) || {}),
       externalCleanupStartedAt: startedAt,
       externalCleanupFinishedAt: new Date().toISOString(),
     };
+    const externalState = (refreshedJob?.externalState ?? job.externalState) || {};
 
     const [updated] = await db
       .update(accountDeletionJobs)
@@ -245,6 +214,16 @@ class AccountDeletionWorker {
       details: {},
       createdAt: new Date(),
     });
+  }
+
+  private async getJobById(jobId: string): Promise<DeletionJob | null> {
+    const [job] = await db
+      .select()
+      .from(accountDeletionJobs)
+      .where(eq(accountDeletionJobs.id, jobId))
+      .limit(1);
+
+    return job ?? null;
   }
 }
 

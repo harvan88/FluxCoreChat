@@ -18,6 +18,8 @@ export const messages = pgTable('messages', {
   aiApprovedBy: uuid('ai_approved_by').references(() => users.id),
   // COR-002: Status de sincronización/entrega (migration-007)
   status: varchar('status', { length: 20 }).default('synced').notNull(),
+  // COR-004: Soft delete por usuario (array de accountIds)
+  deletedBy: jsonb('deleted_by').default([]).notNull(),
   // COR-003: Actor model para mensajes (migration-008)
   fromActorId: uuid('from_actor_id').references(() => actors.id),
   toActorId: uuid('to_actor_id').references(() => actors.id),
@@ -41,7 +43,7 @@ export type MessageEnrichment = typeof messageEnrichments.$inferSelect;
 export type NewMessageEnrichment = typeof messageEnrichments.$inferInsert;
 
 // COR-002: Tipos de status para mensajes
-export type MessageStatus = 
+export type MessageStatus =
   | 'local_only'      // Solo existe localmente (offline-first)
   | 'pending_backend' // Pendiente de sincronizar con backend
   | 'synced'          // Sincronizado con backend
