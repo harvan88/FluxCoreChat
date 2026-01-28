@@ -11,6 +11,7 @@ import type {
   ApiResponse,
   LoginCredentials,
   RegisterData,
+  AccountDeletionJob,
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -381,6 +382,31 @@ class ApiService {
     return this.request<Account>(`/accounts/${accountId}/convert-to-business`, {
       method: 'POST',
     });
+  }
+
+  async requestAccountDeletion(accountId: string, sessionAccountId?: string): Promise<ApiResponse<AccountDeletionJob>> {
+    return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/request`, {
+      method: 'POST',
+      body: JSON.stringify({ sessionAccountId }),
+    });
+  }
+
+  async prepareAccountDeletionSnapshot(accountId: string): Promise<ApiResponse<AccountDeletionJob>> {
+    return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/snapshot`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async confirmAccountDeletion(accountId: string): Promise<ApiResponse<AccountDeletionJob>> {
+    return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async getAccountDeletionJob(accountId: string): Promise<ApiResponse<AccountDeletionJob | null>> {
+    return this.request<AccountDeletionJob | null>(`/accounts/${accountId}/delete/job`);
   }
 
   // Forgot password

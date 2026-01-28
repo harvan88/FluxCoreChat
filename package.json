@@ -17,6 +17,8 @@
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "typecheck": "turbo run typecheck",
+    "seed:system-admins": "bun run packages/db/src/seed-system-admins.ts",
+    "seed:protected-accounts": "bun run packages/db/src/seed-protected-accounts.ts",
     "db:migrate": "bun run packages/db/src/migrate-all.ts",
     "admin:roles": "bun run packages/db/src/system-admins-cli.ts",
     "api:start": "bun run apps/api/src/server.ts",

@@ -53,6 +53,12 @@ export function AssistantsView({
   const [localSelectedAssistant, setLocalSelectedAssistant] = useState<Assistant | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creationProcessedRef = useRef(false);
+  const [creatingAssistant, setCreatingAssistant] = useState(false);
+
+  const resetCreationState = useCallback(() => {
+    creationProcessedRef.current = false;
+    setCreatingAssistant(false);
+  }, []);
 
   // 3. Manejo de selección y navegación (Sincronizado con reactive list)
   const selectionOptions = useMemo(() => ({
@@ -166,27 +172,38 @@ export function AssistantsView({
       ...customInitialData
     };
 
+    setCreatingAssistant(true);
     const newAssistant = await createAssistant(payload);
 
     if (newAssistant) {
       if (onOpenTab) {
         // Recargar el tab actual con el ID real
-        handleSelect(newAssistant);
+        onOpenTab(newAssistant.id, newAssistant.name, {
+          type: 'assistant',
+          identity: `extension:fluxcore:assistant:${accountId}:${newAssistant.id}`,
+          assistantId: newAssistant.id,
+        });
       } else {
         setLocalSelectedAssistant(newAssistant);
         selectEntity(newAssistant);
       }
     }
-  }, [accountId, createAssistant, onOpenTab, selectEntity, handleSelect]);
+    setCreatingAssistant(false);
+    creationProcessedRef.current = false;
+  }, [accountId, createAssistant, onOpenTab, selectEntity]);
 
   // 4.1 Manejo de pre-configuración al cargar
   useEffect(() => {
-    if (assistantId === 'new-assistant' && !creationProcessedRef.current) {
+    if (
+      assistantId === 'new-assistant' &&
+      !creationProcessedRef.current &&
+      !creatingAssistant
+    ) {
       creationProcessedRef.current = true;
       const runtime = initialData?.runtime || 'local';
       handleCreate(runtime as any, initialData);
     }
-  }, [assistantId, initialData, handleCreate]);
+  }, [assistantId, initialData, handleCreate, creatingAssistant]);
 
   const handleOpenResource = useCallback((id: string, type: 'instruction' | 'vectorStore' | 'tool') => {
     onOpenTab?.(id, 'Payload...', { type, [`${type}Id`]: id });
@@ -237,7 +254,18 @@ export function AssistantsView({
         vectorStores={vectorStores}
         tools={tools}
         onUpdate={handleUpdate}
-        onDelete={() => deleteAssistant(localSelectedAssistant.id)}
+        onDelete={async () => {
+          await deleteAssistant(localSelectedAssistant.id);
+          if (assistantId && onOpenTab) {
+            onOpenTab(localSelectedAssistant.id, localSelectedAssistant.name, {
+              type: 'assistant',
+              assistantId: undefined
+            });
+          }
+          setLocalSelectedAssistant(null);
+          clearSelection();
+          resetCreationState();
+        }}
         onActivate={async () => {
           await activateAssistant(localSelectedAssistant.id);
           setDetailActivateConfirm(false);
@@ -249,6 +277,7 @@ export function AssistantsView({
           setLocalSelectedAssistant(null);
           if (onOpenTab) clearSelection();
           else selectEntity(null as any);
+          resetCreationState();
         }}
         onOpenResource={handleOpenResource}
         onCreateResource={handleCreateResource}

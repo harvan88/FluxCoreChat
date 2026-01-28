@@ -3,6 +3,9 @@
  * 
  * Implementa el patrón de arquitectura estable para evitar parpadeos y pérdida de datos.
  * Sincronizado 1:1 con la lógica original pero modularizado.
+ * 
+ * NOTA: La separación Local vs OpenAI es SOLO a nivel de código interno.
+ * La UI muestra TODOS los stores en una sola lista combinada.
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -47,7 +50,6 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
     entities: vectorStores,
     urlId: vectorStoreId,
     onSelect: (store: VectorStore) => {
-      // Solo actualizar si realmente cambió o si no tenemos nada
       setLocalSelectedStore(prev => {
         if (prev?.id === store.id) return prev;
         return store;
@@ -110,10 +112,7 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
   };
 
   const handleUpdate = useCallback((updates: Partial<VectorStore>) => {
-    // 1. Cambio local inmediato (Estabilidad)
     setLocalSelectedStore(prev => prev ? { ...prev, ...updates } : prev);
-
-    // 2. Sincronizar optimísticamente con la lista global (si existe en la lista)
     if (localSelectedStore?.id) {
       updateLocalStore(localSelectedStore.id, updates);
     }
@@ -122,7 +121,6 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
   const handleManualSave = async (updates?: Partial<VectorStore>) => {
     if (!localSelectedStore) return;
 
-    // Combinar estado actual con actualizaciones pendientes (soluciona race condition)
     const storeToSave = { ...localSelectedStore, ...updates };
 
     setIsSavingGlobal(true);
@@ -135,14 +133,13 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
     });
 
     if (result) {
-      // Mantener los cambios locales pero aplicar el feedback del servidor
       setLocalSelectedStore(prev => prev?.id === result.id ? { ...prev, ...result, name: prev.name } : result);
       await refresh();
     }
     setIsSavingGlobal(false);
   };
 
-  // 3. Efecto de Limpieza (Si estamos en modo lista y desaparece la selección)
+  // 3. Efecto de Limpieza
   useEffect(() => {
     if (!vectorStoreId && onOpenTab && localSelectedStore) {
       setLocalSelectedStore(null);
@@ -161,6 +158,7 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
     );
   }
 
+  // Detalle de un store seleccionado - delega al componente correcto según backend
   if (localSelectedStore) {
     if (localSelectedStore.backend === 'openai') {
       return (
@@ -198,10 +196,12 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
         onSave={handleManualSave}
         isSaving={isSaving || isSavingGlobal}
         saveError={error}
+        onOpenTab={onOpenTab}
       />
     );
   }
 
+  // Vista de lista - muestra TODOS los stores juntos (sin separación visual)
   return (
     <div className="h-full flex flex-col">
       <div className="px-6 py-4 border-b border-subtle flex items-center justify-between">

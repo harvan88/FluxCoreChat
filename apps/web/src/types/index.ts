@@ -7,6 +7,31 @@ export interface User {
   systemAdminScopes?: Record<string, boolean> | null;
 }
 
+export type AccountDeletionJobStatus =
+  | 'pending'
+  | 'snapshot'
+  | 'snapshot_ready'
+  | 'external_cleanup'
+  | 'local_cleanup'
+  | 'completed'
+  | 'failed';
+
+export interface AccountDeletionJob {
+  id: string;
+  accountId: string;
+  requesterUserId: string;
+  requesterAccountId?: string | null;
+  status: AccountDeletionJobStatus;
+  phase: string;
+  snapshotUrl?: string | null;
+  snapshotReadyAt?: string | null;
+  externalState?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  failureReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Account {
   id: string;
   ownerUserId: string;

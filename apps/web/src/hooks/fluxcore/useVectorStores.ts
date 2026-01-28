@@ -77,6 +77,16 @@ export function useVectorStores(accountId: string) {
             // ZOD FIX: Ensure description/name is never null, always use undefined or string
             if (payload.description === null) delete payload.description;
             if (payload.name === null) delete payload.name;
+            if (payload.expirationDays === null || payload.expirationDays === undefined) {
+                delete payload.expirationDays;
+            } else if (typeof payload.expirationDays === 'string') {
+                const parsed = Number(payload.expirationDays);
+                if (Number.isNaN(parsed)) {
+                    delete payload.expirationDays;
+                } else {
+                    payload.expirationDays = parsed;
+                }
+            }
 
             const res = await fetch(`/api/fluxcore/vector-stores/${id}`, {
                 method: 'PUT',
