@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { accountService } from '../services/account.service';
 import { accountDeletionService } from '../services/account-deletion.service';
-import { ensureAccountDeletionAuth } from '../middleware/account-deletion-auth';
+import { requireAccountDeletionAuthFromContext } from '../middleware/account-deletion-auth';
 
 export const accountsRoutes = new Elysia({ prefix: '/accounts' })
   .use(authMiddleware)
@@ -222,16 +222,16 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       }
 
       try {
-        await ensureAccountDeletionAuth({
-          userId: user.id,
-          targetAccountId: params.id,
-          sessionAccountId: body?.sessionAccountId ?? null,
+        const auth = await requireAccountDeletionAuthFromContext({
+          user,
+          params,
+          body,
         });
 
         const job = await accountDeletionService.requestDeletion({
           accountId: params.id,
           requesterUserId: user.id,
-          requesterAccountId: body?.sessionAccountId,
+          auth,
         });
 
         return { success: true, data: job };
@@ -278,7 +278,17 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       }
 
       try {
-        const job = await accountDeletionService.prepareSnapshot(params.id, body?.requesterUserId ?? user.id);
+        const auth = await requireAccountDeletionAuthFromContext({
+          user,
+          params,
+          body,
+        });
+
+        const job = await accountDeletionService.prepareSnapshot({
+          accountId: params.id,
+          requesterUserId: user.id,
+          auth,
+        });
         return { success: true, data: job };
       } catch (error: any) {
         if (error?.code === 'ACCOUNT_DELETION_UNAUTHORIZED') {
@@ -298,9 +308,6 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
     {
       isAuthenticated: true,
       params: t.Object({ id: t.String() }),
-      body: t.Object({
-        requesterUserId: t.Optional(t.String()),
-      }),
       detail: {
         tags: ['Accounts'],
         summary: 'Prepare snapshot before account deletion',
@@ -316,7 +323,17 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       }
 
       try {
-        const job = await accountDeletionService.confirmDeletion(params.id, body?.requesterUserId ?? user.id);
+        const auth = await requireAccountDeletionAuthFromContext({
+          user,
+          params,
+          body,
+        });
+
+        const job = await accountDeletionService.confirmDeletion({
+          accountId: params.id,
+          requesterUserId: user.id,
+          auth,
+        });
         return { success: true, data: job };
       } catch (error: any) {
         if (error?.code === 'ACCOUNT_DELETION_UNAUTHORIZED') {
@@ -338,9 +355,6 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
     {
       isAuthenticated: true,
       params: t.Object({ id: t.String() }),
-      body: t.Object({
-        requesterUserId: t.Optional(t.String()),
-      }),
       detail: {
         tags: ['Accounts'],
         summary: 'Confirm irreversible account deletion (triggers cleanup)',

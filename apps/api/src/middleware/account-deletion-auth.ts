@@ -2,6 +2,14 @@ import { db, accounts } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 import { systemAdminService } from '../services/system-admin.service';
 
+export type AccountDeletionAuthMode = 'owner' | 'force';
+
+export interface AccountDeletionAuthResult {
+  mode: AccountDeletionAuthMode;
+  sessionAccountId?: string | null;
+  targetAccountId: string;
+}
+
 interface EnsureAccountDeletionAuthOptions {
   userId?: string;
   targetAccountId?: string;
@@ -36,7 +44,7 @@ function createAuthError(message: string, code: string) {
 export async function ensureAccountDeletionAuth(
   options: EnsureAccountDeletionAuthOptions,
   deps: EnsureAccountDeletionAuthDeps = defaultDeps
-) {
+): Promise<AccountDeletionAuthResult> {
   const { userId, targetAccountId, sessionAccountId } = options;
 
   if (!userId) {
@@ -48,7 +56,7 @@ export async function ensureAccountDeletionAuth(
   }
 
   if (await deps.hasForceScope(userId)) {
-    return { mode: 'force' as const };
+    return { mode: 'force', targetAccountId, sessionAccountId: null };
   }
 
   const ownerUserId = await deps.getOwnerUserId(targetAccountId);
@@ -69,5 +77,28 @@ export async function ensureAccountDeletionAuth(
     throw createAuthError('Session account mismatch for deletion', 'ACCOUNT_DELETION_SESSION_MISMATCH');
   }
 
-  return { mode: 'owner' as const };
+  return { mode: 'owner', targetAccountId, sessionAccountId };
+}
+
+interface RequireAccountDeletionAuthContext {
+  user?: { id: string } | null;
+  params?: Record<string, string>;
+  body?: unknown;
+  targetAccountId?: string;
+  sessionAccountId?: string | null;
+}
+
+export async function requireAccountDeletionAuthFromContext(
+  context: RequireAccountDeletionAuthContext
+): Promise<AccountDeletionAuthResult> {
+  const targetAccountId = context.targetAccountId ?? context.params?.id;
+  const sessionAccountId =
+    context.sessionAccountId ??
+    ((context.body as { sessionAccountId?: string | null } | undefined)?.sessionAccountId ?? null);
+
+  return ensureAccountDeletionAuth({
+    userId: context.user?.id,
+    targetAccountId,
+    sessionAccountId,
+  });
 }
