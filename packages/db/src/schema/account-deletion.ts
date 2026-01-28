@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, varchar, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, varchar, jsonb, integer } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
 import { users } from './users';
 
@@ -31,6 +31,9 @@ export const accountDeletionJobs = pgTable('account_deletion_jobs', {
   phase: varchar('phase', { length: 50 }).notNull().default('snapshot'),
   snapshotUrl: text('snapshot_url'),
   snapshotReadyAt: timestamp('snapshot_ready_at', { withTimezone: true }),
+  snapshotDownloadedAt: timestamp('snapshot_downloaded_at', { withTimezone: true }),
+  snapshotDownloadCount: integer('snapshot_download_count').notNull().default(0),
+  snapshotAcknowledgedAt: timestamp('snapshot_acknowledged_at', { withTimezone: true }),
   externalState: jsonb('external_state').$type<Record<string, unknown>>().default({}).notNull(),
   metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
   failureReason: text('failure_reason'),

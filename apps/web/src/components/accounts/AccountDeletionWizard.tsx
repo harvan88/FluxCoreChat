@@ -17,18 +17,20 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
     isRequesting,
     isGeneratingSnapshot,
     isConfirming,
+    isAcknowledgingSnapshot,
+    isDownloadingSnapshot,
     requestDeletion,
     generateSnapshot,
+    acknowledgeSnapshot,
+    downloadSnapshot,
     confirmDeletion,
   } = useAccountDeletion({ accountId, sessionAccountId });
 
-  const [ackDownload, setAckDownload] = useState(false);
+  const [localConsent, setLocalConsent] = useState(false);
 
   useEffect(() => {
-    if (job?.status !== 'snapshot_ready') {
-      setAckDownload(false);
-    }
-  }, [job?.status]);
+    setLocalConsent(Boolean(job?.snapshotAcknowledgedAt));
+  }, [job?.snapshotAcknowledgedAt]);
 
   const statusLabel = useMemo(() => {
     if (!job) return 'Sin iniciar';
@@ -73,32 +75,61 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
     }
 
     if (job.status === 'snapshot_ready') {
+      const hasDownloaded = Boolean(job.snapshotDownloadedAt);
+      const hasConsent = Boolean(job.snapshotAcknowledgedAt);
+      const canConfirm = hasDownloaded && hasConsent;
+
       return (
         <div className="space-y-3">
           <Button
             variant="primary"
             className="w-full"
+            disabled={isDownloadingSnapshot}
             onClick={() => {
-              if (job.snapshotUrl) {
-                window.open(job.snapshotUrl, '_blank', 'noopener');
-                setAckDownload(true);
-              }
+              downloadSnapshot().catch(() => {
+                // error already tracked in hook
+              });
             }}
           >
-            <Download size={16} className="mr-2" /> Descargar snapshot
+            {isDownloadingSnapshot ? (
+              <Loader2 size={16} className="mr-2 animate-spin" />
+            ) : (
+              <Download size={16} className="mr-2" />
+            )}
+            Descargar snapshot
           </Button>
           <Checkbox
-            checked={ackDownload}
-            onChange={(event) => setAckDownload(event.target.checked)}
+            checked={localConsent}
+            disabled={isAcknowledgingSnapshot || hasConsent}
+            onChange={(event) => {
+              const nextChecked = event.target.checked;
+              setLocalConsent(nextChecked);
+              if (nextChecked && !hasConsent) {
+                acknowledgeSnapshot({ consent: true }).catch(() => {
+                  setLocalConsent(Boolean(job?.snapshotAcknowledgedAt));
+                });
+              }
+            }}
             label="Confirmo que descargué y revisé mi snapshot"
           />
+          <div className="text-xs text-secondary space-y-1">
+            {hasDownloaded ? (
+              <p>
+                Última descarga registrada el {new Date(job.snapshotDownloadedAt!).toLocaleString()}
+                {job.snapshotDownloadCount ? ` · ${job.snapshotDownloadCount} descarga(s)` : ''}
+              </p>
+            ) : (
+              <p>Debes descargar el snapshot antes de continuar.</p>
+            )}
+            {hasConsent && <p>Consentimiento registrado el {new Date(job.snapshotAcknowledgedAt!).toLocaleString()}.</p>}
+          </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-secondary flex-1">
               Esta acción eliminará definitivamente todos los datos restantes.
             </span>
             <DoubleConfirmationDeleteButton
               onConfirm={confirmDeletion}
-              disabled={!ackDownload || isConfirming}
+              disabled={!canConfirm || isConfirming}
               className="ml-auto"
             />
           </div>

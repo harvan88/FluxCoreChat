@@ -315,6 +315,65 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
     }
   )
   .post(
+    '/:id/delete/snapshot/ack',
+    async ({ user, params, body, set, request }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const auth = await requireAccountDeletionAuthFromContext({
+          user,
+          params,
+          body,
+        });
+
+        const job = await accountDeletionService.acknowledgeSnapshot({
+          accountId: params.id,
+          requesterUserId: user.id,
+          auth,
+          payload: {
+            downloaded: body.downloaded,
+            consent: body.consent,
+            userAgent: request.headers.get('user-agent') ?? undefined,
+          },
+        });
+
+        return { success: true, data: job };
+      } catch (error: any) {
+        if (error?.code === 'ACCOUNT_DELETION_UNAUTHORIZED') {
+          set.status = 403;
+        } else if (error?.code === 'ACCOUNT_DELETION_ACK_INVALID') {
+          set.status = 400;
+        } else if (error?.code === 'ACCOUNT_DELETION_INVALID_PHASE' || error?.code === 'ACCOUNT_DELETION_SNAPSHOT_REQUIRED') {
+          set.status = 409;
+        } else if ((error?.message || '').includes('No deletion job')) {
+          set.status = 404;
+        } else {
+          set.status = 400;
+        }
+
+        return {
+          success: false,
+          message: error?.message || 'Failed to acknowledge snapshot',
+        };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        downloaded: t.Optional(t.Boolean()),
+        consent: t.Optional(t.Boolean()),
+      }),
+      detail: {
+        tags: ['Accounts'],
+        summary: 'Register snapshot download and explicit consent',
+      },
+    }
+  )
+  .post(
     '/:id/delete/confirm',
     async ({ user, params, body, set }) => {
       if (!user) {
@@ -358,6 +417,81 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       detail: {
         tags: ['Accounts'],
         summary: 'Confirm irreversible account deletion (triggers cleanup)',
+      },
+    }
+  )
+  .get(
+    '/:id/delete/snapshot/download',
+    async ({ user, params, set, request }) => {
+      if (!user) {
+        set.status = 401;
+        return new Response(JSON.stringify({ success: false, message: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      try {
+        const auth = await requireAccountDeletionAuthFromContext({
+          user,
+          params,
+          body: {},
+        });
+
+        const { job, snapshotPath } = await accountDeletionService.getSnapshotArtifact({
+          accountId: params.id,
+          requesterUserId: user.id,
+          auth,
+        });
+
+        const file = Bun.file(snapshotPath);
+        if (!(await file.exists())) {
+          set.status = 404;
+          return new Response(JSON.stringify({ success: false, message: 'Snapshot file not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+
+        await accountDeletionService.acknowledgeSnapshot({
+          accountId: params.id,
+          requesterUserId: user.id,
+          auth,
+          payload: {
+            downloaded: true,
+            userAgent: request.headers.get('user-agent') ?? undefined,
+          },
+        });
+
+        const filename = `${job.accountId}-${job.id}.zip`;
+        return new Response(file, {
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          },
+        });
+      } catch (error: any) {
+        let status = 400;
+        if (error?.code === 'ACCOUNT_DELETION_UNAUTHORIZED') {
+          status = 403;
+        } else if ((error?.message || '').includes('No deletion job')) {
+          status = 404;
+        } else if (error?.code === 'ACCOUNT_DELETION_INVALID_PHASE') {
+          status = 409;
+        }
+
+        return new Response(JSON.stringify({ success: false, message: error?.message || 'Failed to download snapshot' }), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      detail: {
+        tags: ['Accounts'],
+        summary: 'Download latest account snapshot (requires consent)',
       },
     }
   )

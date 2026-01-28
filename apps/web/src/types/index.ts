@@ -25,6 +25,9 @@ export interface AccountDeletionJob {
   phase: string;
   snapshotUrl?: string | null;
   snapshotReadyAt?: string | null;
+  snapshotDownloadedAt?: string | null;
+  snapshotDownloadCount?: number | null;
+  snapshotAcknowledgedAt?: string | null;
   externalState?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
   failureReason?: string | null;

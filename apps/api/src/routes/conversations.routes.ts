@@ -15,23 +15,23 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
 
       try {
         const { accountId } = query;
-        
+
         // MA-102: Si se provee accountId, filtrar por esa cuenta específica
         if (accountId) {
           // MA-105: Verificar que el accountId pertenece al usuario
           const { accountService } = await import('../services/account.service');
           const userAccounts = await accountService.getAccountsByUserId(user.id);
           const userAccountIds = userAccounts.map(a => a.id);
-          
+
           if (!userAccountIds.includes(accountId)) {
             set.status = 403;
             return { success: false, message: 'Account does not belong to user' };
           }
-          
+
           const conversations = await conversationService.getConversationsByAccountId(accountId);
           return { success: true, data: conversations };
         }
-        
+
         // Fallback: devolver todas las conversaciones del usuario (deprecated behavior)
         const conversations = await conversationService.getConversationsByUserId(user.id);
         return { success: true, data: conversations };
@@ -112,7 +112,21 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
         const limit = parseInt(query.limit || '50');
         const offset = parseInt(query.offset || '0');
 
-        const messages = await messageService.getMessagesByConversationId(params.id, limit, offset);
+        // Check context for security and filtering
+        const context = await conversationService.getConversationContextForUser(params.id, user.id);
+
+        if (!context) {
+          set.status = 403;
+          return { success: false, message: 'User is not a participant of this conversation' };
+        }
+
+        const messages = await messageService.getMessagesByConversationId(
+          params.id,
+          limit,
+          offset,
+          context.accountId,
+          context.clearedAt
+        );
         return { success: true, data: messages };
       } catch (error: any) {
         console.error('[API] Error loading messages:', error);

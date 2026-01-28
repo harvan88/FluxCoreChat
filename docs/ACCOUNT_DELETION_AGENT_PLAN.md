@@ -69,34 +69,75 @@ Conclusión: el agente ya está parcialmente operativo; este plan actúa como ch
 
 **Objetivo**: ofrecer descarga íntegra antes de ejecutar eliminación.
 
-- **Estado actual**: ✅ Tabla `account_deletion_jobs`, servicio `accountDeletionSnapshotService.generate` y wizard en Settings implementados.
-- **Pendiente**: UX de confirmación de descarga (checkbox) ya existe, pero falta telemetría del clic de descarga y advertencia cuando snapshot supere cierto tamaño.
+- **Estado actual**: ✅ **Completado 2026-01-28.**
+  - Nueva migración `024_account_deletion_snapshot_consent.sql` y schema actualizados con `snapshot_downloaded_at`, `snapshot_download_count`, `snapshot_acknowledged_at` + índice dedicado.
+  - `AccountDeletionService` exige ambos flags antes de pasar a `external_cleanup`, agrega `acknowledgeSnapshot` y `getSnapshotArtifact`, y registra telemetría (user-agent, timestamps) en metadata.
+  - Endpoints REST:
+    - `POST /accounts/:id/delete/snapshot/ack` para registrar descargas/consentimiento explícito.
+    - `GET /accounts/:id/delete/snapshot/download` entrega el ZIP autenticado y marca descargas.
+  - Frontend `AccountDeletionWizard` usa `DoubleConfirmationDeleteButton` existente pero sólo habilita la confirmación cuando `snapshotDownloadedAt` y `snapshotAcknowledgedAt` están presentes; `useAccountDeletion` añadió helpers `downloadSnapshot` y `acknowledgeSnapshot` reutilizados en el wizard.
+  - Test de rutas (`apps/api/src/routes/account-deletion.routes.test.ts`) cubre los nuevos endpoints y códigos 409.
+- **Pendiente**: añadir monitoreo sobre tamaño del snapshot y avisos UX cuando supere umbrales (no bloqueante para AD-120).
 
-- Crear tabla `account_deletion_jobs` (estado, requesterId, snapshotUrl, snapshotReadyAt, failureReason, timestamps).
-- Servicio `AccountDeletionSnapshotService`:
-  - Consolida datos (conversaciones, mensajes, contextos, archivos, configuraciones de extensiones, vector stores locales) en archivo ZIP.
-  - Publica artefacto en storage (S3/local) y guarda URL.
-- API `POST /accounts/:id/delete/snapshot` → encola job, responde con estado `pending` y poll intervals.
-- UI en Settings → wizard 3 pasos (reglas → descarga → confirmación) usando `DoubleConfirmationDeleteButton` solo para abrir modal.
-- Estado `snapshotRequired=true` hasta que usuario descargue (checkbox “Confirmo que descargué…”).
-
-**Archivos afectados**: `packages/db/src/schema/account-deletion-jobs.ts` (nuevo), `apps/api/src/services/account-deletion.snapshot.ts` (nuevo), `apps/web/src/components/settings/AccountDeletionWizard.tsx` (nuevo), `apps/web/src/services/accountDeletion.ts` (nuevo client).
+**Archivos afectados**: `packages/db/migrations/024_account_deletion_snapshot_consent.sql`, `packages/db/src/schema/account-deletion.ts`, `apps/api/src/services/account-deletion.service.ts`, `apps/api/src/routes/accounts.routes.ts`, `apps/api/src/routes/account-deletion.routes.test.ts`, `apps/web/src/services/api.ts`, `apps/web/src/services/accounts.ts`, `apps/web/src/hooks/useAccountDeletion.ts`, `apps/web/src/components/accounts/AccountDeletionWizard.tsx`.
 
 ---
 
 ## 4. Hito AD-130 — Limpieza Externa (OpenAI) Secuencial
 
-**Objetivo**: eliminar asistentes, archivos y vector stores externos usando APIs oficiales.
+**Objetivo**: eliminar asistentes, archivos y vector stores externos usando APIs oficiales y dejar constancia auditable del contrato entre dominios.
 
-- **Estado actual**: ⚠️ Parcial. El worker llama `fluxcoreService.deleteAssistant` y `deleteVectorStoreCascade`, pero no separa fases (assistants/files/stores) ni persiste `externalState` detallado.
-- **Pendiente**: crear `account-deletion.external.ts` con retries, manejo 404 benigno, y registrar progreso/errores en `account_deletion_jobs.externalState`.
+- **Estado actual**: ✅ Implementado. `account-deletion.external.ts` genera token firmado, coordina las fases asistentes → archivos → vector stores con retries/404 benigno y actualiza `externalState` estructurado; el worker delega allí antes de pasar a `local_cleanup`.
+- **Validación pendiente**: para correr toda la suite se requiere un seed de test que cargue cuentas/entidades Fluxcore; mientras tanto, validar el hito ejecutando sólo los tests de account deletion (`bun test apps/api account-deletion.*`). Documentar en QUICK_START que tras `docker-compose up -d postgres redis` se debe correr el seed antes de la suite completa.
 
 - Reutilizar `openai-sync.service.ts` para exponer métodos `deleteAssistant(externalId)`, `deleteFile`, `deleteVectorStore` con retries y detección de 404 benigno.
-- Job runner consume listas desde `fluxcore_assistants`, `fluxcore_vector_store_files`, `fluxcore_vector_stores` filtradas por `backend='openai'` / `runtime='openai'`.
-- Orden obligatorio: asistentes → archivos → vector stores. Cada fase marca progreso en `account_deletion_jobs.externalState`.
-- En caso de error, job pasa a `failed_external_cleanup` y aborta local delete.
+- Job runner consume listas de referencia (`fluxcore_assistants`, `fluxcore_vector_store_files`, `fluxcore_vector_stores` con `backend/runtime='openai'`) para auditar qué espera borrar, pero la eliminación real ocurre dentro de FluxCore.
+- Orden obligatorio: asistentes → archivos → vector stores. Cada fase marca progreso en `account_deletion_jobs.externalState` y sólo avanza si FluxCore reporta éxito.
+- En caso de error, el job pasa a `failed_external_cleanup` y se detiene la cascada local; el usuario no recibe la notificación de error, pero queda log interno para intervención.
 
-**Archivos afectados**: `apps/api/src/services/openai-sync.service.ts`, `apps/api/src/services/account-deletion.external.ts` (nuevo), `packages/db/src/schema/fluxcore-assistants.ts`, `fluxcore-vector-stores.ts` (ya existentes, solo lecturas).
+- Reutilizar `openai-sync.service.ts` para exponer métodos `deleteAssistant(externalId)`, `deleteFile`, `deleteVectorStore` con retries y detección de 404 benigno.
+- Job runner consume listas de referencia (`fluxcore_assistants`, `fluxcore_vector_store_files`, `fluxcore_vector_stores` con `backend/runtime='openai'`) para auditar qué espera borrar, pero la eliminación real ocurre dentro de FluxCore.
+- Orden obligatorio: asistentes → archivos → vector stores. Cada fase marca progreso en `account_deletion_jobs.externalState` y sólo avanza si FluxCore reporta éxito.
+- En caso de error, el job pasa a `failed_external_cleanup` y se detiene la cascada local; el usuario no recibe la notificación de error, pero queda log interno para intervención.
+
+### Diseño técnico propuesto
+
+1. **Servicio `account-deletion.external.ts`**
+   - Expone `runExternalCleanup(job: AccountDeletionJob)` y sub-métodos internos: `requestFluxcoreDeletion`, `pollFluxcoreStatus`, `registerPhaseCompletion`.
+   - Recibe dependencias (`fluxcoreService`, `openaiSyncService`, `logger`, `retry`) por constructor para facilitar pruebas.
+   - Emite `externalState` con estructura:
+     ```json
+     {
+       "externalJobId": "fluxcore-job-123",
+       "phases": {
+         "assistants": { "status": "completed", "attempts": 2, "finishedAt": "..." },
+         "files": { "status": "in_progress", "attempts": 1 },
+         "stores": { "status": "pending" }
+       },
+       "lastFluxcorePayload": { ... },
+       "failure": { "code": "shared_resource_blocked", "message": "..." }
+     }
+     ```
+   - Maneja retries exponenciales (p.ej. 3 intentos con backoff 5s/15s/45s) y convierte respuestas 404 de FluxCore/OpenAI en éxitos idempotentes.
+
+2. **Handshake / autorización**
+   - `generateDeletionToken(job)` crea JWT (HS256) con `accountId`, `ownerUserId`, `jobId`, `snapshotAckAt`, `exp` a +15 min.
+   - `fluxcoreService.requestAccountDeletion({ accountId, token })` → retorna `{ externalJobId, status }`.
+   - `pollFluxcoreStatus(externalJobId)` consulta cada 30s hasta recibir `completed` o `failed`. Los payloads se persisten en `externalState.lastFluxcorePayload` para auditoría.
+
+3. **Integración con worker**
+   - `processExternalCleanup` delega en el nuevo servicio. Si el servicio retorna `completed`, el worker mueve el job a `local_cleanup`; si lanza error, captura el motivo y llama `markFailed(job, 'failed_external_cleanup:<code>')`.
+   - `ensureAccountDeletionAllowed` se ejecuta antes de llamar al servicio para reforzar defensa en profundidad.
+   - Se agrega metadata `externalCleanupStartedAt/FinishedAt` y `lastExternalHeartbeatAt` (timestamp de la última respuesta de FluxCore).
+
+4. **Persistencia / migraciones**
+   - `account_deletion_jobs.externalState` pasa a JSONB estructurado (ya existe pero se documenta el shape anterior). Se añade índice GIN para consultas por `externalState->>'externalJobId'` si se requiere monitoreo.
+
+5. **Telemetría y logging**
+   - Cada transición (`assistants.completed`, `files.failed`) genera una entrada en `account_deletion_logs` con `status='external_cleanup'` y `details.phase`.
+   - Se expone métrica `account_external_cleanup_duration_seconds` para Prometheus (opcional, en worker).
+
+**Archivos afectados**: `apps/api/src/services/openai-sync.service.ts`, `apps/api/src/services/account-deletion.external.ts` (nuevo), `apps/api/src/workers/account-deletion.worker.ts`, `packages/db/src/schema/fluxcore-assistants.ts`, `fluxcore-vector-stores.ts` (lecturas) y documentación relacionada.
 
 ---
 

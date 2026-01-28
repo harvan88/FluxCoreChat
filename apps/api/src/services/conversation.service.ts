@@ -122,7 +122,7 @@ export class ConversationService {
 
     // 2. Get conversations for those relationships
     const relationshipIds = accountRelationships.map((r) => r.id);
-    
+
     const accountConversations = await db
       .select()
       .from(conversations)
@@ -133,18 +133,18 @@ export class ConversationService {
       accountConversations.map(async (conv) => {
         const rel = accountRelationships.find(r => r.id === conv.relationshipId);
         if (!rel) return { ...conv, contactName: 'Desconocido' };
-        
+
         // Find the OTHER account (not the current one)
-        const otherAccountId = rel.accountAId === accountId 
-          ? rel.accountBId 
+        const otherAccountId = rel.accountAId === accountId
+          ? rel.accountBId
           : rel.accountAId;
-        
+
         const [otherAccount] = await db
           .select()
           .from(accounts)
           .where(eq(accounts.id, otherAccountId))
           .limit(1);
-        
+
         const profile = otherAccount?.profile as { avatarUrl?: string } | null;
 
         return {
@@ -194,7 +194,7 @@ export class ConversationService {
 
     // 3. Get all conversations for those relationships
     const relationshipIds = userRelationships.map((r) => r.id);
-    
+
     const userConversations = await db
       .select()
       .from(conversations)
@@ -205,18 +205,18 @@ export class ConversationService {
       userConversations.map(async (conv) => {
         const rel = userRelationships.find(r => r.id === conv.relationshipId);
         if (!rel) return { ...conv, contactName: 'Desconocido' };
-        
+
         // Find the OTHER account (not the user's)
-        const otherAccountId = accountIds.includes(rel.accountAId) 
-          ? rel.accountBId 
+        const otherAccountId = accountIds.includes(rel.accountAId)
+          ? rel.accountBId
           : rel.accountAId;
-        
+
         const [otherAccount] = await db
           .select()
           .from(accounts)
           .where(eq(accounts.id, otherAccountId))
           .limit(1);
-        
+
         const profile = otherAccount?.profile as { avatarUrl?: string } | null;
 
         return {
@@ -259,23 +259,68 @@ export class ConversationService {
       .where(eq(accounts.ownerUserId, userId));
 
     const userAccountIds = userAccounts.map(a => a.id);
-    const isOwner = userAccountIds.includes(rel.accountAId) || userAccountIds.includes(rel.accountBId);
+    const isAccountA = userAccountIds.includes(rel.accountAId);
+    const isAccountB = userAccountIds.includes(rel.accountBId);
 
-    if (!isOwner) {
+    if (!isAccountA && !isAccountB) {
       throw new Error('Not authorized to delete this conversation');
     }
 
-    // Delete all messages in the conversation
-    await db
-      .delete(messages)
-      .where(eq(messages.conversationId, conversationId));
+    // Soft delete: Update clearedAt for the user's account(s)
+    const updates: any = {};
+    if (isAccountA) updates.clearedAtA = new Date();
+    if (isAccountB) updates.clearedAtB = new Date();
 
-    // Delete the conversation
     await db
-      .delete(conversations)
+      .update(conversations)
+      .set(updates)
       .where(eq(conversations.id, conversationId));
 
-    console.log(`[ConversationService] Deleted conversation ${conversationId} and all messages`);
+    console.log(`[ConversationService] Cleared conversation history ${conversationId} for user ${userId}`);
+  }
+
+  /**
+   * Helper to get the context of a user in a conversation
+   * Returns the accountId of the user in this conversation and their clear history timestamp
+   */
+  async getConversationContextForUser(conversationId: string, userId: string) {
+    const conversation = await this.getConversationById(conversationId);
+    if (!conversation) return null;
+
+    const [rel] = await db
+      .select()
+      .from(relationships)
+      .where(eq(relationships.id, conversation.relationshipId))
+      .limit(1);
+
+    if (!rel) return null;
+
+    const userAccounts = await db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.ownerUserId, userId));
+
+    const userAccountIds = userAccounts.map(a => a.id);
+
+    let accountId: string | null = null;
+    let clearedAt: Date | null | undefined = null;
+
+    if (userAccountIds.includes(rel.accountAId)) {
+      accountId = rel.accountAId;
+      clearedAt = conversation.clearedAtA;
+    } else if (userAccountIds.includes(rel.accountBId)) {
+      accountId = rel.accountBId;
+      clearedAt = conversation.clearedAtB;
+    }
+
+    if (!accountId) return null;
+
+    return {
+      conversation,
+      relationship: rel,
+      accountId,
+      clearedAt
+    };
   }
 }
 

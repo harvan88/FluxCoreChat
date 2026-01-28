@@ -15,6 +15,14 @@ const mockPrepareSnapshot = mock(async (context: any) => ({
   phase: 'snapshot_ready',
 }));
 
+const mockAcknowledgeSnapshot = mock(async (context: any) => ({
+  id: 'job-ack',
+  accountId: context.accountId,
+  status: 'snapshot_ready',
+  phase: 'snapshot_ready',
+  snapshotAcknowledgedAt: new Date().toISOString(),
+}));
+
 const mockConfirmDeletion = mock(async (context: any) => ({
   id: 'job-confirm',
   accountId: context.accountId,
@@ -23,6 +31,16 @@ const mockConfirmDeletion = mock(async (context: any) => ({
 }));
 
 const mockGetJob = mock(async () => null);
+const mockGetSnapshotArtifact = mock(async (context: any) => ({
+  job: {
+    id: 'job-download',
+    accountId: context.accountId,
+    status: 'snapshot_ready',
+    phase: 'snapshot_ready',
+    snapshotAcknowledgedAt: new Date().toISOString(),
+  },
+  snapshotPath: __filename,
+}));
 
 let currentAuthResult: any = {
   mode: 'owner',
@@ -35,6 +53,19 @@ const requireAuthMock = mock(async () => {
   if (nextAuthError) {
     throw nextAuthError;
   }
+
+  async function requestGet(app: Elysia, path: string) {
+    const response = await app.handle(
+      new Request(`http://localhost${path}`, {
+        method: 'GET',
+        headers: {
+          'content-type': 'application/json',
+        },
+      })
+    );
+
+    return response;
+  }
   return currentAuthResult;
 });
 
@@ -44,6 +75,49 @@ function restoreAuthMock() {
       throw nextAuthError;
     }
     return currentAuthResult;
+  });
+
+  it('allows snapshot acknowledgement with consent', async () => {
+    const app = buildApp();
+    const { response, data } = await request(app, '/accounts/account-target/delete/snapshot/ack', {
+      downloaded: true,
+      consent: true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(mockAcknowledgeSnapshot).toHaveBeenCalledTimes(1);
+    expect(mockAcknowledgeSnapshot.mock.calls[0][0].payload).toEqual({
+      downloaded: true,
+      consent: true,
+      userAgent: undefined,
+    });
+  });
+
+  it('returns 409 when snapshot acknowledgement occurs outside snapshot_ready', async () => {
+    mockAcknowledgeSnapshot.mockImplementationOnce(() => {
+      const error = new Error('Snapshot acknowledgement is only available while snapshot is ready');
+      (error as any).code = 'ACCOUNT_DELETION_INVALID_PHASE';
+      throw error;
+    });
+
+    const app = buildApp();
+    const { response, data } = await request(app, '/accounts/account-target/delete/snapshot/ack', {
+      downloaded: true,
+    });
+
+    expect(response.status).toBe(409);
+    expect(data.success).toBe(false);
+  });
+
+  it('serves snapshot download and records acknowledgement', async () => {
+    const app = buildApp();
+    const response = await requestGet(app, '/accounts/account-target/delete/snapshot/download');
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-disposition')).toContain('attachment; filename=');
+    expect(mockGetSnapshotArtifact).toHaveBeenCalledTimes(1);
+    expect(mockAcknowledgeSnapshot).toHaveBeenCalledTimes(1);
   });
 }
 
@@ -61,8 +135,10 @@ mock.module('../services/account-deletion.service', () => ({
   accountDeletionService: {
     requestDeletion: mockRequestDeletion,
     prepareSnapshot: mockPrepareSnapshot,
+    acknowledgeSnapshot: mockAcknowledgeSnapshot,
     confirmDeletion: mockConfirmDeletion,
     getJobForAccount: mockGetJob,
+    getSnapshotArtifact: mockGetSnapshotArtifact,
   },
 }));
 
@@ -105,8 +181,10 @@ describe('Account deletion routes authorization', () => {
   beforeEach(() => {
     mockRequestDeletion.mockReset();
     mockPrepareSnapshot.mockReset();
+    mockAcknowledgeSnapshot.mockReset();
     mockConfirmDeletion.mockReset();
     mockGetJob.mockReset();
+    mockGetSnapshotArtifact.mockReset();
     requireAuthMock.mockReset();
     restoreAuthMock();
     currentAuthResult = {

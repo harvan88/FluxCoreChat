@@ -8,13 +8,17 @@ export const conversations = pgTable('conversations', {
     .references(() => relationships.id, { onDelete: 'cascade' }),
   channel: varchar('channel', { length: 20 }).notNull(), // 'web' | 'whatsapp' | 'telegram'
   status: varchar('status', { length: 20 }).default('active').notNull(), // 'active' | 'archived' | 'closed'
-  
+
   // Desnormalización para performance
   lastMessageAt: timestamp('last_message_at'),
   lastMessageText: varchar('last_message_text', { length: 500 }),
   unreadCountA: integer('unread_count_a').default(0).notNull(),
   unreadCountB: integer('unread_count_b').default(0).notNull(),
-  
+
+  // COR-004: Historial limpio por usuario
+  clearedAtA: timestamp('cleared_at_a'),
+  clearedAtB: timestamp('cleared_at_b'),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -20,10 +20,14 @@ interface UseAccountDeletionResult {
   isRequesting: boolean;
   isGeneratingSnapshot: boolean;
   isConfirming: boolean;
+  isAcknowledgingSnapshot: boolean;
+  isDownloadingSnapshot: boolean;
   isLoadingJob: boolean;
   error: string | null;
   requestDeletion: () => Promise<void>;
   generateSnapshot: () => Promise<void>;
+  acknowledgeSnapshot: (payload: { downloaded?: boolean; consent?: boolean }) => Promise<void>;
+  downloadSnapshot: () => Promise<void>;
   confirmDeletion: () => Promise<void>;
   refreshJob: () => Promise<void>;
 }
@@ -35,6 +39,8 @@ export function useAccountDeletion({ accountId, sessionAccountId }: UseAccountDe
   const [isRequesting, setIsRequesting] = useState(false);
   const [isGeneratingSnapshot, setIsGeneratingSnapshot] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isAcknowledgingSnapshot, setIsAcknowledgingSnapshot] = useState(false);
+  const [isDownloadingSnapshot, setIsDownloadingSnapshot] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const shouldPoll = useMemo(() => {
@@ -147,6 +153,48 @@ export function useAccountDeletion({ accountId, sessionAccountId }: UseAccountDe
     }
   }, [accountId]);
 
+  const acknowledgeSnapshot = useCallback(
+    async (payload: { downloaded?: boolean; consent?: boolean }) => {
+      if (!accountId) return;
+      setIsAcknowledgingSnapshot(true);
+      try {
+        const response = await accountsApi.acknowledgeDeletionSnapshot(accountId, payload);
+        if (!response.success || !response.data) {
+          throw new Error(response.error || 'No se pudo registrar el consentimiento');
+        }
+        setJob(response.data);
+        setError(null);
+      } catch (err: any) {
+        setError(err?.message || 'Error al registrar consentimiento');
+      } finally {
+        setIsAcknowledgingSnapshot(false);
+      }
+    },
+    [accountId]
+  );
+
+  const downloadSnapshot = useCallback(async () => {
+    if (!accountId) return;
+    setIsDownloadingSnapshot(true);
+    try {
+      const blob = await accountsApi.downloadDeletionSnapshot(accountId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fluxcore-account-${accountId}-snapshot.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setError(null);
+      await refreshJob();
+    } catch (err: any) {
+      setError(err?.message || 'Error al descargar snapshot');
+    } finally {
+      setIsDownloadingSnapshot(false);
+    }
+  }, [accountId, refreshJob]);
+
   return {
     job,
     error,
@@ -154,8 +202,12 @@ export function useAccountDeletion({ accountId, sessionAccountId }: UseAccountDe
     isRequesting,
     isGeneratingSnapshot,
     isConfirming,
+    isAcknowledgingSnapshot,
+    isDownloadingSnapshot,
     requestDeletion,
     generateSnapshot,
+    acknowledgeSnapshot,
+    downloadSnapshot,
     confirmDeletion,
     refreshJob,
   };

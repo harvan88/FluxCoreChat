@@ -1,0 +1,5 @@
+[run]
+preload = ["./tests/preload-indexeddb.ts"]
+
+[test]
+preload = ["./tests/preload-indexeddb.ts"]

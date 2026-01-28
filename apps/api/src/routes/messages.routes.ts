@@ -24,7 +24,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
             content = { text: content };
           }
         }
-        
+
         const result = await messageCore.send({
           conversationId: typedBody.conversationId,
           senderAccountId: typedBody.senderAccountId,
@@ -97,7 +97,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
 
       try {
         const { messageService } = await import('../services/message.service');
-        
+
         // Verificar que el mensaje existe y pertenece al usuario
         const message = await messageService.getMessageById(params.id);
         if (!message) {
@@ -151,7 +151,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
 
       try {
         const { messageService } = await import('../services/message.service');
-        
+
         // Verificar que el mensaje existe
         const message = await messageService.getMessageById(params.id);
         if (!message) {
@@ -160,7 +160,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         }
 
         // Eliminar mensaje (soft delete o hard delete)
-        await messageService.deleteMessage(params.id);
+        await messageService.deleteMessage(params.id, user.id);
 
         return { success: true, data: { deleted: true } };
       } catch (error: any) {
