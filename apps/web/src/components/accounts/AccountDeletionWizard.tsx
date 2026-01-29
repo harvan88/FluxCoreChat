@@ -19,12 +19,13 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
     isConfirming,
     isAcknowledgingSnapshot,
     isDownloadingSnapshot,
+    isBackgroundProcessing,
     requestDeletion,
     generateSnapshot,
     acknowledgeSnapshot,
     downloadSnapshot,
     confirmDeletion,
-  } = useAccountDeletion({ accountId, sessionAccountId });
+  } = useAccountDeletion({ accountId, sessionAccountId, accountName });
 
   const [localConsent, setLocalConsent] = useState(false);
 
@@ -211,6 +212,13 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
           <span className="text-muted">Snapshot listo el {new Date(job.snapshotReadyAt).toLocaleString()}</span>
         )}
       </div>
+
+      {isBackgroundProcessing && (
+        <div className="p-3 rounded-lg border border-info/40 bg-info/10 text-info text-sm flex items-center gap-2">
+          <Loader2 size={16} className="animate-spin" />
+          Eliminación en curso. Puedes seguir usando FluxCore mientras limpiamos los datos.
+        </div>
+      )}
 
       {error && (
         <div className="p-3 rounded-lg border border-error/40 bg-error/10 text-error text-sm flex items-center gap-2">

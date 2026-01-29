@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { X, Copy, Check } from 'lucide-react';
+import { X, Copy, Check, AlertTriangle } from 'lucide-react';
 
 export interface DebugLog {
   timestamp: Date;
@@ -23,15 +23,46 @@ interface DebugPanelProps {
 
 export default function DebugPanel({ logs, state, onClose }: DebugPanelProps) {
   const [activeTab, setActiveTab] = useState<'logs' | 'state'>('logs');
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
-  const handleCopy = () => {
-    const content = activeTab === 'logs' 
+  const copyViaFallback = (content: string) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = content;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const succeeded = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    if (!succeeded) {
+      throw new Error('ExecCommand copy failed');
+    }
+  };
+
+  const handleCopy = async () => {
+    const content = activeTab === 'logs'
       ? JSON.stringify(logs, null, 2)
       : JSON.stringify(state, null, 2);
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        copyViaFallback(content);
+      }
+      setCopyStatus('success');
+      setCopyMessage('Copiado al portapapeles');
+    } catch (error) {
+      console.warn('[DebugPanel] clipboard copy failed', error);
+      setCopyStatus('error');
+      setCopyMessage('No se pudo copiar, intenta con Cmd/Ctrl + C');
+    } finally {
+      setTimeout(() => {
+        setCopyStatus('idle');
+        setCopyMessage(null);
+      }, 2200);
+    }
   };
 
   const getLogColor = (type: DebugLog['type']) => {
@@ -75,7 +106,13 @@ export default function DebugPanel({ logs, state, onClose }: DebugPanelProps) {
             className="p-1.5 hover:bg-gray-700 rounded text-gray-400 hover:text-white"
             title="Copiar contenido"
           >
-            {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+            {copyStatus === 'success' ? (
+              <Check size={14} className="text-green-400" />
+            ) : copyStatus === 'error' ? (
+              <AlertTriangle size={14} className="text-yellow-400" />
+            ) : (
+              <Copy size={14} />
+            )}
           </button>
           <button
             onClick={onClose}
@@ -85,6 +122,12 @@ export default function DebugPanel({ logs, state, onClose }: DebugPanelProps) {
           </button>
         </div>
       </div>
+
+      {copyMessage && (
+        <div className={`text-xs px-3 py-1 ${copyStatus === 'error' ? 'text-yellow-400' : 'text-green-400'}`}>
+          {copyMessage}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 font-mono text-xs">

@@ -9,6 +9,7 @@ import clsx from 'clsx';
 import { ActivityBar } from './ActivityBar';
 import { Sidebar } from './Sidebar';
 import { ViewPort } from './ViewPort';
+import { AccountDeletionBanner, ToastStack } from '../ui';
 import { useThemeStore } from '../../store/themeStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -62,17 +63,24 @@ export function Layout() {
   // Layout Desktop
   if (!isMobile) {
     return (
-      <div data-testid="main-layout" className="h-screen flex bg-base text-primary overflow-hidden">
-        <ActivityBar />
-        <Sidebar />
-        <ViewPort />
-      </div>
+      <>
+        <AccountDeletionBanner />
+        <ToastStack />
+        <div data-testid="main-layout" className="h-screen flex bg-base text-primary overflow-hidden">
+          <ActivityBar />
+          <Sidebar />
+          <ViewPort />
+        </div>
+      </>
     );
   }
 
   // Layout Mobile
   return (
-    <div data-testid="main-layout" className="h-screen flex flex-col bg-base text-primary overflow-hidden">
+    <>
+      <AccountDeletionBanner />
+      <ToastStack />
+      <div data-testid="main-layout" className="h-screen flex flex-col bg-base text-primary overflow-hidden">
       {/* Mobile Header */}
       <header className="h-14 flex items-center justify-between px-4 border-b border-subtle bg-surface flex-shrink-0">
         <button
@@ -124,7 +132,8 @@ export function Layout() {
       <main className="flex-1 overflow-hidden">
         <ViewPort />
       </main>
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -154,6 +154,52 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     }
   )
   .post(
+    '/verify-password',
+    async ({ jwt, headers, body, set }) => {
+      const auth = headers.authorization;
+      if (!auth || !auth.startsWith('Bearer ')) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const payload = await jwt.verify(auth.slice(7));
+        if (!payload || typeof payload.userId !== 'string') {
+          set.status = 401;
+          return { success: false, message: 'Unauthorized' };
+        }
+
+        const isValid = await authService.verifyPassword(payload.userId, body.password);
+
+        if (!isValid) {
+          set.status = 401;
+          return { success: false, message: 'Contraseña incorrecta' };
+        }
+
+        return {
+          success: true,
+          data: { valid: true },
+        };
+      } catch (error) {
+        console.error('[Auth] verify-password error:', error);
+        set.status = 401;
+        return {
+          success: false,
+          message: 'Unauthorized',
+        };
+      }
+    },
+    {
+      body: t.Object({
+        password: t.String({ minLength: 1 }),
+      }),
+      detail: {
+        tags: ['Auth'],
+        summary: 'Verifies the password of the authenticated user',
+      },
+    }
+  )
+  .post(
     '/logout',
     async () => {
       // With JWT, logout is handled client-side by removing the token

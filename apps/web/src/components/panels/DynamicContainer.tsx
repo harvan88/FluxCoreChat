@@ -27,6 +27,8 @@ import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConf
 import { CreditsSection } from '../settings/CreditsSection';
 import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
+import { MonitoringHub } from '../monitor/MonitoringHub';
+import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
 
 interface DynamicContainerProps {
   container: DynamicContainerType;
@@ -417,24 +419,36 @@ function TabContent({ tab, containerId }: TabContentProps) {
         </div>
       );
 
-    case 'settings':
-      return <SettingsTabContent section={tab.context.settingsSection} />;
+    case 'settings': {
+      const section = typeof tab.context?.section === 'string' ? tab.context.section : undefined;
+      return <SettingsTabContent section={section} />;
+    }
 
     case 'extension':
       return <ExtensionTabContent tab={tab} containerId={containerId} />;
 
-    case 'editor':
+    case 'editor': {
+      const editorProps = tab.context || {};
       return (
         <ExpandedEditor
-          title={tab.context.title || 'Editor'}
-          content={tab.context.content || ''}
-          maxLength={tab.context.maxLength || 5000}
-          placeholder={tab.context.placeholder || 'Escribe aquí...'}
-          onSave={tab.context.onSave || (() => { })}
-          onChange={tab.context.onChange || (() => { })}
-          onClose={tab.context.onClose || (() => { })}
+          title={editorProps.title}
+          content={editorProps.content || ''}
+          maxLength={editorProps.maxLength}
+          placeholder={editorProps.placeholder}
+          onSave={(content: string) => {
+            if (typeof editorProps.onSave === 'function') {
+              editorProps.onSave(content);
+            }
+          }}
+          onClose={() => {
+            if (typeof editorProps.onClose === 'function') {
+              editorProps.onClose();
+            }
+          }}
+          onChange={editorProps.onChange}
         />
       );
+    }
 
     case 'openai-assistant-editor':
       return (
@@ -451,6 +465,14 @@ function TabContent({ tab, containerId }: TabContentProps) {
           onClose={tab.context.onClose || (() => { })}
         />
       );
+
+    case 'monitoring': {
+      const view = typeof tab.context?.view === 'string' ? tab.context.view : 'hub';
+      if (view === 'audit') {
+        return <AccountDataAuditPanel />;
+      }
+      return <MonitoringHub />;
+    }
 
     default:
       return (

@@ -18,8 +18,6 @@ export const messages = pgTable('messages', {
   aiApprovedBy: uuid('ai_approved_by').references(() => users.id),
   // COR-002: Status de sincronización/entrega (migration-007)
   status: varchar('status', { length: 20 }).default('synced').notNull(),
-  // COR-004: Soft delete por usuario (array de accountIds)
-  deletedBy: jsonb('deleted_by').default([]).notNull(),
   // COR-003: Actor model para mensajes (migration-008)
   fromActorId: uuid('from_actor_id').references(() => actors.id),
   toActorId: uuid('to_actor_id').references(() => actors.id),

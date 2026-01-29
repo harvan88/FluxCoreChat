@@ -28,6 +28,7 @@ import { internalAiRoutes } from './routes/internal-ai.routes';
 import { creditsRoutes } from './routes/credits.routes';
 import { internalCreditsRoutes } from './routes/internal-credits.routes';
 import { systemAdminRoutes } from './routes/system-admin.routes';
+import { accountDeletionAdminRoutes } from './routes/account-deletion.admin.routes';
 import { uploadRoutes } from './routes/upload.routes';
 import { websiteRoutes } from './routes/website.routes';
 import { fluxcoreRoutes } from './routes/fluxcore.routes';
@@ -38,6 +39,9 @@ import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { aiOrchestrator } from './services/ai-orchestrator.service';
 import { accountDeletionWorker } from './workers/account-deletion.worker';
+import { featureFlags } from './config/feature-flags';
+import { startAccountDeletionQueue, stopAccountDeletionQueue } from './workers/account-deletion.queue';
+import { closeRedisConnection } from './queues/redis-connection';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -152,7 +156,7 @@ const elysiaApp = new Elysia()
         return configuredOrigins.includes(normalizedRequestOrigin);
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-user-id', 'x-admin-scope'],
       credentials: true,
       maxAge: 60 * 60 * 24,
     })
@@ -191,6 +195,7 @@ const elysiaApp = new Elysia()
   .use(internalAiRoutes)
   .use(creditsRoutes)
   .use(internalCreditsRoutes)
+  .use(accountDeletionAdminRoutes)
   .use(systemAdminRoutes)
   .use(uploadRoutes)
   .use(websiteRoutes)
@@ -428,6 +433,42 @@ console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
 
 automationScheduler.init();
 aiOrchestrator.init();
-accountDeletionWorker.start();
+
+const cleanupTasks: Array<() => Promise<void> | void> = [];
+
+const addCleanupTask = (task: () => Promise<void> | void) => {
+  cleanupTasks.push(task);
+};
+
+const useAccountDeletionQueue = featureFlags.accountDeletionQueue;
+
+if (useAccountDeletionQueue) {
+  startAccountDeletionQueue();
+  addCleanupTask(async () => {
+    await stopAccountDeletionQueue();
+    await closeRedisConnection();
+  });
+  console.log('🧹 AccountDeletion processing running on BullMQ queue');
+} else {
+  accountDeletionWorker.start();
+  addCleanupTask(() => accountDeletionWorker.stop());
+  console.log('🧹 AccountDeletion processing running on interval worker');
+}
+
+const handleShutdown = async (signal: NodeJS.Signals) => {
+  console.log(`[shutdown] received ${signal}, cleaning up...`);
+  for (const task of cleanupTasks.reverse()) {
+    try {
+      await task();
+    } catch (error) {
+      console.error('[shutdown] cleanup task failed', error);
+    }
+  }
+  process.exit(0);
+};
+
+['SIGINT', 'SIGTERM'].forEach((signal) => {
+  process.on(signal as NodeJS.Signals, handleShutdown);
+});
 
 export type App = typeof elysiaApp;

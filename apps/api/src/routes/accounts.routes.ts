@@ -222,6 +222,7 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       }
 
       try {
+        const dataHandling = (body as { dataHandling?: 'download_snapshot' | 'delete_all' } | undefined)?.dataHandling;
         const auth = await requireAccountDeletionAuthFromContext({
           user,
           params,
@@ -232,6 +233,7 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
           accountId: params.id,
           requesterUserId: user.id,
           auth,
+          preferences: dataHandling ? { dataHandling } : undefined,
         });
 
         return { success: true, data: job };
@@ -262,6 +264,7 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       params: t.Object({ id: t.String() }),
       body: t.Object({
         sessionAccountId: t.Optional(t.String()),
+        dataHandling: t.Optional(t.Union([t.Literal('download_snapshot'), t.Literal('delete_all')])),
       }),
       detail: {
         tags: ['Accounts'],

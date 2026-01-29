@@ -12,12 +12,16 @@ import type {
   LoginCredentials,
   RegisterData,
   AccountDeletionJob,
+  AccountDeletionLog,
+  AccountDataReference,
+  AccountOrphanReference,
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 class ApiService {
   private token: string | null = null;
+  private currentUserId: string | null = null;
 
   setToken(token: string | null) {
     this.token = token;
@@ -33,6 +37,17 @@ class ApiService {
       this.token = localStorage.getItem('fluxcore_token');
     }
     return this.token;
+  }
+
+  setCurrentUserId(userId: string | null) {
+    this.currentUserId = userId;
+  }
+
+  getAdminHeaders(): HeadersInit {
+    return {
+      'x-user-id': this.currentUserId ?? '',
+      'x-admin-scope': 'ACCOUNT_DELETE_FORCE',
+    };
   }
 
   private async request<T>(
@@ -104,6 +119,7 @@ class ApiService {
     });
     if (response.success && response.data?.token) {
       this.setToken(response.data.token);
+      this.setCurrentUserId(response.data.user?.id ?? null);
     }
     return response;
   }
@@ -115,6 +131,7 @@ class ApiService {
     });
     if (response.success && response.data?.token) {
       this.setToken(response.data.token);
+      this.setCurrentUserId(response.data.user?.id ?? null);
     }
     return response;
   }
@@ -122,6 +139,7 @@ class ApiService {
   async logout(): Promise<void> {
     await this.request('/auth/logout', { method: 'POST' });
     this.setToken(null);
+    this.setCurrentUserId(null);
   }
 
   async getSession(): Promise<ApiResponse<{ user: User; accounts: Account[] }>> {
@@ -384,10 +402,16 @@ class ApiService {
     });
   }
 
-  async requestAccountDeletion(accountId: string, sessionAccountId?: string): Promise<ApiResponse<AccountDeletionJob>> {
+  async requestAccountDeletion(
+    accountId: string,
+    options?: { sessionAccountId?: string; dataHandling?: 'download_snapshot' | 'delete_all' }
+  ): Promise<ApiResponse<AccountDeletionJob>> {
     return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/request`, {
       method: 'POST',
-      body: JSON.stringify({ sessionAccountId }),
+      body: JSON.stringify({
+        sessionAccountId: options?.sessionAccountId,
+        dataHandling: options?.dataHandling,
+      }),
     });
   }
 
@@ -395,6 +419,13 @@ class ApiService {
     return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/snapshot`, {
       method: 'POST',
       body: JSON.stringify({}),
+    });
+  }
+
+  async verifyPassword(password: string): Promise<ApiResponse<{ valid: boolean }>> {
+    return this.request<{ valid: boolean }>(`/auth/verify-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
     });
   }
 
@@ -434,15 +465,54 @@ class ApiService {
     return response.blob();
   }
 
-  async confirmAccountDeletion(accountId: string): Promise<ApiResponse<AccountDeletionJob>> {
+  async confirmAccountDeletion(
+    accountId: string,
+    options?: { sessionAccountId?: string | null }
+  ): Promise<ApiResponse<AccountDeletionJob>> {
     return this.request<AccountDeletionJob>(`/accounts/${accountId}/delete/confirm`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ sessionAccountId: options?.sessionAccountId ?? null }),
     });
   }
 
   async getAccountDeletionJob(accountId: string): Promise<ApiResponse<AccountDeletionJob | null>> {
     return this.request<AccountDeletionJob | null>(`/accounts/${accountId}/delete/job`);
+  }
+
+  async getAccountDeletionLogs(params: {
+    limit?: number;
+    accountId?: string;
+    jobId?: string;
+    status?: string;
+    createdAfter?: string;
+    createdBefore?: string;
+  }): Promise<ApiResponse<AccountDeletionLog[]>> {
+    const query = new URLSearchParams();
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.accountId) query.set('accountId', params.accountId);
+    if (params.jobId) query.set('jobId', params.jobId);
+    if (params.status) query.set('status', params.status);
+    if (params.createdAfter) query.set('createdAfter', params.createdAfter);
+    if (params.createdBefore) query.set('createdBefore', params.createdBefore);
+
+    return this.request<AccountDeletionLog[]>(`/internal/account-deletions/logs?${query.toString()}`, {
+      headers: this.getAdminHeaders(),
+    });
+  }
+
+  async getAccountDataReferences(accountId: string): Promise<ApiResponse<AccountDataReference[]>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<AccountDataReference[]>(`/internal/account-deletions/references?${query.toString()}`, {
+      headers: this.getAdminHeaders(),
+    });
+  }
+
+  async getAccountOrphanReferences(sampleLimit?: number): Promise<ApiResponse<AccountOrphanReference[]>> {
+    const query = new URLSearchParams();
+    if (sampleLimit) query.set('sampleLimit', String(sampleLimit));
+    return this.request<AccountOrphanReference[]>(`/internal/account-deletions/orphans?${query.toString()}`, {
+      headers: this.getAdminHeaders(),
+    });
   }
 
   // Forgot password

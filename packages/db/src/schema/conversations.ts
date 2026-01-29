@@ -15,10 +15,6 @@ export const conversations = pgTable('conversations', {
   unreadCountA: integer('unread_count_a').default(0).notNull(),
   unreadCountB: integer('unread_count_b').default(0).notNull(),
 
-  // COR-004: Historial limpio por usuario
-  clearedAtA: timestamp('cleared_at_a'),
-  clearedAtB: timestamp('cleared_at_b'),
-
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

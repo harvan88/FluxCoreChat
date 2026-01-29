@@ -25,6 +25,7 @@ import { WebsiteBuilderSidebar } from '../extensions/WebsiteBuilderSidebar';
 import { FluxCoreSidebar } from '../fluxcore/FluxCoreSidebar';
 import { useExtensions } from '../../hooks/useExtensions';
 import { FluxCoreView } from '@/types/fluxcore/views.types';
+import { MonitoringSidebar } from '../monitor/MonitoringSidebar';
 
 // Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
 const extensionComponents: Record<string, ComponentType> = {
@@ -173,6 +174,8 @@ export function Sidebar() {
         return <ConversationsList />;
       case 'contacts':
         return <ContactsList />;
+      case 'monitoring':
+        return <MonitoringSidebar />;
       case 'extensions':
         return <ExtensionsPanel accountId={selectedAccountId || ''} variant="sidebar" />;
       case 'settings':
