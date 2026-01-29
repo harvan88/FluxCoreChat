@@ -112,21 +112,7 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
         const limit = parseInt(query.limit || '50');
         const offset = parseInt(query.offset || '0');
 
-        // Check context for security and filtering
-        const context = await conversationService.getConversationContextForUser(params.id, user.id);
-
-        if (!context) {
-          set.status = 403;
-          return { success: false, message: 'User is not a participant of this conversation' };
-        }
-
-        const messages = await messageService.getMessagesByConversationId(
-          params.id,
-          limit,
-          offset,
-          context.accountId,
-          context.clearedAt
-        );
+        const messages = await messageService.getMessagesByConversationId(params.id, limit, offset);
         return { success: true, data: messages };
       } catch (error: any) {
         console.error('[API] Error loading messages:', error);

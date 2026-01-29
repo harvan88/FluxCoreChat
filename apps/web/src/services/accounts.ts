@@ -63,8 +63,11 @@ export const accountsApi = {
     return api.convertToBusiness(id);
   },
 
-  async requestDeletion(id: string, sessionAccountId?: string): Promise<ApiResponse<AccountDeletionJob>> {
-    return api.requestAccountDeletion(id, sessionAccountId);
+  async requestDeletion(
+    id: string,
+    options?: { sessionAccountId?: string; dataHandling?: 'download_snapshot' | 'delete_all' }
+  ): Promise<ApiResponse<AccountDeletionJob>> {
+    return api.requestAccountDeletion(id, options);
   },
 
   async prepareDeletionSnapshot(id: string): Promise<ApiResponse<AccountDeletionJob>> {
@@ -82,12 +85,19 @@ export const accountsApi = {
     return api.downloadAccountDeletionSnapshot(id);
   },
 
-  async confirmDeletion(id: string): Promise<ApiResponse<AccountDeletionJob>> {
-    return api.confirmAccountDeletion(id);
+  async confirmDeletion(
+    id: string,
+    options?: { sessionAccountId?: string | null }
+  ): Promise<ApiResponse<AccountDeletionJob>> {
+    return api.confirmAccountDeletion(id, options);
   },
 
   async getAccountDeletionJob(id: string): Promise<ApiResponse<AccountDeletionJob | null>> {
     return api.getAccountDeletionJob(id);
+  },
+
+  async verifyPassword(password: string): Promise<ApiResponse<{ valid: boolean }>> {
+    return api.verifyPassword(password);
   },
 
   /**

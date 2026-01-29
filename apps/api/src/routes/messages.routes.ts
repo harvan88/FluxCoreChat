@@ -160,7 +160,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         }
 
         // Eliminar mensaje (soft delete o hard delete)
-        await messageService.deleteMessage(params.id, user.id);
+        await messageService.deleteMessage(params.id);
 
         return { success: true, data: { deleted: true } };
       } catch (error: any) {

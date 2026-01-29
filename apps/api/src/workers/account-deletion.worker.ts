@@ -1,22 +1,10 @@
 import { db } from '@fluxcore/db';
-import {
-  accountDeletionJobs,
-  accountDeletionLogs,
-  automationRules,
-  fluxcoreAssistants,
-  fluxcoreVectorStores,
-  conversations,
-  messages,
-  relationships,
-  accounts,
-  actors,
-} from '@fluxcore/db';
-import { eq, inArray, and } from 'drizzle-orm';
-import { fluxcoreService } from '../services/fluxcore.service';
-import { deleteVectorStoreCascade } from '../services/vector-store-deletion.service';
+import { accountDeletionJobs, accountDeletionLogs } from '@fluxcore/db';
+import { eq, inArray } from 'drizzle-orm';
 import { broadcastSystemEvent } from '../websocket/system-events';
 import { ensureAccountDeletionAllowed } from '../services/account-deletion.guard';
 import { accountDeletionExternalService } from '../services/account-deletion.external';
+import { accountPurgeService } from '../services/account-deletion.local';
 
 type DeletionJobStatus = 'external_cleanup' | 'local_cleanup' | 'completed' | 'failed';
 
@@ -128,40 +116,13 @@ class AccountDeletionWorker {
   private async processLocalCleanup(job: DeletionJob) {
     const startedAt = job.metadata?.localCleanupStartedAt ?? new Date().toISOString();
 
-    await db.transaction(async (tx) => {
-      // Automation rules
-      await tx.delete(automationRules).where(eq(automationRules.accountId, job.accountId));
-
-      // Mensajes y conversaciones
-      const conversationIds = await tx
-        .select({ id: conversations.id })
-        .from(conversations)
-        .innerJoin(relationships, eq(conversations.relationshipId, relationships.id))
-        .where(and(eq(relationships.accountAId, job.accountId)));
-
-      const convoIdList = conversationIds.map((c) => c.id);
-      if (convoIdList.length > 0) {
-        await tx.delete(messages).where(inArray(messages.conversationId, convoIdList));
-        await tx.delete(conversations).where(inArray(conversations.id, convoIdList));
-      }
-
-      // Relationships
-      await tx.delete(relationships).where(eq(relationships.accountAId, job.accountId));
-      await tx.delete(relationships).where(eq(relationships.accountBId, job.accountId));
-
-      // Fluxcore tables (ya vacías tras external cleanup)
-      await tx.delete(fluxcoreAssistants).where(eq(fluxcoreAssistants.accountId, job.accountId));
-      await tx.delete(fluxcoreVectorStores).where(eq(fluxcoreVectorStores.accountId, job.accountId));
-
-      // Cuenta y actores
-      await tx.delete(actors).where(eq(actors.accountId, job.accountId));
-      await tx.delete(accounts).where(eq(accounts.id, job.accountId));
-    });
+    const summary = await accountPurgeService.purgeAccountData(job.accountId);
 
     const metadata = {
       ...(job.metadata || {}),
       localCleanupStartedAt: startedAt,
       localCleanupFinishedAt: new Date().toISOString(),
+      localCleanupSummary: summary,
     };
 
     await db
@@ -174,7 +135,9 @@ class AccountDeletionWorker {
       })
       .where(eq(accountDeletionJobs.id, job.id));
 
-    await this.log(job.accountId, job.id, 'completed', 'Local cleanup completed');
+    await this.log(job.accountId, job.id, 'completed', 'Local cleanup completed', {
+      summary,
+    });
     console.log('[AccountDeletionWorker] Job completed', job.id);
 
     broadcastSystemEvent({
@@ -205,13 +168,19 @@ class AccountDeletionWorker {
     });
   }
 
-  private async log(accountId: string, jobId: string, status: DeletionJobStatus, reason: string) {
+  private async log(
+    accountId: string,
+    jobId: string,
+    status: DeletionJobStatus,
+    reason: string,
+    details: Record<string, unknown> = {},
+  ) {
     await db.insert(accountDeletionLogs).values({
       accountId,
       jobId,
       status,
       reason,
-      details: {},
+      details,
       createdAt: new Date(),
     });
   }

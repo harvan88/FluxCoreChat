@@ -89,7 +89,7 @@ export function ViewPort() {
   return (
     <div
       className={`
-        flex-1 flex gap-1 p-1 bg-base overflow-hidden
+        flex-1 flex gap-1 p-1 bg-base overflow-hidden min-h-0
         ${layout.splitDirection === 'horizontal' ? 'flex-row' : 'flex-col'}
       `}
     >

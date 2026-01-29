@@ -22,7 +22,7 @@
   ],
   "ui": {
     "sidebar": {
-      "icon": "zap",
+      "icon": "bot",
       "title": "FluxCore"
     },
     "panel": {

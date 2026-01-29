@@ -3,6 +3,8 @@ import { and, eq, inArray, desc } from 'drizzle-orm';
 import { accountDeletionGuard } from './account-deletion.guard';
 import { broadcastSystemEvent } from '../websocket/system-events';
 import { accountDeletionSnapshotService } from './account-deletion.snapshot.service';
+import { featureFlags } from '../config/feature-flags';
+import { enqueueAccountDeletionJob } from '../workers/account-deletion.queue';
 import type { AccountDeletionAuthMode, AccountDeletionAuthResult } from '../middleware/account-deletion-auth';
 
 const ACTIVE_JOB_STATUSES = ['pending', 'snapshot', 'snapshot_ready', 'external_cleanup', 'local_cleanup'] as const;
@@ -11,10 +13,17 @@ const SNAPSHOT_PHASES = ['snapshot', 'snapshot_ready'] as const;
 type ActiveJobStatus = (typeof ACTIVE_JOB_STATUSES)[number];
 type SnapshotPhase = (typeof SNAPSHOT_PHASES)[number];
 
+type DeletionDataHandling = 'download_snapshot' | 'delete_all';
+
+interface DeletionPreferences {
+  dataHandling?: DeletionDataHandling;
+}
+
 interface DeletionContext {
   accountId: string;
   requesterUserId: string;
   auth: AccountDeletionAuthResult;
+  preferences?: DeletionPreferences;
 }
 
 interface SnapshotAckPayload {
@@ -22,6 +31,8 @@ interface SnapshotAckPayload {
   consent?: boolean;
   userAgent?: string;
 }
+
+const DEFAULT_DATA_HANDLING: DeletionDataHandling = 'download_snapshot';
 
 class AccountDeletionService {
   async requestDeletion(context: DeletionContext) {
@@ -41,6 +52,8 @@ class AccountDeletionService {
       return existingJob;
     }
 
+    const dataHandling = context.preferences?.dataHandling ?? DEFAULT_DATA_HANDLING;
+
     const [job] = await db
       .insert(accountDeletionJobs)
       .values({
@@ -49,6 +62,9 @@ class AccountDeletionService {
         requesterAccountId: requesterAccountId ?? null,
         status: 'pending',
         phase: 'snapshot',
+        metadata: {
+          dataHandling,
+        },
       })
       .returning();
 
@@ -99,20 +115,30 @@ class AccountDeletionService {
 
     await this.ensureRequester(job, requesterUserId, auth.mode);
 
-    if (!job.snapshotAcknowledgedAt) {
-      const error = new Error('Snapshot acknowledgement required before confirmation');
-      (error as any).code = 'ACCOUNT_DELETION_CONSENT_REQUIRED';
-      throw error;
-    }
+    const dataHandling = (job.metadata as any)?.dataHandling ?? DEFAULT_DATA_HANDLING;
+    const skipSnapshot = dataHandling === 'delete_all';
 
-    if (!job.snapshotDownloadedAt) {
-      const error = new Error('Snapshot download required before confirmation');
-      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_REQUIRED';
-      throw error;
-    }
+    if (!skipSnapshot) {
+      if (!job.snapshotAcknowledgedAt) {
+        const error = new Error('Snapshot acknowledgement required before confirmation');
+        (error as any).code = 'ACCOUNT_DELETION_CONSENT_REQUIRED';
+        throw error;
+      }
 
-    if (job.status !== 'snapshot_ready') {
-      throw new Error('Snapshot must be ready before confirmation');
+      if (!job.snapshotDownloadedAt) {
+        const error = new Error('Snapshot download required before confirmation');
+        (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_REQUIRED';
+        throw error;
+      }
+
+      if (job.status !== 'snapshot_ready') {
+        throw new Error('Snapshot must be ready before confirmation');
+      }
+    } else {
+      const allowedStatuses: AccountDeletionJobStatus[] = ['pending', 'snapshot', 'snapshot_ready'];
+      if (!allowedStatuses.includes(job.status as AccountDeletionJobStatus)) {
+        throw new Error('Deletion job not in a confirmable state');
+      }
     }
 
     const [updated] = await db
@@ -126,6 +152,8 @@ class AccountDeletionService {
           consent: {
             acknowledgedAt: job.snapshotAcknowledgedAt?.toISOString?.() ?? job.snapshotAcknowledgedAt,
             downloadedAt: job.snapshotDownloadedAt?.toISOString?.() ?? job.snapshotDownloadedAt,
+            dataHandling,
+            skippedSnapshot: skipSnapshot || undefined,
           },
         },
       })
@@ -137,6 +165,10 @@ class AccountDeletionService {
       accountId,
       jobId: job.id,
     });
+
+    if (featureFlags.accountDeletionQueue) {
+      await enqueueAccountDeletionJob(job.id);
+    }
 
     return updated;
   }

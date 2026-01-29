@@ -88,7 +88,7 @@ Conclusión: el agente ya está parcialmente operativo; este plan actúa como ch
 **Objetivo**: eliminar asistentes, archivos y vector stores externos usando APIs oficiales y dejar constancia auditable del contrato entre dominios.
 
 - **Estado actual**: ✅ Implementado. `account-deletion.external.ts` genera token firmado, coordina las fases asistentes → archivos → vector stores con retries/404 benigno y actualiza `externalState` estructurado; el worker delega allí antes de pasar a `local_cleanup`.
-- **Validación pendiente**: para correr toda la suite se requiere un seed de test que cargue cuentas/entidades Fluxcore; mientras tanto, validar el hito ejecutando sólo los tests de account deletion (`bun test apps/api account-deletion.*`). Documentar en QUICK_START que tras `docker-compose up -d postgres redis` se debe correr el seed antes de la suite completa.
+- **Validación pendiente**: para correr toda la suite se requiere el seed `bun run seed:test-baseline` (crea owner protegido + admin con ACCOUNT_DELETE_FORCE + recursos Fluxcore). Mientras tanto, validar el hito ejecutando sólo los tests de account deletion (`bun test apps/api/src/services/account-deletion.guard.test.ts` y `apps/api/src/routes/account-deletion.routes.test.ts`). Documentado en QUICK_START tras `docker-compose up -d postgres redis`.
 
 - Reutilizar `openai-sync.service.ts` para exponer métodos `deleteAssistant(externalId)`, `deleteFile`, `deleteVectorStore` con retries y detección de 404 benigno.
 - Job runner consume listas de referencia (`fluxcore_assistants`, `fluxcore_vector_store_files`, `fluxcore_vector_stores` con `backend/runtime='openai'`) para auditar qué espera borrar, pero la eliminación real ocurre dentro de FluxCore.
@@ -145,21 +145,13 @@ Conclusión: el agente ya está parcialmente operativo; este plan actúa como ch
 
 **Objetivo**: remover definitivamente todos los datos de FluxCore tras éxito externo.
 
-- **Estado actual**: ⚠️ Parcial. El worker limpia automation rules, fluxcore entities, conversations/messages, relationships y cierra cuentas/actors dentro de una transacción. Se emite `account:deleted` y el cliente limpia Dexie.
-- **Pendiente**: extender el purge a créditos/ledger/tablas auxiliares y encapsular la lógica en un `AccountPurgeService` con lista exhaustiva de tablas.
+- **Estado actual**: ✅ Implementado (2026-01-28). Ahora existe `AccountPurgeService` (@apps/api/src/services/account-deletion.local.ts) que ejecuta TODA la cascada dentro de una única transacción y devuelve un resumen (`localCleanupSummary`) con los conteos por tabla.
+  - Cobertura: automation (`automation_rules`), extensiones (`extension_contexts`, `extension_installations`), website/workspaces, citas, TODOS los `fluxcore_*` (assistants/instructions/files/vector stores/tool connections/usage/logs/credit transactions/marketplace), créditos (`credits_wallets`, `credits_ledger`, `credits_conversation_sessions`), relationships/conversations/mensajes (por relationship y por sender), protecciones (`protected_accounts`, `system_admins` condicional por owner), `actors` y finalmente `accounts`.
+  - El worker delega en el servicio y persiste `metadata.localCleanupSummary` + log detallado (`account_deletion_logs.details.summary`). En caso de fallo, basta reintentar `local_cleanup` y se mantendrá la idempotencia por `where accountId = ...`.
+  - El evento `account:deleted` ya es consumido por el frontend: `useWebSocket` ejecuta `clearAccountData` + `deleteAccountDatabase` y reinicia la UI cuando la cuenta eliminada era la seleccionada (@apps/web/src/hooks/useWebSocket.ts, líneas 214‑228).
+- **Pendiente**: ampliar cobertura de pruebas (unitarias contra `AccountPurgeService` + integración local cleanup) y exponer el resumen/métricas en dashboards una vez AD-150 habilite el worker en cola.
 
-- Crear servicio `AccountPurgeService` con transacción `db.transaction(async (tx) => {...})`.
-- Orden sugerido:
-  1. Automation rules / triggers
-  2. Fluxcore entities (`fluxcore_*`)
-  3. Conversations/messages/participants (`messages`, `conversations`, `conversation_participants`)
-  4. Relationships/context overlays
-  5. Credits / ledgers / system tables
-  6. Accounts + actors
-- Ningún soft delete; utilizar `delete` + cascadas en schema.
-- Al finalizar, invocar limpieza Dexie: emitir evento WS `account:deleted` para que clientes llamen `clearAccountData` y `deleteAccountDatabase`.
-
-**Archivos afectados**: `apps/api/src/services/account-deletion.local.ts` (nuevo), `apps/api/src/websocket/events.ts`, `apps/web/src/hooks/useWebSocket.ts` (nuevo handler), `apps/web/src/store/accountStore.ts` (reset state al recibir evento).
+**Archivos afectados**: `apps/api/src/services/account-deletion.local.ts`, `apps/api/src/workers/account-deletion.worker.ts`, `apps/web/src/hooks/useWebSocket.ts`.
 
 ---
 
@@ -167,8 +159,41 @@ Conclusión: el agente ya está parcialmente operativo; este plan actúa como ch
 
 **Objetivo**: ejecutar el proceso completo fuera del request/response.
 
-- **Estado actual**: ⚠️ Parcial. `AccountDeletionWorker` con `setInterval` corre desde `server.ts` y procesa snapshots+external+local cleanup.
-- **Pendiente**: mover a cola dedicada (Redis/Bun queue), exponer métricas (`account_deletion_duration_seconds`), health-check/monitoring y endpoint admin.
+- **Estado actual**: ✅ Implementado (2026-01-28). El flujo corre sobre `accountDeletionQueue` (BullMQ + Redis) con flag `ACCOUNT_DELETION_USE_QUEUE`. `AccountDeletionService.confirmDeletion()` encola jobs, `account-deletion.queue.ts` procesa fases con retries/backoff, y `server.ts` conmuta automáticamente entre cola o worker legacy según el flag (incluye graceful shutdown + cierre de Redis).
+- **Métricas**: `account-deletion.processor.ts` reporta `account_deletion.jobs_processing_total`, `account_deletion.jobs_failed_total`, `account_deletion.phase_completed_total`, `account_deletion.external_cleanup/local_cleanup` timings y `account_deletion.total_duration`. Falta exportarlos al endpoint `/metrics` y dashboards externos.
+- **Admin tooling**: expuesto `/internal/account-deletions` (lista + filtros + stats), `/internal/account-deletions/stats`, y `POST /internal/account-deletions/:jobId/retry-phase` con guard `ACCOUNT_DELETE_FORCE`. Servicio `account-deletion.admin.service.ts` ofrece listar/reintentar/consultar queue stats.
+- **Pendiente**: pruebas unitarias/integración para queue worker y endpoints admin, exponer métricas agregadas en `/metrics` y documentar runbook de monitoreo.
+
+### 6.1 Arquitectura propuesta
+1. **Queue**: `accountDeletionQueue` (BullMQ) con `jobId = accountDeletionJob.id`. Datos del job = `{ accountId, jobId, requesterUserId, requesterAccountId }` + snapshot metadata opcional.
+2. **Producer**: `AccountDeletionService.confirmDeletion()` encola `local_cleanup` cuando cambia estado a `ready_for_processing` (ya ocurre hoy al pasar a `external_cleanup`). Reemplazamos `accountDeletionWorker.start()` por `queue.add`.
+3. **Worker**: nuevo `accountDeletionQueueWorker.ts` con BullMQ `Worker`. Procesa fases secuencialmente reutilizando `accountDeletionExternalService` y `accountPurgeService`. Concurrency configurable (default 2) y rate limit (N cuentas/minuto) para no saturar OpenAI ni DB.
+4. **Retry/Backoff**: BullMQ maneja reintentos configurables (p.ej. 5 intentos con backoff exponencial). Al exceder, marcamos `accountDeletionJobs.status = 'failed'` y dejamos el job en `failed` para inspección.
+5. **Idempotencia**: cada fase verifica `job.status` en DB antes de actuar; si un retry vuelve a entrar en `local_cleanup` ya completado, se salta gracias a `phase` en DB y al resumen guardado.
+
+### 6.2 Observabilidad y métricas
+- Exportar métricas Prometheus (via existing `/metrics`):
+  - `account_deletion_jobs_total{phase}`
+  - `account_deletion_duration_seconds` (histograma, diferencia entre `metadata.requestedAt` y `metadata.localCleanupFinishedAt`).
+  - `account_deletion_queue_depth` (gauge leyendo `queue.getWaitingCount()` + `queue.getActiveCount()`).
+  - `account_deletion_failures_total{phase,reason}`.
+- Logs estructurados en cada transición + `job.attemptsMade` para debug.
+
+### 6.3 Endpoint/Admin tooling
+- **Endpoints reales**: `/internal/account-deletions` (GET) devuelve lista paginada + metadata básica; `/internal/account-deletions/stats` expone conteos por estado + `queueStats`; `POST /internal/account-deletions/:jobId/retry-phase` re-enciende fases `external_cleanup`/`local_cleanup` y reencola cuando la cola está habilitada. Todos requieren scope `ACCOUNT_DELETE_FORCE`.
+- Pendiente: panel en Admin UI aprovechando estas rutas y mostrar métricas históricas.
+
+### 6.4 Plan de implementación
+1. **Infra**: agregar `@bullmq` dependencia en `apps/api` + config Redis (reusar `REDIS_URL`). Crear helper `createQueue(name)` y `createWorker(name, handler)` en `apps/api/src/queues`.
+2. **Productor**: en `AccountDeletionService` reemplazar `accountDeletionWorker.start()` (actual) por `accountDeletionQueue.add()` al confirmar borrado. Registrar metadata `queueJobId`.
+3. **Worker**: nuevo archivo `account-deletion.queue-worker.ts` que procesa jobs y actualiza `accountDeletionJobs`. Importado desde `server.ts` sólo para iniciar listeners (sin `setInterval`).
+4. **Graceful shutdown**: hook en `server.ts` para `queueWorker.close()` y `queue.close()`.
+5. **Métricas**: módulo `account-deletion.metrics.ts` que expone `collect()` para `/metrics` y es alimentado desde el worker.
+6. **Endpoints admin**: rutas bajo `apps/api/src/routes/admin-account-deletions.routes.ts`, servicio `AccountDeletionMonitorService`.
+7. **Tests**: unit tests para `AccountDeletionQueueWorker` (mocks de BullMQ + servicios), pruebas E2E del endpoint admin y caso retry.
+8. **Rollout**: feature flag `ACCOUNT_DELETION_USE_QUEUE` durante transición; cuando esté estable se elimina el worker anterior.
+
+**Dependencias externas**: Redis (ya requerido por `docker-compose`). Para producción, considerar `bull-board`/CLI `bunx bullmq-pro` para inspección.
 
 - Introducir cola `account-deletion` (Redis o Bun queue). Productor: endpoint `/delete/confirm` encola job.
 - Worker `scripts/account-deletion-worker.ts` o `apps/api/src/workers/account-deletion.worker.ts` que:
@@ -178,7 +203,7 @@ Conclusión: el agente ya está parcialmente operativo; este plan actúa como ch
 - Logs detallados + métrica Prometheus (`account_deletion_duration_seconds`).
 - Endpoint admin `GET /internal/account-deletion-jobs` para monitorear.
 
-**Archivos afectados**: `apps/api/src/workers`, `apps/api/src/server.ts` (registro worker/cron), `scripts/README.md`.
+**Archivos afectados**: `apps/api/src/queues/*`, `apps/api/src/services/account-deletion.service.ts`, `apps/api/src/workers/account-deletion.*`, `apps/api/src/routes/account-deletion.admin.routes.ts`, `apps/api/src/server.ts`.
 
 ---
 
@@ -186,18 +211,10 @@ Conclusión: el agente ya está parcialmente operativo; este plan actúa como ch
 
 **Objetivo**: experiencia consistente con instrucciones (redirigir al inicio tras confirmar, proceso background).
 
-- **Estado actual**: ⚠️ Parcial. La sección “Eliminar cuenta” existe y muestra wizard/estado, y se reciben notificaciones vía WS.
-- **Pendiente**: cerrar tabs/redirigir automáticamente al confirmar, toasts globales durante el worker y banner “Eliminación en curso”.
+- **Estado actual**: ✅ Implementado (2026-01-28). La UI ahora muestra un banner global de “Eliminación en curso”, toasts para cada transición y redirige automáticamente a Conversaciones mientras se cierra el layout anterior. `useAccountDeletion` dispara las acciones (banner/toasts, cambio de actividad, snapshot UX) y `useWebSocket` finaliza la limpieza local cuando llega `account:deleted` (reset layout, tabs, cuenta seleccionada). Banners/toasts se renderizan en `Layout`, de modo que cualquier vista (desktop o mobile) refleja el estado.
+- **Pendiente**: ejercicios manuales/E2E para validar transiciones con múltiples cuentas y documentar en el Runbook cómo intervenir si el banner queda “atascado”.
 
-- Nueva sección “Eliminar Cuenta” dentro de Settings → AccountsSection.
-- Flujo:
-  1. Usuario abre tab → ve checklist de reglas + botón “Generar snapshot”.
-  2. Tras snapshot listo, botón “Eliminar definitivamente” habilita `DoubleConfirmationDeleteButton`.
-  3. Al confirmar, se lanza petición `POST /accounts/:id/delete/confirm`, se muestra modal “Procesando en segundo plano…” y se redirige al Home (`/`) cerrando tabs de la cuenta.
-- Notificaciones vía toast + websocket al completar/fallar.
-- UI usa componentes canónicos (Button, Card, Alert) y respeta densidad VSCode-like.
-
-**Archivos afectados**: `apps/web/src/components/settings/AccountsSection.tsx`, `apps/web/src/components/settings/AccountDeletionWizard.tsx`, `apps/web/src/store/panelStore.ts` (cerrar tabs), `apps/web/src/store/uiStore.ts` (redirección).
+**Archivos afectados**: `apps/web/src/hooks/useAccountDeletion.ts`, `apps/web/src/hooks/useWebSocket.ts`, `apps/web/src/store/uiStore.ts`, `apps/web/src/components/accounts/AccountDeletionWizard.tsx`, `apps/web/src/components/layout/Layout.tsx`, `apps/web/src/components/ui/AccountDeletionBanner.tsx`, `apps/web/src/components/ui/ToastStack.tsx`.
 
 ---
 

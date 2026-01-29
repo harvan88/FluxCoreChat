@@ -12,7 +12,6 @@
  */
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Users, Settings, LogOut, Puzzle, PanelLeftOpen, PanelLeftClose, Globe, Calendar, ShoppingCart, FileText, Zap, Bot } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -20,6 +19,23 @@ import { useAccountStore } from '../../store/accountStore';
 import { useExtensions } from '../../hooks/useExtensions';
 import { AccountSwitcher } from '../accounts';
 import { api } from '../../services/api';
+import { usePanelStore } from '../../store/panelStore';
+import {
+  ConversationsIcon,
+  ContactsIcon,
+  ExtensionsIcon,
+  SettingsIcon,
+  ActivityBarExpandIcon,
+  ActivityBarCollapseIcon,
+  CreditsIcon,
+  LogoutIcon,
+  GlobeIcon,
+  CalendarIcon,
+  ShoppingCartIcon,
+  FileTextIcon,
+  BotIcon,
+  MonitoringIcon,
+} from '../../lib/icon-library';
 
 import type { ActivityType } from '../../types';
 
@@ -31,21 +47,21 @@ interface ActivityItem {
 
 // Actividades base del sistema
 const baseActivities: ActivityItem[] = [
-  { id: 'conversations', icon: <MessageSquare size={22} />, label: 'Mensajes' },
-  { id: 'contacts', icon: <Users size={22} />, label: 'Contactos' },
-  { id: 'extensions', icon: <Puzzle size={22} />, label: 'Extensiones' },
-  { id: 'settings', icon: <Settings size={22} />, label: 'Configuración' },
+  { id: 'conversations', icon: <ConversationsIcon size={22} />, label: 'Mensajes' },
+  { id: 'contacts', icon: <ContactsIcon size={22} />, label: 'Contactos' },
+  { id: 'extensions', icon: <ExtensionsIcon size={22} />, label: 'Extensiones' },
+  { id: 'settings', icon: <SettingsIcon size={22} />, label: 'Configuración' },
 ];
 
 // Mapeo de nombres de iconos a componentes Lucide
 const iconMap: Record<string, React.ReactNode> = {
-  globe: <Globe size={22} />,
-  calendar: <Calendar size={22} />,
-  'shopping-cart': <ShoppingCart size={22} />,
-  'file-text': <FileText size={22} />,
-  zap: <Zap size={22} />,
-  puzzle: <Puzzle size={22} />,
-  bot: <Bot size={22} />,
+  globe: <GlobeIcon size={22} />,
+  calendar: <CalendarIcon size={22} />,
+  'shopping-cart': <ShoppingCartIcon size={22} />,
+  'file-text': <FileTextIcon size={22} />,
+  zap: <CreditsIcon size={22} />,
+  puzzle: <ExtensionsIcon size={22} />,
+  bot: <BotIcon size={22} />,
 };
 
 export function ActivityBar() {
@@ -59,6 +75,7 @@ export function ActivityBar() {
   } = useUIStore();
   const { logout } = useAuthStore();
   const { activeAccount } = useAccountStore();
+  const openTab = usePanelStore((state) => state.openTab);
   
   // VER-002: Usar selectedAccountId de uiStore (sincronizado por AccountSwitcher)
   const selectedAccountId = uiSelectedAccountId || activeAccount?.id || null;
@@ -129,11 +146,19 @@ export function ActivityBar() {
   // Generar actividades dinámicas de extensiones con UI
   const extensionActivities: ActivityItem[] = installations
     .filter(inst => inst.enabled && inst.manifest?.ui?.sidebar)
-    .map(inst => ({
-      id: `ext:${inst.extensionId}` as ActivityType,
-      icon: iconMap[inst.manifest?.ui?.sidebar?.icon || 'puzzle'] || <Puzzle size={22} />,
-      label: inst.manifest?.ui?.sidebar?.title || inst.manifest?.name || 'Extension',
-    }));
+    .map(inst => {
+      const iconKey = inst.manifest?.ui?.sidebar?.icon || 'puzzle';
+      const isFluxCoreExtension = inst.extensionId === '@fluxcore/fluxcore' || inst.extensionId === 'fluxcore';
+      const iconNode = isFluxCoreExtension
+        ? <BotIcon size={22} />
+        : iconMap[iconKey] || <ExtensionsIcon size={22} />;
+
+      return {
+        id: `ext:${inst.extensionId}` as ActivityType,
+        icon: iconNode,
+        label: inst.manifest?.ui?.sidebar?.title || inst.manifest?.name || 'Extension',
+      };
+    });
   
   // VER-004: Log extensiones con UI
   console.log('[ActivityBar] extensionActivities:', extensionActivities);
@@ -144,6 +169,18 @@ export function ActivityBar() {
     ...extensionActivities,        // extensiones con UI
     ...baseActivities.slice(2),    // extensions, settings
   ];
+
+  const handleOpenMonitoring = () => {
+    setActiveActivity('monitoring');
+    openTab('dashboard', {
+      type: 'monitoring',
+      identity: 'monitoring-hub',
+      title: 'Monitoring Hub',
+      icon: 'Activity',
+      closable: true,
+      context: {},
+    });
+  };
 
   return (
     <div 
@@ -175,9 +212,9 @@ export function ActivityBar() {
           title={activityBarExpanded ? 'Colapsar barra' : 'Expandir barra'}
         >
           {activityBarExpanded ? (
-            <PanelLeftClose size={18} />
+            <ActivityBarCollapseIcon size={18} />
           ) : (
-            <PanelLeftOpen size={18} />
+            <ActivityBarExpandIcon size={18} />
           )}
         </button>
       </div>
@@ -218,7 +255,7 @@ export function ActivityBar() {
             title={!activityBarExpanded ? `Créditos: ${creditsBalance ?? '-'}` : undefined}
           >
             <span className="flex-shrink-0">
-              <Zap size={18} className={premiumSession ? 'text-accent' : undefined} />
+              <CreditsIcon size={18} className={premiumSession ? 'text-accent' : undefined} />
             </span>
             {activityBarExpanded && (
               <div className="min-w-0 flex-1">
@@ -236,6 +273,23 @@ export function ActivityBar() {
         )}
 
         <button
+          onClick={handleOpenMonitoring}
+          className={clsx(
+            'w-full flex items-center gap-3 rounded-lg transition-all duration-200',
+            activityBarExpanded ? 'px-3 py-2.5' : 'px-0 py-2.5 justify-center',
+            activeActivity === 'monitoring'
+              ? 'bg-active text-primary'
+              : 'text-secondary hover:text-primary hover:bg-hover'
+          )}
+          title={!activityBarExpanded ? 'Monitoring Hub' : undefined}
+        >
+          <MonitoringIcon size={18} className="flex-shrink-0" />
+          {activityBarExpanded && (
+            <span className="text-sm font-medium truncate">Monitoring</span>
+          )}
+        </button>
+
+        <button
           onClick={logout}
           className={clsx(
             'w-full flex items-center gap-3 rounded-lg transition-all duration-200',
@@ -244,7 +298,7 @@ export function ActivityBar() {
           )}
           title={!activityBarExpanded ? 'Cerrar sesión' : undefined}
         >
-          <LogOut size={22} className="flex-shrink-0" />
+          <LogoutIcon size={22} className="flex-shrink-0" />
           {activityBarExpanded && (
             <span className="text-sm font-medium truncate">
               Cerrar sesión

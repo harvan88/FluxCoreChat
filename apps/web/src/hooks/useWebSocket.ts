@@ -9,6 +9,7 @@ import type { AISuggestion } from '../components/extensions';
 import type { EnrichmentBatch } from '../types/enrichments';
 import { useEnrichmentStore } from '../store/enrichmentStore';
 import { useUIStore } from '../store/uiStore';
+import { usePanelStore } from '../store/panelStore';
 import { clearAccountData, deleteAccountDatabase } from '../db';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
@@ -223,8 +224,25 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
                       .finally(() => {
                         useUIStore.getState().resetAccountData();
                         useUIStore.getState().setSelectedAccount(null);
+                        useUIStore.getState().setSelectedConversation(null);
+                        useUIStore.getState().setActiveConversation(null);
+                        useUIStore.getState().setActiveActivity('conversations');
+                        usePanelStore.getState().resetLayout();
                       });
                   }
+
+                  useUIStore.getState().completeAccountDeletionBanner({
+                    accountId: deletedAccountId,
+                    status: 'completed',
+                  });
+                  useUIStore.getState().pushToast({
+                    type: 'success',
+                    title: 'Cuenta eliminada',
+                    description:
+                      selected === deletedAccountId
+                        ? 'Tus datos locales se limpiaron y la eliminación finalizó.'
+                        : `La cuenta ${deletedAccountId} se eliminó correctamente.`,
+                  });
                 }
                 onMsg?.(message);
                 return;

@@ -47,6 +47,7 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          api.setCurrentUserId(response.data.user?.id ?? null);
           
           // Set auth token in syncManager for API calls
           syncManager.setAuthToken(response.data.token);
@@ -101,6 +102,7 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             isLoading: false,
           });
+          api.setCurrentUserId(response.data.user?.id ?? null);
           
           // Set auth token in syncManager
           syncManager.setAuthToken(response.data.token);
@@ -207,6 +209,8 @@ export const useAuthStore = create<AuthStore>()(
           } catch (err) {
             console.error('[AuthStore] Error loading accounts on init:', err);
           }
+        } else {
+          api.setCurrentUserId(null);
         }
       },
     }),
@@ -217,6 +221,13 @@ export const useAuthStore = create<AuthStore>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        if (state.token) {
+          api.setToken(state.token);
+        }
+        api.setCurrentUserId(state.user?.id ?? null);
+      },
     }
   )
 );

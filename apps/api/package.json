@@ -21,7 +21,9 @@
     "bcrypt": "^6.0.0",
     "croner": "^9.1.0",
     "elysia": "0.8.17",
-    "openai": "^6.16.0"
+    "openai": "^6.16.0",
+    "bullmq": "^5.10.2",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

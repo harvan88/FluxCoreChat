@@ -35,6 +35,31 @@ export interface AccountDeletionJob {
   updatedAt: string;
 }
 
+export interface AccountDeletionLog {
+  id: string;
+  accountId: string;
+  jobId?: string | null;
+  requesterUserId?: string | null;
+  requesterAccountId?: string | null;
+  status: string;
+  reason?: string | null;
+  details?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface AccountDataReference {
+  tableName: string;
+  columnName: string;
+  rowCount: number;
+}
+
+export interface AccountOrphanReference {
+  tableName: string;
+  columnName: string;
+  orphanCount: number;
+  sampleIds: string[];
+}
+
 export interface Account {
   id: string;
   ownerUserId: string;
@@ -154,7 +179,7 @@ export interface ApiResponse<T> {
 
 // Activity types for sidebar
 // Extensiones dinámicas usan el formato 'ext:{extensionId}'
-export type ActivityType = 'conversations' | 'contacts' | 'extensions' | 'settings' | `ext:${string}`;
+export type ActivityType = 'conversations' | 'contacts' | 'extensions' | 'settings' | 'monitoring' | `ext:${string}`;
 
 // Extension UI configuration from manifest
 export interface ExtensionUIConfig {

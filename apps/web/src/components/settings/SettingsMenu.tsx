@@ -3,7 +3,15 @@
  * Solo muestra opciones, el contenido se abre en tabs del DynamicContainer
  */
 
-import { User, Bell, Shield, Palette, Building2, ChevronRight, Zap } from 'lucide-react';
+import clsx from 'clsx';
+import {
+  UserIcon,
+  BellIcon,
+  ShieldIcon,
+  PaletteIcon,
+  BuildingIcon,
+  CreditsIcon,
+} from '../../lib/icon-library';
 import { usePanelStore } from '../../store/panelStore';
 import { useAuthStore } from '../../store/authStore';
 
@@ -19,42 +27,42 @@ const settingItems: SettingMenuItem[] = [
   { 
     id: 'profile', 
     tabType: 'settings-profile',
-    icon: <User size={20} />, 
+    icon: <UserIcon size={20} />, 
     label: 'Perfil', 
     description: 'Gestiona tu información personal' 
   },
   { 
     id: 'accounts', 
     tabType: 'settings-accounts',
-    icon: <Building2 size={20} />, 
+    icon: <BuildingIcon size={20} />, 
     label: 'Cuentas', 
     description: 'Gestiona tus cuentas y colaboradores' 
   },
   { 
     id: 'credits', 
     tabType: 'settings-accounts',
-    icon: <Zap size={20} />, 
+    icon: <CreditsIcon size={20} />, 
     label: 'Créditos', 
     description: 'Administra balances y asignaciones (dev)' 
   },
   { 
     id: 'notifications', 
     tabType: 'settings-notifications',
-    icon: <Bell size={20} />, 
+    icon: <BellIcon size={20} />, 
     label: 'Notificaciones', 
     description: 'Configura las alertas' 
   },
   { 
     id: 'privacy', 
     tabType: 'settings-privacy',
-    icon: <Shield size={20} />, 
+    icon: <ShieldIcon size={20} />, 
     label: 'Privacidad', 
     description: 'Controla quién puede verte' 
   },
   { 
     id: 'appearance', 
     tabType: 'settings-appearance',
-    icon: <Palette size={20} />, 
+    icon: <PaletteIcon size={20} />, 
     label: 'Apariencia', 
     description: 'Personaliza la interfaz' 
   },
@@ -62,10 +70,18 @@ const settingItems: SettingMenuItem[] = [
 
 export function SettingsMenu() {
   const { user } = useAuthStore();
-  const { openTab } = usePanelStore();
+  const { openTab, layout } = usePanelStore((state) => ({ openTab: state.openTab, layout: state.layout }));
 
   const hasCreditsAccess = Boolean(user?.systemAdminScopes?.['*'] || user?.systemAdminScopes?.credits);
   const visibleItems = hasCreditsAccess ? settingItems : settingItems.filter((item) => item.id !== 'credits');
+
+  const settingsContainer = layout.containers.find((container) => container.type === 'settings');
+  const activeSettingsSection = (() => {
+    if (!settingsContainer) return null;
+    const activeTab = settingsContainer.tabs.find((tab) => tab.id === settingsContainer.activeTabId);
+    if (!activeTab || activeTab.type !== 'settings') return null;
+    return typeof activeTab.context?.section === 'string' ? activeTab.context.section : null;
+  })();
 
   const handleOpenSettingsTab = (item: SettingMenuItem) => {
     openTab('settings', {
@@ -73,7 +89,7 @@ export function SettingsMenu() {
       title: item.label,
       closable: true,
       context: {
-        settingsSection: item.id,
+        section: item.id,
       },
     });
   };
@@ -96,19 +112,30 @@ export function SettingsMenu() {
       </div>
 
       {/* Menu items */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto py-2" data-component-name="SettingsMenu">
         {visibleItems.map((item) => (
           <button
             key={item.id}
             onClick={() => handleOpenSettingsTab(item)}
-            className="w-full p-4 flex items-center gap-4 hover:bg-hover transition-colors text-left"
+            className={clsx(
+              'w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg transition-colors duration-150',
+              activeSettingsSection === item.id
+                ? 'bg-active text-primary'
+                : 'text-secondary hover:bg-hover hover:text-primary',
+            )}
           >
-            <div className="text-secondary">{item.icon}</div>
-            <div className="flex-1">
-              <div className="text-primary font-medium">{item.label}</div>
-              <div className="text-sm text-muted">{item.description}</div>
-            </div>
-            <ChevronRight size={20} className="text-muted" />
+            <span
+              className={clsx(
+                activeSettingsSection === item.id ? 'text-accent' : 'text-muted',
+                'flex-shrink-0',
+              )}
+            >
+              {item.icon}
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="text-sm font-medium text-primary block truncate">{item.label}</span>
+              <span className="text-xs text-muted block truncate">{item.description}</span>
+            </span>
           </button>
         ))}
       </div>

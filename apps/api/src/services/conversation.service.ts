@@ -259,68 +259,23 @@ export class ConversationService {
       .where(eq(accounts.ownerUserId, userId));
 
     const userAccountIds = userAccounts.map(a => a.id);
-    const isAccountA = userAccountIds.includes(rel.accountAId);
-    const isAccountB = userAccountIds.includes(rel.accountBId);
+    const isOwner = userAccountIds.includes(rel.accountAId) || userAccountIds.includes(rel.accountBId);
 
-    if (!isAccountA && !isAccountB) {
+    if (!isOwner) {
       throw new Error('Not authorized to delete this conversation');
     }
 
-    // Soft delete: Update clearedAt for the user's account(s)
-    const updates: any = {};
-    if (isAccountA) updates.clearedAtA = new Date();
-    if (isAccountB) updates.clearedAtB = new Date();
-
+    // Delete all messages in the conversation
     await db
-      .update(conversations)
-      .set(updates)
+      .delete(messages)
+      .where(eq(messages.conversationId, conversationId));
+
+    // Delete the conversation
+    await db
+      .delete(conversations)
       .where(eq(conversations.id, conversationId));
 
-    console.log(`[ConversationService] Cleared conversation history ${conversationId} for user ${userId}`);
-  }
-
-  /**
-   * Helper to get the context of a user in a conversation
-   * Returns the accountId of the user in this conversation and their clear history timestamp
-   */
-  async getConversationContextForUser(conversationId: string, userId: string) {
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) return null;
-
-    const [rel] = await db
-      .select()
-      .from(relationships)
-      .where(eq(relationships.id, conversation.relationshipId))
-      .limit(1);
-
-    if (!rel) return null;
-
-    const userAccounts = await db
-      .select()
-      .from(accounts)
-      .where(eq(accounts.ownerUserId, userId));
-
-    const userAccountIds = userAccounts.map(a => a.id);
-
-    let accountId: string | null = null;
-    let clearedAt: Date | null | undefined = null;
-
-    if (userAccountIds.includes(rel.accountAId)) {
-      accountId = rel.accountAId;
-      clearedAt = conversation.clearedAtA;
-    } else if (userAccountIds.includes(rel.accountBId)) {
-      accountId = rel.accountBId;
-      clearedAt = conversation.clearedAtB;
-    }
-
-    if (!accountId) return null;
-
-    return {
-      conversation,
-      relationship: rel,
-      accountId,
-      clearedAt
-    };
+    console.log(`[ConversationService] Deleted conversation ${conversationId} and all messages`);
   }
 }
 

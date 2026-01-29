@@ -107,6 +107,16 @@ export class AuthService {
     };
   }
 
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    const [user] = await db.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId)).limit(1);
+
+    if (!user) {
+      return false;
+    }
+
+    return compare(password, user.passwordHash);
+  }
+
   async checkEmailExists(email: string): Promise<boolean> {
     const [user] = await db
       .select({ id: users.id })
