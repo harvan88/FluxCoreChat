@@ -62,6 +62,8 @@ export {
 
   X as XIcon,
 
+  HardDrive as HardDriveIcon,
+
 } from 'lucide-react';
 
 

@@ -588,6 +588,149 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ASSET MANAGEMENT (Chat Core)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  async createAssetUploadSession(params: {
+    accountId: string;
+    fileName: string;
+    mimeType: string;
+    totalBytes: number;
+    maxSizeBytes?: number;
+    allowedMimeTypes?: string[];
+  }): Promise<ApiResponse<{
+    sessionId: string;
+    expiresAt: string;
+    maxSizeBytes: number;
+    allowedMimeTypes: string[];
+  }>> {
+    return this.request(`/api/assets/upload-session?accountId=${params.accountId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: params.fileName,
+        mimeType: params.mimeType,
+        totalBytes: params.totalBytes,
+        maxSizeBytes: params.maxSizeBytes,
+        allowedMimeTypes: params.allowedMimeTypes,
+      }),
+    });
+  }
+
+  async commitAssetUpload(sessionId: string, accountId: string): Promise<ApiResponse<{
+    assetId: string;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    status: string;
+  }>> {
+    return this.request(`/api/assets/upload/${sessionId}/commit?accountId=${accountId}`, {
+      method: 'POST',
+    });
+  }
+
+  async cancelAssetUpload(sessionId: string, accountId: string): Promise<ApiResponse<void>> {
+    return this.request(`/api/assets/upload/${sessionId}/cancel?accountId=${accountId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getAsset(assetId: string, accountId: string): Promise<ApiResponse<{
+    id: string;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    status: string;
+    scope: string;
+    version: number;
+    createdAt: string;
+  }>> {
+    return this.request(`/api/assets/${assetId}?accountId=${accountId}`);
+  }
+
+  async signAssetUrl(assetId: string, accountId: string, context?: string): Promise<ApiResponse<{
+    url: string;
+    expiresAt: string;
+  }>> {
+    return this.request(`/api/assets/${assetId}/sign?accountId=${accountId}`, {
+      method: 'POST',
+      body: JSON.stringify({ context: context || 'download:web' }),
+    });
+  }
+
+  async searchAssets(params: {
+    accountId: string;
+    scope?: string;
+    status?: string;
+    mimeType?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<{
+    assets: Array<{
+      id: string;
+      name: string;
+      mimeType: string;
+      sizeBytes: number;
+      status: string;
+      scope: string;
+      createdAt: string;
+    }>;
+    total: number;
+  }>> {
+    return this.request(`/api/assets/search?accountId=${params.accountId}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        scope: params.scope,
+        status: params.status,
+        mimeType: params.mimeType,
+        search: params.search,
+        limit: params.limit,
+        offset: params.offset,
+      }),
+    });
+  }
+
+  async deleteAsset(assetId: string, accountId: string): Promise<ApiResponse<void>> {
+    return this.request(`/api/assets/${assetId}?accountId=${accountId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getAssetVersions(assetId: string, accountId: string): Promise<ApiResponse<Array<{
+    version: number;
+    sizeBytes: number;
+    createdAt: string;
+  }>>> {
+    return this.request(`/api/assets/${assetId}/versions?accountId=${accountId}`);
+  }
+
+  // Asset Relations
+  async linkAssetToMessage(messageId: string, assetId: string, accountId: string, position?: number): Promise<ApiResponse<void>> {
+    return this.request(`/api/messages/${messageId}/assets?accountId=${accountId}`, {
+      method: 'POST',
+      body: JSON.stringify({ assetId, position }),
+    });
+  }
+
+  async getMessageAssets(messageId: string): Promise<ApiResponse<Array<{
+    assetId: string;
+    version: number;
+    position: number;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    status: string;
+  }>>> {
+    return this.request(`/api/messages/${messageId}/assets`);
+  }
+
+  async unlinkAssetFromMessage(messageId: string, assetId: string, accountId: string): Promise<ApiResponse<void>> {
+    return this.request(`/api/messages/${messageId}/assets/${assetId}?accountId=${accountId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new ApiService();

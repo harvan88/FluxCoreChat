@@ -56,3 +56,12 @@ export * from './fluxcore-billing';
 
 // RAG-021: Archivos Centralizados
 export * from './fluxcore-files';
+
+// AM-100: Sistema de Gestión de Assets
+export * from './assets';
+export * from './asset-upload-sessions';
+export * from './asset-policies';
+export * from './asset-audit-logs';
+export * from './message-assets';
+export * from './template-assets';
+export * from './plan-assets';

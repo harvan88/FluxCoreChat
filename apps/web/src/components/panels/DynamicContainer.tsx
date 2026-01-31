@@ -29,6 +29,7 @@ import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
 import { MonitoringHub } from '../monitor/MonitoringHub';
 import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
+import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
 
 interface DynamicContainerProps {
   container: DynamicContainerType;
@@ -470,6 +471,9 @@ function TabContent({ tab, containerId }: TabContentProps) {
       const view = typeof tab.context?.view === 'string' ? tab.context.view : 'hub';
       if (view === 'audit') {
         return <AccountDataAuditPanel />;
+      }
+      if (view === 'assets') {
+        return <AssetMonitoringPanel />;
       }
       return <MonitoringHub />;
     }
