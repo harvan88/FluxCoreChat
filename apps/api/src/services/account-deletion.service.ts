@@ -1,4 +1,5 @@
-import { db, accountDeletionJobs } from '@fluxcore/db';
+import { randomUUID } from 'crypto';
+import { db, accountDeletionJobs, type AccountDeletionJob } from '@fluxcore/db';
 import { and, eq, inArray, desc } from 'drizzle-orm';
 import { accountDeletionGuard } from './account-deletion.guard';
 import { broadcastSystemEvent } from '../websocket/system-events';
@@ -9,9 +10,11 @@ import type { AccountDeletionAuthMode, AccountDeletionAuthResult } from '../midd
 
 const ACTIVE_JOB_STATUSES = ['pending', 'snapshot', 'snapshot_ready', 'external_cleanup', 'local_cleanup'] as const;
 const SNAPSHOT_PHASES = ['snapshot', 'snapshot_ready'] as const;
+const CONFIRMABLE_STATUSES = ['pending', 'snapshot', 'snapshot_ready'] as const;
 
 type ActiveJobStatus = (typeof ACTIVE_JOB_STATUSES)[number];
 type SnapshotPhase = (typeof SNAPSHOT_PHASES)[number];
+type AccountDeletionJobStatus = (typeof CONFIRMABLE_STATUSES)[number];
 
 type DeletionDataHandling = 'download_snapshot' | 'delete_all';
 
@@ -25,6 +28,14 @@ interface DeletionContext {
   auth: AccountDeletionAuthResult;
   preferences?: DeletionPreferences;
 }
+
+interface SnapshotDownloadMetadata {
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+const SNAPSHOT_DOWNLOAD_TOKEN_TTL_MS = 1000 * 60 * 60 * 48; // 48h
 
 interface SnapshotAckPayload {
   downloaded?: boolean;
@@ -116,30 +127,24 @@ class AccountDeletionService {
     await this.ensureRequester(job, requesterUserId, auth.mode);
 
     const dataHandling = (job.metadata as any)?.dataHandling ?? DEFAULT_DATA_HANDLING;
-    const skipSnapshot = dataHandling === 'delete_all';
+    const requiresSnapshot = dataHandling !== 'delete_all';
+    const allowedStatuses: AccountDeletionJobStatus[] = ['pending', 'snapshot', 'snapshot_ready'];
 
-    if (!skipSnapshot) {
-      if (!job.snapshotAcknowledgedAt) {
-        const error = new Error('Snapshot acknowledgement required before confirmation');
-        (error as any).code = 'ACCOUNT_DELETION_CONSENT_REQUIRED';
-        throw error;
-      }
-
-      if (!job.snapshotDownloadedAt) {
-        const error = new Error('Snapshot download required before confirmation');
-        (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_REQUIRED';
-        throw error;
-      }
-
-      if (job.status !== 'snapshot_ready') {
-        throw new Error('Snapshot must be ready before confirmation');
-      }
-    } else {
-      const allowedStatuses: AccountDeletionJobStatus[] = ['pending', 'snapshot', 'snapshot_ready'];
-      if (!allowedStatuses.includes(job.status as AccountDeletionJobStatus)) {
-        throw new Error('Deletion job not in a confirmable state');
-      }
+    if (!allowedStatuses.includes(job.status as AccountDeletionJobStatus)) {
+      throw new Error('Deletion job not in a confirmable state');
     }
+
+    const metadata = job.metadata ? { ...(job.metadata as Record<string, any>) } : {};
+
+    if (requiresSnapshot && !this.snapshotExists(job)) {
+      metadata.snapshotGeneration = {
+        ...(metadata.snapshotGeneration || {}),
+        pending: true,
+        requestedAt: new Date().toISOString(),
+      };
+    }
+
+    const snapshotDownloadToken = requiresSnapshot ? this.createSnapshotDownloadTokenMetadata() : undefined;
 
     const [updated] = await db
       .update(accountDeletionJobs)
@@ -147,14 +152,15 @@ class AccountDeletionService {
         status: 'external_cleanup',
         phase: 'external_cleanup',
         metadata: {
-          ...job.metadata,
+          ...metadata,
           confirmedAt: new Date().toISOString(),
           consent: {
             acknowledgedAt: job.snapshotAcknowledgedAt?.toISOString?.() ?? job.snapshotAcknowledgedAt,
             downloadedAt: job.snapshotDownloadedAt?.toISOString?.() ?? job.snapshotDownloadedAt,
             dataHandling,
-            skippedSnapshot: skipSnapshot || undefined,
+            skippedSnapshot: requiresSnapshot ? undefined : true,
           },
+          ...(snapshotDownloadToken ? { snapshotDownloadToken } : {}),
         },
       })
       .where(eq(accountDeletionJobs.id, job.id))
@@ -272,6 +278,88 @@ class AccountDeletionService {
     return job ?? null;
   }
 
+  async getJobById(jobId: string) {
+    const [job] = await db
+      .select()
+      .from(accountDeletionJobs)
+      .where(eq(accountDeletionJobs.id, jobId))
+      .limit(1);
+
+    return job ?? null;
+  }
+
+  async getSnapshotDownloadStatusByToken(jobId: string, token: string) {
+    const job = await this.getJobById(jobId);
+    if (!job) {
+      const error = new Error('Deletion job not found');
+      (error as any).code = 'ACCOUNT_DELETION_JOB_NOT_FOUND';
+      throw error;
+    }
+
+    const tokenMetadata = this.ensureValidSnapshotDownloadToken(job, token);
+    const snapshotPath = (job.metadata as any)?.snapshotPath as string | undefined;
+
+    return {
+      jobId: job.id,
+      accountId: job.accountId,
+      status: job.status,
+      phase: job.phase,
+      snapshotReadyAt: job.snapshotReadyAt,
+      downloadAvailable: Boolean(snapshotPath),
+      expiresAt: tokenMetadata.expiresAt,
+      completedAt: job.status === 'completed' ? job.updatedAt : null,
+    };
+  }
+
+  async getSnapshotArtifactByToken(jobId: string, token: string) {
+    const job = await this.getJobById(jobId);
+    if (!job) {
+      const error = new Error('Deletion job not found');
+      (error as any).code = 'ACCOUNT_DELETION_JOB_NOT_FOUND';
+      throw error;
+    }
+
+    this.ensureValidSnapshotDownloadToken(job, token);
+
+    const snapshotPath = (job.metadata as any)?.snapshotPath as string | undefined;
+    if (!snapshotPath) {
+      const error = new Error('Snapshot artifact not available for download');
+      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_MISSING';
+      throw error;
+    }
+
+    return { job, snapshotPath };
+  }
+
+  async markSnapshotDownloaded(job: AccountDeletionJob, userAgent?: string) {
+    const now = new Date();
+    const acknowledgements = Array.isArray((job.metadata as any)?.snapshotAcknowledgements)
+      ? ([...(job.metadata as any).snapshotAcknowledgements] as any[])
+      : [];
+
+    acknowledgements.push({ type: 'download', at: now.toISOString(), userAgent });
+
+    const [updated] = await db
+      .update(accountDeletionJobs)
+      .set({
+        snapshotDownloadedAt: job.snapshotDownloadedAt ?? now,
+        snapshotDownloadCount: (job.snapshotDownloadCount ?? 0) + 1,
+        metadata: {
+          ...job.metadata,
+          snapshotAcknowledgements: acknowledgements,
+          snapshotDownloadToken: {
+            ...(job.metadata as any)?.snapshotDownloadToken,
+            lastDownloadedAt: now.toISOString(),
+          },
+        },
+        updatedAt: now,
+      })
+      .where(eq(accountDeletionJobs.id, job.id))
+      .returning();
+
+    return updated;
+  }
+
   private async getActiveJob(accountId: string) {
     const [existingJob] = await db
       .select()
@@ -299,6 +387,45 @@ class AccountDeletionService {
     const error = new Error('Not authorized to manage this deletion job');
     (error as any).code = 'ACCOUNT_DELETION_UNAUTHORIZED';
     throw error;
+  }
+
+  private createSnapshotDownloadTokenMetadata(): SnapshotDownloadMetadata {
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + SNAPSHOT_DOWNLOAD_TOKEN_TTL_MS);
+    return {
+      token: randomUUID(),
+      createdAt: createdAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  private getSnapshotDownloadTokenMetadata(job: AccountDeletionJob): SnapshotDownloadMetadata | undefined {
+    const metadata = job.metadata as Record<string, any>;
+    const tokenMetadata = metadata.snapshotDownloadToken as SnapshotDownloadMetadata | undefined;
+    return tokenMetadata;
+  }
+
+  private ensureValidSnapshotDownloadToken(job: AccountDeletionJob, token: string): SnapshotDownloadMetadata {
+    const metadata = this.getSnapshotDownloadTokenMetadata(job);
+    if (!metadata || metadata.token !== token) {
+      const error = new Error('Invalid snapshot download token');
+      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_TOKEN_INVALID';
+      throw error;
+    }
+
+    const expiresAt = new Date(metadata.expiresAt);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+      const error = new Error('Snapshot download token expired');
+      (error as any).code = 'ACCOUNT_DELETION_SNAPSHOT_TOKEN_EXPIRED';
+      throw error;
+    }
+
+    return metadata;
+  }
+
+  private snapshotExists(job: AccountDeletionJob) {
+    const metadata = job.metadata as Record<string, any>;
+    return Boolean(job.snapshotReadyAt || metadata?.snapshotPath);
   }
 }
 

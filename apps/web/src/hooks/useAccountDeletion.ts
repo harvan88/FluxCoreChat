@@ -36,6 +36,12 @@ const pickFallbackAccountId = (accounts: Account[]): string | null => {
   return personal?.id ?? accounts[0].id;
 };
 
+const buildSnapshotPortalPath = (job: AccountDeletionJob | null) => {
+  const token = (job?.metadata as any)?.snapshotDownloadToken?.token;
+  if (!job || !token) return null;
+  return `/account-deletions/${job.id}?token=${encodeURIComponent(token)}`;
+};
+
 interface UseAccountDeletionOptions {
   accountId?: string;
   sessionAccountId?: string;
@@ -44,6 +50,10 @@ interface UseAccountDeletionOptions {
 
 export interface UseAccountDeletionResult {
   job: AccountDeletionJob | null;
+  snapshotDownloadUrl: string | null;
+  snapshotPortalUrl: string | null;
+  snapshotPortalPath: string | null;
+  snapshotTokenExpiresAt: Date | null;
   isRequesting: boolean;
   isGeneratingSnapshot: boolean;
   isConfirming: boolean;
@@ -108,6 +118,30 @@ export function useAccountDeletion({ accountId, sessionAccountId, accountName }:
   const clearDebugLogs = useCallback(() => {
     clearMonitorLogs(accountId);
   }, [accountId, clearMonitorLogs]);
+
+  const jobSnapshotToken = job && (job.metadata as any)?.snapshotDownloadToken;
+  const snapshotDownloadUrl = useMemo(() => {
+    if (!job || !jobSnapshotToken?.token) return null;
+    if (typeof window === 'undefined') return null;
+    const baseUrl = new URL(`/account-deletions/${job.id}/download`, window.location.origin);
+    baseUrl.searchParams.set('token', jobSnapshotToken.token);
+    return baseUrl.toString();
+  }, [job, jobSnapshotToken]);
+
+  const snapshotPortalPath = useMemo(() => buildSnapshotPortalPath(job), [job]);
+
+  const snapshotPortalUrl = useMemo(() => {
+    if (!snapshotPortalPath) return null;
+    if (typeof window === 'undefined') return snapshotPortalPath;
+    return `${window.location.origin}${snapshotPortalPath}`;
+  }, [snapshotPortalPath]);
+
+  const snapshotTokenExpiresAt = useMemo(() => {
+    if (!jobSnapshotToken?.expiresAt) return null;
+    const timestamp = new Date(jobSnapshotToken.expiresAt);
+    if (Number.isNaN(timestamp.getTime())) return null;
+    return timestamp;
+  }, [jobSnapshotToken]);
 
   const syncAccountsAfterDeletion = useCallback(
     async (removedAccountId: string) => {
@@ -321,6 +355,8 @@ export function useAccountDeletion({ accountId, sessionAccountId, accountName }:
       setJob(response.data);
       setIsBackgroundProcessing(true);
       setError(null);
+      const portalPath = buildSnapshotPortalPath(response.data);
+      const portalUrl = portalPath && typeof window !== 'undefined' ? `${window.location.origin}${portalPath}` : null;
       pushDebugLog({
         type: 'success',
         message: `Eliminación confirmada (${formatDuration(now() - start)})`,
@@ -332,6 +368,11 @@ export function useAccountDeletion({ accountId, sessionAccountId, accountName }:
         title: 'Procesando eliminación',
         description: 'Estamos eliminando tus datos en segundo plano. Puedes continuar usando FluxCore.',
       });
+      if (portalUrl) {
+        setTimeout(() => {
+          window.location.href = portalUrl;
+        }, 0);
+      }
       await syncAccountsAfterDeletion(accountId);
     } catch (err: any) {
       setError(err?.message || 'Error al confirmar eliminación');
@@ -439,6 +480,10 @@ export function useAccountDeletion({ accountId, sessionAccountId, accountName }:
 
   return {
     job,
+    snapshotDownloadUrl,
+    snapshotPortalUrl,
+    snapshotPortalPath,
+    snapshotTokenExpiresAt,
     error,
     isLoadingJob,
     isRequesting,

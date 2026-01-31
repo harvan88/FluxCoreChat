@@ -88,12 +88,22 @@ class AccountDeletionWorker {
     await accountDeletionExternalService.run(job);
 
     const refreshedJob = await this.getJobById(job.id);
+    if (!refreshedJob) {
+      return null;
+    }
+
+    if (this.requiresSnapshot(refreshedJob) && !this.snapshotReady(refreshedJob)) {
+      console.log('[AccountDeletionWorker] Snapshot still pending for job', job.id, '- keeping external_cleanup');
+      await this.log(job.accountId, job.id, 'external_cleanup', 'Snapshot generation pending, retrying');
+      return refreshedJob;
+    }
+
     const metadata = {
-      ...((refreshedJob?.metadata ?? job.metadata) || {}),
+      ...((refreshedJob.metadata ?? job.metadata) || {}),
       externalCleanupStartedAt: startedAt,
       externalCleanupFinishedAt: new Date().toISOString(),
     };
-    const externalState = (refreshedJob?.externalState ?? job.externalState) || {};
+    const externalState = (refreshedJob.externalState ?? job.externalState) || {};
 
     const [updated] = await db
       .update(accountDeletionJobs)
@@ -115,6 +125,11 @@ class AccountDeletionWorker {
 
   private async processLocalCleanup(job: DeletionJob) {
     const startedAt = job.metadata?.localCleanupStartedAt ?? new Date().toISOString();
+    if (this.requiresSnapshot(job) && !this.snapshotReady(job)) {
+      console.log('[AccountDeletionWorker] Blocking local cleanup, snapshot still pending for job', job.id);
+      await this.log(job.accountId, job.id, 'local_cleanup', 'Waiting for snapshot before purge');
+      return;
+    }
 
     const summary = await accountPurgeService.purgeAccountData(job.accountId);
 
@@ -183,6 +198,16 @@ class AccountDeletionWorker {
       details,
       createdAt: new Date(),
     });
+  }
+
+  private requiresSnapshot(job: DeletionJob) {
+    const metadata = (job.metadata ?? {}) as Record<string, unknown>;
+    return (metadata?.dataHandling as string | undefined) !== 'delete_all';
+  }
+
+  private snapshotReady(job: DeletionJob) {
+    const metadata = (job.metadata ?? {}) as Record<string, any>;
+    return Boolean(job.snapshotReadyAt || metadata?.snapshotPath);
   }
 
   private async getJobById(jobId: string): Promise<DeletionJob | null> {

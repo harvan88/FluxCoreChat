@@ -16,6 +16,7 @@ import {
   removeFileFromOpenAIVectorStore,
   deleteOpenAIFile,
 } from './openai-sync.service';
+import { accountDeletionSnapshotService } from './account-deletion.snapshot.service';
 
 type CleanupPhase = 'assistants' | 'files' | 'vectorStores';
 type PhaseStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
@@ -139,6 +140,10 @@ export class AccountDeletionExternalService {
     const state = ensureState(job.externalState as Record<string, unknown> | undefined);
     const metadata = { ...(job.metadata || {}) } as Record<string, unknown>;
 
+    if (this.requiresSnapshot(metadata) && !this.snapshotExists(job)) {
+      await this.generateSnapshot(job, metadata);
+    }
+
     if (!state.externalJobId) {
       const token = generateDeletionToken(job);
       state.externalJobId = `local:${job.id}`;
@@ -157,6 +162,42 @@ export class AccountDeletionExternalService {
     await this.processVectorStores(job, state, metadata);
 
     return this.persistState(job.id, state, metadata);
+  }
+
+  private requiresSnapshot(metadata: Record<string, unknown>) {
+    return (metadata?.dataHandling as string | undefined) !== 'delete_all';
+  }
+
+  private snapshotExists(job: AccountDeletionJob) {
+    const metadata = job.metadata as Record<string, any> | undefined;
+    return Boolean(job.snapshotReadyAt || metadata?.snapshotPath);
+  }
+
+  private async generateSnapshot(job: AccountDeletionJob, metadata: Record<string, unknown>) {
+    const snapshot = await accountDeletionSnapshotService.generate(job.accountId, job.id);
+
+    metadata.snapshotGeneratedAt = snapshot.generatedAt;
+    metadata.snapshotSizeBytes = snapshot.sizeBytes;
+    metadata.snapshotPath = snapshot.path;
+    metadata.snapshotGeneration = {
+      ...(metadata.snapshotGeneration as Record<string, unknown> | undefined),
+      pending: false,
+      completedAt: snapshot.generatedAt,
+    };
+
+    await db
+      .update(accountDeletionJobs)
+      .set({
+        snapshotUrl: snapshot.url,
+        snapshotReadyAt: new Date(snapshot.generatedAt),
+        metadata,
+        updatedAt: new Date(),
+      })
+      .where(eq(accountDeletionJobs.id, job.id));
+
+    job.snapshotUrl = snapshot.url;
+    job.snapshotReadyAt = new Date(snapshot.generatedAt) as any;
+    job.metadata = metadata;
   }
 
   private async processAssistants(

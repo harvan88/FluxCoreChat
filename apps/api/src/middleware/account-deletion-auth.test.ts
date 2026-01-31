@@ -31,7 +31,11 @@ describe('ensureAccountDeletionAuth', () => {
       buildDeps()
     );
 
-    expect(result).toEqual({ mode: 'owner' });
+    expect(result).toEqual({
+      mode: 'owner',
+      targetAccountId: 'target-account',
+      sessionAccountId: 'target-account',
+    });
   });
 
   it('rejects owner deletion if session is missing', async () => {
@@ -57,7 +61,11 @@ describe('ensureAccountDeletionAuth', () => {
       buildDeps({ hasForceScope: true })
     );
 
-    expect(result).toEqual({ mode: 'force' });
+    expect(result).toEqual({
+      mode: 'force',
+      targetAccountId: 'target-account',
+      sessionAccountId: null,
+    });
   });
 
   it('rejects non-owner without force scope', async () => {

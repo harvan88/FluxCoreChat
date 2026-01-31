@@ -231,10 +231,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
                       });
                   }
 
-                  useUIStore.getState().completeAccountDeletionBanner({
-                    accountId: deletedAccountId,
-                    status: 'completed',
-                  });
                   useUIStore.getState().pushToast({
                     type: 'success',
                     title: 'Cuenta eliminada',

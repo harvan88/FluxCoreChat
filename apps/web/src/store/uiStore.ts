@@ -9,17 +9,6 @@ import { api } from '../services/api';
 
 import type { ActivityType, Account, Conversation } from '../types';
 
-type AccountDeletionBannerStatus = 'processing' | 'completed' | 'failed';
-
-interface AccountDeletionBannerState {
-  accountId: string;
-  accountName?: string | null;
-  status: AccountDeletionBannerStatus;
-  message?: string;
-  startedAt: string;
-  completedAt?: string;
-}
-
 type ToastType = 'info' | 'success' | 'error';
 
 interface ToastItem {
@@ -51,9 +40,6 @@ interface UIStore {
   // Data cache
   accounts: Account[];
   conversations: Conversation[];
-
-  // Account deletion UX
-  accountDeletionBanner?: AccountDeletionBannerState;
 
   // Toasts
   toasts: ToastItem[];
@@ -88,11 +74,6 @@ interface UIStore {
   // Account-specific data reset
   resetAccountData: () => void;
 
-  // Account deletion UX
-  startAccountDeletionBanner: (payload: { accountId: string; accountName?: string | null }) => void;
-  completeAccountDeletionBanner: (payload: { accountId: string; status: Exclude<AccountDeletionBannerStatus, 'processing'>; reason?: string }) => void;
-  clearAccountDeletionBanner: () => void;
-
   // Toasts
   pushToast: (toast: Omit<ToastItem, 'id'> & { id?: string }) => string;
   removeToast: (id: string) => void;
@@ -115,7 +96,6 @@ export const useUIStore = create<UIStore>()(
       activeConversationId: null,
       accounts: [],
       conversations: [],
-      accountDeletionBanner: undefined,
       toasts: [],
 
       // ActivityBar Actions
@@ -212,36 +192,6 @@ export const useUIStore = create<UIStore>()(
           // Mantener selectedAccountId ya que se actualiza externamente
         });
       },
-
-      startAccountDeletionBanner: ({ accountId, accountName }) => {
-        set({
-          accountDeletionBanner: {
-            accountId,
-            accountName,
-            status: 'processing',
-            startedAt: new Date().toISOString(),
-          },
-        });
-      },
-
-      completeAccountDeletionBanner: ({ accountId, status, reason }) => {
-        set((state) => {
-          const current = state.accountDeletionBanner;
-          if (!current || current.accountId !== accountId) {
-            return {};
-          }
-          return {
-            accountDeletionBanner: {
-              ...current,
-              status,
-              message: reason ?? current.message,
-              completedAt: new Date().toISOString(),
-            },
-          };
-        });
-      },
-
-      clearAccountDeletionBanner: () => set({ accountDeletionBanner: undefined }),
 
       pushToast: ({ id, durationMs = 5000, ...toast }) => {
         const toastId = id ?? createToastId();

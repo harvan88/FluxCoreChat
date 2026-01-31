@@ -19,9 +19,7 @@ export type ProtectedAccount = typeof protectedAccounts.$inferSelect;
 
 export const accountDeletionJobs = pgTable('account_deletion_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  accountId: uuid('account_id')
-    .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull(),
   requesterUserId: uuid('requester_user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
@@ -46,11 +44,8 @@ export type NewAccountDeletionJob = typeof accountDeletionJobs.$inferInsert;
 
 export const accountDeletionLogs = pgTable('account_deletion_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  jobId: uuid('job_id')
-    .references(() => accountDeletionJobs.id, { onDelete: 'cascade' }),
-  accountId: uuid('account_id')
-    .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
+  jobId: uuid('job_id').notNull(),
+  accountId: uuid('account_id').notNull(),
   requesterUserId: uuid('requester_user_id').references(() => users.id, { onDelete: 'set null' }),
   requesterAccountId: uuid('requester_account_id').references(() => accounts.id, { onDelete: 'set null' }),
   status: varchar('status', { length: 50 }).notNull(),

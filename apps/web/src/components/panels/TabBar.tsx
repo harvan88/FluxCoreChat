@@ -233,11 +233,11 @@ function TabItem({
       data-identity={tab.identity}
       data-active={isActive}
       className={clsx(
-        'group flex items-center gap-2 px-3 py-1.5 min-w-0 max-w-[180px]',
+        'group relative flex items-center gap-2 px-3 py-1.5 min-w-0 max-w-[180px]',
         'border-r border-subtle cursor-pointer select-none',
         'transition-all duration-200',
         isActive
-          ? 'bg-surface text-primary border-b-2 border-b-[var(--accent-primary)]'
+          ? 'bg-surface text-primary border-b-2 border-b-[var(--accent-primary)] after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-[var(--accent-primary)] after:opacity-70 after:content-[""]'
           : 'text-secondary hover:text-primary hover:bg-hover',
         isDragging && 'opacity-50'
       )}
