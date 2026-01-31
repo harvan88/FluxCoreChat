@@ -4,6 +4,7 @@ import {
   ExternalLinkIcon,
   DatabaseIcon,
   AlertTriangleIcon,
+  HardDriveIcon,
 } from '../../lib/icon-library';
 import { usePanelStore } from '../../store/panelStore';
 import { useAccountDeletionMonitorStore } from '../../store/accountDeletionMonitorStore';
@@ -69,6 +70,14 @@ export function MonitoringSidebar() {
     title: 'Orphan Explorer',
     description: 'Detecta tablas con cuentas inexistentes.',
     onClick: () => openMonitoringTab('monitoring-orphans', 'orphans', 'Orphan Explorer', 'AlertTriangle'),
+  },
+  {
+    id: 'monitoring-assets',
+    identity: 'monitoring-assets',
+    icon: <HardDriveIcon size={18} />,
+    title: 'Asset Monitoring',
+    description: 'Logs de uploads, descargas y políticas de assets.',
+    onClick: () => openMonitoringTab('monitoring-assets', 'assets' as any, 'Asset Monitoring', 'HardDrive'),
   },
 ];
 

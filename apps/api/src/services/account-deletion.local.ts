@@ -34,6 +34,14 @@ import {
   systemAdmins,
   websiteConfigs,
   workspaces,
+  // Asset Management (Chat Core)
+  assets,
+  assetUploadSessions,
+  assetPolicies,
+  assetAuditLogs,
+  messageAssets,
+  templateAssets,
+  planAssets,
 } from '@fluxcore/db';
 import { and, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 
@@ -221,6 +229,39 @@ export class AccountPurgeService {
         .delete(creditsConversationSessions)
         .where(eq(creditsConversationSessions.accountId, accountId))
         .returning({ id: creditsConversationSessions.id }),
+    );
+
+    // Asset Management (Chat Core) - delete relations first, then assets
+    const accountAssetIds = (
+      await tx
+        .select({ id: assets.id })
+        .from(assets)
+        .where(eq(assets.accountId, accountId))
+    ).map((row) => row.id);
+
+    if (accountAssetIds.length > 0) {
+      await deleteAndCount('messageAssets', () =>
+        tx.delete(messageAssets).where(inArray(messageAssets.assetId, accountAssetIds)).returning({ assetId: messageAssets.assetId }),
+      );
+      await deleteAndCount('templateAssets', () =>
+        tx.delete(templateAssets).where(inArray(templateAssets.assetId, accountAssetIds)).returning({ assetId: templateAssets.assetId }),
+      );
+      await deleteAndCount('planAssets', () =>
+        tx.delete(planAssets).where(inArray(planAssets.assetId, accountAssetIds)).returning({ assetId: planAssets.assetId }),
+      );
+    }
+
+    await deleteAndCount('assetAuditLogs', () =>
+      tx.delete(assetAuditLogs).where(eq(assetAuditLogs.accountId, accountId)).returning({ id: assetAuditLogs.id }),
+    );
+    await deleteAndCount('assetPolicies', () =>
+      tx.delete(assetPolicies).where(eq(assetPolicies.accountId, accountId)).returning({ id: assetPolicies.id }),
+    );
+    await deleteAndCount('assetUploadSessions', () =>
+      tx.delete(assetUploadSessions).where(eq(assetUploadSessions.accountId, accountId)).returning({ id: assetUploadSessions.id }),
+    );
+    await deleteAndCount('assets', () =>
+      tx.delete(assets).where(eq(assets.accountId, accountId)).returning({ id: assets.id }),
     );
 
     // Conversations / relationships

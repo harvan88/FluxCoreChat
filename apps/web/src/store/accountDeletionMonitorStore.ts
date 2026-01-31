@@ -94,7 +94,7 @@ const mergeBackendLogs = (
   return merged;
 };
 
-export const useAccountDeletionMonitorStore = create<AccountDeletionMonitorState>((set, get) => ({
+export const useAccountDeletionMonitorStore = create<AccountDeletionMonitorState>((set, _get) => ({
   logs: [],
   isFetchingLogs: false,
   fetchError: null,
