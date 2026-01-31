@@ -23,6 +23,7 @@ export type TabContextType =
   | 'extension'       // Extensión específica
   | 'editor'          // Editor específico
   | 'openai-assistant-editor' // Editor dedicado para asistentes OpenAI
+  | 'template-editor' // Editor de plantillas
   | 'monitoring'
   | 'custom';         // Custom
 

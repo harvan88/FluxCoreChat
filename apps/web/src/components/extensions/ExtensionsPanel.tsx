@@ -11,6 +11,7 @@ import { ExtensionCard } from './ExtensionCard';
 import { useExtensions } from '../../hooks/useExtensions';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
+import { Switch } from '../ui/Switch';
 
 type TabType = 'all' | 'installed' | 'available';
 
@@ -55,22 +56,11 @@ function ExtensionSidebarItem({
             <Settings size={14} />
           </button>
         )}
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle(!isEnabled);
-          }}
-          className={clsx(
-            "w-8 h-4 rounded-full relative cursor-pointer transition-colors",
-            isEnabled ? "bg-accent" : "bg-subtle"
-          )}
-          title={isEnabled ? "Desactivar" : "Activar"}
-        >
-          <div className={clsx(
-            "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all shadow-sm",
-            isEnabled ? "left-4.5" : "left-0.5"
-          )} />
-        </div>
+        <Switch
+          checked={isEnabled}
+          onCheckedChange={(checked) => onToggle(checked)}
+          size="sm"
+        />
       </div>
     </div>
   );
