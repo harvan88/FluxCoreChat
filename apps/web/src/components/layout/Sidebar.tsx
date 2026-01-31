@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState, type ComponentType } from 'react';
-import { Lock, LockOpen } from 'lucide-react';
+import { Lock, LockOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { usePanelStore } from '../../store/panelStore';
@@ -39,6 +39,7 @@ export function Sidebar() {
     sidebarPinned,
     selectedAccountId,
     toggleSidebarPinned,
+    toggleSidebar,
     isMobile,
   } = useUIStore();
 
@@ -242,6 +243,17 @@ export function Sidebar() {
 
         {/* Controls */}
         <div className="flex items-center gap-1">
+          {/* Collapse toggle */}
+          <button
+            onClick={toggleSidebar}
+            className={clsx(
+              'w-8 h-8 flex items-center justify-center rounded-lg transition-colors',
+              'text-secondary hover:text-primary hover:bg-hover'
+            )}
+            title={sidebarOpen ? 'Colapsar sidebar' : 'Expandir sidebar'}
+          >
+            {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+          </button>
           {/* Pin/Lock toggle */}
           <button
             onClick={toggleSidebarPinned}

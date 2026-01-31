@@ -35,6 +35,7 @@ import {
   FileTextIcon,
   BotIcon,
   MonitoringIcon,
+  FluxCoreIcon,
 } from '../../lib/icon-library';
 
 import type { ActivityType } from '../../types';
@@ -150,7 +151,7 @@ export function ActivityBar() {
       const iconKey = inst.manifest?.ui?.sidebar?.icon || 'puzzle';
       const isFluxCoreExtension = inst.extensionId === '@fluxcore/fluxcore' || inst.extensionId === 'fluxcore';
       const iconNode = isFluxCoreExtension
-        ? <BotIcon size={22} />
+        ? <FluxCoreIcon size={22} />
         : iconMap[iconKey] || <ExtensionsIcon size={22} />;
 
       return {

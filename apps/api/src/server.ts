@@ -29,6 +29,7 @@ import { creditsRoutes } from './routes/credits.routes';
 import { internalCreditsRoutes } from './routes/internal-credits.routes';
 import { systemAdminRoutes } from './routes/system-admin.routes';
 import { accountDeletionAdminRoutes } from './routes/account-deletion.admin.routes';
+import { accountDeletionPublicRoutes } from './routes/account-deletion.public.routes';
 import { uploadRoutes } from './routes/upload.routes';
 import { websiteRoutes } from './routes/website.routes';
 import { fluxcoreRoutes } from './routes/fluxcore.routes';
@@ -196,6 +197,7 @@ const elysiaApp = new Elysia()
   .use(creditsRoutes)
   .use(internalCreditsRoutes)
   .use(accountDeletionAdminRoutes)
+  .use(accountDeletionPublicRoutes)
   .use(systemAdminRoutes)
   .use(uploadRoutes)
   .use(websiteRoutes)

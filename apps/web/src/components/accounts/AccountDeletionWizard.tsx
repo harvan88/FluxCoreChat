@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Download, Loader2, Shield, CheckCircle2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle, Download, Loader2, Shield, CheckCircle2, Link, Copy } from 'lucide-react';
 import { Button, Card, Checkbox, DoubleConfirmationDeleteButton } from '../ui';
 import { useAccountDeletion } from '../../hooks/useAccountDeletion';
+import { useUIStore } from '../../store/uiStore';
 
 interface AccountDeletionWizardProps {
   accountId?: string;
@@ -12,6 +14,10 @@ interface AccountDeletionWizardProps {
 export function AccountDeletionWizard({ accountId, sessionAccountId, accountName }: AccountDeletionWizardProps) {
   const {
     job,
+    snapshotDownloadUrl,
+    snapshotPortalUrl,
+    snapshotPortalPath,
+    snapshotTokenExpiresAt,
     error,
     isLoadingJob,
     isRequesting,
@@ -28,10 +34,43 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
   } = useAccountDeletion({ accountId, sessionAccountId, accountName });
 
   const [localConsent, setLocalConsent] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<'status' | 'download' | null>(null);
+  const pushToast = useUIStore((state) => state.pushToast);
+  const navigate = useNavigate();
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     setLocalConsent(Boolean(job?.snapshotAcknowledgedAt));
   }, [job?.snapshotAcknowledgedAt]);
+
+  useEffect(() => {
+    if (!copiedLink) return;
+    const timeout = setTimeout(() => setCopiedLink(null), 2000);
+    return () => clearTimeout(timeout);
+  }, [copiedLink]);
+
+  const handleOpenLink = useCallback((url: string | null) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handleCopyLink = useCallback(
+    async (type: 'status' | 'download') => {
+      const url = type === 'status' ? snapshotPortalUrl : snapshotDownloadUrl;
+      if (!url) return;
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopiedLink(type);
+      } catch (err: any) {
+        pushToast({
+          type: 'error',
+          title: 'No se pudo copiar',
+          description: err?.message || 'Intenta copiar manualmente el enlace.',
+        });
+      }
+    },
+    [snapshotDownloadUrl, snapshotPortalUrl, pushToast]
+  );
 
   const statusLabel = useMemo(() => {
     if (!job) return 'Sin iniciar';
@@ -53,6 +92,87 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
         return job.status;
     }
   }, [job]);
+
+  useEffect(() => {
+    if (!snapshotPortalPath || redirectedRef.current) return;
+    if (!job) return;
+    if (['external_cleanup', 'local_cleanup', 'completed'].includes(job.status)) {
+      redirectedRef.current = true;
+      navigate(snapshotPortalPath, { replace: true });
+    }
+  }, [job, snapshotPortalPath, navigate]);
+
+  const stepSnapshotStatus = useMemo<'pending' | 'progress' | 'done'>(() => {
+    if (!job) return 'pending';
+    if (['external_cleanup', 'local_cleanup', 'completed', 'failed'].includes(job.status)) {
+      return 'done';
+    }
+    return job.status === 'snapshot_ready' ? 'done' : 'progress';
+  }, [job]);
+
+  const stepConfirmStatus = useMemo<'pending' | 'progress' | 'done'>(() => {
+    if (!job) return 'pending';
+    if (job.status === 'completed') return 'done';
+    if (['external_cleanup', 'local_cleanup'].includes(job.status)) return 'progress';
+    if (job.status === 'failed') return 'progress';
+    return job.status === 'snapshot_ready' ? 'progress' : 'pending';
+  }, [job]);
+
+  const renderPortalLinks = useCallback(() => {
+    if (!snapshotPortalUrl && !snapshotDownloadUrl) return null;
+    const expirationLabel = snapshotTokenExpiresAt
+      ? `Disponible hasta ${snapshotTokenExpiresAt.toLocaleString()}`
+      : 'Disponible durante 48 horas tras confirmar la eliminación';
+
+    return (
+      <div className="rounded-lg border border-accent/40 bg-accent/5 p-3 space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-primary font-semibold">Portal seguro de respaldo</p>
+            <p className="text-xs text-secondary">{expirationLabel}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!snapshotPortalUrl}
+            onClick={() => handleOpenLink(snapshotPortalUrl)}
+            className="flex items-center gap-1"
+          >
+            <Link size={14} /> Abrir portal
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!snapshotPortalUrl}
+            onClick={() => handleCopyLink('status')}
+            className="flex items-center gap-1"
+          >
+            <Copy size={14} /> {copiedLink === 'status' ? 'Copiado' : 'Copiar portal'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!snapshotDownloadUrl}
+            onClick={() => handleOpenLink(snapshotDownloadUrl)}
+            className="flex items-center gap-1"
+          >
+            <Download size={14} /> Descargar desde portal
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!snapshotDownloadUrl}
+            onClick={() => handleCopyLink('download')}
+            className="flex items-center gap-1"
+          >
+            <Copy size={14} /> {copiedLink === 'download' ? 'Copiado' : 'Copiar descarga'}
+          </Button>
+        </div>
+      </div>
+    );
+  }, [snapshotPortalUrl, snapshotDownloadUrl, snapshotTokenExpiresAt, handleOpenLink, handleCopyLink, copiedLink]);
 
   if (!accountId) {
     return null;
@@ -78,7 +198,7 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
     if (job.status === 'snapshot_ready') {
       const hasDownloaded = Boolean(job.snapshotDownloadedAt);
       const hasConsent = Boolean(job.snapshotAcknowledgedAt);
-      const canConfirm = hasDownloaded && hasConsent;
+      const canConfirm = (localConsent || hasConsent) && !isConfirming;
 
       return (
         <div className="space-y-3">
@@ -88,7 +208,7 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
             disabled={isDownloadingSnapshot}
             onClick={() => {
               downloadSnapshot().catch(() => {
-                // error already tracked in hook
+                // handled in hook
               });
             }}
           >
@@ -97,7 +217,7 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
             ) : (
               <Download size={16} className="mr-2" />
             )}
-            Descargar snapshot
+            Descargar snapshot (opcional)
           </Button>
           <Checkbox
             checked={localConsent}
@@ -111,7 +231,7 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
                 });
               }
             }}
-            label="Confirmo que descargué y revisé mi snapshot"
+            label="Confirmo que entendí el contenido de mi respaldo"
           />
           <div className="text-xs text-secondary space-y-1">
             {hasDownloaded ? (
@@ -120,17 +240,17 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
                 {job.snapshotDownloadCount ? ` · ${job.snapshotDownloadCount} descarga(s)` : ''}
               </p>
             ) : (
-              <p>Debes descargar el snapshot antes de continuar.</p>
+              <p>Puedes descargar ahora o usar el portal seguro una vez confirmes la eliminación.</p>
             )}
             {hasConsent && <p>Consentimiento registrado el {new Date(job.snapshotAcknowledgedAt!).toLocaleString()}.</p>}
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-secondary flex-1">
-              Esta acción eliminará definitivamente todos los datos restantes.
+              Esta acción eliminará definitivamente todos los datos restantes. Podrás descargar tu respaldo luego desde el portal seguro.
             </span>
             <DoubleConfirmationDeleteButton
               onConfirm={confirmDeletion}
-              disabled={!canConfirm || isConfirming}
+              disabled={!canConfirm}
               className="ml-auto"
             />
           </div>
@@ -146,18 +266,24 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
 
     if (job.status === 'external_cleanup' || job.status === 'local_cleanup') {
       return (
-        <div className="flex items-center gap-2 text-secondary text-sm">
-          <Loader2 size={16} className="animate-spin" />
-          Proceso en curso. Te notificaremos cuando finalice.
+        <div className="flex flex-col gap-2 text-secondary text-sm">
+          <div className="flex items-center gap-2">
+            <Loader2 size={16} className="animate-spin" />
+            Proceso en curso. Te notificaremos cuando finalice.
+          </div>
+          {renderPortalLinks()}
         </div>
       );
     }
 
     if (job.status === 'completed') {
       return (
-        <div className="flex items-center gap-2 text-success text-sm">
-          <CheckCircle2 size={16} />
-          Cuenta eliminada definitivamente.
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="flex items-center gap-2 text-success">
+            <CheckCircle2 size={16} />
+            Cuenta eliminada definitivamente.
+          </div>
+          {renderPortalLinks()}
         </div>
       );
     }
@@ -194,14 +320,14 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
           status={job ? 'done' : 'pending'}
         />
         <WizardStep
-          title="2. Generar y descargar snapshot"
-          description="Descarga el respaldo completo antes de continuar."
-          status={job?.status === 'snapshot_ready' ? 'done' : job ? 'progress' : 'pending'}
+          title="2. Generar y preparar snapshot"
+          description="Descarga ahora o guarda el enlace seguro que activaremos tras la confirmación."
+          status={stepSnapshotStatus}
         />
         <WizardStep
           title="3. Confirmar eliminación"
-          description="Una vez confirmado, el proceso no se puede revertir."
-          status={job?.status === 'completed' ? 'done' : job?.status ? 'progress' : 'pending'}
+          description="Una vez confirmado, tu cuenta se bloqueará y podrás usar el portal por 48h."
+          status={stepConfirmStatus}
         />
       </div>
 
@@ -212,6 +338,8 @@ export function AccountDeletionWizard({ accountId, sessionAccountId, accountName
           <span className="text-muted">Snapshot listo el {new Date(job.snapshotReadyAt).toLocaleString()}</span>
         )}
       </div>
+
+      {renderPortalLinks()}
 
       {isBackgroundProcessing && (
         <div className="p-3 rounded-lg border border-info/40 bg-info/10 text-info text-sm flex items-center gap-2">

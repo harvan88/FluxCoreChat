@@ -9,7 +9,7 @@ import clsx from 'clsx';
 import { ActivityBar } from './ActivityBar';
 import { Sidebar } from './Sidebar';
 import { ViewPort } from './ViewPort';
-import { AccountDeletionBanner, ToastStack } from '../ui';
+import { ToastStack } from '../ui';
 import { useThemeStore } from '../../store/themeStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -64,7 +64,6 @@ export function Layout() {
   if (!isMobile) {
     return (
       <>
-        <AccountDeletionBanner />
         <ToastStack />
         <div data-testid="main-layout" className="h-screen flex bg-base text-primary overflow-hidden">
           <ActivityBar />
@@ -78,7 +77,6 @@ export function Layout() {
   // Layout Mobile
   return (
     <>
-      <AccountDeletionBanner />
       <ToastStack />
       <div data-testid="main-layout" className="h-screen flex flex-col bg-base text-primary overflow-hidden">
       {/* Mobile Header */}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { Button, Checkbox, Input } from '../ui';
 import { useAccountDeletion } from '../../hooks/useAccountDeletion';
@@ -41,15 +41,6 @@ export function AccountDeletionModal({ account, sessionAccountId, onClose }: Acc
     resetPasswordVerification();
     setView('intro');
   }, [account.id, job?.id, resetPasswordVerification]);
-
-  const jobStatus = job?.status;
-  const cleanupInProgress = jobStatus === 'external_cleanup' || jobStatus === 'local_cleanup';
-  const isCompleted = jobStatus === 'completed';
-  const canConfirmDeletion = useMemo(() => {
-    if (!job) return false;
-    if (cleanupInProgress || isCompleted) return false;
-    return isPasswordVerified && !isConfirming;
-  }, [job, cleanupInProgress, isCompleted, isPasswordVerified, isConfirming]);
 
   const handleVerifyPassword = async () => {
     const success = await verifyPassword(passwordInput);
@@ -122,8 +113,7 @@ export function AccountDeletionModal({ account, sessionAccountId, onClose }: Acc
           {view === 'intro' && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-semibold text-secondary">2.1</p>
-                <h3 className="text-xl font-semibold text-primary mt-1">Estás a punto de eliminar tu cuenta</h3>
+                <h3 className="text-xl font-semibold text-primary">Estás a punto de eliminar tu cuenta</h3>
                 <p className="mt-2 text-sm text-secondary leading-relaxed">
                   Estás a punto de eliminar tu cuenta de forma permanente.
                   <br />
@@ -144,8 +134,7 @@ export function AccountDeletionModal({ account, sessionAccountId, onClose }: Acc
           {view === 'options' && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-semibold text-secondary">2.2</p>
-                <h3 className="text-xl font-semibold text-primary mt-1">Antes de continuar</h3>
+                <h3 className="text-xl font-semibold text-primary">Antes de continuar</h3>
                 <p className="mt-2 text-sm text-secondary">¿Deseás conservar una copia de tus datos?</p>
               </div>
               <div className="space-y-2">
@@ -200,8 +189,7 @@ export function AccountDeletionModal({ account, sessionAccountId, onClose }: Acc
           {view === 'confirm' && (
             <div className="space-y-5">
               <div>
-                <p className="text-xs font-semibold text-secondary">2.3</p>
-                <h3 className="text-xl font-semibold text-primary mt-1">Confirmación final</h3>
+                <h3 className="text-xl font-semibold text-primary">Confirmación final</h3>
                 <p className="mt-2 text-sm text-secondary">
                   Para continuar, escribí tu contraseña. Si sos owner o administrador, se utilizará la contraseña de tu sesión actual.
                 </p>

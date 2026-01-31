@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Download, Copy, Trash2, Loader2, Ban } from 'lucide-react';
+import { Download, RefreshCw, Copy, Trash2, Loader2 } from 'lucide-react';
 import { useAccountDeletionMonitorStore, type AccountDeletionLogFilters } from '../../store/accountDeletionMonitorStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAccounts } from '../../store/accountStore';
@@ -33,8 +33,6 @@ const copyViaFallback = (content: string) => {
 export function MonitoringHub() {
   const { accounts } = useAccounts();
   const selectedAccountId = useUIStore((state) => state.selectedAccountId);
-  const accountDeletionBanner = useUIStore((state) => state.accountDeletionBanner);
-  const clearBanner = useUIStore((state) => state.clearAccountDeletionBanner);
 
   const {
     logs,
@@ -54,19 +52,6 @@ export function MonitoringHub() {
   const filteredLogs = useMemo(() => {
     return [...logs].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [logs]);
-
-  const translateStatus = (status?: string) => {
-    switch (status) {
-      case 'completed':
-        return 'Completado';
-      case 'failed':
-        return 'Fallido';
-      case 'processing':
-        return 'Procesando';
-      default:
-        return status || 'Desconocido';
-    }
-  };
 
   const convertFilters = useCallback((): AccountDeletionLogFilters => {
     return {
@@ -134,17 +119,12 @@ export function MonitoringHub() {
     });
   }, [clearLogs, pushLog, filters.accountId]);
 
-  const bannerLabel = useMemo(() => {
-    if (!accountDeletionBanner) return 'Sin procesos activos';
-    return `${translateStatus(accountDeletionBanner.status)} • ${accountDeletionBanner.accountName ?? accountDeletionBanner.accountId}`;
-  }, [accountDeletionBanner]);
-
   return (
     <div className="h-full w-full bg-base text-primary flex flex-col">
       <div className="border-b border-subtle px-5 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Monitoring Hub</h1>
-          <p className="text-sm text-secondary">Logs de eliminación de cuentas y estado del banner global.</p>
+          <p className="text-sm text-secondary">Logs de eliminación de cuentas y estado del portal de descargas.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -170,29 +150,6 @@ export function MonitoringHub() {
       </div>
 
       <div className="p-5 space-y-4 overflow-auto">
-        <section className="border border-subtle rounded-xl p-4 bg-surface">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="text-lg font-semibold">Banner de eliminación</h2>
-              <p className="text-sm text-secondary">Estado mostrado globalmente en la app.</p>
-            </div>
-            {accountDeletionBanner && (
-              <button
-                className="inline-flex items-center gap-1 rounded-lg border border-subtle px-3 py-1 text-xs hover:bg-hover"
-                onClick={clearBanner}
-              >
-                <Ban size={12} /> Ocultar banner
-              </button>
-            )}
-          </div>
-          <div className="text-sm">
-            <div className="font-medium">{bannerLabel}</div>
-            {accountDeletionBanner?.message && (
-              <div className="text-secondary">{accountDeletionBanner.message}</div>
-            )}
-          </div>
-        </section>
-
         <section className="border border-subtle rounded-xl p-4 bg-surface">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -291,11 +248,11 @@ export function MonitoringHub() {
                       <td className="px-4 py-2 capitalize">{log.source}</td>
                       <td className="px-4 py-2">
                         <div className="font-medium">{log.message}</div>
-                        {log.data && (
+                        {log.data ? (
                           <pre className="mt-1 text-xs text-secondary bg-base rounded-lg p-2 overflow-auto max-h-32">
                             {JSON.stringify(log.data, null, 2)}
                           </pre>
-                        )}
+                        ) : null}
                       </td>
                       <td className="px-4 py-2 text-right">
                         <button

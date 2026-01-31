@@ -7,6 +7,7 @@ import { AuthPage } from './components/auth/AuthPage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SystemMonitor } from './components/monitor';
+import { AccountDeletionPortalPage } from './pages/AccountDeletionPortalPage';
 
 function App() {
   const { isAuthenticated, initFromStorage } = useAuthStore();
@@ -44,6 +45,7 @@ function App() {
       <Routes>
         <Route path="/design-system" element={<DesignSystemPage />} />
         <Route path="/monitor" element={<SystemMonitor />} />
+        <Route path="/account-deletions/:jobId" element={<AccountDeletionPortalPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route 
           path="/login" 
