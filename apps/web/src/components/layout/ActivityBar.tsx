@@ -50,6 +50,7 @@ interface ActivityItem {
 const baseActivities: ActivityItem[] = [
   { id: 'conversations', icon: <ConversationsIcon size={22} />, label: 'Mensajes' },
   { id: 'contacts', icon: <ContactsIcon size={22} />, label: 'Contactos' },
+  { id: 'templates', icon: <FileTextIcon size={22} />, label: 'Plantillas' },
   { id: 'extensions', icon: <ExtensionsIcon size={22} />, label: 'Extensiones' },
   { id: 'settings', icon: <SettingsIcon size={22} />, label: 'Configuración' },
 ];

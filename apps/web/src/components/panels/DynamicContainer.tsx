@@ -1,12 +1,25 @@
 /**
  * DynamicContainer - Panel dinámico con tabs
  * TOTEM PARTE 11: Dynamic Container
+ * 
+ * PRINCIPIO: ChatCore gobierna, extensiones inyectan.
+ * 
+ * Este componente renderiza el contenido de tabs usando el ViewRegistry.
+ * Las extensiones registran sus vistas y ChatCore las renderiza.
  */
 
 import { useMemo, useCallback, Component, type ReactNode, type ComponentType } from 'react';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
 import { TabBar } from './TabBar';
+import { useExtensions } from '../../hooks/useExtensions';
+import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
+
+// ViewRegistry and ExtensionHost
+import { viewRegistry } from '../../core/registry/ViewRegistry';
+import { extensionHost } from '../../core/extension-api/ExtensionHost';
+
+// Core imports (ChatCore views) - Mantenidos para fallback legacy
 import { ChatView } from '../chat/ChatView';
 import { WelcomeView } from '../chat/WelcomeView';
 import { ContactDetails } from '../contacts/ContactDetails';
@@ -15,6 +28,12 @@ import { AccountsSection } from '../accounts';
 import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
 import { OpenAIAssistantEditor } from '../editors/OpenAIAssistantEditor';
+import { CreditsSection } from '../settings/CreditsSection';
+import { MonitoringHub } from '../monitor/MonitoringHub';
+import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
+import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
+
+// Extension imports (legacy - will be migrated to ViewRegistry)
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
 import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
 import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
@@ -24,12 +43,45 @@ import { InstructionsView } from '../fluxcore/views/InstructionsView';
 import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
 import { ToolsView } from '../fluxcore/views/ToolsView';
 import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConfigView';
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+
+// Templates
+import { TemplateEditor } from '../templates';
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+
+// Templates
+import { TemplateEditor } from '../templates';
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
 import { CreditsSection } from '../settings/CreditsSection';
 import { useExtensions } from '../../hooks/useExtensions';
 import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
 import { MonitoringHub } from '../monitor/MonitoringHub';
 import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
-import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
+import { TemplateEditor } from '../templates';
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-2d5a1b0c/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+
+// Templates
+import { TemplateEditor } from '../templates';
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+
+// Templates
+import { TemplateEditor } from '../templates';
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+
+// Templates
+import { TemplateEditor } from '../templates';
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
 
 interface DynamicContainerProps {
   container: DynamicContainerType;
@@ -395,9 +447,171 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   );
 }
 
+/**
+ * TabContent - Renderiza el contenido de un tab
+ * 
+ * Orden de resolución:
+ * 1. Intentar obtener del ViewRegistry (nuevo sistema)
+ * 2. Fallback a switch legacy (para compatibilidad)
+ * 
+ * PRINCIPIO: ChatCore gobierna qué se renderiza.
+ */
 function TabContent({ tab, containerId }: TabContentProps) {
   const { selectedAccountId } = useUIStore();
+  const { closeTab } = usePanelStore();
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
 
+  // ========================================
+  // 1. Intentar obtener del ViewRegistry
+  // ========================================
+  const RegisteredTabView = viewRegistry.getTabView(tab);
+  if (RegisteredTabView) {
+    return (
+      <RegisteredTabView
+        tab={tab}
+        containerId={containerId}
+        accountId={selectedAccountId}
+      />
+    );
+  }
+
+  // ========================================
+  // 2. Para extensiones, intentar ViewRegistry de extensiones
+  // ========================================
+  if (tab.type === 'extension') {
+    const extensionId = typeof tab.context?.extensionId === 'string' ? tab.context.extensionId : '';
+    const viewId = typeof tab.context?.view === 'string' ? tab.context.view : 'default';
+    
+    // Intentar obtener vista de extensión del ViewRegistry
+    const ExtensionView = viewRegistry.getExtensionView(extensionId, viewId);
+    if (ExtensionView) {
+      return (
+        <ExtensionView
+          accountId={selectedAccountId || ''}
+          extensionId={extensionId}
+          context={tab.context as Record<string, unknown>}
+          onOpenTab={(newViewId, title, data) => {
+            const { openTab } = usePanelStore.getState();
+            const manifest = extensionHost.getManifest(extensionId);
+            const viewConfig = manifest?.views[newViewId];
+            
+            openTab('extensions', {
+              type: 'extension',
+              identity: `extension:${extensionId}:${newViewId}:${selectedAccountId}`,
+              title: title || viewConfig?.defaultTitle || newViewId,
+              icon: viewConfig?.defaultIcon || 'Settings',
+              closable: true,
+              context: {
+                extensionId,
+                extensionName: manifest?.displayName || extensionId,
+                view: newViewId,
+                accountId: selectedAccountId,
+                ...data,
+              },
+            });
+          }}
+          onClose={() => closeTab(containerId, tab.id)}
+        />
+      );
+    }
+    
+    // Fallback a ExtensionTabContent legacy
+    return <ExtensionTabContent tab={tab} containerId={containerId} />;
+  }
+
+  // ========================================
+=======
+=======
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+
+  // ========================================
+=======
+
+  // ========================================
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+
+  // ========================================
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+  // 1. Intentar obtener del ViewRegistry
+  // ========================================
+  const RegisteredTabView = viewRegistry.getTabView(tab);
+  if (RegisteredTabView) {
+    return (
+      <RegisteredTabView
+        tab={tab}
+        containerId={containerId}
+        accountId={selectedAccountId}
+      />
+    );
+  }
+
+  // ========================================
+  // 2. Para extensiones, intentar ViewRegistry de extensiones
+  // ========================================
+  if (tab.type === 'extension') {
+    const extensionId = typeof tab.context?.extensionId === 'string' ? tab.context.extensionId : '';
+    const viewId = typeof tab.context?.view === 'string' ? tab.context.view : 'default';
+    
+    // Intentar obtener vista de extensión del ViewRegistry
+    const ExtensionView = viewRegistry.getExtensionView(extensionId, viewId);
+    if (ExtensionView) {
+      return (
+        <ExtensionView
+          accountId={selectedAccountId || ''}
+          extensionId={extensionId}
+          context={tab.context as Record<string, unknown>}
+          onOpenTab={(newViewId, title, data) => {
+            const { openTab } = usePanelStore.getState();
+            const manifest = extensionHost.getManifest(extensionId);
+            const viewConfig = manifest?.views[newViewId];
+            
+            openTab('extensions', {
+              type: 'extension',
+              identity: `extension:${extensionId}:${newViewId}:${selectedAccountId}`,
+              title: title || viewConfig?.defaultTitle || newViewId,
+              icon: viewConfig?.defaultIcon || 'Settings',
+              closable: true,
+              context: {
+                extensionId,
+                extensionName: manifest?.displayName || extensionId,
+                view: newViewId,
+                accountId: selectedAccountId,
+                ...data,
+              },
+            });
+          }}
+          onClose={() => closeTab(containerId, tab.id)}
+        />
+      );
+    }
+    
+    // Fallback a ExtensionTabContent legacy
+    return <ExtensionTabContent tab={tab} containerId={containerId} />;
+  }
+
+  // ========================================
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+=======
+>>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+  // 3. Fallback: Switch legacy para tabs del núcleo
+  // ========================================
   switch (tab.type) {
     case 'chat':
       return tab.context.chatId ? (
@@ -425,9 +639,6 @@ function TabContent({ tab, containerId }: TabContentProps) {
       return <SettingsTabContent section={section} />;
     }
 
-    case 'extension':
-      return <ExtensionTabContent tab={tab} containerId={containerId} />;
-
     case 'editor': {
       const editorProps = tab.context || {};
       return (
@@ -450,6 +661,18 @@ function TabContent({ tab, containerId }: TabContentProps) {
         />
       );
     }
+
+    case 'template-editor':
+      return (
+        <TemplateEditor
+          templateId={tab.context.templateId || ''}
+          accountId={tab.context.accountId || ''}
+          onClose={() => {
+            const { closeTab } = usePanelStore.getState();
+            closeTab(containerId, tab.id);
+          }}
+        />
+      );
 
     case 'openai-assistant-editor':
       return (
@@ -476,6 +699,17 @@ function TabContent({ tab, containerId }: TabContentProps) {
         return <AssetMonitoringPanel />;
       }
       return <MonitoringHub />;
+    }
+
+    case 'template-editor': {
+      const { closeTab } = usePanelStore.getState();
+      return (
+        <TemplateEditor
+          templateId={tab.context?.templateId || ''}
+          accountId={tab.context?.accountId || ''}
+          onClose={() => closeTab(containerId, tab.id)}
+        />
+      );
     }
 
     default:
