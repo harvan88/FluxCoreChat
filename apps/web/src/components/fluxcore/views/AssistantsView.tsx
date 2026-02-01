@@ -177,11 +177,17 @@ export function AssistantsView({
 
     if (newAssistant) {
       if (onOpenTab) {
-        // Recargar el tab actual con el ID real
+        const isOpenAI = runtime === 'openai';
+        const type = isOpenAI ? 'openai-assistant' : 'assistant';
+        const identity = isOpenAI
+          ? `extension:fluxcore:openai-assistant:${accountId}:${newAssistant.id}`
+          : `extension:fluxcore:assistant:${accountId}:${newAssistant.id}`;
+
         onOpenTab(newAssistant.id, newAssistant.name, {
-          type: 'assistant',
-          identity: `extension:fluxcore:assistant:${accountId}:${newAssistant.id}`,
+          type,
+          identity,
           assistantId: newAssistant.id,
+          runtime,
         });
       } else {
         setLocalSelectedAssistant(newAssistant);

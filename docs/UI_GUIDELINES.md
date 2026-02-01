@@ -323,6 +323,23 @@ apps/web/src/
 └── store/               # Zustand stores
 ```
 
+### Rutas clicables
+
+- [apps/web/src/](../apps/web/src/) – raíz del frontend
+  - [components/](../apps/web/src/components/) – vistas y widgets de UI
+    - [ui/](../apps/web/src/components/ui/) – Componentes base (Button, Input, etc.)
+    - [chat/](../apps/web/src/components/chat/) – Componentes del módulo de chat
+    - [contacts/](../apps/web/src/components/contacts/) – Contactos/listas
+    - [templates/](../apps/web/src/components/templates/) – Gestor/editor de plantillas
+  - [core/](../apps/web/src/core/) – Infraestructura compartida
+    - [components/](../apps/web/src/core/components/) – EmptyState, LoadingState, etc.
+    - [registry/](../apps/web/src/core/registry/) – ViewRegistry y registros canónicos
+    - [extension-api/](../apps/web/src/core/extension-api/) – APIs para extensiones
+    - [orchestrator/](../apps/web/src/core/orchestrator/) – UIOrchestrator y flujo principal
+  - [extensions/](../apps/web/src/extensions/) – Manifests y wrappers de extensiones
+    - [fluxcore/](../apps/web/src/extensions/fluxcore/) – Extension oficial FluxCore
+  - [store/](../apps/web/src/store/) – Zustand stores y estado global
+
 ---
 
 ## 8. Referencias

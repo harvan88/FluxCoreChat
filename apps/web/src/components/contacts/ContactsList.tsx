@@ -3,6 +3,7 @@
  * Conectada a API real - SIN DATOS MOCK
  */
 
+import clsx from 'clsx';
 import { useState, useEffect, useCallback } from 'react';
 import { Search, UserPlus, Loader2, Users, X, Plus, Check, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
@@ -165,9 +166,13 @@ export function ContactsList() {
               `Contacto ${contact.accountBId?.slice(0, 8)}`;
             
             return (
-              <button
+              <div
                 key={contact.id}
+                role="button"
+                tabIndex={0}
+                aria-disabled={isCreatingConversation}
                 onClick={async () => {
+                  if (isCreatingConversation) return;
                   // Buscar conversación existente con este contacto
                   let existingConv = conversations.find(
                     (c: any) => c.relationshipId === contact.id
@@ -209,8 +214,16 @@ export function ContactsList() {
                     });
                   }
                 }}
-                className="w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left disabled:opacity-50 group"
-                disabled={isCreatingConversation}
+                onKeyDown={async (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    await (event.currentTarget as HTMLDivElement).click();
+                  }
+                }}
+                className={clsx(
+                  'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left group cursor-pointer rounded-lg',
+                  isCreatingConversation && 'opacity-60 pointer-events-none'
+                )}
               >
                 {/* Avatar - Bug 3 Fix: Usar Avatar component con imagen real */}
                 {isCreatingConversation ? (
@@ -276,7 +289,7 @@ export function ContactsList() {
                     <Trash2 size={16} />
                   </button>
                 )}
-              </button>
+              </div>
             );
           })
         )}
