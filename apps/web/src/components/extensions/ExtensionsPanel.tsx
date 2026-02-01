@@ -11,59 +11,13 @@ import { ExtensionCard } from './ExtensionCard';
 import { useExtensions } from '../../hooks/useExtensions';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
-import { Switch } from '../ui/Switch';
+import { SidebarNavList, Switch } from '../ui';
 
 type TabType = 'all' | 'installed' | 'available';
 
 interface ExtensionsPanelProps {
   accountId: string;
   variant?: 'full' | 'sidebar';
-}
-
-function ExtensionSidebarItem({
-  extension,
-  onToggle,
-  onConfigure
-}: {
-  extension: any;
-  onToggle: (enabled: boolean) => void;
-  onConfigure?: () => void;
-}) {
-  const isEnabled = extension.status === 'enabled';
-
-  return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-elevated hover:bg-hover border border-subtle transition-colors group">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="p-2 rounded-md bg-surface text-accent">
-          <Package size={16} />
-        </div>
-        <div className="min-w-0">
-          <div className="font-medium text-sm text-primary truncate">{extension.name}</div>
-          <div className="text-xs text-secondary truncate">{extension.author}</div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {onConfigure && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfigure();
-            }}
-            className="p-1.5 text-secondary hover:text-primary rounded-md hover:bg-surface"
-            title="Configurar"
-          >
-            <Settings size={14} />
-          </button>
-        )}
-        <Switch
-          checked={isEnabled}
-          onCheckedChange={(checked) => onToggle(checked)}
-          size="sm"
-        />
-      </div>
-    </div>
-  );
 }
 
 export function ExtensionsPanel({
@@ -138,6 +92,63 @@ export function ExtensionsPanel({
 
     return true;
   });
+
+  const getExtensionConfigureHandler = (extension: any) => {
+    if (extension.status === 'available') return undefined;
+
+    return () => {
+      const panelComponent = extension.installation?.manifest?.ui?.panel?.component;
+      const isFluxCore = panelComponent === 'FluxCorePanel';
+      const hasSidebarUI = Boolean(extension.installation?.manifest?.ui?.sidebar);
+
+      if (isFluxCore || hasSidebarUI) {
+        handleActivateExtension(extension.id);
+        return;
+      }
+
+      handleOpenConfigure(extension.id, extension.name);
+    };
+  };
+
+  const sidebarItems = variant === 'sidebar'
+    ? filteredExtensions.map((extension) => {
+        const isAvailable = extension.status === 'available';
+        const isEnabled = extension.status === 'enabled';
+        const onConfigure = getExtensionConfigureHandler(extension);
+
+        const trailingControls = !isAvailable ? (
+          <div className="flex items-center gap-1">
+            {onConfigure && (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onConfigure();
+                }}
+                className="p-1.5 text-secondary hover:text-primary rounded-md hover:bg-surface"
+                title="Configurar"
+              >
+                <Settings size={14} />
+              </button>
+            )}
+            <Switch
+              checked={isEnabled}
+              onCheckedChange={(checked) => toggle(extension.id, checked)}
+              size="sm"
+            />
+          </div>
+        ) : undefined;
+
+        return {
+          id: extension.id,
+          label: extension.name,
+          description: extension.author,
+          icon: <Package size={16} />,
+          active: isEnabled,
+          trailing: trailingControls,
+          onSelect: onConfigure,
+        };
+      })
+    : [];
 
   // Contar extensiones
   const counts = {
@@ -249,7 +260,12 @@ export function ExtensionsPanel({
       )}
 
       {/* Extensions List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        className={clsx(
+          'flex-1 overflow-y-auto space-y-4',
+          variant === 'sidebar' ? 'py-4' : 'p-4'
+        )}
+      >
         {filteredExtensions.length === 0 ? (
           <div className="text-center py-12">
             <Sparkles className="mx-auto text-muted mb-3" size={48} />
@@ -262,66 +278,24 @@ export function ExtensionsPanel({
             </p>
           </div>
         ) : (
-          filteredExtensions.map((extension) => (
-            variant === 'sidebar' ? (
-              <ExtensionSidebarItem
-                key={extension.id}
-                extension={extension}
-                onToggle={(enabled) => toggle(extension.id, enabled)}
-                onConfigure={
-                  extension.status !== 'available'
-                    ? () => {
-                      const panelComponent = extension.installation?.manifest?.ui?.panel?.component;
-                      const isFluxCore = panelComponent === 'FluxCorePanel';
-                      const hasSidebarUI = Boolean(extension.installation?.manifest?.ui?.sidebar);
-
-                      if (isFluxCore) {
-                        handleActivateExtension(extension.id);
-                        return;
-                      }
-
-                      if (hasSidebarUI) {
-                        handleActivateExtension(extension.id);
-                        return;
-                      }
-
-                      handleOpenConfigure(extension.id, extension.name);
-                    }
-                    : undefined
-                }
-              />
-            ) : (
+          variant === 'sidebar' ? (
+            <SidebarNavList
+              data-component-name="ExtensionsSidebarNav"
+              items={sidebarItems}
+            />
+          ) : (
+            filteredExtensions.map((extension) => (
               <ExtensionCard
                 key={extension.id}
                 extension={extension}
                 onInstall={() => install(extension.id)}
                 onUninstall={() => uninstall(extension.id)}
                 onToggle={(enabled) => toggle(extension.id, enabled)}
-                onConfigure={
-                  extension.status !== 'available'
-                    ? () => {
-                      const panelComponent = extension.installation?.manifest?.ui?.panel?.component;
-                      const isFluxCore = panelComponent === 'FluxCorePanel';
-                      const hasSidebarUI = Boolean(extension.installation?.manifest?.ui?.sidebar);
-
-                      if (isFluxCore) {
-                        handleActivateExtension(extension.id);
-                        return;
-                      }
-
-                      if (hasSidebarUI) {
-                        handleActivateExtension(extension.id);
-                        return;
-                      }
-
-                      handleOpenConfigure(extension.id, extension.name);
-                    }
-                    : undefined
-                }
+                onConfigure={getExtensionConfigureHandler(extension)}
                 isLoading={isLoading}
               />
-            )
-          ))
+            ))
+          )
         )}
       </div>
 

@@ -29,6 +29,7 @@ import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
 import { OpenAIAssistantEditor } from '../editors/OpenAIAssistantEditor';
 import { CreditsSection } from '../settings/CreditsSection';
+import { ComponentPreviewGallery } from '../settings/ComponentPreviewGallery';
 import { MonitoringHub } from '../monitor/MonitoringHub';
 import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
 import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
@@ -43,45 +44,7 @@ import { InstructionsView } from '../fluxcore/views/InstructionsView';
 import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
 import { ToolsView } from '../fluxcore/views/ToolsView';
 import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConfigView';
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-
-// Templates
-import { TemplateEditor } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-
-// Templates
-import { TemplateEditor } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-import { CreditsSection } from '../settings/CreditsSection';
-import { useExtensions } from '../../hooks/useExtensions';
-import type { DynamicContainer as DynamicContainerType, Tab } from '../../types/panels';
-import { MonitoringHub } from '../monitor/MonitoringHub';
-import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
-import { TemplateEditor } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-2d5a1b0c/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-
-// Templates
-import { TemplateEditor } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-
-// Templates
-import { TemplateEditor } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-
-// Templates
-import { TemplateEditor } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
+import { TemplateEditor, TemplateManager } from '../templates';
 
 interface DynamicContainerProps {
   container: DynamicContainerType;
@@ -459,11 +422,6 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
 function TabContent({ tab, containerId }: TabContentProps) {
   const { selectedAccountId } = useUIStore();
   const { closeTab } = usePanelStore();
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
 
   // ========================================
   // 1. Intentar obtener del ViewRegistry
@@ -524,92 +482,6 @@ function TabContent({ tab, containerId }: TabContentProps) {
   }
 
   // ========================================
-=======
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-
-  // ========================================
-=======
-
-  // ========================================
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
-
-  // ========================================
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-  // 1. Intentar obtener del ViewRegistry
-  // ========================================
-  const RegisteredTabView = viewRegistry.getTabView(tab);
-  if (RegisteredTabView) {
-    return (
-      <RegisteredTabView
-        tab={tab}
-        containerId={containerId}
-        accountId={selectedAccountId}
-      />
-    );
-  }
-
-  // ========================================
-  // 2. Para extensiones, intentar ViewRegistry de extensiones
-  // ========================================
-  if (tab.type === 'extension') {
-    const extensionId = typeof tab.context?.extensionId === 'string' ? tab.context.extensionId : '';
-    const viewId = typeof tab.context?.view === 'string' ? tab.context.view : 'default';
-    
-    // Intentar obtener vista de extensión del ViewRegistry
-    const ExtensionView = viewRegistry.getExtensionView(extensionId, viewId);
-    if (ExtensionView) {
-      return (
-        <ExtensionView
-          accountId={selectedAccountId || ''}
-          extensionId={extensionId}
-          context={tab.context as Record<string, unknown>}
-          onOpenTab={(newViewId, title, data) => {
-            const { openTab } = usePanelStore.getState();
-            const manifest = extensionHost.getManifest(extensionId);
-            const viewConfig = manifest?.views[newViewId];
-            
-            openTab('extensions', {
-              type: 'extension',
-              identity: `extension:${extensionId}:${newViewId}:${selectedAccountId}`,
-              title: title || viewConfig?.defaultTitle || newViewId,
-              icon: viewConfig?.defaultIcon || 'Settings',
-              closable: true,
-              context: {
-                extensionId,
-                extensionName: manifest?.displayName || extensionId,
-                view: newViewId,
-                accountId: selectedAccountId,
-                ...data,
-              },
-            });
-          }}
-          onClose={() => closeTab(containerId, tab.id)}
-        />
-      );
-    }
-    
-    // Fallback a ExtensionTabContent legacy
-    return <ExtensionTabContent tab={tab} containerId={containerId} />;
-  }
-
-  // ========================================
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/panels/DynamicContainer.tsx
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/panels/DynamicContainer.tsx
   // 3. Fallback: Switch legacy para tabs del núcleo
   // ========================================
   switch (tab.type) {
@@ -662,6 +534,11 @@ function TabContent({ tab, containerId }: TabContentProps) {
       );
     }
 
+    case 'template-panel': {
+      const accountId = typeof tab.context.accountId === 'string' ? tab.context.accountId : '';
+      return <TemplateManager accountId={accountId} />;
+    }
+
     case 'template-editor':
       return (
         <TemplateEditor
@@ -699,17 +576,6 @@ function TabContent({ tab, containerId }: TabContentProps) {
         return <AssetMonitoringPanel />;
       }
       return <MonitoringHub />;
-    }
-
-    case 'template-editor': {
-      const { closeTab } = usePanelStore.getState();
-      return (
-        <TemplateEditor
-          templateId={tab.context?.templateId || ''}
-          accountId={tab.context?.accountId || ''}
-          onClose={() => closeTab(containerId, tab.id)}
-        />
-      );
     }
 
     default:
@@ -800,6 +666,7 @@ function SettingsTabContent({ section }: SettingsTabContentProps) {
         <div className="h-full overflow-y-auto p-6">
           <h2 className="text-xl font-semibold text-primary mb-6">Apariencia</h2>
           <ThemeSettings />
+          <ComponentPreviewGallery />
         </div>
       );
 

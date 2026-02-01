@@ -22,6 +22,8 @@ import {
   Lock,
 } from 'lucide-react';
 
+import { SidebarNavList } from '../ui';
+import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 import { FluxCoreView } from '@/types/fluxcore/views.types';
 
 interface FluxCoreSidebarProps {
@@ -31,13 +33,7 @@ interface FluxCoreSidebarProps {
   isLocked?: boolean;
 }
 
-interface NavItem {
-  id: FluxCoreView;
-  label: string;
-  icon: React.ReactNode;
-}
-
-const navItems: NavItem[] = [
+const navItems: SidebarNavItem[] = [
   { id: 'usage', label: 'Uso', icon: <BarChart3 size={18} /> },
   { id: 'assistants', label: 'Asistentes', icon: <Bot size={18} /> },
   { id: 'instructions', label: 'Instrucciones del sistema', icon: <FileText size={18} /> },
@@ -67,27 +63,15 @@ export function FluxCoreSidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-2 overflow-y-auto">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onViewChange(item.id)}
-            className={`
-              w-full flex items-center gap-3 px-4 py-2.5 text-left
-              transition-colors duration-150
-              ${activeView === item.id
-                ? 'bg-active text-primary'
-                : 'text-secondary hover:bg-hover hover:text-primary'
-              }
-            `}
-          >
-            <span className={activeView === item.id ? 'text-accent' : 'text-muted'}>
-              {item.icon}
-            </span>
-            <span className="text-sm font-medium truncate">{item.label}</span>
-          </button>
-        ))}
-      </nav>
+      <SidebarNavList
+        as="nav"
+        className="flex-1"
+        items={navItems.map((item) => ({
+          ...item,
+          active: activeView === item.id,
+          onSelect: () => onViewChange(item.id as FluxCoreView),
+        }))}
+      />
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-subtle">

@@ -1,8 +1,8 @@
 /**
  * TemplateManager Component
  * 
- * Vista principal de gestión de plantillas (Sidebar View).
- * Sigue las guías de UI_GUIDELINES.md
+ * Vista principal de gestión de plantillas (Tab View).
+ * Se renderiza dentro de un DynamicContainer siguiendo las guías de UI_GUIDELINES.md
  */
 
 import { useState, useEffect } from 'react';
@@ -46,12 +46,14 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   
   // Fetch templates on mount
   useEffect(() => {
+    if (!accountId) return;
     if (templates.length === 0) {
       fetchTemplates(accountId);
     }
   }, [accountId, templates.length, fetchTemplates]);
 
   const handleCreateNew = async () => {
+    if (!accountId) return;
     setIsCreating(true);
     try {
       const newTemplate = await createTemplate(accountId, {
@@ -81,6 +83,8 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   };
 
   const handleEdit = (template: Template) => {
+    if (!accountId) return;
+
     openTab('editor', {
       type: 'template-editor',
       identity: `template:${template.id}`,
@@ -103,6 +107,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   };
 
   const handleDuplicate = async (template: Template) => {
+    if (!accountId) return;
     try {
       const duplicated = await duplicateTemplate(template.id, accountId);
       selectTemplate(duplicated.id);
@@ -112,6 +117,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   };
   
   const handleRefresh = () => {
+    if (!accountId) return;
     fetchTemplates(accountId);
   };
 

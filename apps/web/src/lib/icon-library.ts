@@ -30,6 +30,8 @@ export {
 
   FileText as FileTextIcon,
 
+  Wrench as ToolsIcon,
+
   Bot as BotIcon,
 
   Activity as MonitoringIcon,

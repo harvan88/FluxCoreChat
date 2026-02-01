@@ -28,64 +28,17 @@ import { ContactsList } from '../contacts/ContactsList';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { ExtensionsPanel } from '../extensions';
 import { MonitoringSidebar } from '../monitor/MonitoringSidebar';
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-=======
-import { TemplateManager } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
-import { TemplateManager } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
-import { TemplateManager } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
-import { TemplateManager } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
-import { TemplateManager } from '../templates';
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
+import { ToolsSidebar } from '../tools/ToolsSidebar';
 
 // Extension imports (legacy - will be migrated to ViewRegistry)
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
 import { WebsiteBuilderSidebar } from '../extensions/WebsiteBuilderSidebar';
 import { FluxCoreSidebar } from '../fluxcore/FluxCoreSidebar';
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
 
 // ViewRegistry and ExtensionHost
 import { viewRegistry } from '../../core/registry/ViewRegistry';
 import { extensionHost } from '../../core/extension-api/ExtensionHost';
 import type { ActivityType } from '../../types';
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-=======
-import { useExtensions } from '../../hooks/useExtensions';
-import { FluxCoreView } from '@/types/fluxcore/views.types';
-import { MonitoringSidebar } from '../monitor/MonitoringSidebar';
-import { TemplateManager } from '../templates';
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-2d5a1b0c/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-2d5a1b0c/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
 
 // Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
 const extensionComponents: Record<string, ComponentType> = {
@@ -334,12 +287,10 @@ export function Sidebar() {
         return <ConversationsList />;
       case 'contacts':
         return <ContactsList />;
-      case 'templates':
-        return <TemplateManager accountId={selectedAccountId || ''} />;
+      case 'tools':
+        return <ToolsSidebar accountId={selectedAccountId} />;
       case 'monitoring':
         return <MonitoringSidebar />;
-      case 'templates':
-        return <TemplateManager accountId={selectedAccountId || ''} />;
       case 'extensions':
         return <ExtensionsPanel accountId={selectedAccountId || ''} variant="sidebar" />;
       case 'settings':
@@ -353,43 +304,7 @@ export function Sidebar() {
    * Obtiene el título del sidebar usando la función de resolución centralizada.
    */
   const getTitle = () => {
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
-<<<<<<< C:/Users/harva/Documents/Trabajos/meetgar/FluxCoreChat/FluxCoreChat/apps/web/src/components/layout/Sidebar.tsx
     return resolveSidebarTitle(activeActivity, installations);
-=======
-    // Título para extensiones dinámicas
-    if (activeActivity.startsWith('ext:')) {
-      const extensionId = activeActivity.replace('ext:', '');
-      const installation = installations.find(i => i.extensionId === extensionId);
-      return installation?.manifest?.ui?.panel?.title || installation?.manifest?.name || 'Extensión';
-    }
-
-    switch (activeActivity) {
-      case 'conversations':
-        return 'Conversaciones';
-      case 'contacts':
-        return 'Contactos';
-      case 'extensions':
-        return 'Extensiones';
-      case 'templates':
-        return 'Plantillas';
-      case 'settings':
-        return 'Configuración';
-      default:
-        return '';
-    }
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-2d5a1b0c/apps/web/src/components/layout/Sidebar.tsx
-=======
-    return resolveSidebarTitle(activeActivity, installations);
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
-    return resolveSidebarTitle(activeActivity, installations);
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
-=======
-    return resolveSidebarTitle(activeActivity, installations);
->>>>>>> C:/Users/harva/.windsurf/worktrees/FluxCoreChat/FluxCoreChat-df1065e2/apps/web/src/components/layout/Sidebar.tsx
   };
 
   // En móvil, el sidebar se muestra dentro del drawer sin animaciones propias

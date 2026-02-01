@@ -54,3 +54,6 @@ export { Switch } from './Switch';
 export type { SwitchProps } from './Switch';
 
 export { ToastStack } from './ToastStack';
+
+// Sidebar components
+export { SidebarNavList } from './sidebar/SidebarNavList';
