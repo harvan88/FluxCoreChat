@@ -65,3 +65,4 @@ export * from './asset-audit-logs';
 export * from './message-assets';
 export * from './template-assets';
 export * from './plan-assets';
+export * from './templates';

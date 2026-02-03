@@ -6,13 +6,13 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { 
-  Save, 
-  X, 
-  Eye, 
-  Code, 
-  Plus, 
-  Trash2, 
+import {
+  Save,
+  X,
+  Eye,
+  Code,
+  Plus,
+  Trash2,
   Copy,
   Check,
   AlertCircle,
@@ -21,7 +21,9 @@ import {
 import clsx from 'clsx';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
+import { Input, Textarea, Select, Checkbox } from '../ui';
 import { useTemplateStore } from './store/templateStore';
+import { TemplateAssetPicker } from './TemplateAssetPicker';
 import type { TemplateVariable, UpdateTemplateInput } from './types';
 import { TEMPLATE_CATEGORIES, VARIABLE_TYPES } from './types';
 
@@ -33,16 +35,16 @@ interface TemplateEditorProps {
 
 export function TemplateEditor({ templateId, accountId, onClose }: TemplateEditorProps) {
   const { getTemplateById, updateTemplate, isUpdating, fetchTemplates, templates } = useTemplateStore();
-  
+
   // Fetch templates if not loaded
   useEffect(() => {
     if (templates.length === 0) {
       fetchTemplates(accountId);
     }
   }, [accountId, templates.length, fetchTemplates]);
-  
+
   const originalTemplate = getTemplateById(templateId);
-  
+
   // Form state
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
@@ -50,7 +52,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
   const [variables, setVariables] = useState<TemplateVariable[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
-  
+
   // UI state
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [hasChanges, setHasChanges] = useState(false);
@@ -71,14 +73,14 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
   // Track changes
   useEffect(() => {
     if (!originalTemplate) return;
-    
-    const changed = 
+
+    const changed =
       name !== originalTemplate.name ||
       content !== originalTemplate.content ||
       category !== (originalTemplate.category || '') ||
       JSON.stringify(variables) !== JSON.stringify(originalTemplate.variables) ||
       JSON.stringify(tags) !== JSON.stringify(originalTemplate.tags);
-    
+
     setHasChanges(changed);
   }, [name, content, category, variables, tags, originalTemplate]);
 
@@ -102,7 +104,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
   // Handlers
   const handleSave = async () => {
     setSaveError(null);
-    
+
     try {
       const updates: UpdateTemplateInput = {
         name,
@@ -111,8 +113,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
         variables,
         tags,
       };
-      
-      await updateTemplate(templateId, updates);
+
+      await updateTemplate(accountId, templateId, updates);
       setHasChanges(false);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Error al guardar');
@@ -137,7 +139,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
 
   const handleAddVariable = (varName: string) => {
     if (variables.some(v => v.name === varName)) return;
-    
+
     setVariables([
       ...variables,
       {
@@ -180,18 +182,18 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-subtle bg-surface">
         <div className="flex items-center gap-3">
-          <input
-            type="text"
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="text-lg font-semibold bg-transparent border-none focus:outline-none text-primary placeholder:text-muted"
+            className="text-lg font-semibold bg-transparent border-none focus:outline-none focus:ring-0 text-primary placeholder:text-muted"
             placeholder="Nombre de la plantilla"
+            fullWidth={false}
           />
           {hasChanges && (
             <Badge variant="warning" size="sm">Sin guardar</Badge>
           )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           {/* View toggle */}
           <div className="flex items-center bg-elevated rounded-lg p-0.5">
@@ -199,8 +201,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
               onClick={() => setViewMode('edit')}
               className={clsx(
                 'px-3 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === 'edit' 
-                  ? 'bg-surface text-primary shadow-sm' 
+                viewMode === 'edit'
+                  ? 'bg-surface text-primary shadow-sm'
                   : 'text-muted hover:text-primary'
               )}
             >
@@ -211,8 +213,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
               onClick={() => setViewMode('preview')}
               className={clsx(
                 'px-3 py-1.5 text-sm rounded-md transition-colors',
-                viewMode === 'preview' 
-                  ? 'bg-surface text-primary shadow-sm' 
+                viewMode === 'preview'
+                  ? 'bg-surface text-primary shadow-sm'
                   : 'text-muted hover:text-primary'
               )}
             >
@@ -220,7 +222,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
               Preview
             </button>
           </div>
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -229,7 +231,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
           >
             {copied ? <Check size={16} /> : <Copy size={16} />}
           </Button>
-          
+
           <Button
             size="sm"
             onClick={handleSave}
@@ -238,7 +240,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
             <Save size={14} className="mr-1.5" />
             {isUpdating ? 'Guardando...' : 'Guardar'}
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
@@ -263,14 +265,15 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
         <div className="flex-1 flex flex-col overflow-hidden">
           {viewMode === 'edit' ? (
             <div className="flex-1 p-4 overflow-auto">
-              <label className="text-sm text-muted mb-2 block">Contenido</label>
-              <textarea
+              <Textarea
+                label="Contenido"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                className="w-full h-[300px] p-4 bg-surface border border-subtle rounded-lg resize-none focus:outline-none focus:border-accent text-primary font-mono text-sm"
+                className="w-full h-[300px] font-mono text-sm"
                 placeholder="Escribe el contenido de tu plantilla...&#10;&#10;Usa {{variable}} para insertar variables dinámicas."
+                fullWidth
               />
-              
+
               {/* Detected variables hint */}
               {detectedVariables.length > 0 && (
                 <div className="mt-3">
@@ -314,17 +317,16 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
         <div className="w-80 border-l border-subtle bg-surface overflow-y-auto">
           {/* Category */}
           <div className="p-4 border-b border-subtle">
-            <label className="text-sm text-muted mb-2 block">Categoría</label>
-            <select
+            <Select
+              label="Categoría"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-base border border-subtle rounded-lg focus:outline-none focus:border-accent text-primary"
-            >
-              <option value="">Sin categoría</option>
-              {TEMPLATE_CATEGORIES.map(cat => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
-              ))}
-            </select>
+              onChange={(val) => setCategory(val as string)}
+              options={[
+                { value: '', label: 'Sin categoría' },
+                ...TEMPLATE_CATEGORIES.map(cat => ({ value: cat.value, label: cat.label }))
+              ]}
+              fullWidth
+            />
           </div>
 
           {/* Variables */}
@@ -332,7 +334,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm text-muted">Variables ({variables.length})</label>
             </div>
-            
+
             {variables.length === 0 ? (
               <p className="text-xs text-muted py-2">
                 Las variables se detectan automáticamente del contenido usando {'{{nombre}}'}.
@@ -350,35 +352,34 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
                         <Trash2 size={12} />
                       </button>
                     </div>
-                    
-                    <input
-                      type="text"
+
+                    <Input
+                      variant="text"
                       value={variable.label || ''}
                       onChange={(e) => handleUpdateVariable(index, { label: e.target.value })}
                       placeholder="Etiqueta"
-                      className="w-full px-2 py-1 text-xs bg-surface border border-subtle rounded mb-2 focus:outline-none focus:border-accent text-primary"
+                      className="mb-2 text-xs"
+                      fullWidth
                     />
-                    
+
                     <div className="flex gap-2">
-                      <select
+                      <Select
                         value={variable.type}
-                        onChange={(e) => handleUpdateVariable(index, { type: e.target.value as TemplateVariable['type'] })}
-                        className="flex-1 px-2 py-1 text-xs bg-surface border border-subtle rounded focus:outline-none focus:border-accent text-primary"
-                      >
-                        {VARIABLE_TYPES.map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
-                      
-                      <label className="flex items-center gap-1 text-xs text-muted">
-                        <input
-                          type="checkbox"
+                        onChange={(val) => handleUpdateVariable(index, { type: val as TemplateVariable['type'] })}
+                        options={VARIABLE_TYPES.map(t => ({ value: t.value, label: t.label }))}
+                        fullWidth
+                      />
+
+                      <div className="flex items-center">
+                        <Checkbox
                           checked={variable.required}
                           onChange={(e) => handleUpdateVariable(index, { required: e.target.checked })}
-                          className="rounded"
+                          id={`req-${index}`}
                         />
-                        Req.
-                      </label>
+                        <label htmlFor={`req-${index}`} className="ml-2 text-xs text-muted cursor-pointer">
+                          Req.
+                        </label>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -389,21 +390,20 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
           {/* Tags */}
           <div className="p-4">
             <label className="text-sm text-muted mb-2 block">Etiquetas</label>
-            
+
             <div className="flex gap-2 mb-2">
-              <input
-                type="text"
+              <Input
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                 placeholder="Nueva etiqueta"
-                className="flex-1 px-3 py-1.5 text-sm bg-base border border-subtle rounded-lg focus:outline-none focus:border-accent text-primary"
+                fullWidth
               />
               <Button size="sm" variant="secondary" onClick={handleAddTag}>
                 <Plus size={14} />
               </Button>
             </div>
-            
+
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {tags.map(tag => (
@@ -422,6 +422,14 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="p-4 border-t border-subtle">
+            <TemplateAssetPicker
+              templateId={templateId}
+              accountId={accountId}
+              assets={originalTemplate.assets || []}
+            />
           </div>
         </div>
       </div>

@@ -16,6 +16,11 @@ import type {
   AccountDataReference,
   AccountOrphanReference,
 } from '../types';
+import type {
+  Template,
+  CreateTemplateInput,
+  UpdateTemplateInput,
+} from '../components/templates/types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -95,7 +100,7 @@ class ApiService {
       return data;
     } catch (error: any) {
       console.error(`[API] Request failed for ${endpoint}:`, error);
-      
+
       // Detectar errores específicos de red
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
         return {
@@ -103,7 +108,7 @@ class ApiService {
           error: 'No se puede conectar al servidor. Verifica que el backend esté corriendo.',
         };
       }
-      
+
       return {
         success: false,
         error: error.message || 'Error de conexión',
@@ -305,15 +310,15 @@ class ApiService {
   }): Promise<
     ApiResponse<
       | {
-          id: string;
-          featureKey: string;
-          engine: string;
-          model: string;
-          tokenBudget: number;
-          tokensUsed: number;
-          tokensRemaining: number;
-          expiresAt: string;
-        }
+        id: string;
+        featureKey: string;
+        engine: string;
+        model: string;
+        tokenBudget: number;
+        tokensUsed: number;
+        tokensRemaining: number;
+        expiresAt: string;
+      }
       | null
     >
   > {
@@ -515,6 +520,52 @@ class ApiService {
     });
   }
 
+  // Templates CRUD -----------------------------------------------------------
+  async listTemplates(accountId: string): Promise<ApiResponse<Template[]>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<Template[]>(`/templates?${query.toString()}`);
+  }
+
+  async getTemplate(accountId: string, id: string): Promise<ApiResponse<Template>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<Template>(`/templates/${id}?${query.toString()}`);
+  }
+
+  async createTemplate(accountId: string, payload: CreateTemplateInput): Promise<ApiResponse<Template>> {
+    return this.request<Template>('/templates', {
+      method: 'POST',
+      body: JSON.stringify({ accountId, ...payload }),
+    });
+  }
+
+  async updateTemplate(accountId: string, id: string, payload: UpdateTemplateInput): Promise<ApiResponse<Template>> {
+    return this.request<Template>(`/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountId, ...payload }),
+    });
+  }
+
+  async deleteTemplate(accountId: string, id: string): Promise<ApiResponse<{ success: boolean }>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<{ success: boolean }>(`/templates/${id}?${query.toString()}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async linkTemplateAsset(accountId: string, templateId: string, assetId: string, slot: string = 'attachment'): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request<{ success: boolean }>(`/templates/${templateId}/assets`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId, assetId, slot }),
+    });
+  }
+
+  async unlinkTemplateAsset(accountId: string, templateId: string, assetId: string): Promise<ApiResponse<{ success: boolean }>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<{ success: boolean }>(`/templates/${templateId}/assets/${assetId}?${query.toString()}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Forgot password
   async forgotPassword(email: string): Promise<ApiResponse<{ message: string }>> {
     return this.request<{ message: string }>('/auth/forgot-password', {
@@ -535,14 +586,14 @@ class ApiService {
   async uploadAvatar(file: File, accountId?: string): Promise<ApiResponse<{ url: string; filename: string }>> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const query = accountId ? `?accountId=${accountId}` : '';
-    
+
     const response = await this.request<{ url: string; filename: string }>(`/upload/avatar${query}`, {
       method: 'POST',
       body: formData,
     });
-    
+
     return response;
   }
 

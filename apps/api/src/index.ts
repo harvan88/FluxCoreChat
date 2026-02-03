@@ -18,6 +18,7 @@ import { appointmentsRoutes } from './routes/appointments.routes';
 import { adaptersRoutes } from './routes/adapters.routes';
 import { workspacesRoutes } from './routes/workspaces.routes';
 import { automationRoutes } from './routes/automation.routes';
+import { templatesRoutes } from './routes/templates.routes';
 import { messageCore } from './core/message-core';
 import { conversationService } from './services/conversation.service';
 
@@ -85,6 +86,7 @@ const app = new Elysia()
   .use(adaptersRoutes)
   .use(workspacesRoutes)
   .use(automationRoutes)
+  .use(templatesRoutes)
   .listen(PORT);
 
 async function initializeMessageCore() {

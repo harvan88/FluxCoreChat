@@ -6,79 +6,8 @@
  */
 
 import { create } from 'zustand';
+import { api } from '../../../services/api';
 import type { Template, CreateTemplateInput, UpdateTemplateInput, TemplateFilters, TemplateSort } from '../types';
-
-// ============================================================================
-// Mock Data (temporal hasta conectar con API)
-// ============================================================================
-
-const INITIAL_TEMPLATES: Template[] = [
-  {
-    id: '1',
-    accountId: 'acc-1',
-    name: 'Bienvenida',
-    content: 'Hola {{nombre}}, ¡bienvenido/a a nuestro servicio! ¿En qué podemos ayudarte hoy?',
-    category: 'greeting',
-    variables: [
-      { name: 'nombre', type: 'text', label: 'Nombre del cliente', required: true }
-    ],
-    tags: ['saludo', 'inicio'],
-    isActive: true,
-    usageCount: 150,
-    createdAt: '2025-01-15T10:00:00Z',
-    updatedAt: '2025-01-20T15:30:00Z',
-  },
-  {
-    id: '2',
-    accountId: 'acc-1',
-    name: 'Seguimiento de pedido',
-    content: 'Hola {{nombre}}, tu pedido #{{numero_pedido}} está en camino. Llegará aproximadamente el {{fecha_entrega}}.',
-    category: 'followup',
-    variables: [
-      { name: 'nombre', type: 'text', label: 'Nombre', required: true },
-      { name: 'numero_pedido', type: 'text', label: 'Número de pedido', required: true },
-      { name: 'fecha_entrega', type: 'date', label: 'Fecha de entrega', required: true },
-    ],
-    tags: ['pedido', 'seguimiento'],
-    isActive: true,
-    usageCount: 89,
-    createdAt: '2025-01-10T08:00:00Z',
-    updatedAt: '2025-01-18T12:00:00Z',
-  },
-  {
-    id: '3',
-    accountId: 'acc-1',
-    name: 'Despedida',
-    content: '¡Gracias por contactarnos, {{nombre}}! Si tienes más preguntas, no dudes en escribirnos. ¡Que tengas un excelente día!',
-    category: 'closing',
-    variables: [
-      { name: 'nombre', type: 'text', label: 'Nombre', required: false }
-    ],
-    tags: ['despedida', 'cierre'],
-    isActive: true,
-    usageCount: 200,
-    createdAt: '2025-01-05T14:00:00Z',
-    updatedAt: '2025-01-05T14:00:00Z',
-  },
-  {
-    id: '4',
-    accountId: 'acc-1',
-    name: 'Promoción especial',
-    content: '🎉 ¡Hola {{nombre}}! Tenemos una oferta especial para ti: {{descuento}}% de descuento en {{producto}}. Válido hasta {{fecha_limite}}.',
-    category: 'promotion',
-    variables: [
-      { name: 'nombre', type: 'text', label: 'Nombre', required: true },
-      { name: 'descuento', type: 'number', label: 'Porcentaje de descuento', required: true },
-      { name: 'producto', type: 'text', label: 'Producto', required: true },
-      { name: 'fecha_limite', type: 'date', label: 'Fecha límite', required: true },
-    ],
-    tags: ['promoción', 'oferta', 'descuento'],
-    isActive: false,
-    usageCount: 45,
-    createdAt: '2025-01-01T09:00:00Z',
-    updatedAt: '2025-01-25T11:00:00Z',
-  },
-];
 
 // ============================================================================
 // Store Interface
@@ -88,32 +17,34 @@ interface TemplateState {
   // Data
   templates: Template[];
   selectedTemplateId: string | null;
-  
+
   // Loading states
   isLoading: boolean;
   isCreating: boolean;
   isUpdating: boolean;
   isDeleting: boolean;
   error: string | null;
-  
+
   // Filters
   filters: TemplateFilters;
   sort: TemplateSort;
-  
+
   // Actions
   setTemplates: (templates: Template[]) => void;
   selectTemplate: (id: string | null) => void;
   setFilters: (filters: TemplateFilters) => void;
   setSort: (sort: TemplateSort) => void;
   setError: (error: string | null) => void;
-  
+
   // CRUD
   fetchTemplates: (accountId: string) => Promise<void>;
   createTemplate: (accountId: string, data: CreateTemplateInput) => Promise<Template>;
-  updateTemplate: (id: string, data: UpdateTemplateInput) => Promise<Template>;
-  deleteTemplate: (id: string) => Promise<void>;
+  updateTemplate: (accountId: string, id: string, data: UpdateTemplateInput) => Promise<Template>;
+  deleteTemplate: (accountId: string, id: string) => Promise<void>;
   duplicateTemplate: (id: string, accountId: string) => Promise<Template>;
-  
+  linkAsset: (accountId: string, templateId: string, assetId: string) => Promise<void>;
+  unlinkAsset: (accountId: string, templateId: string, assetId: string) => Promise<void>;
+
   // Getters
   getTemplateById: (id: string) => Template | undefined;
   getFilteredTemplates: () => Template[];
@@ -134,135 +65,117 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
   error: null,
   filters: {},
   sort: { field: 'updatedAt', direction: 'desc' },
-  
+
   // Setters
   setTemplates: (templates) => set({ templates }),
   selectTemplate: (id) => set({ selectedTemplateId: id }),
   setFilters: (filters) => set({ filters }),
   setSort: (sort) => set({ sort }),
   setError: (error) => set({ error }),
-  
+
   // Fetch templates
   fetchTemplates: async (accountId) => {
     set({ isLoading: true, error: null });
-    
+
+    if (!accountId) {
+      set({ error: 'Cuenta no válida', isLoading: false });
+      return;
+    }
+
     try {
-      // TODO: Reemplazar con llamada real a API
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Usar mock data
-      const data = INITIAL_TEMPLATES.filter(t => t.accountId === accountId || accountId);
-      set({ templates: data, isLoading: false });
+      const response = await api.listTemplates(accountId);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Error al cargar plantillas');
+      }
+
+      set({ templates: response.data, isLoading: false });
     } catch (err) {
-      set({ 
+      set({
         error: err instanceof Error ? err.message : 'Error al cargar plantillas',
-        isLoading: false 
+        isLoading: false,
       });
     }
   },
-  
+
   // Create template
   createTemplate: async (accountId, data) => {
     set({ isCreating: true, error: null });
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      const newTemplate: Template = {
-        id: `template-${Date.now()}`,
-        accountId,
-        name: data.name,
-        content: data.content,
-        category: data.category,
-        variables: data.variables || [],
-        tags: data.tags || [],
-        isActive: true,
-        usageCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      
-      set(state => ({ 
+      const response = await api.createTemplate(accountId, data);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Error al crear plantilla');
+      }
+
+      const newTemplate = response.data;
+      set((state) => ({
         templates: [newTemplate, ...state.templates],
-        isCreating: false 
+        isCreating: false,
       }));
-      
+
       return newTemplate;
     } catch (err) {
-      set({ 
-        error: err instanceof Error ? err.message : 'Error al crear plantilla',
-        isCreating: false 
-      });
-      throw err;
+      const error = err instanceof Error ? err : new Error('Error al crear plantilla');
+      set({ error: error.message, isCreating: false });
+      throw error;
     }
   },
-  
+
   // Update template
-  updateTemplate: async (id, data) => {
+  updateTemplate: async (accountId, id, data) => {
     set({ isUpdating: true, error: null });
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      let updatedTemplate: Template | undefined;
-      
-      set(state => ({
-        templates: state.templates.map(t => {
-          if (t.id === id) {
-            updatedTemplate = {
-              ...t,
-              ...data,
-              updatedAt: new Date().toISOString(),
-            };
-            return updatedTemplate;
-          }
-          return t;
-        }),
-        isUpdating: false,
-      }));
-      
-      if (!updatedTemplate) {
-        throw new Error('Plantilla no encontrada');
+      const response = await api.updateTemplate(accountId, id, data);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Error al actualizar plantilla');
       }
-      
+
+      const updatedTemplate = response.data;
+      set((state) => ({
+        templates: state.templates.map((t) => (t.id === id ? updatedTemplate : t)),
+      }));
+
       return updatedTemplate;
     } catch (err) {
-      set({ 
-        error: err instanceof Error ? err.message : 'Error al actualizar plantilla',
-        isUpdating: false 
-      });
-      throw err;
+      const error = err instanceof Error ? err : new Error('Error al actualizar plantilla');
+      set({ error: error.message });
+      throw error;
+    } finally {
+      set({ isUpdating: false });
     }
   },
-  
+
   // Delete template
-  deleteTemplate: async (id) => {
+  deleteTemplate: async (accountId, id) => {
     set({ isDeleting: true, error: null });
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      set(state => ({
-        templates: state.templates.filter(t => t.id !== id),
+      const response = await api.deleteTemplate(accountId, id);
+      if (!response.success) {
+        throw new Error(response.error || 'Error al eliminar plantilla');
+      }
+
+      set((state) => ({
+        templates: state.templates.filter((t) => t.id !== id),
         selectedTemplateId: state.selectedTemplateId === id ? null : state.selectedTemplateId,
-        isDeleting: false,
       }));
     } catch (err) {
-      set({ 
-        error: err instanceof Error ? err.message : 'Error al eliminar plantilla',
-        isDeleting: false 
-      });
-      throw err;
+      const error = err instanceof Error ? err : new Error('Error al eliminar plantilla');
+      set({ error: error.message });
+      throw error;
+    } finally {
+      set({ isDeleting: false });
     }
   },
-  
+
   // Duplicate template
   duplicateTemplate: async (id, accountId) => {
     const original = get().templates.find(t => t.id === id);
     if (!original) {
       throw new Error('Plantilla no encontrada');
     }
-    
+
     return get().createTemplate(accountId, {
       name: `${original.name} (copia)`,
       content: original.content,
@@ -271,39 +184,81 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
       tags: [...original.tags],
     });
   },
-  
+
+  // Link asset
+  linkAsset: async (accountId, templateId, assetId) => {
+    try {
+      const response = await api.linkTemplateAsset(accountId, templateId, assetId);
+      if (!response.success) throw new Error(response.error || 'Error al vincular archivo');
+
+      // Refresh template to get updated assets
+      // Optimized: just re-fetch this single template if possible, or refetch all
+      // For now, let's just refetch all to be safe and simple, or update optimistic if we had the asset data
+      // Since we don't have the full asset data return from linkTemplateAsset, better to refetch.
+      await get().fetchTemplates(accountId);
+
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Error al vincular archivo');
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  // Unlink asset
+  unlinkAsset: async (accountId, templateId, assetId) => {
+    try {
+      const response = await api.unlinkTemplateAsset(accountId, templateId, assetId);
+      if (!response.success) throw new Error(response.error || 'Error al desvincular archivo');
+
+      // Optimistic update
+      set((state) => ({
+        templates: state.templates.map(t => {
+          if (t.id !== templateId) return t;
+          return {
+            ...t,
+            assets: t.assets?.filter(a => a.assetId !== assetId) || []
+          };
+        })
+      }));
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Error al desvincular archivo');
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   // Get template by ID
   getTemplateById: (id) => {
     return get().templates.find(t => t.id === id);
   },
-  
+
   // Get filtered and sorted templates
   getFilteredTemplates: () => {
     const { templates, filters, sort } = get();
     let result = [...templates];
-    
+
     // Apply filters
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      result = result.filter(t => 
+      result = result.filter(t =>
         t.name.toLowerCase().includes(searchLower) ||
         t.content.toLowerCase().includes(searchLower) ||
         t.tags.some(tag => tag.toLowerCase().includes(searchLower))
       );
     }
-    
+
     if (filters.category) {
       result = result.filter(t => t.category === filters.category);
     }
-    
+
     if (filters.isActive !== undefined) {
       result = result.filter(t => t.isActive === filters.isActive);
     }
-    
+
     // Apply sort
     result.sort((a, b) => {
       let comparison = 0;
-      
+
       switch (sort.field) {
         case 'name':
           comparison = a.name.localeCompare(b.name);
@@ -318,10 +273,10 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
           comparison = a.usageCount - b.usageCount;
           break;
       }
-      
+
       return sort.direction === 'asc' ? comparison : -comparison;
     });
-    
+
     return result;
   },
 }));

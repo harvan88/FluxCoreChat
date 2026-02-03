@@ -140,18 +140,25 @@ viewRegistry.registerTabView({
 });
 ```
 
-### 4.3 Agregar a ActivityBar
+### 4.3 Exponer en Tools de ChatCore
 
 ```tsx
-// En components/layout/ActivityBar.tsx
-// Agregar nuevo item:
+// En components/tools/ToolsSidebar.tsx
+// Agregar item dentro de la sección "Herramientas"
 
 {
   id: 'templates',
-  icon: FileText,
   label: 'Plantillas',
+  icon: FileTextIcon,
+  onSelect: () => openTab('editor', {
+    type: 'template-panel',
+    identity: `template-panel:${accountId}`,
+    context: { accountId },
+  }),
 }
 ```
+
+> Nota: Las herramientas viven bajo el namespace de ChatCore Tools; mantener este punto como única vía de acceso evita llenar la ActivityBar con paneles de edición avanzados.
 
 ---
 
@@ -238,13 +245,12 @@ export interface UpdateTemplateInput {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ActivityBar                                                 │
-│ [💬] [👥] [📄] [⚙️]                                         │
-│        ▲                                                    │
-│        │ Click en Plantillas                                │
-└────────┼────────────────────────────────────────────────────┘
-         │
-         ▼
+│ Tools (ChatCore)                                            │
+│ ┌──────────────┐                                            │
+│ │ Plantillas ▶ │───┐                                        │
+│ └──────────────┘   │                                        │
+└────────────────────┼────────────────────────────────────────┘
+                     ▼
 ┌─────────────────────┐    ┌──────────────────────────────────┐
 │ Sidebar             │    │ ViewPort                         │
 │ ┌─────────────────┐ │    │ ┌──────────────────────────────┐ │
@@ -290,7 +296,7 @@ export interface UpdateTemplateInput {
 
 ### Fase 4: Integración (2h)
 - [ ] Registrar en ViewRegistry
-- [ ] Agregar a ActivityBar
+- [ ] Registrar acceso en ToolsSidebar (ChatCore Tools)
 - [ ] Registrar tab type en DynamicContainer
 - [ ] Agregar tipos a `types/panels.ts`
 
