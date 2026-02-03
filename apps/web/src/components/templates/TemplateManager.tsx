@@ -100,7 +100,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
 
   const handleDelete = async (template: Template) => {
     try {
-      await deleteTemplate(template.id);
+      await deleteTemplate(accountId, template.id);
     } catch (err) {
       console.error('Error deleting template:', err);
     }

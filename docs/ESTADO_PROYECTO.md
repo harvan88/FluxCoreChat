@@ -1,6 +1,6 @@
 # Estado del Proyecto FluxCore
 
-> **Última actualización:** 2026-01-09  
+> **Última actualización:** 2026-02-03  
 > **Estado:** 🟠 **EN PROGRESO**  
 > El foco actual es **FluxCore (Sistema IA)**: completar el flujo end-to-end de bibliotecas (Asistentes / Instrucciones / Base de conocimiento / Herramientas) y alinear el UX de tabs según `FLUX CORE.md`.
 
@@ -80,7 +80,9 @@
 |------|--------|--------|-----------|
 | PC-1 | Avatar Upload System | ✅ Completado | Alta |
 | PC-2 | Password Reset Flow | ✅ Completado | Media |
-| PC-3 | Automation Triggers Avanzados | ⏳ Pendiente | Baja |
+| PC-3 | Automation Triggers Avanzados | ✅ Completado | Media |
+| H3-TM-BE | Template CRUD Backend | ✅ Completado | Alta |
+| H3-TM | Template Manager UI | ⏳ Pendiente (frontend) | Media |
 | PC-4 | UI Completeness | ⏳ Pendiente | Media |
 | AUDIT-1 | Security: Credits Admin | ✅ Fixed | CRÍTICA |
 | AUDIT-2 | UI: Iconography Consistency | ✅ Fixed | Media |

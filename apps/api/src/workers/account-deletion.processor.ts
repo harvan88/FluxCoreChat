@@ -11,6 +11,16 @@ export type DeletionJobStatus = 'external_cleanup' | 'local_cleanup' | 'complete
 
 const ACTIVE_STATUSES: DeletionJobStatus[] = ['external_cleanup', 'local_cleanup'];
 
+const logAccountDeletionEvent = (event: Record<string, unknown>) => {
+  console.info(
+    '[AccountDeletion]',
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      ...event,
+    }),
+  );
+};
+
 export const getNextDeletionJob = async (): Promise<DeletionJob | null> => {
   const [job] = await db
     .select()
@@ -78,6 +88,14 @@ export const markDeletionJobFailed = async (job: DeletionJob, reason: string) =>
     jobId: job.id,
     reason,
   });
+
+  logAccountDeletionEvent({
+    event: 'job_failed',
+    jobId: job.id,
+    accountId: job.accountId,
+    reason,
+    phase: job.status,
+  });
 };
 
 const processExternalCleanup = async (job: DeletionJob) => {
@@ -106,7 +124,12 @@ const processExternalCleanup = async (job: DeletionJob) => {
     .where(eq(accountDeletionJobs.id, job.id));
 
   await logDeletionJob(job.accountId, job.id, 'local_cleanup', 'External cleanup completed');
-  console.log('[AccountDeletion] External cleanup done for job', job.id, '→ local_cleanup');
+  logAccountDeletionEvent({
+    event: 'phase_completed',
+    nextPhase: 'local_cleanup',
+    jobId: job.id,
+    accountId: job.accountId,
+  });
 
   metricsService.increment('account_deletion.phase_completed_total', 1, {
     phase: 'external_cleanup',
@@ -140,7 +163,12 @@ const processLocalCleanup = async (job: DeletionJob) => {
     .where(eq(accountDeletionJobs.id, job.id));
 
   await logDeletionJob(job.accountId, job.id, 'completed', 'Local cleanup completed', { summary });
-  console.log('[AccountDeletion] Job completed', job.id);
+  logAccountDeletionEvent({
+    event: 'job_completed',
+    jobId: job.id,
+    accountId: job.accountId,
+    summary,
+  });
 
   broadcastSystemEvent({
     type: 'account:deleted',

@@ -16,6 +16,7 @@ export interface Template {
   category?: string;
   variables: TemplateVariable[];
   tags: string[];
+  assets?: TemplateAsset[];
   isActive: boolean;
   usageCount: number;
   createdAt: string;

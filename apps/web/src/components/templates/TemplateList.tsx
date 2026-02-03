@@ -5,11 +5,12 @@
  */
 
 import { useState } from 'react';
-import { Search, Filter, SortAsc, SortDesc } from 'lucide-react';
+import { Filter, SortAsc, SortDesc } from 'lucide-react';
 import clsx from 'clsx';
 import { TemplateCard } from './TemplateCard';
 import type { Template, TemplateFilters, TemplateSort, TemplateSortField } from './types';
 import { TEMPLATE_CATEGORIES } from './types';
+import { Input, Select } from '../ui';
 
 interface TemplateListProps {
   templates: Template[];
@@ -45,15 +46,16 @@ export function TemplateList({
 }: TemplateListProps) {
   const [showFilters, setShowFilters] = useState(false);
 
-  const handleSearchChange = (value: string) => {
-    onFiltersChange({ ...filters, search: value || undefined });
+  // ... imports need to be updated first
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onFiltersChange({ ...filters, search: e.target.value || undefined });
   };
 
-  const handleCategoryChange = (value: string) => {
-    onFiltersChange({ ...filters, category: value || undefined });
+  const handleCategoryChange = (value: string | string[]) => {
+    onFiltersChange({ ...filters, category: (value as string) || undefined });
   };
 
-  const handleSortFieldChange = (value: string) => {
+  const handleSortFieldChange = (value: string | string[]) => {
     onSortChange({ ...sort, field: value as TemplateSortField });
   };
 
@@ -67,21 +69,20 @@ export function TemplateList({
       <div className="p-3 border-b border-subtle">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              type="text"
+            <Input
+              variant="search"
               placeholder="Buscar plantillas..."
               value={filters.search || ''}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm bg-surface border border-subtle rounded-lg focus:outline-none focus:border-accent text-primary placeholder:text-muted"
+              onChange={handleSearchChange}
+              fullWidth
             />
           </div>
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={clsx(
               'p-2 rounded-lg border transition-colors',
-              showFilters 
-                ? 'border-accent bg-accent/10 text-accent' 
+              showFilters
+                ? 'border-accent bg-accent/10 text-accent'
                 : 'border-subtle text-muted hover:text-primary hover:bg-hover'
             )}
             title="Filtros"
@@ -94,34 +95,30 @@ export function TemplateList({
         {showFilters && (
           <div className="mt-3 pt-3 border-t border-subtle flex flex-wrap gap-3">
             <div className="flex-1 min-w-[140px]">
-              <label className="text-xs text-muted mb-1 block">Categoría</label>
-              <select
+              <Select
+                label="Categoría"
                 value={filters.category || ''}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                className="w-full px-3 py-1.5 text-sm bg-surface border border-subtle rounded-lg focus:outline-none focus:border-accent text-primary"
-              >
-                <option value="">Todas</option>
-                {TEMPLATE_CATEGORIES.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
+                onChange={handleCategoryChange}
+                options={[
+                  { value: '', label: 'Todas' },
+                  ...TEMPLATE_CATEGORIES.map(cat => ({ value: cat.value, label: cat.label }))
+                ]}
+              />
             </div>
-            
+
             <div className="flex-1 min-w-[140px]">
-              <label className="text-xs text-muted mb-1 block">Ordenar por</label>
-              <div className="flex gap-1">
-                <select
-                  value={sort.field}
-                  onChange={(e) => handleSortFieldChange(e.target.value)}
-                  className="flex-1 px-3 py-1.5 text-sm bg-surface border border-subtle rounded-lg focus:outline-none focus:border-accent text-primary"
-                >
-                  {SORT_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Select
+                    label="Ordenar por"
+                    value={sort.field}
+                    onChange={handleSortFieldChange}
+                    options={SORT_OPTIONS}
+                  />
+                </div>
                 <button
                   onClick={toggleSortDirection}
-                  className="p-1.5 border border-subtle rounded-lg hover:bg-hover text-muted hover:text-primary transition-colors"
+                  className="mb-1 p-2 border border-subtle rounded-lg hover:bg-hover text-muted hover:text-primary transition-colors h-[38px] flex items-center justify-center"
                   title={sort.direction === 'asc' ? 'Ascendente' : 'Descendente'}
                 >
                   {sort.direction === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
