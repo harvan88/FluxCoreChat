@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react';
 import {
     Loader2,
     Mic,
@@ -12,45 +12,7 @@ import { AttachmentPanel, type AttachmentAction } from './AttachmentPanel';
 import { AudioRecorderPanel } from './AudioRecorderPanel';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { EmojiPanel } from './EmojiPanel';
-
-type UploadFileFn = (args: { file: File; type: 'image' | 'document' | 'video' }) => Promise<{
-    success: boolean;
-    error?: string;
-    data?: {
-        attachment?: {
-            id: string;
-            url: string;
-            filename: string;
-            mimeType: string;
-            sizeBytes: number;
-        };
-    };
-}>;
-
-type ComposerMediaItem = {
-    type: 'image' | 'document' | 'audio' | 'video';
-    url: string;
-    attachmentId: string;
-    filename: string;
-    mimeType: string;
-    size: number;
-    waveformData?: any;
-};
-
-type UploadAudioFn = (args: { file: File }) => Promise<{
-    success: boolean;
-    error?: string;
-    data?: {
-        attachment?: {
-            id: string;
-            url: string;
-            filename: string;
-            mimeType: string;
-            sizeBytes: number;
-        };
-        waveformData?: any;
-    };
-}>;
+import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from './composerUploadTypes';
 
 type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
 
@@ -64,7 +26,7 @@ export function StandardComposer(props: {
     accountId?: string;
     relationshipId?: string;
 
-    uploadFile: UploadFileFn;
+    uploadAsset: UploadAssetFn;
     uploadAudio: UploadAudioFn;
     isUploading: boolean;
     uploadProgress: number;
@@ -131,6 +93,26 @@ export function StandardComposer(props: {
         setQueuedMedia((prev) => [...prev, item]);
     };
 
+    const buildMediaFromResult = (
+        result: ComposerUploadResult,
+        type: ComposerMediaItem['type'],
+    ): ComposerMediaItem | null => {
+        if (!result.success || !result.asset) {
+            return null;
+        }
+
+        return {
+            id: result.asset.assetId,
+            assetId: result.asset.assetId,
+            type,
+            name: result.asset.name,
+            mimeType: result.asset.mimeType,
+            sizeBytes: result.asset.sizeBytes,
+            previewUrl: result.previewUrl,
+            waveformData: result.waveformData,
+        };
+    };
+
     const removeQueuedMedia = (index: number) => {
         setQueuedMedia((prev) => prev.filter((_, i) => i !== index));
     };
@@ -168,19 +150,13 @@ export function StandardComposer(props: {
                 open={isCameraOpen}
                 onClose={() => setIsCameraOpen(false)}
                 onSend={async (file) => {
-                    const res = await props.uploadFile({ file, type: 'image' });
-                    if (res.success && res.data?.attachment) {
-                        enqueueMedia({
-                            type: 'image',
-                            url: res.data.attachment.url,
-                            attachmentId: res.data.attachment.id,
-                            filename: res.data.attachment.filename,
-                            mimeType: res.data.attachment.mimeType,
-                            size: res.data.attachment.sizeBytes,
-                        });
+                    const result = await props.uploadAsset({ file, type: 'image' });
+                    const media = buildMediaFromResult(result, 'image');
+                    if (media) {
+                        enqueueMedia(media);
                         return { ok: true };
                     }
-                    return { ok: false, error: res.error || 'Error' };
+                    return { ok: false, error: result.error || 'Error' };
                 }}
             />
 
@@ -190,16 +166,10 @@ export function StandardComposer(props: {
             <input type="file" accept="image/*" className="hidden" ref={(el) => { openGalleryRef.current = () => el?.click(); }} onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                    const res = await props.uploadFile({ file, type: 'image' });
-                    if (res.success && res.data?.attachment) {
-                        enqueueMedia({
-                            type: 'image',
-                            url: res.data.attachment.url,
-                            attachmentId: res.data.attachment.id,
-                            filename: res.data.attachment.filename,
-                            mimeType: res.data.attachment.mimeType,
-                            size: res.data.attachment.sizeBytes,
-                        });
+                    const result = await props.uploadAsset({ file, type: 'image' });
+                    const media = buildMediaFromResult(result, 'image');
+                    if (media) {
+                        enqueueMedia(media);
                     }
                 }
                 e.target.value = '';
@@ -208,16 +178,10 @@ export function StandardComposer(props: {
             <input type="file" accept="application/pdf,text/plain,application/msword" className="hidden" ref={(el) => { openDocumentRef.current = () => el?.click(); }} onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                    const res = await props.uploadFile({ file, type: 'document' });
-                    if (res.success && res.data?.attachment) {
-                        enqueueMedia({
-                            type: 'document',
-                            url: res.data.attachment.url,
-                            attachmentId: res.data.attachment.id,
-                            filename: res.data.attachment.filename,
-                            mimeType: res.data.attachment.mimeType,
-                            size: res.data.attachment.sizeBytes,
-                        });
+                    const result = await props.uploadAsset({ file, type: 'document' });
+                    const media = buildMediaFromResult(result, 'document');
+                    if (media) {
+                        enqueueMedia(media);
                     }
                 }
                 e.target.value = '';
@@ -230,8 +194,8 @@ export function StandardComposer(props: {
             {queuedMedia.length > 0 && (
                 <div className="mb-2 flex gap-2 overflow-x-auto">
                     {queuedMedia.map((m, index) => (
-                        <div key={index} className="flex items-center gap-2 px-3 py-2 bg-active border border-subtle rounded-full">
-                            <span className="text-xs truncate max-w-[150px]">{m.filename}</span>
+                        <div key={`${m.id}-${index}`} className="flex items-center gap-2 px-3 py-2 bg-active border border-subtle rounded-full">
+                            <span className="text-xs truncate max-w-[150px]">{m.name}</span>
                             <button onClick={() => removeQueuedMedia(index)}><X size={14} /></button>
                         </div>
                     ))}
@@ -244,9 +208,19 @@ export function StandardComposer(props: {
                     disabled={props.disabled}
                     onDiscard={() => setIsAudioRecorderOpen(false)}
                     onSend={async (file) => {
-                        const res = await props.uploadAudio({ file });
-                        if (res.success && res.data?.attachment) {
-                            props.onSend({ text: '', media: [{ type: 'audio', ...res.data.attachment }] });
+                        const result = await props.uploadAudio({ file });
+                        if (result.success && result.asset) {
+                            await props.onSend({
+                                text: '',
+                                media: [{
+                                    type: 'audio',
+                                    assetId: result.asset.assetId,
+                                    name: result.asset.name,
+                                    mimeType: result.asset.mimeType,
+                                    sizeBytes: result.asset.sizeBytes,
+                                    waveformData: result.waveformData,
+                                }],
+                            });
                             setIsAudioRecorderOpen(false);
                         }
                     }}

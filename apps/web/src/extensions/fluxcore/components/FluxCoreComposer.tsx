@@ -21,45 +21,7 @@ import { AudioRecorderPanel } from '../../../components/chat/AudioRecorderPanel'
 import { CameraCaptureModal } from '../../../components/chat/CameraCaptureModal';
 import { EmojiPanel } from '../../../components/chat/EmojiPanel';
 import { useAutomation, type AutomationMode } from '../../../hooks/useAutomation';
-
-type UploadFileFn = (args: { file: File; type: 'image' | 'document' | 'video' }) => Promise<{
-    success: boolean;
-    error?: string;
-    data?: {
-        attachment?: {
-            id: string;
-            url: string;
-            filename: string;
-            mimeType: string;
-            sizeBytes: number;
-        };
-    };
-}>;
-
-type ComposerMediaItem = {
-    type: 'image' | 'document' | 'audio' | 'video';
-    url: string;
-    attachmentId: string;
-    filename: string;
-    mimeType: string;
-    size: number;
-    waveformData?: any;
-};
-
-type UploadAudioFn = (args: { file: File }) => Promise<{
-    success: boolean;
-    error?: string;
-    data?: {
-        attachment?: {
-            id: string;
-            url: string;
-            filename: string;
-            mimeType: string;
-            sizeBytes: number;
-        };
-        waveformData?: any;
-    };
-}>;
+import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from '../../../components/chat/composerUploadTypes';
 
 type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
 
@@ -73,7 +35,7 @@ export function FluxCoreComposer(props: {
     accountId?: string;
     relationshipId?: string;
 
-    uploadFile: UploadFileFn;
+    uploadAsset: UploadAssetFn;
     uploadAudio: UploadAudioFn;
     isUploading: boolean;
     uploadProgress: number;
@@ -147,6 +109,26 @@ export function FluxCoreComposer(props: {
         setQueuedMedia((prev) => [...prev, item]);
     };
 
+    const buildMediaFromResult = (
+        result: ComposerUploadResult,
+        type: ComposerMediaItem['type'],
+    ): ComposerMediaItem | null => {
+        if (!result.success || !result.asset) {
+            return null;
+        }
+
+        return {
+            id: result.asset.assetId,
+            assetId: result.asset.assetId,
+            type,
+            name: result.asset.name,
+            mimeType: result.asset.mimeType,
+            sizeBytes: result.asset.sizeBytes,
+            previewUrl: result.previewUrl,
+            waveformData: result.waveformData,
+        };
+    };
+
     const removeQueuedMedia = (index: number) => {
         setQueuedMedia((prev) => prev.filter((_, i) => i !== index));
     };
@@ -215,18 +197,17 @@ export function FluxCoreComposer(props: {
             disabled={props.disabled || props.isUploading || props.isSending}
             onDiscard={() => setIsAudioRecorderOpen(false)}
             onSend={async (file) => {
-                const res = await props.uploadAudio({ file });
-                if (!res.success || !res.data?.attachment) return;
-                props.onSend({
+                const result = await props.uploadAudio({ file });
+                if (!result.success || !result.asset) return;
+                await props.onSend({
                     text: '',
                     media: [{
                         type: 'audio',
-                        url: res.data.attachment.url,
-                        attachmentId: res.data.attachment.id,
-                        filename: res.data.attachment.filename,
-                        mimeType: res.data.attachment.mimeType,
-                        size: res.data.attachment.sizeBytes,
-                        waveformData: res.data.waveformData,
+                        assetId: result.asset.assetId,
+                        name: result.asset.name,
+                        mimeType: result.asset.mimeType,
+                        sizeBytes: result.asset.sizeBytes,
+                        waveformData: result.waveformData,
                     }],
                 });
                 setIsAudioRecorderOpen(false);
@@ -295,9 +276,10 @@ export function FluxCoreComposer(props: {
     return (
         <div className="px-4 py-3 sm:py-4 bg-active border-t border-subtle flex-shrink-0 relative">
             <CameraCaptureModal open={isCameraOpen} onClose={() => setIsCameraOpen(false)} onSend={async (file) => {
-                const res = await props.uploadFile({ file, type: 'image' });
-                if (res.success && res.data?.attachment) {
-                    enqueueMedia({ type: 'image', url: res.data.attachment.url, attachmentId: res.data.attachment.id, filename: res.data.attachment.filename, mimeType: res.data.attachment.mimeType, size: res.data.attachment.sizeBytes });
+                const result = await props.uploadAsset({ file, type: 'image' });
+                const media = buildMediaFromResult(result, 'image');
+                if (media) {
+                    enqueueMedia(media);
                     return { ok: true };
                 }
                 return { ok: false };
@@ -316,16 +298,10 @@ export function FluxCoreComposer(props: {
                     if (!file) return;
                     e.target.value = '';
 
-                    const res = await props.uploadFile({ file, type: 'image' });
-                    if (res.success && res.data?.attachment) {
-                        enqueueMedia({
-                            type: 'image',
-                            url: res.data.attachment.url,
-                            attachmentId: res.data.attachment.id,
-                            filename: res.data.attachment.filename,
-                            mimeType: res.data.attachment.mimeType,
-                            size: res.data.attachment.sizeBytes,
-                        });
+                    const result = await props.uploadAsset({ file, type: 'image' });
+                    const media = buildMediaFromResult(result, 'image');
+                    if (media) {
+                        enqueueMedia(media);
                     }
                 }}
             />
@@ -342,16 +318,10 @@ export function FluxCoreComposer(props: {
                     if (!file) return;
                     e.target.value = '';
 
-                    const res = await props.uploadFile({ file, type: 'document' });
-                    if (res.success && res.data?.attachment) {
-                        enqueueMedia({
-                            type: 'document',
-                            url: res.data.attachment.url,
-                            attachmentId: res.data.attachment.id,
-                            filename: res.data.attachment.filename,
-                            mimeType: res.data.attachment.mimeType,
-                            size: res.data.attachment.sizeBytes,
-                        });
+                    const result = await props.uploadAsset({ file, type: 'document' });
+                    const media = buildMediaFromResult(result, 'document');
+                    if (media) {
+                        enqueueMedia(media);
                     }
                 }}
             />
@@ -371,12 +341,12 @@ export function FluxCoreComposer(props: {
                         const Icon = m.type === 'image' ? Images : m.type === 'audio' ? AudioLines : File;
                         return (
                             <div
-                                key={`${m.attachmentId}-${index}`}
+                                key={`${m.id}-${index}`}
                                 className="flex items-center gap-2 px-3 py-2 bg-active border border-subtle rounded-full min-w-0"
                             >
                                 <Icon className="w-4 h-4 text-secondary flex-shrink-0" />
                                 <div className="min-w-0">
-                                    <div className="text-xs text-primary truncate max-w-[180px]">{m.filename}</div>
+                                    <div className="text-xs text-primary truncate max-w-[180px]">{m.name}</div>
                                 </div>
                                 <button
                                     type="button"

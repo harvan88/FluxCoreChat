@@ -1,4 +1,4 @@
-import { db, templates, templateAssets, type Template, type TemplateVariable } from '@fluxcore/db';
+import { db, templates, templateAssets, assets, type Template, type TemplateVariable } from '@fluxcore/db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 
 export interface TemplateInput {
@@ -20,7 +20,11 @@ export interface TemplateAssetLink {
   assetId: string;
   slot: string;
   version: number;
-  linkedAt: Date | null;
+  linkedAt: string | null;
+  name: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  status: string;
 }
 
 export class TemplateService {
@@ -115,15 +119,31 @@ export class TemplateService {
   }
 
   private async getTemplateAssets(templateId: string): Promise<TemplateAssetLink[]> {
-    return await this.orm
+    const results = await this.orm
       .select({
         assetId: templateAssets.assetId,
         version: templateAssets.version,
         slot: templateAssets.slot,
         linkedAt: templateAssets.linkedAt,
+        name: assets.name,
+        mimeType: assets.mimeType,
+        sizeBytes: assets.sizeBytes,
+        status: assets.status,
       })
       .from(templateAssets)
+      .innerJoin(assets, eq(templateAssets.assetId, assets.id))
       .where(eq(templateAssets.templateId, templateId));
+    
+    return results.map(asset => ({
+      assetId: asset.assetId,
+      slot: asset.slot,
+      version: asset.version,
+      linkedAt: asset.linkedAt ? asset.linkedAt.toISOString() : null,
+      name: asset.name,
+      mimeType: asset.mimeType,
+      sizeBytes: asset.sizeBytes ? Number(asset.sizeBytes) : null,
+      status: asset.status,
+    }));
   }
 
   private async attachAssets(rows: Template[]): Promise<TemplateWithAssets[]> {
@@ -133,25 +153,34 @@ export class TemplateService {
 
     const templateIds = rows.map((t) => t.id);
 
-    const assets = await this.orm
+    const assetsWithMeta = await this.orm
       .select({
         templateId: templateAssets.templateId,
         assetId: templateAssets.assetId,
         version: templateAssets.version,
         slot: templateAssets.slot,
         linkedAt: templateAssets.linkedAt,
+        name: assets.name,
+        mimeType: assets.mimeType,
+        sizeBytes: assets.sizeBytes,
+        status: assets.status,
       })
       .from(templateAssets)
+      .innerJoin(assets, eq(templateAssets.assetId, assets.id))
       .where(inArray(templateAssets.templateId, templateIds));
 
     const grouped = new Map<string, TemplateAssetLink[]>();
-    assets.forEach((asset) => {
+    assetsWithMeta.forEach((asset) => {
       const list = grouped.get(asset.templateId) || [];
       list.push({
         assetId: asset.assetId,
         slot: asset.slot,
         version: asset.version,
-        linkedAt: asset.linkedAt,
+        linkedAt: asset.linkedAt ? asset.linkedAt.toISOString() : null,
+        name: asset.name,
+        mimeType: asset.mimeType,
+        sizeBytes: asset.sizeBytes ? Number(asset.sizeBytes) : null,
+        status: asset.status,
       });
       grouped.set(asset.templateId, list);
     });

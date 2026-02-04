@@ -6,6 +6,7 @@
 
 import type { IStorageAdapter } from './storage-adapter.interface';
 import { LocalStorageAdapter } from './local-storage.adapter';
+import path from 'path';
 import { S3StorageAdapter, createS3ConfigFromEnv } from './s3-storage.adapter';
 
 const DEBUG_PREFIX = '[StorageFactory]';
@@ -45,8 +46,8 @@ export function getStorageAdapter(options?: StorageFactoryOptions): IStorageAdap
 
     if (provider === 'local') {
         _instance = new LocalStorageAdapter({
-            basePath: options?.localBasePath,
-            baseUrl: options?.localBaseUrl,
+            basePath: options?.localBasePath || path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets'),
+            baseUrl: options?.localBaseUrl || 'http://localhost:3000/uploads/assets',
             secret: options?.signingSecret,
         });
         console.log(`${DEBUG_PREFIX} Using Local adapter`);
@@ -67,8 +68,8 @@ export function getStorageAdapter(options?: StorageFactoryOptions): IStorageAdap
         }
 
         _instance = new LocalStorageAdapter({
-            basePath: options?.localBasePath,
-            baseUrl: options?.localBaseUrl,
+            basePath: options?.localBasePath || path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets'),
+            baseUrl: options?.localBaseUrl || 'http://localhost:3000/uploads/assets',
             secret: options?.signingSecret,
         });
         console.log(`${DEBUG_PREFIX} Using Local adapter (auto-detected)`);

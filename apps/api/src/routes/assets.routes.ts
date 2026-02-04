@@ -9,24 +9,31 @@ import { assetGatewayService } from '../services/asset-gateway.service';
 import { assetRegistryService } from '../services/asset-registry.service';
 import { assetPolicyService } from '../services/asset-policy.service';
 import { assetAuditService } from '../services/asset-audit.service';
+import { assetDeletionService } from '../services/asset-deletion.service';
 
 const DEBUG_PREFIX = '[AssetsRoutes]';
 
-export const assetsRoutes = new Elysia({ prefix: '/assets' })
+export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
     // ════════════════════════════════════════════════════════════════════════
     // Upload Session Management
     // ════════════════════════════════════════════════════════════════════════
 
     /**
-     * POST /assets/upload-session
+     * POST /api/assets/upload-session
      * Crear sesión de upload
      */
-    .post('/upload-session', async ({ body, set }) => {
+    .post('/upload-session', async ({ body, query, set }) => {
         try {
             console.log(`${DEBUG_PREFIX} POST /upload-session`);
 
+            const accountId = query.accountId || body.accountId;
+            if (!accountId) {
+                set.status = 400;
+                return { success: false, error: 'accountId is required' };
+            }
+
             const session = await assetGatewayService.createUploadSession({
-                accountId: body.accountId,
+                accountId,
                 uploadedBy: body.uploadedBy,
                 maxSizeBytes: body.maxSizeBytes,
                 allowedMimeTypes: body.allowedMimeTypes,
@@ -39,7 +46,7 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
             // Log audit
             await assetAuditService.logUploadStarted({
                 sessionId: session.id,
-                accountId: body.accountId,
+                accountId,
                 actorId: body.uploadedBy,
                 fileName: body.fileName,
                 mimeType: body.mimeType,
@@ -60,7 +67,7 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         }
     }, {
         body: t.Object({
-            accountId: t.String(),
+            accountId: t.Optional(t.String()),
             uploadedBy: t.Optional(t.String()),
             maxSizeBytes: t.Optional(t.Number()),
             allowedMimeTypes: t.Optional(t.Array(t.String())),
@@ -68,6 +75,9 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
             mimeType: t.Optional(t.String()),
             totalBytes: t.Optional(t.Number()),
             ttlMinutes: t.Optional(t.Number()),
+        }),
+        query: t.Object({
+            accountId: t.Optional(t.String()),
         }),
         detail: {
             tags: ['Assets'],
@@ -77,20 +87,28 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
     })
 
     /**
-     * PUT /assets/upload/:sessionId
+     * PUT /api/assets/upload/:sessionId
      * Upload file data to session
      */
     .put('/upload/:sessionId', async ({ params, body, set }) => {
         try {
             console.log(`${DEBUG_PREFIX} PUT /upload/${params.sessionId}`);
 
-            // Body es el archivo raw
-            const data = body as unknown as ArrayBuffer;
-            const buffer = Buffer.from(data);
+            // Elysia con t.File() maneja el archivo correctamente
+            const file = body.file as File;
+            if (!file) {
+                set.status = 400;
+                return { success: false, error: 'No file provided' };
+            }
+
+            // Convertir File a Buffer
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
 
             const result = await assetGatewayService.uploadComplete(
                 params.sessionId,
-                buffer
+                buffer,
+                file.type
             );
 
             if (!result.success) {
@@ -108,6 +126,9 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         params: t.Object({
             sessionId: t.String(),
         }),
+        body: t.Object({
+            file: t.File(),
+        }),
         detail: {
             tags: ['Assets'],
             summary: 'Upload file data',
@@ -116,28 +137,42 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
     })
 
     /**
-     * POST /assets/upload/:sessionId/commit
+     * POST /api/assets/upload/:sessionId/commit
      * Commit upload and create asset
      */
-    .post('/upload/:sessionId/commit', async ({ params, body, set }) => {
+    .post('/upload/:sessionId/commit', async ({ params, body, query, set }) => {
         try {
             console.log(`${DEBUG_PREFIX} POST /upload/${params.sessionId}/commit`);
+            console.log(`${DEBUG_PREFIX} Query:`, query);
+            console.log(`${DEBUG_PREFIX} Body:`, body);
+
+            const accountId = query.accountId || body?.accountId;
+            if (!accountId) {
+                console.log(`${DEBUG_PREFIX} ERROR: accountId is required`);
+                set.status = 400;
+                return { success: false, error: 'accountId is required' };
+            }
+
+            console.log(`${DEBUG_PREFIX} Creating asset from upload for account: ${accountId}`);
 
             const result = await assetRegistryService.createFromUpload({
                 sessionId: params.sessionId,
-                accountId: body.accountId,
-                workspaceId: body.workspaceId,
-                name: body.name,
-                scope: body.scope as any,
-                dedupPolicy: body.dedupPolicy as any,
-                uploadedBy: body.uploadedBy,
-                metadata: body.metadata,
+                accountId,
+                workspaceId: body?.workspaceId,
+                name: body?.name,
+                scope: body?.scope as any,
+                dedupPolicy: body?.dedupPolicy as any,
+                uploadedBy: body?.uploadedBy,
+                metadata: body?.metadata,
             });
 
             if (!result.success || !result.asset) {
+                console.log(`${DEBUG_PREFIX} ERROR:`, result.error);
                 set.status = 400;
                 return { success: false, error: result.error };
             }
+
+            console.log(`${DEBUG_PREFIX} Asset created: ${result.asset.id}`);
 
             // Log audit
             const session = await assetGatewayService.getSession(params.sessionId);
@@ -145,8 +180,8 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
                 await assetAuditService.logUploadCompleted({
                     assetId: result.asset.id,
                     sessionId: params.sessionId,
-                    accountId: body.accountId,
-                    actorId: body.uploadedBy,
+                    accountId,
+                    actorId: body?.uploadedBy,
                     sizeBytes: result.asset.sizeBytes || 0,
                     checksumSHA256: result.asset.checksumSHA256 || '',
                 });
@@ -154,7 +189,13 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
 
             return {
                 success: true,
-                data: result.asset,
+                data: {
+                    assetId: result.asset.id,
+                    name: result.asset.name,
+                    mimeType: result.asset.mimeType,
+                    sizeBytes: result.asset.sizeBytes,
+                    status: result.asset.status,
+                },
             };
         } catch (error) {
             console.error(`${DEBUG_PREFIX} Error committing upload:`, error);
@@ -165,15 +206,18 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         params: t.Object({
             sessionId: t.String(),
         }),
-        body: t.Object({
-            accountId: t.String(),
+        query: t.Object({
+            accountId: t.Optional(t.String()),
+        }),
+        body: t.Optional(t.Object({
+            accountId: t.Optional(t.String()),
             workspaceId: t.Optional(t.String()),
             name: t.Optional(t.String()),
             scope: t.Optional(t.String()),
             dedupPolicy: t.Optional(t.String()),
             uploadedBy: t.Optional(t.String()),
             metadata: t.Optional(t.Record(t.String(), t.Unknown())),
-        }),
+        })),
         detail: {
             tags: ['Assets'],
             summary: 'Commit upload',
@@ -237,12 +281,12 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
     // ════════════════════════════════════════════════════════════════════════
 
     /**
-     * GET /assets/:id
+     * GET /api/assets/:assetId
      * Get asset metadata
      */
-    .get('/:id', async ({ params, set }) => {
+    .get('/:assetId', async ({ params, set }) => {
         try {
-            const asset = await assetRegistryService.getById(params.id);
+            const asset = await assetRegistryService.getById(params.assetId);
             
             if (!asset) {
                 set.status = 404;
@@ -257,7 +301,7 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         }
     }, {
         params: t.Object({
-            id: t.String(),
+            assetId: t.String(),
         }),
         detail: {
             tags: ['Assets'],
@@ -266,15 +310,15 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
     })
 
     /**
-     * POST /assets/:id/sign
+     * POST /api/assets/:assetId/sign
      * Generate signed URL for asset access
      */
-    .post('/:id/sign', async ({ params, body, set }) => {
+    .post('/:assetId/sign', async ({ params, body, set }) => {
         try {
-            console.log(`${DEBUG_PREFIX} POST /${params.id}/sign`);
+            console.log(`${DEBUG_PREFIX} POST /${params.assetId}/sign`);
 
             const result = await assetPolicyService.signAsset({
-                assetId: params.id,
+                assetId: params.assetId,
                 actorId: body.actorId,
                 actorType: body.actorType as any || 'user',
                 context: {
@@ -290,10 +334,10 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
             }
 
             // Log audit
-            const asset = await assetRegistryService.getById(params.id);
+            const asset = await assetRegistryService.getById(params.assetId);
             if (asset) {
                 await assetAuditService.logUrlSigned({
-                    assetId: params.id,
+                    assetId: params.assetId,
                     actorId: body.actorId,
                     actorType: body.actorType as any || 'user',
                     context: `${body.action || 'download'}:${body.channel || 'web'}`,
@@ -317,7 +361,7 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         }
     }, {
         params: t.Object({
-            id: t.String(),
+            assetId: t.String(),
         }),
         body: t.Object({
             actorId: t.String(),
@@ -374,27 +418,33 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
     })
 
     /**
-     * DELETE /assets/:id
+     * DELETE /api/assets/:assetId
      * Delete asset (soft delete)
      */
-    .delete('/:id', async ({ params, body, set }) => {
+    .delete('/:assetId', async ({ params, query, body, set }) => {
         try {
-            const asset = await assetRegistryService.getById(params.id);
-            
+            const accountId = query.accountId || body?.accountId;
+            if (!accountId) {
+                set.status = 400;
+                return { success: false, error: 'accountId is required' };
+            }
+
+            const asset = await assetRegistryService.getById(params.assetId);
             if (!asset) {
                 set.status = 404;
                 return { success: false, error: 'Asset not found' };
             }
 
-            await assetRegistryService.delete(params.id);
+            if (asset.accountId !== accountId) {
+                set.status = 403;
+                return { success: false, error: 'Asset does not belong to this account' };
+            }
 
-            // Log audit
-            await assetAuditService.logDeleted({
-                assetId: params.id,
-                accountId: asset.accountId,
-                actorId: body?.actorId,
-                reason: body?.reason,
-            });
+            const deleted = await assetDeletionService.deleteAsset(params.assetId, accountId, body?.actorId);
+            if (!deleted) {
+                set.status = 500;
+                return { success: false, error: 'Could not delete asset' };
+            }
 
             return { success: true };
         } catch (error) {
@@ -404,26 +454,30 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         }
     }, {
         params: t.Object({
-            id: t.String(),
+            assetId: t.String(),
+        }),
+        query: t.Object({
+            accountId: t.Optional(t.String()),
         }),
         body: t.Optional(t.Object({
+            accountId: t.Optional(t.String()),
             actorId: t.Optional(t.String()),
             reason: t.Optional(t.String()),
         })),
         detail: {
             tags: ['Assets'],
             summary: 'Delete asset',
-            description: 'Soft delete an asset',
+            description: 'Delete an asset and its physical file',
         },
     })
 
     /**
-     * GET /assets/:id/versions
+     * GET /api/assets/:assetId/versions
      * Get asset versions
      */
-    .get('/:id/versions', async ({ params, set }) => {
+    .get('/:assetId/versions', async ({ params, set }) => {
         try {
-            const versions = await assetRegistryService.getVersions(params.id);
+            const versions = await assetRegistryService.getVersions(params.assetId);
             return { success: true, data: versions };
         } catch (error) {
             console.error(`${DEBUG_PREFIX} Error getting versions:`, error);
@@ -432,7 +486,7 @@ export const assetsRoutes = new Elysia({ prefix: '/assets' })
         }
     }, {
         params: t.Object({
-            id: t.String(),
+            assetId: t.String(),
         }),
         detail: {
             tags: ['Assets'],

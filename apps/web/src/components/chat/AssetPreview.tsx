@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import clsx from 'clsx';
+import { useAuthStore } from '../../store/authStore';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Tipos
@@ -39,6 +40,7 @@ interface AssetPreviewProps {
     className?: string;
     showDownload?: boolean;
     compact?: boolean;
+    typeHint?: AssetType;
 }
 
 type AssetType = 'image' | 'video' | 'audio' | 'document';
@@ -89,13 +91,15 @@ export function AssetPreview({
     className,
     showDownload = true,
     compact = false,
+    typeHint,
 }: AssetPreviewProps) {
     const [signedUrl, setSignedUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lightboxOpen, setLightboxOpen] = useState(false);
+    const currentUserId = useAuthStore((state) => state.user?.id ?? null);
 
-    const assetType = getAssetType(mimeType);
+    const assetType = typeHint ?? getAssetType(mimeType);
     const AssetIcon = getAssetIcon(assetType);
     const extension = getFileExtension(name);
 
@@ -103,11 +107,22 @@ export function AssetPreview({
     const fetchSignedUrl = useCallback(async () => {
         if (signedUrl) return signedUrl;
 
+        if (!currentUserId) {
+            setError('Usuario no autenticado');
+            return null;
+        }
+
         setLoading(true);
         setError(null);
 
         try {
-            const response = await api.signAssetUrl(assetId, accountId, 'preview:web');
+            const response = await api.signAssetUrl(assetId, accountId, {
+                actorId: currentUserId,
+                actorType: 'user',
+                action: 'preview',
+                channel: 'web',
+                disposition: assetType === 'document' ? 'attachment' : 'inline',
+            });
             if (!response.success || !response.data) {
                 throw new Error(response.error || 'Failed to get signed URL');
             }
@@ -120,7 +135,7 @@ export function AssetPreview({
         } finally {
             setLoading(false);
         }
-    }, [assetId, accountId, signedUrl]);
+    }, [assetId, accountId, signedUrl, currentUserId, assetType]);
 
     // Cargar URL para imágenes automáticamente
     useEffect(() => {
@@ -249,17 +264,32 @@ export function AssetPreview({
                     onClick={fetchSignedUrl}
                     className="flex items-center gap-2 p-3 bg-subtle rounded-lg hover:bg-hover transition-colors"
                 >
-                    <Music size={20} className="text-muted" />
-                    <span className="text-sm text-primary">{name}</span>
+                    <Music size={18} className="text-muted" />
+                    <span className="text-sm text-primary">Escuchar audio</span>
                     {loading && <Loader2 size={16} className="animate-spin text-muted" />}
                 </button>
             );
         }
 
         return (
-            <div className="flex items-center gap-3 p-3 bg-subtle rounded-lg">
-                <Music size={20} className="text-accent" />
-                <audio src={signedUrl} controls className="flex-1 h-8" />
+            <div className="flex flex-col gap-2">
+                <audio src={signedUrl} controls className="w-full" />
+                {showDownload && (
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleDownload}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-subtle hover:bg-hover"
+                        >
+                            <Download size={14} /> Descargar
+                        </button>
+                        <button
+                            onClick={handleOpenExternal}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-subtle hover:bg-hover"
+                        >
+                            <ExternalLink size={14} /> Abrir
+                        </button>
+                    </div>
+                )}
             </div>
         );
     };

@@ -16,6 +16,13 @@ Este plan implementa un sistema completo de gestión de assets para Chat Core, i
 - **Audit & Compliance Layer** para trazabilidad
 - **Activity Bar Monitoring** con logs de depuración en tiempo real
 
+### Estado al 2026-02-04
+
+- ✅ Pipeline de ingesta revisado end-to-end: firmas ahora respetan `/uploads/assets`, los viewers consumen los mismos endpoints (Chat Core + FluxCore) y los assets quedan disponibles tras recarga/offline sync.
+- ✅ Frontend alineado con el Asset Gateway: `useAssetUpload` reemplaza hooks legados, `StandardComposer` y `FluxCoreComposer` comparten la misma cola y manejo de media.
+- ✅ Compatibilidad multimedia: audio se graba en **OGG/Opus mono** (estándar WhatsApp) y AssetPreview simplifica la UI; imágenes ya se muestran correctamente.
+- 🟡 Monitoring aún requiere eventos WebSocket en tiempo real y exportación de logs.
+
 ---
 
 ## Arquitectura de Componentes
@@ -295,7 +302,7 @@ Este plan implementa un sistema completo de gestión de assets para Chat Core, i
 | AM-180-02 | Crear componente `AssetUploader` con drag & drop | `apps/web/src/components/chat/AssetUploader.tsx` | ✅ |
 | AM-180-03 | Implementar preview de archivos antes de enviar | `apps/web/src/components/chat/AssetUploader.tsx` | ✅ |
 | AM-180-04 | Mostrar progreso de upload con barra | `apps/web/src/components/chat/AssetUploader.tsx` | ✅ |
-| AM-180-05 | Integrar en `ChatInput` | `apps/web/src/components/chat/ChatInput.tsx` | 🟡 Pendiente |
+| AM-180-05 | Integrar en `ChatInput` | `apps/web/src/components/chat/ChatInput.tsx` | ✅ |
 | AM-180-06 | Agregar métodos a `api.ts` para assets | `apps/web/src/services/api.ts` | ✅ |
 
 **Criterios de aceptación:**
@@ -319,7 +326,7 @@ Este plan implementa un sistema completo de gestión de assets para Chat Core, i
 | AM-190-01 | Crear componente `AssetPreview` para mensajes | `apps/web/src/components/chat/AssetPreview.tsx` | ✅ |
 | AM-190-02 | Crear componente `AssetBrowser` para gestión | `apps/web/src/components/assets/AssetBrowser.tsx` | ✅ |
 | AM-190-03 | Implementar galería de imágenes con lightbox | `apps/web/src/components/chat/AssetPreview.tsx` | ✅ |
-| AM-190-04 | Integrar `AssetPreview` en `MessageBubble` | `apps/web/src/components/chat/MessageBubble.tsx` | 🟡 Pendiente |
+| AM-190-04 | Integrar `AssetPreview` en `MessageBubble` | `apps/web/src/components/chat/MessageBubble.tsx` | ✅ |
 | AM-190-05 | Agregar `AssetBrowser` como tab en DynamicContainer | `apps/web/src/components/panels/DynamicContainer.tsx` | 🟡 Pendiente |
 
 **Criterios de aceptación:**

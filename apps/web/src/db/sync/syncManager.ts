@@ -8,6 +8,27 @@
 import { db, type LocalMessage, type SyncQueueItem } from '../index';
 import { createSyncQueueItem } from '../schema';
 
+const buildContentSignature = (message: {
+  senderAccountId?: string;
+  type?: string;
+  content?: any;
+}): string => {
+  const normalizedContent = typeof message.content === 'string'
+    ? { text: message.content }
+    : (message.content || {});
+  const textFragment = normalizedContent.text || '';
+  const media = Array.isArray(normalizedContent.media)
+    ? (normalizedContent.media as Array<any>)
+    : [];
+  const mediaSignature = media.length
+    ? media
+        .map((m) => `${m.type}:${m.assetId || m.url || m.name || m.filename || ''}`)
+        .sort()
+        .join('|')
+    : '';
+  return `${message.senderAccountId || ''}:${textFragment}:${message.type || ''}:${mediaSignature}`;
+};
+
 // API base URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -512,7 +533,7 @@ class SyncManager {
         
         if (!existing) {
           // FIX: Verificar si existe un mensaje local con el mismo contenido (duplicado por sync)
-          const contentKey = `${serverMsg.senderAccountId}:${serverMsg.content?.text || ''}:${serverMsg.type}`;
+          const contentKey = buildContentSignature(serverMsg);
           const duplicateByContent = localContentIndex.get(contentKey);
           
           if (duplicateByContent && duplicateByContent.syncState !== 'synced') {
@@ -604,7 +625,7 @@ class SyncManager {
     // Agrupar por contenido+sender+type
     const groups = new Map<string, LocalMessage[]>();
     for (const msg of messages) {
-      const key = `${msg.senderAccountId}:${msg.content?.text || ''}:${msg.type}`;
+      const key = buildContentSignature(msg);
       const group = groups.get(key) || [];
       group.push(msg);
       groups.set(key, group);

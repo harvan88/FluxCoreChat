@@ -42,8 +42,8 @@ interface TemplateState {
   updateTemplate: (accountId: string, id: string, data: UpdateTemplateInput) => Promise<Template>;
   deleteTemplate: (accountId: string, id: string) => Promise<void>;
   duplicateTemplate: (id: string, accountId: string) => Promise<Template>;
-  linkAsset: (accountId: string, templateId: string, assetId: string) => Promise<void>;
-  unlinkAsset: (accountId: string, templateId: string, assetId: string) => Promise<void>;
+  linkAsset: (accountId: string, templateId: string, assetId: string, slot?: string) => Promise<void>;
+  unlinkAsset: (accountId: string, templateId: string, assetId: string, slot?: string) => Promise<void>;
 
   // Getters
   getTemplateById: (id: string) => Template | undefined;
@@ -186,16 +186,25 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
   },
 
   // Link asset
-  linkAsset: async (accountId, templateId, assetId) => {
-    try {
-      const response = await api.linkTemplateAsset(accountId, templateId, assetId);
-      if (!response.success) throw new Error(response.error || 'Error al vincular archivo');
+  linkAsset: async (accountId, templateId, assetId, slot = 'default') => {
+    set({ error: null });
 
-      // Refresh template to get updated assets
-      // Optimized: just re-fetch this single template if possible, or refetch all
-      // For now, let's just refetch all to be safe and simple, or update optimistic if we had the asset data
-      // Since we don't have the full asset data return from linkTemplateAsset, better to refetch.
-      await get().fetchTemplates(accountId);
+    try {
+      const response = await api.linkTemplateAsset(accountId, templateId, assetId, slot);
+      if (!response.success) {
+        throw new Error(response.error || 'Error al vincular archivo');
+      }
+
+      const templateResponse = await api.getTemplate(accountId, templateId);
+      if (!templateResponse.success || !templateResponse.data) {
+        await get().fetchTemplates(accountId);
+        return;
+      }
+
+      const refreshedTemplate = templateResponse.data;
+      set((state) => ({
+        templates: state.templates.map((t) => (t.id === templateId ? refreshedTemplate : t)),
+      }));
 
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Error al vincular archivo');
@@ -205,20 +214,20 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
   },
 
   // Unlink asset
-  unlinkAsset: async (accountId, templateId, assetId) => {
+  unlinkAsset: async (accountId, templateId, assetId, slot = 'default') => {
     try {
-      const response = await api.unlinkTemplateAsset(accountId, templateId, assetId);
+      const response = await api.unlinkTemplateAsset(accountId, templateId, assetId, slot);
       if (!response.success) throw new Error(response.error || 'Error al desvincular archivo');
 
-      // Optimistic update
+      const templateResponse = await api.getTemplate(accountId, templateId);
+      if (!templateResponse.success || !templateResponse.data) {
+        await get().fetchTemplates(accountId);
+        return;
+      }
+
+      const refreshedTemplate = templateResponse.data;
       set((state) => ({
-        templates: state.templates.map(t => {
-          if (t.id !== templateId) return t;
-          return {
-            ...t,
-            assets: t.assets?.filter(a => a.assetId !== assetId) || []
-          };
-        })
+        templates: state.templates.map(t => (t.id === templateId ? refreshedTemplate : t)),
       }));
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Error al desvincular archivo');

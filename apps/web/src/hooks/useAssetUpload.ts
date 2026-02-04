@@ -42,7 +42,7 @@ export interface UploadedAsset {
 }
 
 export interface UseAssetUploadOptions {
-    accountId: string;
+    accountId?: string;
     onSuccess?: (asset: UploadedAsset) => void;
     onError?: (error: string) => void;
     onProgress?: (progress: UploadProgress) => void;
@@ -85,6 +85,9 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
         setError(null);
 
         try {
+            if (!accountId) {
+                throw new Error('Account ID is required to create an upload session');
+            }
             const response = await api.createAssetUploadSession({
                 accountId,
                 fileName: file.name,
@@ -128,6 +131,9 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
         abortControllerRef.current = new AbortController();
 
         try {
+            if (!accountId) {
+                throw new Error('Account ID is required to upload assets');
+            }
             // Usar XMLHttpRequest para tener progreso real
             return new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
@@ -166,11 +172,16 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
                 });
 
                 // Abrir conexión
-                xhr.open('PUT', `/api/assets/upload/${sessionId}?accountId=${accountId}`);
-                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-
+                // FC-FIX: Use full API_URL to match ApiService behavior and avoid proxy stripping '/api' prefix
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+                xhr.open('PUT', `${API_URL}/api/assets/upload/${sessionId}?accountId=${accountId}`);
+                
+                // FC-FIX: Enviar como FormData para que Elysia pueda parsear con t.File()
+                const formData = new FormData();
+                formData.append('file', file);
+                
                 // Agregar token de autenticación si existe
-                const token = localStorage.getItem('token');
+                const token = localStorage.getItem('fluxcore_token');
                 if (token) {
                     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
                 }
@@ -180,8 +191,8 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
                     abort: () => xhr.abort(),
                 } as AbortController;
 
-                // Enviar archivo
-                xhr.send(file);
+                // Enviar FormData
+                xhr.send(formData);
             });
         } catch (err) {
             if ((err as Error).message === 'Upload cancelled') {
@@ -199,6 +210,9 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
         setStatus('committing');
 
         try {
+            if (!accountId) {
+                throw new Error('Account ID is required to commit uploads');
+            }
             const response = await api.commitAssetUpload(sessionId, accountId);
 
             if (!response.success || !response.data) {
@@ -259,6 +273,9 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
         }
 
         try {
+            if (!accountId) {
+                throw new Error('Account ID is required to upload assets');
+            }
             // 1. Crear sesión
             const sessionData = await createSession(file);
             if (!sessionData) return null;
@@ -288,7 +305,7 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
         }
 
         // Cancelar sesión en el servidor si existe
-        if (sessionIdRef.current) {
+        if (sessionIdRef.current && accountId) {
             api.cancelAssetUpload(sessionIdRef.current, accountId).catch(() => {
                 // Ignorar errores de cancelación
             });

@@ -31,6 +31,7 @@ import { api } from '../../services/api';
 import { AssetPreview } from '../chat/AssetPreview';
 import { AssetUploader } from '../chat/AssetUploader';
 import clsx from 'clsx';
+import { useAuthStore } from '../../store/authStore';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Tipos
@@ -132,6 +133,7 @@ export function AssetBrowser({
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
     const [showFilters, setShowFilters] = useState(false);
     const [showUploader, setShowUploader] = useState(false);
+    const currentUserId = useAuthStore((state) => state.user?.id ?? null);
 
     // Paginación
     const [offset, setOffset] = useState(0);
@@ -199,8 +201,18 @@ export function AssetBrowser({
 
     // Descargar asset
     const handleDownload = useCallback(async (asset: Asset) => {
+        if (!currentUserId) {
+            alert('No hay sesión activa. Inicia sesión de nuevo.');
+            return;
+        }
         try {
-            const response = await api.signAssetUrl(asset.id, accountId, 'download:web');
+            const response = await api.signAssetUrl(asset.id, accountId, {
+                actorId: currentUserId,
+                actorType: 'user',
+                action: 'download',
+                channel: 'web',
+                disposition: 'attachment',
+            });
             if (!response.success || !response.data) {
                 throw new Error(response.error || 'Failed to get download URL');
             }
@@ -215,7 +227,7 @@ export function AssetBrowser({
         } catch (err) {
             alert(err instanceof Error ? err.message : 'Error downloading asset');
         }
-    }, [accountId]);
+    }, [accountId, currentUserId]);
 
     // Renderizar asset en grid
     const renderGridItem = (asset: Asset) => {

@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Check, CheckCheck, Clock, AlertCircle, RotateCcw, Reply, Pencil, Trash2, Bot, File } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message, MessageStatus } from '../../types';
+import { AssetPreview } from './AssetPreview';
 
 interface MessageBubbleProps {
   message: Message;
@@ -19,6 +20,7 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onRetry?: () => void;
   onScrollToMessage?: (messageId: string) => void;
+  viewerAccountId?: string;
 }
 
 export function MessageBubble({
@@ -30,6 +32,7 @@ export function MessageBubble({
   onDelete,
   onRetry,
   onScrollToMessage,
+  viewerAccountId,
 }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
 
@@ -175,27 +178,69 @@ export function MessageBubble({
         {Array.isArray(message.content.media) && message.content.media.length > 0 && (
           <div className="flex flex-col gap-2 mb-2">
             {message.content.media.map((m, idx) => {
+              const key = m.assetId ?? `${m.type}-${idx}`;
+              const fallbackName = m.name || m.filename || `Archivo ${idx + 1}`;
+              const sizeBytes = m.sizeBytes ?? m.size ?? 0;
+
+              const renderAsset = () => {
+                if (!m.assetId || !viewerAccountId) return null;
+
+                const preview = (
+                  <AssetPreview
+                    key={key}
+                    assetId={m.assetId}
+                    accountId={viewerAccountId}
+                    name={fallbackName}
+                    mimeType={m.mimeType || 'application/octet-stream'}
+                    sizeBytes={sizeBytes}
+                    typeHint={m.type}
+                  />
+                );
+
+                if (m.type === 'audio' && (m as any)?.waveformData?.samples) {
+                  return (
+                    <div key={`${key}-asset-audio`} className="bg-elevated rounded-lg p-2 border border-subtle">
+                      {preview}
+                      {renderWaveform((m as any)?.waveformData?.samples)}
+                    </div>
+                  );
+                }
+
+                return preview;
+              };
+
+              const assetContent = renderAsset();
+              if (assetContent) return assetContent;
+
+              if (!m.url) {
+                return (
+                  <div key={`${key}-unsupported`} className="text-xs text-muted bg-active rounded-lg p-2 border border-subtle">
+                    No se puede mostrar este adjunto.
+                  </div>
+                );
+              }
+
               const url = resolveMediaUrl(m.url);
 
               switch (m.type) {
                 case 'image':
                   return (
                     <img
-                      key={`${m.type}-${idx}`}
+                      key={`${key}-image`}
                       src={url}
-                      alt={m.filename || 'imagen'}
+                      alt={fallbackName}
                       className="rounded-lg max-h-64 object-cover border border-subtle"
                       loading="lazy"
                     />
                   );
                 case 'audio':
                   return (
-                    <div key={`${m.type}-${idx}`} className="bg-elevated rounded-lg p-2 border border-subtle">
+                    <div key={`${key}-audio`} className="bg-elevated rounded-lg p-2 border border-subtle">
                       <audio controls src={url} className="w-full" />
                       {renderWaveform((m as any)?.waveformData?.samples)}
-                      {m.filename && (
+                      {fallbackName && (
                         <div className={clsx('mt-1 text-xs', isOwn ? 'text-secondary' : 'text-muted')}>
-                          {m.filename}
+                          {fallbackName}
                         </div>
                       )}
                     </div>
@@ -204,7 +249,7 @@ export function MessageBubble({
                 default:
                   return (
                     <a
-                      key={`${m.type}-${idx}`}
+                      key={`${key}-doc`}
                       href={url}
                       target="_blank"
                       rel="noreferrer"
@@ -215,12 +260,12 @@ export function MessageBubble({
                     >
                       <File size={18} className="text-info flex-shrink-0" />
                       <div className="min-w-0">
-                        <div className={clsx('text-sm truncate', isOwn ? 'text-primary' : 'text-primary')}>
-                          {m.filename || 'Documento'}
+                        <div className="text-sm truncate text-primary">
+                          {fallbackName}
                         </div>
-                        {(m.mimeType || m.size) && (
+                        {(m.mimeType || sizeBytes) && (
                           <div className={clsx('text-xs truncate', isOwn ? 'text-secondary' : 'text-muted')}>
-                            {m.mimeType || ''}{m.mimeType && m.size ? ' · ' : ''}{formatBytes(m.size)}
+                            {m.mimeType || ''}{m.mimeType && sizeBytes ? ' · ' : ''}{formatBytes(sizeBytes)}
                           </div>
                         )}
                       </div>
