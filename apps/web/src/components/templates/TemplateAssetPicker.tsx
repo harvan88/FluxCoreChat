@@ -6,26 +6,20 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Paperclip, X, File, FileText, Image, Film, Music, Loader2 } from 'lucide-react';
-import { AssetUploader } from '../chat/AssetUploader'; // Import from chat/AssetUploader
-import { Button } from '../ui/Button'; // Import from ui
+import { Paperclip, X, File, FileText, Image, Film, Music, Loader2, AlertCircle } from 'lucide-react';
+import { AssetUploader } from '../chat/AssetUploader';
+import { Button } from '../ui/Button';
+import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
 import { useTemplateStore } from './store/templateStore';
-import { api } from '../../services/api';
 import type { TemplateAsset } from './types';
-import { formatBytes } from '../../hooks/useAssetUpload';
+import { formatBytes, type UploadedAsset } from '../../hooks/useAssetUpload';
+import { api } from '../../services/api';
 
 interface TemplateAssetPickerProps {
     templateId: string;
     accountId: string;
     assets: TemplateAsset[];
     readonly?: boolean;
-}
-
-interface AssetDetails {
-    id: string;
-    name: string;
-    mimeType: string;
-    sizeBytes: number;
 }
 
 export function TemplateAssetPicker({
@@ -36,80 +30,70 @@ export function TemplateAssetPicker({
 }: TemplateAssetPickerProps) {
     const { linkAsset, unlinkAsset } = useTemplateStore();
     const [showUploader, setShowUploader] = useState(false);
-    const [assetDetails, setAssetDetails] = useState<Record<string, AssetDetails>>({});
-    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+    const [linkingAssets, setLinkingAssets] = useState<Record<string, TemplateAsset | UploadedAsset>>({});
+    const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
 
-    // Fetch asset details for linked assets
+    // Limpiar estados "linking" cuando el asset ya llegó desde el backend
     useEffect(() => {
-        const fetchDetails = async () => {
-            const missingIds = assets
-                .map(a => a.assetId)
-                .filter(id => !assetDetails[id]);
+        setLinkingAssets(prev => {
+            let changed = false;
+            const next = { ...prev };
+            assets.forEach(asset => {
+                if (next[asset.assetId]) {
+                    delete next[asset.assetId];
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [assets]);
 
-            if (missingIds.length === 0) return;
+    const handleUploadComplete = async (uploadedAsset: UploadedAsset) => {
+        setActionError(null);
+        setLinkingAssets(prev => ({
+            ...prev,
+            [uploadedAsset.assetId]: {
+                assetId: uploadedAsset.assetId,
+                name: uploadedAsset.name,
+                mimeType: uploadedAsset.mimeType,
+                sizeBytes: uploadedAsset.sizeBytes,
+                slot: 'attachment',
+                version: 1,
+                linkedAt: new Date().toISOString(),
+                status: uploadedAsset.status,
+            },
+        }));
 
-            setIsLoadingDetails(true);
-            try {
-                // En un caso real optimizado, haríamos un batch fetch.
-                // Aquí hacemos fetch individual por simplicidad, pero con Promise.all
-                const promises = missingIds.map(id => api.getAsset(id, accountId));
-                const results = await Promise.all(promises);
-
-                const newDetails: Record<string, AssetDetails> = {};
-                results.forEach(res => {
-                    if (res.success && res.data) {
-                        newDetails[res.data.id] = {
-                            id: res.data.id,
-                            name: res.data.name,
-                            mimeType: res.data.mimeType,
-                            sizeBytes: res.data.sizeBytes,
-                        };
-                    }
-                });
-
-                setAssetDetails(prev => ({ ...prev, ...newDetails }));
-            } catch (err) {
-                console.error('Error fetching asset details:', err);
-            } finally {
-                setIsLoadingDetails(false);
-            }
-        };
-
-        fetchDetails();
-    }, [assets, accountId, assetDetails]);
-
-    const handleUploadComplete = async (uploadedAsset: any) => {
         try {
             await linkAsset(accountId, templateId, uploadedAsset.assetId);
-
-            // Update local details cache immediately
-            setAssetDetails(prev => ({
-                ...prev,
-                [uploadedAsset.assetId]: {
-                    id: uploadedAsset.assetId,
-                    name: uploadedAsset.name,
-                    mimeType: uploadedAsset.mimeType,
-                    sizeBytes: uploadedAsset.sizeBytes,
-                }
-            }));
-
             setShowUploader(false);
         } catch (err) {
             console.error('Failed to link asset:', err);
+            setActionError('No se pudo adjuntar el archivo. Intenta nuevamente.');
         }
     };
 
-    const handleUnlink = async (assetId: string) => {
-        if (confirm('¿Estás seguro de desvincular este archivo?')) {
-            try {
-                await unlinkAsset(accountId, templateId, assetId);
-            } catch (err) {
-                console.error('Failed to unlink asset:', err);
+    const handleDeleteAsset = async (assetId: string, slot: string) => {
+        setActionError(null);
+        setDeletingAssetId(assetId);
+
+        try {
+            await unlinkAsset(accountId, templateId, assetId, slot);
+            const response = await api.deleteAsset(assetId, accountId);
+            if (!response.success) {
+                throw new Error(response.error || 'No se pudo eliminar el archivo');
             }
+        } catch (err) {
+            console.error('Failed to delete asset:', err);
+            setActionError('Hubo un problema eliminando el archivo. Intenta nuevamente.');
+        } finally {
+            setDeletingAssetId(null);
         }
     };
 
-    const getIcon = (mimeType: string) => {
+    const getIcon = (mimeType: string | null) => {
+        if (!mimeType) return File;
         if (mimeType.startsWith('image/')) return Image;
         if (mimeType.startsWith('video/')) return Film;
         if (mimeType.startsWith('audio/')) return Music;
@@ -160,8 +144,7 @@ export function TemplateAssetPicker({
             {/* Asset List */}
             <div className="space-y-2">
                 {assets.map(asset => {
-                    const details = assetDetails[asset.assetId];
-                    const Icon = details ? getIcon(details.mimeType) : File;
+                    const Icon = getIcon(asset.mimeType);
 
                     return (
                         <div
@@ -173,35 +156,45 @@ export function TemplateAssetPicker({
                             </div>
 
                             <div className="flex-1 min-w-0">
-                                {details ? (
-                                    <>
-                                        <p className="text-sm font-medium text-primary truncate">
-                                            {details.name}
-                                        </p>
-                                        <p className="text-xs text-muted">
-                                            {formatBytes(details.sizeBytes)}
-                                        </p>
-                                    </>
-                                ) : (
-                                    <div className="h-8 flex items-center">
-                                        {isLoadingDetails ? (
-                                            <Loader2 size={16} className="animate-spin text-muted" />
-                                        ) : (
-                                            <span className="text-sm text-muted">Cargando detalles...</span>
-                                        )}
-                                    </div>
-                                )}
+                                <p className="text-sm /*<<< font-medium text-primary truncate">
+                                    {asset.name}
+                                </p>
+                                <p className="text-xs text-muted">
+                                    {asset.sizeBytes !== null ? formatBytes(asset.sizeBytes) : 'Tamaño desconocido'}
+                                </p>
                             </div>
 
                             {!readonly && (
-                                <button
-                                    onClick={() => handleUnlink(asset.assetId)}
-                                    className="p-1.5 text-muted hover:text-error hover:bg-hover rounded transition-colors opacity-0 group-hover:opacity-100"
-                                    title="Desvincular"
-                                >
-                                    <X size={16} />
-                                </button>
+                                <DoubleConfirmationDeleteButton
+                                    onConfirm={() => handleDeleteAsset(asset.assetId, asset.slot)}
+                                    disabled={deletingAssetId === asset.assetId}
+                                    className="opacity-0 group-hover:opacity-100"
+                                />
                             )}
+                        </div>
+                    );
+                })}
+
+                {Object.entries(linkingAssets).map(([assetId, details]) => {
+                    const Icon = getIcon(details.mimeType ?? null);
+
+                    return (
+                        <div
+                            key={`linking-${assetId}`}
+                            className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-accent/40 bg-accent/5"
+                        >
+                            <div className="p-2 bg-accent/10 rounded">
+                                <Icon size={20} className="text-accent" />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-primary truncate">
+                                    {details.name}
+                                </p>
+                                <p className="text-xs text-muted flex items-center gap-1">
+                                    <Loader2 size={12} className="animate-spin" /> Vinculando
+                                </p>
+                            </div>
                         </div>
                     );
                 })}
@@ -212,6 +205,13 @@ export function TemplateAssetPicker({
                     </p>
                 )}
             </div>
+
+            {actionError && (
+                <div className="flex items-center gap-2 text-error text-sm bg-error/10 border border-error/20 rounded px-3 py-2">
+                    <AlertCircle size={14} />
+                    {actionError}
+                </div>
+            )}
         </div>
     );
 }

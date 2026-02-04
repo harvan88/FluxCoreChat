@@ -12,7 +12,7 @@ function formatDuration(ms: number) {
 }
 
 function pickAudioMimeType() {
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+  const candidates = ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm'];
   for (const c of candidates) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(c)) return c;
   }
@@ -285,7 +285,13 @@ export function AudioRecorderPanel(props: {
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 48000,
+          },
+          video: false,
+        });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -456,7 +462,7 @@ export function AudioRecorderPanel(props: {
       const rawMime = r.mimeType || 'audio/webm';
       const normalizedMime = normalizeMimeType(rawMime);
       const blob = new Blob(chunksRef.current, { type: normalizedMime });
-      const ext = normalizedMime.includes('ogg') ? 'ogg' : 'webm';
+      const ext = normalizedMime.includes('ogg') || normalizedMime.includes('opus') ? 'ogg' : 'webm';
       const file = new File([blob], `audio-${Date.now()}.${ext}`, { type: normalizedMime });
 
       Promise.resolve(props.onSend(file))

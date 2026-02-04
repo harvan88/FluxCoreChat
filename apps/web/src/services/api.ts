@@ -63,8 +63,10 @@ class ApiService {
 
     const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
+    const shouldSendJsonHeader = !isFormDataBody && options.body !== undefined;
+
     const headers: HeadersInit = {
-      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
+      ...(shouldSendJsonHeader ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
@@ -523,45 +525,46 @@ class ApiService {
   // Templates CRUD -----------------------------------------------------------
   async listTemplates(accountId: string): Promise<ApiResponse<Template[]>> {
     const query = new URLSearchParams({ accountId });
-    return this.request<Template[]>(`/templates?${query.toString()}`);
+    return this.request<Template[]>(`/api/templates?${query.toString()}`);
   }
 
-  async getTemplate(accountId: string, id: string): Promise<ApiResponse<Template>> {
+  async getTemplate(accountId: string, templateId: string): Promise<ApiResponse<Template>> {
     const query = new URLSearchParams({ accountId });
-    return this.request<Template>(`/templates/${id}?${query.toString()}`);
+    return this.request<Template>(`/api/templates/${templateId}?${query.toString()}`);
   }
 
   async createTemplate(accountId: string, payload: CreateTemplateInput): Promise<ApiResponse<Template>> {
-    return this.request<Template>('/templates', {
+    return this.request<Template>('/api/templates', {
       method: 'POST',
       body: JSON.stringify({ accountId, ...payload }),
     });
   }
 
-  async updateTemplate(accountId: string, id: string, payload: UpdateTemplateInput): Promise<ApiResponse<Template>> {
-    return this.request<Template>(`/templates/${id}`, {
+  async updateTemplate(accountId: string, templateId: string, payload: UpdateTemplateInput): Promise<ApiResponse<Template>> {
+    return this.request<Template>(`/api/templates/${templateId}`, {
       method: 'PUT',
       body: JSON.stringify({ accountId, ...payload }),
     });
   }
 
-  async deleteTemplate(accountId: string, id: string): Promise<ApiResponse<{ success: boolean }>> {
+  async deleteTemplate(accountId: string, templateId: string): Promise<ApiResponse<{ success: boolean }>> {
     const query = new URLSearchParams({ accountId });
-    return this.request<{ success: boolean }>(`/templates/${id}?${query.toString()}`, {
+    return this.request<{ success: boolean }>(`/api/templates/${templateId}?${query.toString()}`, {
       method: 'DELETE',
     });
   }
 
   async linkTemplateAsset(accountId: string, templateId: string, assetId: string, slot: string = 'attachment'): Promise<ApiResponse<{ success: boolean }>> {
-    return this.request<{ success: boolean }>(`/templates/${templateId}/assets`, {
+    const query = new URLSearchParams({ accountId });
+    return this.request<{ success: boolean }>(`/api/templates/${templateId}/assets?${query.toString()}`, {
       method: 'POST',
-      body: JSON.stringify({ accountId, assetId, slot }),
+      body: JSON.stringify({ assetId, slot }),
     });
   }
 
-  async unlinkTemplateAsset(accountId: string, templateId: string, assetId: string): Promise<ApiResponse<{ success: boolean }>> {
-    const query = new URLSearchParams({ accountId });
-    return this.request<{ success: boolean }>(`/templates/${templateId}/assets/${assetId}?${query.toString()}`, {
+  async unlinkTemplateAsset(accountId: string, templateId: string, assetId: string, slot: string = 'attachment'): Promise<ApiResponse<{ success: boolean }>> {
+    const query = new URLSearchParams({ accountId, slot });
+    return this.request<{ success: boolean }>(`/api/templates/${templateId}/assets/${assetId}?${query.toString()}`, {
       method: 'DELETE',
     });
   }
@@ -678,12 +681,13 @@ class ApiService {
   }>> {
     return this.request(`/api/assets/upload/${sessionId}/commit?accountId=${accountId}`, {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   }
 
-  async cancelAssetUpload(sessionId: string, accountId: string): Promise<ApiResponse<void>> {
-    return this.request(`/api/assets/upload/${sessionId}/cancel?accountId=${accountId}`, {
-      method: 'POST',
+  async cancelAssetUpload(sessionId: string, _accountId: string): Promise<ApiResponse<void>> {
+    return this.request(`/api/assets/upload/${sessionId}`, {
+      method: 'DELETE',
     });
   }
 
@@ -700,13 +704,32 @@ class ApiService {
     return this.request(`/api/assets/${assetId}?accountId=${accountId}`);
   }
 
-  async signAssetUrl(assetId: string, accountId: string, context?: string): Promise<ApiResponse<{
+  async signAssetUrl(
+    assetId: string,
+    accountId: string,
+    params: {
+      actorId: string;
+      actorType?: 'user' | 'assistant' | 'system';
+      action?: string;
+      channel?: string;
+      disposition?: 'inline' | 'attachment';
+    }
+  ): Promise<ApiResponse<{
     url: string;
     expiresAt: string;
+    ttlSeconds?: number;
   }>> {
+    const { actorId, actorType = 'user', action = 'download', channel = 'web', disposition } = params;
+
     return this.request(`/api/assets/${assetId}/sign?accountId=${accountId}`, {
       method: 'POST',
-      body: JSON.stringify({ context: context || 'download:web' }),
+      body: JSON.stringify({
+        actorId,
+        actorType,
+        action,
+        channel,
+        disposition,
+      }),
     });
   }
 

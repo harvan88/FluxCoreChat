@@ -18,6 +18,7 @@ import {
   Table,
   SidebarNavList,
   Switch,
+  DoubleConfirmationDeleteButton,
 } from '../ui';
 
 interface ComponentPreviewSpec {
@@ -26,6 +27,34 @@ interface ComponentPreviewSpec {
   category: string;
   description: string;
   preview: React.ComponentType;
+}
+
+function DeleteConfirmationPreview() {
+  const [status, setStatus] = useState<'idle' | 'confirmed'>('idle');
+
+  const handleConfirm = () => {
+    setStatus('confirmed');
+    setTimeout(() => setStatus('idle'), 2000);
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-subtle bg-elevated p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-primary">Eliminar integración</p>
+          <p className="text-xs text-muted">Acción irreversible protegida con doble confirmación.</p>
+        </div>
+        <DoubleConfirmationDeleteButton onConfirm={handleConfirm} />
+      </div>
+      <div className="text-xs text-secondary">
+        {status === 'confirmed' ? (
+          <span className="text-success">Confirmación registrada correctamente.</span>
+        ) : (
+          'Haz clic en eliminar y luego confirma para ejecutar la acción.'
+        )}
+      </div>
+    </div>
+  );
 }
 
 function SwitchPreview() {
@@ -224,6 +253,13 @@ const componentsCatalog: ComponentPreviewSpec[] = [
     category: 'Acciones',
     description: 'Botones canónicos con variantes primary, secondary, ghost y danger.',
     preview: ButtonsPreview,
+  },
+  {
+    id: 'double-confirmation-delete',
+    name: 'DoubleConfirmationDeleteButton',
+    category: 'Acciones críticas',
+    description: 'Botón con doble confirmación para operaciones destructivas con feedback inmediato.',
+    preview: DeleteConfirmationPreview,
   },
   {
     id: 'inputs',

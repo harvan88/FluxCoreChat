@@ -10,9 +10,9 @@
  * Pertenece a CHAT CORE, no a FluxCore.
  */
 
-import { useState, useCallback, useRef } from 'react';
-import { Upload, X, Image, FileText, Film, Music, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
-import { useAssetUpload, formatBytes, type UploadedAsset } from '../../hooks/useAssetUpload';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Upload, X, Image, FileText, Film, Music, AlertCircle, CheckCircle, Loader2, RefreshCcw } from 'lucide-react';
+import { useAssetUpload, formatBytes, type UploadedAsset, type UploadStatus, type UploadProgress } from '../../hooks/useAssetUpload';
 import clsx from 'clsx';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -29,10 +29,22 @@ interface AssetUploaderProps {
     compact?: boolean;
 }
 
+type FileType = 'image' | 'video' | 'audio' | 'document';
+
 interface FilePreview {
     file: File;
     previewUrl: string | null;
-    type: 'image' | 'video' | 'audio' | 'document';
+    type: FileType;
+}
+
+type QueueStatus = UploadStatus | 'pending';
+
+interface QueuedFile extends FilePreview {
+    id: string;
+    status: QueueStatus;
+    progress: UploadProgress | null;
+    error?: string | null;
+    asset?: UploadedAsset | null;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -63,365 +75,361 @@ export function AssetUploader({
     accountId,
     onUploadComplete,
     onCancel,
-    maxSizeBytes = 100 * 1024 * 1024, // 100MB default
+    maxSizeBytes = 100 * 1024 * 1024,
     allowedMimeTypes,
     className,
     compact = false,
 }: AssetUploaderProps) {
     const [isDragging, setIsDragging] = useState(false);
-    const [selectedFile, setSelectedFile] = useState<FilePreview | null>(null);
+    const [queue, setQueue] = useState<QueuedFile[]>([]);
+    const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+    const [isProcessingQueue, setIsProcessingQueue] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const activeUploadIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        activeUploadIdRef.current = activeUploadId;
+    }, [activeUploadId]);
+
+    useEffect(() => {
+        return () => {
+            queue.forEach((item) => {
+                if (item.previewUrl) {
+                    URL.revokeObjectURL(item.previewUrl);
+                }
+            });
+        };
+    }, []);
+
+    const updateQueueItem = useCallback((id: string, updater: (item: QueuedFile) => QueuedFile) => {
+        setQueue((prev) => prev.map((item) => (item.id === id ? updater(item) : item)));
+    }, []);
+
+    const removeQueueItem = useCallback((id: string) => {
+        setQueue((prev) => {
+            const target = prev.find((item) => item.id === id);
+            if (target?.previewUrl) {
+                URL.revokeObjectURL(target.previewUrl);
+            }
+            return prev.filter((item) => item.id !== id);
+        });
+    }, []);
+
+    const clearCompleted = useCallback(() => {
+        setQueue((prev) => {
+            prev.filter((item) => item.status === 'completed').forEach((item) => {
+                if (item.previewUrl) {
+                    URL.revokeObjectURL(item.previewUrl);
+                }
+            });
+            return prev.filter((item) => item.status !== 'completed');
+        });
+    }, []);
 
     const {
+        upload,
+        cancel,
         status,
         progress,
         error,
-        uploadedAsset,
-        upload,
-        cancel,
         reset,
     } = useAssetUpload({
         accountId,
         maxSizeBytes,
         allowedMimeTypes,
-        onSuccess: (asset) => {
-            onUploadComplete?.(asset);
+        onProgress: (currentProgress) => {
+            const currentId = activeUploadIdRef.current;
+            if (!currentId) return;
+            updateQueueItem(currentId, (item) => ({
+                ...item,
+                progress: currentProgress,
+                status: 'uploading',
+            }));
+        },
+        onError: (message) => {
+            const currentId = activeUploadIdRef.current;
+            if (!currentId) return;
+            updateQueueItem(currentId, (item) => ({
+                ...item,
+                status: 'error',
+                error: message,
+                progress: null,
+            }));
         },
     });
 
-    // Crear preview del archivo
     const createPreview = useCallback((file: File): FilePreview => {
         const type = getFileType(file.type);
-        let previewUrl: string | null = null;
-
-        if (type === 'image') {
-            previewUrl = URL.createObjectURL(file);
-        }
-
+        const previewUrl = type === 'image' ? URL.createObjectURL(file) : null;
         return { file, previewUrl, type };
     }, []);
 
-    // Limpiar preview
-    const clearPreview = useCallback(() => {
-        if (selectedFile?.previewUrl) {
-            URL.revokeObjectURL(selectedFile.previewUrl);
-        }
-        setSelectedFile(null);
-    }, [selectedFile]);
+    const enqueueFiles = useCallback((files: File[]) => {
+        if (files.length === 0) return;
 
-    // Manejar selección de archivo
-    const handleFileSelect = useCallback((file: File) => {
-        clearPreview();
-        const preview = createPreview(file);
-        setSelectedFile(preview);
-    }, [clearPreview, createPreview]);
+        setQueue((prev) => [
+            ...prev,
+            ...files.map((file) => ({
+                ...createPreview(file),
+                id: crypto.randomUUID(),
+                status: 'pending' as QueueStatus,
+                progress: null,
+                error: null,
+                asset: null,
+            } satisfies QueuedFile)),
+        ]);
+    }, [createPreview]);
 
-    // Manejar drop
-    const handleDrop = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
+    const handleDrop = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
         setIsDragging(false);
+        enqueueFiles(Array.from(event.dataTransfer.files || []));
+    }, [enqueueFiles]);
 
-        const file = e.dataTransfer.files[0];
-        if (file) {
-            handleFileSelect(file);
-        }
-    }, [handleFileSelect]);
-
-    // Manejar drag over
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
+    const handleDragOver = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
         setIsDragging(true);
     }, []);
 
-    // Manejar drag leave
-    const handleDragLeave = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
+    const handleDragLeave = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
         setIsDragging(false);
     }, []);
 
-    // Manejar click para seleccionar archivo
-    const handleClick = useCallback(() => {
-        fileInputRef.current?.click();
-    }, []);
-
-    // Manejar cambio en input
-    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            handleFileSelect(file);
+    const handleFileInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files) {
+            enqueueFiles(Array.from(event.target.files));
         }
-        e.target.value = '';
-    }, [handleFileSelect]);
+        event.target.value = '';
+    }, [enqueueFiles]);
 
-    // Iniciar upload
-    const handleUpload = useCallback(async () => {
-        if (!selectedFile) return;
-        await upload(selectedFile.file);
-    }, [selectedFile, upload]);
+    const processQueueItem = useCallback(async (item: QueuedFile) => {
+        setActiveUploadId(item.id);
+        updateQueueItem(item.id, (current) => ({ ...current, status: 'creating_session', error: null }));
 
-    // Cancelar
-    const handleCancel = useCallback(() => {
+        try {
+            const uploadedAsset = await upload(item.file);
+            if (!uploadedAsset) {
+                updateQueueItem(item.id, (current) => ({ ...current, status: 'cancelled', progress: null }));
+                return;
+            }
+
+            updateQueueItem(item.id, (current) => ({
+                ...current,
+                status: 'completed',
+                asset: uploadedAsset,
+                progress: null,
+            }));
+
+            onUploadComplete?.(uploadedAsset);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al subir';
+            updateQueueItem(item.id, (current) => ({
+                ...current,
+                status: message === 'Upload cancelled' ? 'cancelled' : 'error',
+                error: message === 'Upload cancelled' ? null : message,
+                progress: null,
+            }));
+        } finally {
+            setActiveUploadId(null);
+            setIsProcessingQueue(false);
+            reset();
+        }
+    }, [upload, onUploadComplete, reset, updateQueueItem]);
+
+    useEffect(() => {
+        if (isProcessingQueue) return;
+        const nextItem = queue.find((item) => item.status === 'pending');
+        if (!nextItem) return;
+
+        setIsProcessingQueue(true);
+        void processQueueItem(nextItem);
+    }, [queue, isProcessingQueue, processQueueItem]);
+
+    const handleCancelActive = useCallback(() => {
         cancel();
-        clearPreview();
-        reset();
+        const currentId = activeUploadIdRef.current;
+        if (currentId) {
+            updateQueueItem(currentId, (item) => ({ ...item, status: 'cancelled', progress: null }));
+        }
+        setActiveUploadId(null);
+        setIsProcessingQueue(false);
         onCancel?.();
-    }, [cancel, clearPreview, reset, onCancel]);
+    }, [cancel, onCancel, updateQueueItem]);
 
-    // Remover archivo seleccionado
-    const handleRemoveFile = useCallback(() => {
-        clearPreview();
-        reset();
-    }, [clearPreview, reset]);
-
-    // Renderizar estado
-    const renderStatus = () => {
-        if (status === 'completed' && uploadedAsset) {
-            return (
-                <div className="flex items-center gap-2 text-green-500">
-                    <CheckCircle size={16} />
-                    <span className="text-sm">Upload completado</span>
-                </div>
-            );
-        }
-
-        if (status === 'error' && error) {
-            return (
-                <div className="flex items-center gap-2 text-red-500">
-                    <AlertCircle size={16} />
-                    <span className="text-sm">{error}</span>
-                </div>
-            );
-        }
-
-        if (status === 'uploading' && progress) {
-            return (
-                <div className="w-full">
-                    <div className="flex items-center justify-between text-sm text-muted mb-1">
-                        <span>Subiendo...</span>
-                        <span>{progress.percentage}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-subtle rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-accent transition-all duration-300"
-                            style={{ width: `${progress.percentage}%` }}
-                        />
-                    </div>
-                    <div className="text-xs text-muted mt-1">
-                        {formatBytes(progress.bytesUploaded)} / {formatBytes(progress.totalBytes)}
-                    </div>
-                </div>
-            );
-        }
-
-        if (status === 'creating_session' || status === 'committing') {
-            return (
-                <div className="flex items-center gap-2 text-muted">
-                    <Loader2 size={16} className="animate-spin" />
-                    <span className="text-sm">
-                        {status === 'creating_session' ? 'Preparando...' : 'Finalizando...'}
-                    </span>
-                </div>
-            );
-        }
-
-        return null;
-    };
-
-    // Renderizar preview del archivo
-    const renderFilePreview = () => {
-        if (!selectedFile) return null;
-
-        const FileIcon = getFileIcon(selectedFile.type);
+    const renderQueueItem = (item: QueuedFile) => {
+        const FileIcon = getFileIcon(item.type);
+        const isActive = activeUploadId === item.id;
 
         return (
-            <div className="flex items-center gap-3 p-3 bg-surface rounded-lg border border-subtle">
-                {selectedFile.previewUrl ? (
-                    <img
-                        src={selectedFile.previewUrl}
-                        alt="Preview"
-                        className="w-12 h-12 object-cover rounded"
-                    />
+            <div
+                key={item.id}
+                className="flex items-center gap-3 p-3 border border-subtle rounded-lg bg-surface"
+            >
+                {item.previewUrl ? (
+                    <img src={item.previewUrl} alt={item.file.name} className="w-12 h-12 object-cover rounded" />
                 ) : (
                     <div className="w-12 h-12 flex items-center justify-center bg-subtle rounded">
-                        <FileIcon size={24} className="text-muted" />
+                        <FileIcon size={20} className="text-muted" />
                     </div>
                 )}
 
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-primary truncate">
-                        {selectedFile.file.name}
-                    </p>
+                    <p className="text-sm font-medium text-primary truncate">{item.file.name}</p>
                     <p className="text-xs text-muted">
-                        {formatBytes(selectedFile.file.size)} • {selectedFile.file.type || 'Desconocido'}
+                        {formatBytes(item.file.size)} · {item.file.type || 'Desconocido'}
                     </p>
+
+                    {item.status === 'pending' && (
+                        <p className="text-xs text-muted mt-1">En cola</p>
+                    )}
+
+                    {item.status === 'creating_session' && (
+                        <p className="text-xs text-muted mt-1 flex items-center gap-1">
+                            <Loader2 size={12} className="animate-spin" /> Preparando…
+                        </p>
+                    )}
+
+                    {item.status === 'uploading' && item.progress && (
+                        <div className="mt-2">
+                            <div className="flex items-center justify-between text-xs text-muted">
+                                <span>Subiendo…</span>
+                                <span>{item.progress.percentage}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-subtle rounded-full overflow-hidden mt-1">
+                                <div
+                                    className="h-full bg-accent transition-all"
+                                    style={{ width: `${item.progress.percentage}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {item.status === 'completed' && (
+                        <p className="text-xs text-success mt-1 flex items-center gap-1">
+                            <CheckCircle size={12} /> Listo
+                        </p>
+                    )}
+
+                    {item.status === 'error' && (
+                        <p className="text-xs text-error mt-1 flex items-center gap-1">
+                            <AlertCircle size={12} /> {item.error || 'Error al subir'}
+                        </p>
+                    )}
+
+                    {item.status === 'cancelled' && (
+                        <p className="text-xs text-warning mt-1 flex items-center gap-1">
+                            <AlertCircle size={12} /> Cancelado
+                        </p>
+                    )}
                 </div>
 
-                {status === 'idle' && (
-                    <button
-                        onClick={handleRemoveFile}
-                        className="p-1 hover:bg-hover rounded"
-                        title="Remover archivo"
-                    >
-                        <X size={16} className="text-muted" />
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {item.status === 'pending' && (
+                        <button
+                            onClick={() => removeQueueItem(item.id)}
+                            className="p-1.5 text-muted hover:text-error hover:bg-hover rounded"
+                            title="Eliminar"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+
+                    {item.status === 'error' && (
+                        <button
+                            onClick={() => updateQueueItem(item.id, (current) => ({ ...current, status: 'pending', error: null }))}
+                            className="p-1.5 rounded hover:bg-hover text-primary"
+                            title="Reintentar"
+                        >
+                            <RefreshCcw size={14} />
+                        </button>
+                    )}
+
+                    {isActive && (status === 'uploading' || status === 'creating_session' || status === 'committing') && (
+                        <Loader2 size={16} className="animate-spin text-muted" />
+                    )}
+                </div>
             </div>
         );
     };
 
-    // Modo compacto (para integrar en ChatComposer)
-    if (compact) {
-        return (
-            <div className={clsx('relative', className)}>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    accept={allowedMimeTypes?.join(',')}
-                    onChange={handleInputChange}
-                />
-                
-                {!selectedFile ? (
-                    <button
-                        onClick={handleClick}
-                        className="p-2 hover:bg-hover rounded-lg transition-colors"
-                        title="Adjuntar archivo"
-                    >
-                        <Upload size={20} className="text-muted" />
-                    </button>
-                ) : (
-                    <div className="flex items-center gap-2">
-                        {renderFilePreview()}
-                        {renderStatus()}
-                        
-                        {status === 'idle' && (
-                            <button
-                                onClick={handleUpload}
-                                className="px-3 py-1 bg-accent text-white rounded text-sm hover:bg-accent/90"
-                            >
-                                Subir
-                            </button>
-                        )}
-                        
-                        {(status === 'uploading' || status === 'creating_session') && (
-                            <button
-                                onClick={handleCancel}
-                                className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
-                            >
-                                Cancelar
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-        );
-    }
+    const completedCount = queue.filter((item) => item.status === 'completed').length;
+    const globalStatus = (() => {
+        if (status === 'creating_session') return 'Preparando archivo…';
+        if (status === 'uploading' && progress) {
+            return `Subiendo ${progress.percentage}% (${formatBytes(progress.bytesUploaded)} / ${formatBytes(progress.totalBytes)})`;
+        }
+        if (status === 'committing') return 'Confirmando subida…';
+        if (status === 'error' && error) return `Error: ${error}`;
+        return null;
+    })();
 
-    // Modo completo (con drag & drop)
+    const DropZone = (
+        <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => fileInputRef.current?.click()}
+            className={clsx(
+                'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
+                isDragging ? 'border-accent bg-accent/10' : 'border-subtle hover:border-accent/50 hover:bg-hover'
+            )}
+        >
+            <Upload size={32} className={clsx('mx-auto mb-3', isDragging ? 'text-accent' : 'text-muted')} />
+            <p className="text-sm font-medium text-primary">Arrastra archivos o haz click para seleccionarlos</p>
+            <p className="text-xs text-muted mt-1">
+                Hasta {formatBytes(maxSizeBytes)} por archivo · {allowedMimeTypes?.join(', ') || 'Formatos permitidos por la cuenta'}
+            </p>
+        </div>
+    );
+
+    const QueueSection = queue.length > 0 ? (
+        <div className="space-y-3">
+            {queue.map(renderQueueItem)}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span>{completedCount}/{queue.length} completados</span>
+                {activeUploadId && (
+                    <button
+                        onClick={handleCancelActive}
+                        className="px-3 py-1 rounded bg-error/10 text-error"
+                    >
+                        Cancelar actual
+                    </button>
+                )}
+                <button
+                    onClick={clearCompleted}
+                    className="px-3 py-1 rounded bg-elevated text-secondary hover:bg-hover"
+                    disabled={completedCount === 0}
+                >
+                    Limpiar completados
+                </button>
+            </div>
+        </div>
+    ) : (
+        <p className="text-sm text-muted text-center border border-dashed border-subtle rounded-lg py-6">
+            La cola está vacía. Agrega uno o varios archivos para iniciar la ingesta.
+        </p>
+    );
+
+    const StatusBanner = globalStatus ? (
+        <div className="text-xs text-muted flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin" /> {globalStatus}
+        </div>
+    ) : null;
+
     return (
         <div className={clsx('space-y-4', className)}>
             <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="hidden"
                 accept={allowedMimeTypes?.join(',')}
-                onChange={handleInputChange}
+                onChange={handleFileInput}
             />
-
-            {/* Zona de drop */}
-            {!selectedFile && (
-                <div
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onClick={handleClick}
-                    className={clsx(
-                        'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
-                        isDragging
-                            ? 'border-accent bg-accent/10'
-                            : 'border-subtle hover:border-accent/50 hover:bg-hover'
-                    )}
-                >
-                    <Upload
-                        size={40}
-                        className={clsx(
-                            'mx-auto mb-4',
-                            isDragging ? 'text-accent' : 'text-muted'
-                        )}
-                    />
-                    <p className="text-primary font-medium mb-1">
-                        {isDragging ? 'Suelta el archivo aquí' : 'Arrastra un archivo o haz click'}
-                    </p>
-                    <p className="text-sm text-muted">
-                        Máximo {formatBytes(maxSizeBytes)}
-                        {allowedMimeTypes && allowedMimeTypes.length > 0 && (
-                            <> • {allowedMimeTypes.join(', ')}</>
-                        )}
-                    </p>
-                </div>
-            )}
-
-            {/* Preview del archivo */}
-            {selectedFile && renderFilePreview()}
-
-            {/* Estado */}
-            {renderStatus()}
-
-            {/* Botones de acción */}
-            {selectedFile && status === 'idle' && (
-                <div className="flex gap-2">
-                    <button
-                        onClick={handleUpload}
-                        className="flex-1 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors"
-                    >
-                        Subir archivo
-                    </button>
-                    <button
-                        onClick={handleRemoveFile}
-                        className="px-4 py-2 bg-subtle text-secondary rounded-lg hover:bg-hover transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                </div>
-            )}
-
-            {/* Botón de cancelar durante upload */}
-            {(status === 'uploading' || status === 'creating_session') && (
-                <button
-                    onClick={handleCancel}
-                    className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                >
-                    Cancelar upload
-                </button>
-            )}
-
-            {/* Botón de reintentar en error */}
-            {status === 'error' && (
-                <div className="flex gap-2">
-                    <button
-                        onClick={handleUpload}
-                        className="flex-1 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors"
-                    >
-                        Reintentar
-                    </button>
-                    <button
-                        onClick={handleRemoveFile}
-                        className="px-4 py-2 bg-subtle text-secondary rounded-lg hover:bg-hover transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                </div>
-            )}
-
-            {/* Botón de cerrar en completado */}
-            {status === 'completed' && (
-                <button
-                    onClick={handleCancel}
-                    className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                >
-                    Listo
-                </button>
-            )}
+            {DropZone}
+            {QueueSection}
+            {StatusBanner}
         </div>
     );
 }

@@ -29,6 +29,30 @@ export async function listTemplatesHandler(
   return { success: true, data: templates };
 }
 
+export async function getTemplateHandler(
+  ctx: HandlerContext<unknown, { accountId?: string }, { templateId: string }>,
+  service: TemplateService = templateService
+) {
+  if (!ctx.user) {
+    ctx.set.status = 401;
+    return { success: false, message: 'Unauthorized' };
+  }
+
+  const accountId = ctx.query.accountId;
+  if (!accountId) {
+    ctx.set.status = 400;
+    return { success: false, message: 'accountId is required' };
+  }
+
+  try {
+    const template = await service.getTemplate(accountId, ctx.params.templateId);
+    return { success: true, data: template };
+  } catch (error: any) {
+    ctx.set.status = 404;
+    return { success: false, message: error?.message ?? 'Template not found' };
+  }
+}
+
 export async function createTemplateHandler(
   ctx: HandlerContext<{ accountId: string }>,
   service: TemplateService = templateService
@@ -48,7 +72,7 @@ export async function createTemplateHandler(
 }
 
 export async function updateTemplateHandler(
-  ctx: HandlerContext<{ accountId: string }, any, { id: string }>,
+  ctx: HandlerContext<{ accountId: string }, any, { templateId: string }>,
   service: TemplateService = templateService
 ) {
   if (!ctx.user) {
@@ -57,7 +81,7 @@ export async function updateTemplateHandler(
   }
 
   try {
-    const template = await service.updateTemplate(ctx.body.accountId, ctx.params.id, ctx.body as any);
+    const template = await service.updateTemplate(ctx.body.accountId, ctx.params.templateId, ctx.body as any);
     return { success: true, data: template };
   } catch (error: any) {
     ctx.set.status = 400;
@@ -66,7 +90,7 @@ export async function updateTemplateHandler(
 }
 
 export async function deleteTemplateHandler(
-  ctx: HandlerContext<unknown, { accountId?: string }, { id: string }>,
+  ctx: HandlerContext<unknown, { accountId?: string }, { templateId: string }>,
   service: TemplateService = templateService
 ) {
   if (!ctx.user) {
@@ -81,7 +105,7 @@ export async function deleteTemplateHandler(
   }
 
   try {
-    await service.deleteTemplate(accountId, ctx.params.id);
+    await service.deleteTemplate(accountId, ctx.params.templateId);
     return { success: true };
   } catch (error: any) {
     ctx.set.status = 400;
@@ -89,17 +113,8 @@ export async function deleteTemplateHandler(
   }
 }
 
-export const templatesRoutes = new Elysia({ prefix: '/templates' })
+export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
   .use(authMiddleware)
-  .get('', (ctx) => listTemplatesHandler(ctx), {
-    query: t.Object({
-      accountId: t.String(),
-    }),
-    detail: {
-      tags: ['Templates'],
-      summary: 'List templates by account',
-    },
-  })
   .get('/', (ctx) => listTemplatesHandler(ctx), {
     query: t.Object({
       accountId: t.String(),
@@ -124,6 +139,14 @@ export const templatesRoutes = new Elysia({ prefix: '/templates' })
       summary: 'Create template',
     },
   })
+  .get('/:templateId', (ctx) => getTemplateHandler(ctx), {
+    params: t.Object({ templateId: t.String() }),
+    query: t.Object({ accountId: t.String() }),
+    detail: {
+      tags: ['Templates'],
+      summary: 'Get template by id',
+    },
+  })
   .post('/', (ctx) => createTemplateHandler(ctx), {
     body: t.Object({
       accountId: t.String(),
@@ -139,8 +162,8 @@ export const templatesRoutes = new Elysia({ prefix: '/templates' })
       summary: 'Create template',
     },
   })
-  .put('/:id', (ctx) => updateTemplateHandler(ctx), {
-    params: t.Object({ id: t.String() }),
+  .put('/:templateId', (ctx) => updateTemplateHandler(ctx), {
+    params: t.Object({ templateId: t.String() }),
     body: t.Object({
       accountId: t.String(),
       name: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
@@ -155,8 +178,8 @@ export const templatesRoutes = new Elysia({ prefix: '/templates' })
       summary: 'Update template',
     },
   })
-  .delete('/:id', (ctx) => deleteTemplateHandler(ctx), {
-    params: t.Object({ id: t.String() }),
+  .delete('/:templateId', (ctx) => deleteTemplateHandler(ctx), {
+    params: t.Object({ templateId: t.String() }),
     query: t.Object({ accountId: t.String() }),
     detail: {
       tags: ['Templates'],

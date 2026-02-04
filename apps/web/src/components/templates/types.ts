@@ -37,6 +37,10 @@ export interface TemplateAsset {
   slot: string;
   version: number;
   linkedAt: string;
+  name: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  status: string;
 }
 
 // ============================================================================

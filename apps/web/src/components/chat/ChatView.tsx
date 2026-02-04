@@ -11,13 +11,34 @@ import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extens
 import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
 import { useConnectionStatus, useOfflineMessages } from '../../hooks/useOfflineFirst';
-import { useFileUpload } from '../../hooks/useFileUpload';
+import { useAssetUpload } from '../../hooks/useAssetUpload';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useUIStore } from '../../store/uiStore';
 import { useAutoReplyStore } from '../../store/autoReplyStore';
 import { db } from '../../db';
 import { Avatar } from '../ui/Avatar';
 import { ParticipantsActivityBar } from './ParticipantsActivityBar';
+import { useAuthStore } from '../../store/authStore';
+
+const CHAT_SUPPORTED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/webm',
+  'audio/ogg;codecs=opus',
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp3',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+
+const CHAT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
 
 interface ChatViewProps {
   conversationId: string;
@@ -47,15 +68,64 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   // V2-1: useOfflineMessages para persistencia local + sync
   const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
 
-  // PC-9: uploads (con progress)
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+
+  // Assets: session-based uploads
   const {
-    uploadFile,
-    uploadAudio,
-    isUploading: isUploadingAttachment,
-    progress: uploadProgress,
+    upload: uploadAssetRequest,
+    status: assetUploadStatus,
+    progress: assetProgress,
     error: uploadError,
-    clearError: clearUploadError,
-  } = useFileUpload();
+    reset: resetUpload,
+  } = useAssetUpload({
+    accountId: accountId ?? undefined,
+    allowedMimeTypes: CHAT_SUPPORTED_MIME_TYPES,
+    maxSizeBytes: CHAT_MAX_UPLOAD_BYTES,
+  });
+
+  const isUploadingAttachment = assetUploadStatus === 'creating_session' || assetUploadStatus === 'uploading' || assetUploadStatus === 'committing';
+  const uploadProgress = assetProgress?.percentage ?? 0;
+
+  const clearUploadError = () => {
+    resetUpload();
+  };
+
+  const performAssetUpload = useCallback(async ({ file }: { file: File }) => {
+    const asset = await uploadAssetRequest(file);
+    return asset;
+  }, [uploadAssetRequest]);
+
+  const uploadAssetForComposer = useCallback(async ({ file }: { file: File; type: 'image' | 'document' | 'video' }) => {
+    if (!currentUserId || !accountId) {
+      return { success: false, error: 'No hay sesión activa para subir archivos' };
+    }
+    const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/') ? URL.createObjectURL(file) : undefined;
+    const asset = await performAssetUpload({ file });
+
+    if (!asset) {
+      return {
+        success: false,
+        error: uploadError || 'No se pudo subir el archivo',
+      };
+    }
+
+    return {
+      success: true,
+      asset,
+      previewUrl,
+    };
+  }, [performAssetUpload, uploadError, currentUserId, accountId]);
+
+  const uploadAudioForComposer = useCallback(async ({ file }: { file: File }) => {
+    if (!currentUserId || !accountId) {
+      return { success: false, error: 'No hay sesión activa para grabar audio' };
+    }
+    const asset = await performAssetUpload({ file });
+    return {
+      success: !!asset,
+      asset: asset ?? undefined,
+    };
+  }, [performAssetUpload, currentUserId, accountId]);
 
   // C3: Estado de conexión offline-first (online/offline/syncing)
   const syncConnectionStatus = useConnectionStatus();
@@ -461,6 +531,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
                     } : undefined}
                     onDelete={msg.senderAccountId === accountId ? () => handleDelete(msg.id) : undefined}
                     onScrollToMessage={scrollToMessage}
+                    viewerAccountId={accountId}
                   />
                 </div>
               );
@@ -551,8 +622,8 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         onSend={handleSend}
         accountId={accountId}
         relationshipId={activeRelationshipId}
-        uploadFile={uploadFile}
-        uploadAudio={uploadAudio}
+        uploadAsset={uploadAssetForComposer}
+        uploadAudio={uploadAudioForComposer}
         isUploading={isUploadingAttachment}
         uploadProgress={uploadProgress}
         onClearUploadError={clearUploadError}

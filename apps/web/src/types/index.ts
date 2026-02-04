@@ -138,13 +138,17 @@ export interface MessageContent {
 
 export interface MediaItem {
   type: 'image' | 'video' | 'audio' | 'document';
-  url: string;
+  url?: string;
   attachmentId?: string;
   filename?: string;
   mimeType?: string;
   size?: number;
+  sizeBytes?: number;
   waveformData?: any;
   name?: string;
+  assetId?: string;
+  status?: string;
+  scope?: string;
 }
 
 export interface Button {
