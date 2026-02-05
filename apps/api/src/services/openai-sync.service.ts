@@ -18,6 +18,7 @@
 
 import OpenAI from 'openai';
 import type { AssistantModelConfig } from '@fluxcore/db';
+import { aiToolService } from './ai-tools.service';
 
 let openaiClient: OpenAI | null = null;
 
@@ -206,6 +207,10 @@ export async function createOpenAIAssistant(params: CreateOpenAIAssistantParams)
     tools.push({ type: 'file_search' });
   }
 
+  // Add functional tools
+  const coreTools = aiToolService.getTools();
+  coreTools.forEach(t => tools.push(t));
+
   const assistant = await client.beta.assistants.create({
     name: params.name,
     description: params.description,
@@ -262,9 +267,19 @@ export async function updateOpenAIAssistant(params: UpdateOpenAIAssistantParams)
       };
     }
 
+    // Maintain functional tools
+    const coreTools = aiToolService.getTools();
+    coreTools.forEach(t => tools.push(t));
+
     if (tools.length > 0) {
       updateData.tools = tools;
     }
+  } else {
+    // Even if vector stores aren't updated, ensure tools are present
+    const tools: any[] = [];
+    const coreTools = aiToolService.getTools();
+    coreTools.forEach(t => tools.push(t));
+    if (tools.length > 0) updateData.tools = tools;
   }
 
   await client.beta.assistants.update(params.externalId, updateData);
@@ -561,8 +576,12 @@ export interface CreateThreadAndRunParams {
     role: 'user' | 'assistant';
     content: string;
   }>;
+  instructions?: string;
   additionalInstructions?: string;
   traceId?: string;
+  // Context for tool execution
+  accountId: string;
+  conversationId: string;
 }
 
 export interface AssistantRunResult {
@@ -612,7 +631,8 @@ export async function runAssistantWithMessages(
     // 2. Crear y ejecutar un run con el asistente
     const run = await client.beta.threads.runs.create(thread.id, {
       assistant_id: params.assistantExternalId,
-      additional_instructions: params.additionalInstructions,
+      instructions: params.instructions, // REPLACER (Control total FluxCore)
+      additional_instructions: params.additionalInstructions, // APPENDER (Opcional)
     });
 
     console.log(`${tracePrefix} Run created`, {
@@ -622,7 +642,14 @@ export async function runAssistantWithMessages(
     });
 
     // 3. Esperar a que el run complete (polling)
-    const completedRun = await waitForRunCompletion(client, thread.id, run.id, 60000, params.traceId);
+    const completedRun = await waitForRunCompletion(
+      client,
+      thread.id,
+      run.id,
+      60000,
+      params.traceId,
+      { accountId: params.accountId, conversationId: params.conversationId } // Context for tools
+    );
 
     console.log(`${tracePrefix} Run finished`, {
       threadId: thread.id,
@@ -707,7 +734,8 @@ async function waitForRunCompletion(
   threadId: string,
   runId: string,
   maxWaitMs: number = 60000,
-  traceId?: string
+  traceId?: string,
+  context?: { accountId: string; conversationId: string }
 ): Promise<any> {
   const tracePrefix = traceId ? `[openai-sync][${traceId}]` : '[openai-sync]';
   const startTime = Date.now();
@@ -736,6 +764,53 @@ async function waitForRunCompletion(
         elapsedMs: Date.now() - startTime,
       });
       return run;
+    }
+
+    // Handle required actions (Tool Calls)
+    if (run.status === 'requires_action') {
+      console.log(`${tracePrefix} Run requires action (tool calls)`, {
+        toolCallsCount: run.required_action?.submit_tool_outputs?.tool_calls?.length
+      });
+
+      const toolCalls = run.required_action?.submit_tool_outputs?.tool_calls || [];
+      const toolOutputs = [];
+
+      if (context) {
+        for (const toolCall of toolCalls) {
+          const output = await aiToolService.executeTool(toolCall, context);
+          toolOutputs.push({
+            tool_call_id: toolCall.id,
+            output
+          });
+        }
+
+        if (toolOutputs.length > 0) {
+          console.log(`${tracePrefix} Submitting tool outputs`, { count: toolOutputs.length });
+          const runsApi = client.beta.threads.runs as any;
+
+          try {
+            // Try new signature: (threadId, runId, body)
+            await runsApi.submitToolOutputs(threadId, runId, {
+              tool_outputs: toolOutputs
+            });
+          } catch (e: any) {
+            // Fallback to old/other signature: (runId, { thread_id, tool_outputs })
+            // or if the first one really failed because of the signature mismatch explained above:
+            if (e.message && (e.message.includes('undefined') || e.message.includes('path'))) {
+              await runsApi.submitToolOutputs(runId, {
+                thread_id: threadId,
+                tool_outputs: toolOutputs
+              });
+            } else {
+              throw e;
+            }
+          }
+
+          // Reset poll interval after submission to check result quickly
+          pollInterval = 500;
+          continue; // Continue polling
+        }
+      }
     }
 
     // Esperar antes del siguiente poll

@@ -16,14 +16,19 @@ Crear un sistema UI para gestionar plantillas de mensajes que:
 
 ## 2. Análisis del Backend Existente
 
-### 2.1 Schema de Base de Datos
-```
 packages/db/src/schema/template-assets.ts
 - templateId: uuid
 - assetId: uuid
 - version: integer
 - slot: varchar
 - linkedAt: timestamp
+
+packages/db/src/schema/templates.ts
+- id: uuid
+- name: varchar
+- content: text
+- authorizeForAI: boolean (NUEVO: Controla si la IA puede usar esta plantilla)
+- isActive: boolean
 ```
 
 ### 2.2 API Endpoints Existentes
@@ -39,6 +44,7 @@ DELETE /templates/:id                # Eliminar plantilla
 POST   /templates/:id/assets         # Vincular asset
 GET    /templates/:id/assets         # Obtener assets
 DELETE /templates/:id/assets/:assetId # Desvincular asset
+POST   /templates/:id/execute        # EJECUTAR/ENVIAR plantilla (Unified Core Execution)
 ```
 
 ---
@@ -206,6 +212,8 @@ export interface Template {
   variables: TemplateVariable[];
   category?: string;
   tags?: string[];
+  isActive: boolean;
+  authorizeForAI: boolean; // Flag para uso en flujos automáticos de IA
   assets?: TemplateAsset[];
   createdAt: string;
   updatedAt: string;
@@ -240,36 +248,40 @@ export interface UpdateTemplateInput {
 ```
 
 ---
-
 ## 7. Flujo de Usuario
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Tools (ChatCore)                                            │
-│ ┌──────────────┐                                            │
-│ │ Plantillas ▶ │───┐                                        │
-│ └──────────────┘   │                                        │
-└────────────────────┼────────────────────────────────────────┘
-                     ▼
-┌─────────────────────┐    ┌──────────────────────────────────┐
-│ Sidebar             │    │ ViewPort                         │
-│ ┌─────────────────┐ │    │ ┌──────────────────────────────┐ │
-│ │ 🔍 Buscar...    │ │    │ │ Tab: Editar Plantilla        │ │
-│ ├─────────────────┤ │    │ ├──────────────────────────────┤ │
-│ │ + Nueva         │ │───▶│ │ Nombre: [____________]       │ │
-│ ├─────────────────┤ │    │ │                              │ │
-│ │ 📄 Bienvenida   │ │    │ │ Contenido:                   │ │
-│ │ 📄 Seguimiento  │ │    │ │ ┌────────────────────────┐   │ │
-│ │ 📄 Despedida    │ │    │ │ │ Hola {{nombre}},       │   │ │
-│ └─────────────────┘ │    │ │ │ Gracias por...         │   │ │
-└─────────────────────┘    │ │ └────────────────────────┘   │ │
-                           │ │                              │ │
-                           │ │ Variables: [+]              │ │
-                           │ │ Assets: [Adjuntar]          │ │
-                           │ │                              │ │
-                           │ │ [Guardar] [Cancelar]        │ │
-                           │ └──────────────────────────────┘ │
-                           └──────────────────────────────────┘
+│ Activity Bar: Herramientas                                  │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ ToolsSidebar (selector de herramientas)                │ │
+│ │ ┌──────────────┐  ┌────────────┐  ┌──────────────┐     │ │
+│ │ │ Plantillas ▶ │  │ Etiquetas │  │ Perfil       │ ... │ │
+│ │ └──────────────┘  └────────────┘  └──────────────┘     │ │
+│ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                    │ (solo selector de herramientas)
+                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│ ViewPort (tabs por herramienta)                             │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Tab activo: Plantillas                                  │ │
+│ ├─────────────────────────────────────────────────────────┤ │
+│ │ ┌───────── Colección de plantillas (lista/buscador) ─┐ │ │
+│ │ │ 🔍 Buscar...   [+ Nueva]                         │ │ │
+│ │ │ 📄 Bienvenida  📄 Seguimiento  📄 Despedida       │ │ │
+│ │ └──────────────────────────────────────────────────┘ │ │
+│ │                                                     │ │
+│ │ ┌───────── Editor/Preview de plantilla seleccionada ┐ │ │
+│ │ │ Nombre: [____________]                           │ │ │
+│ │ │ Contenido: [ ... ]                               │ │ │
+│ │ │ Variables [+]   Assets [Adjuntar]                │ │ │
+│ │ │ [Guardar] [Cancelar]                             │ │ │
+│ │ └──────────────────────────────────────────────────┘ │ │
+│ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+
+> Nota: la Sidebar nunca contiene la colección en sí; solo expone el **ToolsSidebar** como menú. La lista y edición de plantillas viven dentro del tab correspondiente en el ViewPort.
 ```
 
 ---
@@ -277,34 +289,38 @@ export interface UpdateTemplateInput {
 ## 8. Fases de Implementación
 
 ### Fase 1: Estructura Base (2h)
-- [ ] Crear carpeta `components/templates/`
-- [ ] Crear `types.ts` con interfaces
-- [ ] Crear `useTemplates.ts` hook básico
-- [ ] Crear `index.ts` exports
+- [x] Crear carpeta `components/templates/`
+- [x] Crear `types.ts` con interfaces
+- [x] Crear `useTemplates.ts` hook básico (Implementado como `templateStore.ts`)
+- [x] Crear `index.ts` exports
 
 ### Fase 2: Componentes UI (3h)
-- [ ] Implementar `TemplateCard.tsx`
-- [ ] Implementar `TemplateList.tsx`
-- [ ] Implementar `TemplateManager.tsx`
-- [ ] Usar componentes de `ui/` y `core/components/`
+- [x] Implementar `TemplateCard.tsx` (Refactorizado a formato Fila/Tabla para coherencia)
+- [x] Implementar `TemplateList.tsx` (Refactorizado a estructura Tabla para coherencia)
+- [x] Implementar `TemplateManager.tsx`
+- [x] Usar componentes de `ui/` y `core/components/`
 
 ### Fase 3: Editor (3h)
-- [ ] Implementar `TemplateEditor.tsx`
+- [x] Implementar `TemplateEditor.tsx`
 - [ ] Implementar `TemplatePreview.tsx`
-- [ ] Implementar `TemplateAssetPicker.tsx`
-- [ ] Integrar con sistema de assets
+- [x] Implementar `TemplateAssetPicker.tsx`
+- [x] Integrar con sistema de assets
 
 ### Fase 4: Integración (2h)
-- [ ] Registrar en ViewRegistry
-- [ ] Registrar acceso en ToolsSidebar (ChatCore Tools)
-- [ ] Registrar tab type en DynamicContainer
-- [ ] Agregar tipos a `types/panels.ts`
+- [x] Registrar en ViewRegistry (Implementado via fallback legacy en `DynamicContainer` y `registry/chatcore-views.tsx`)
+- [x] Registrar acceso en ToolsSidebar (ChatCore Tools)
+- [x] Registrar tab type en DynamicContainer
+- [x] Agregar tipos a `types/panels.ts`
 
-### Fase 5: Testing y QA (2h)
-- [ ] Probar flujo completo
-- [ ] Verificar estados (loading, empty, error)
-- [ ] Verificar responsive/móvil
-- [ ] Verificar accesibilidad
+- [x] Verificar accesibilidad
+
+### Fase 6: IA Integration (2h)
+- [x] Agregar campo `authorizeForAI` a DB (Migración manual 033 ejecutada)
+- [x] Actualizar `TemplateEditor` para permitir toggle de autorización IA
+- [x] Crear `AITemplateService` en backend
+- [x] Centralizar lógica de ejecución en `TemplateService.executeTemplate` (Soberanía de Chat Core)
+- [x] Implementar Tool de envío de plantillas en AI Engine (`send_template`)
+- [x] Integrar selector de plantillas en `FluxCoreComposer` y `StandardComposer` (Frontend)
 
 ---
 

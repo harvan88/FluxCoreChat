@@ -9,9 +9,9 @@ import { useState, useEffect } from 'react';
 import { Plus, FileText, RefreshCw } from 'lucide-react';
 import { TemplateList } from './TemplateList';
 import { useTemplateStore } from './store/templateStore';
+import { usePanelStore } from '../../store/panelStore';
 import { Button } from '../ui/Button';
 import { EmptyState, LoadingState, ErrorState } from '../../core/components';
-import { usePanelStore } from '../../store/panelStore';
 import type { Template } from './types';
 
 interface TemplateManagerProps {
@@ -19,12 +19,8 @@ interface TemplateManagerProps {
 }
 
 export function TemplateManager({ accountId }: TemplateManagerProps) {
-  const { openTab } = usePanelStore();
-  
   // Use Zustand store for shared state
   const {
-    templates,
-    selectedTemplateId,
     isLoading,
     error,
     filters,
@@ -39,18 +35,33 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
     getFilteredTemplates,
   } = useTemplateStore();
 
+  const { openTab } = usePanelStore();
+
   const filteredTemplates = getFilteredTemplates();
-  const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || null;
+  // We no longer need selectedTemplateId for view switching, 
+  // but we might want to keep it if we want to highlight the selected row in the list.
+  // For now, let's rely on tabs.
 
   const [isCreating, setIsCreating] = useState(false);
-  
-  // Fetch templates on mount
+
+  // Fetch templates when accountId changes
   useEffect(() => {
-    if (!accountId) return;
-    if (templates.length === 0) {
+    if (accountId) {
       fetchTemplates(accountId);
+      selectTemplate(null); // Clear selection
     }
-  }, [accountId, templates.length, fetchTemplates]);
+  }, [accountId, fetchTemplates, selectTemplate]);
+
+  const openTemplateEditor = (templateId: string, templateName: string) => {
+    openTab('editor', {
+      type: 'template-editor',
+      identity: `template-editor:${templateId}`,
+      title: templateName,
+      icon: 'FileText',
+      closable: true,
+      context: { templateId, accountId },
+    });
+  };
 
   const handleCreateNew = async () => {
     if (!accountId) return;
@@ -61,20 +72,8 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
         content: 'Escribe el contenido de tu plantilla aquí...',
         category: 'other',
       });
-      
-      // Abrir editor en tab (usa 'editor' como containerType)
-      openTab('editor', {
-        type: 'template-editor',
-        identity: `template:${newTemplate.id}`,
-        title: newTemplate.name,
-        icon: 'FileText',
-        closable: true,
-        context: {
-          templateId: newTemplate.id,
-          accountId,
-          isNew: true,
-        },
-      });
+
+      openTemplateEditor(newTemplate.id, newTemplate.name);
     } catch (err) {
       console.error('Error creating template:', err);
     } finally {
@@ -83,19 +82,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   };
 
   const handleEdit = (template: Template) => {
-    if (!accountId) return;
-
-    openTab('editor', {
-      type: 'template-editor',
-      identity: `template:${template.id}`,
-      title: template.name,
-      icon: 'FileText',
-      closable: true,
-      context: {
-        templateId: template.id,
-        accountId,
-      },
-    });
+    openTemplateEditor(template.id, template.name);
   };
 
   const handleDelete = async (template: Template) => {
@@ -110,12 +97,12 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
     if (!accountId) return;
     try {
       const duplicated = await duplicateTemplate(template.id, accountId);
-      selectTemplate(duplicated.id);
+      openTemplateEditor(duplicated.id, duplicated.name);
     } catch (err) {
       console.error('Error duplicating template:', err);
     }
   };
-  
+
   const handleRefresh = () => {
     if (!accountId) return;
     fetchTemplates(accountId);
@@ -139,8 +126,8 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
       <div className="h-full flex flex-col">
         <Header onCreateNew={handleCreateNew} isCreating={isCreating} onRefresh={handleRefresh} />
         <div className="flex-1 flex items-center justify-center p-4">
-          <ErrorState 
-            message={error || 'Error al cargar plantillas'} 
+          <ErrorState
+            message={error || 'Error al cargar plantillas'}
             onRetry={handleRefresh}
           />
         </div>
@@ -177,12 +164,12 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
       <div className="flex-1 overflow-hidden">
         <TemplateList
           templates={filteredTemplates}
-          selectedId={selectedTemplate?.id}
+          selectedId={undefined}
           filters={filters}
           sort={sort}
           onFiltersChange={setFilters}
           onSortChange={setSort}
-          onSelect={(template) => selectTemplate(template.id)}
+          onSelect={(template) => handleEdit(template)}  /* Click opens editor tab */
           onEdit={handleEdit}
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
@@ -193,12 +180,12 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
 }
 
 // Header subcomponent
-function Header({ 
-  onCreateNew, 
+function Header({
+  onCreateNew,
   isCreating,
-  onRefresh 
-}: { 
-  onCreateNew: () => void; 
+  onRefresh
+}: {
+  onCreateNew: () => void;
   isCreating: boolean;
   onRefresh: () => void;
 }) {
@@ -213,8 +200,8 @@ function Header({
         >
           <RefreshCw size={16} />
         </button>
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           onClick={onCreateNew}
           disabled={isCreating}
         >

@@ -15,6 +15,7 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { aiEntitlementsService, type AIProviderId } from './ai-entitlements.service';
 import { creditsService } from './credits.service';
+import { aiToolService } from './ai-tools.service';
 
 type AISuggestion = {
   id: string;
@@ -299,10 +300,10 @@ class AIService {
       // Construir contexto
       const context = await this.buildContext(recipientAccountId, conversationId);
 
-    console.log(`${tracePrefix} context built`, {
-      messagesCount: Array.isArray((context as any)?.messages) ? (context as any).messages.length : undefined,
-      elapsedMs: Date.now() - start,
-    });
+      console.log(`${tracePrefix} context built`, {
+        messagesCount: Array.isArray((context as any)?.messages) ? (context as any).messages.length : undefined,
+        elapsedMs: Date.now() - start,
+      });
 
       // 🔧 NUEVO: Construir system prompt desde instructions del asistente
       let systemPrompt = '';
@@ -366,6 +367,7 @@ class AIService {
         timeoutMs: 15000,
         providerOrder: finalProviderOrder,  // ← USAR PROVEEDOR ORDER CORREGIDO
         systemPrompt: systemPrompt.trim() || undefined,
+        tools: aiToolService.getTools(), // ← INYECTAR TOOLS DISPONIBLES
       });
 
       console.log('[ai-service] Config aplicada (FIX):', {
@@ -380,7 +382,7 @@ class AIService {
       // ════════════════════════════════════════════════════════════════════════
       // FLUJO DIFERENCIADO: Asistentes OpenAI vs Local
       // ════════════════════════════════════════════════════════════════════════
-      
+
       const assistantRuntime = composition?.assistant?.runtime;
       const assistantExternalId = composition?.assistant?.externalId;
 
@@ -390,19 +392,19 @@ class AIService {
         externalId: assistantExternalId,
         elapsedMs: Date.now() - start,
       });
-      
+
       console.log('[ai-service] Assistant runtime:', assistantRuntime);
       console.log('[ai-service] Assistant externalId:', assistantExternalId);
 
       // Si es un asistente OpenAI con externalId, usar la API de Assistants
       if (assistantRuntime === 'openai' && assistantExternalId) {
         console.log('[ai-service] 🚀 Usando flujo de OpenAI Assistants API');
-        
+
         const { runAssistantWithMessages } = await import('./openai-sync.service');
-        
+
         // Construir mensajes para el thread de OpenAI
         const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-        
+
         // Agregar mensajes del historial (context.messages)
         if (Array.isArray(context.messages)) {
           for (const msg of context.messages) {
@@ -413,9 +415,9 @@ class AIService {
             });
           }
         }
-        
+
         // Agregar el mensaje actual si no está en el historial
-        const currentMsgInHistory = threadMessages.some(m => 
+        const currentMsgInHistory = threadMessages.some(m =>
           m.content.includes(content) || content.includes(m.content)
         );
         if (!currentMsgInHistory) {
@@ -429,7 +431,10 @@ class AIService {
         const result = await runAssistantWithMessages({
           assistantExternalId,
           messages: threadMessages,
+          instructions: systemPrompt.trim() || undefined,
           traceId,
+          accountId: recipientAccountId,
+          conversationId,
         });
 
         console.log(`${tracePrefix} openai result`, {
@@ -494,7 +499,7 @@ class AIService {
       // ════════════════════════════════════════════════════════════════════════
       // FLUJO LOCAL: Usar FluxCore Extension con Chat Completions
       // ════════════════════════════════════════════════════════════════════════
-      
+
       console.log('[ai-service] 📦 Usando flujo local FluxCore (Chat Completions)');
       console.log('[ai-service] Llamando extension.onMessage()...');
       const suggestion = await extension.onMessage(event, context, recipientAccountId);
@@ -1316,10 +1321,10 @@ class AIService {
         const assistantModel = typeof assistantModelConfig.model === 'string' ? assistantModelConfig.model : null;
         const assistantMaxTokens = typeof assistantModelConfig.maxTokens === 'number'
           ? assistantModelConfig.maxTokens
-          : gated.config.maxTokens || this.config.maxTokens || 256;
+          : gated.config.maxTokens || 256;
         const assistantTemperature = typeof assistantModelConfig.temperature === 'number'
           ? assistantModelConfig.temperature
-          : gated.config.temperature || this.config.temperature || 0.7;
+          : gated.config.temperature || 0.7;
 
         const { runAssistantWithMessages } = await import('./openai-sync.service');
 
@@ -1434,6 +1439,7 @@ class AIService {
               responseFormat: (composition.assistant.modelConfig as any)?.responseFormat,
             }
             : undefined,
+          effective: undefined as any, // Initialize for later assignment
         } : undefined;
 
         const traceContext = {
@@ -1470,6 +1476,8 @@ class AIService {
           assistantExternalId,
           messages: threadMessages,
           traceId: options.traceId,
+          accountId: recipientAccountId,
+          conversationId,
         });
 
         const traceAttempt: any = {

@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { eq, and, desc, ne, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, ne } from 'drizzle-orm';
 import * as openaiSync from '../openai-sync.service';
 import {
     db,
@@ -11,9 +11,14 @@ import {
     fluxcoreAssistantTools,
     fluxcoreInstructionVersions,
     accounts,
+    fluxcoreToolConnections,
     type FluxcoreAssistant,
     type NewFluxcoreAssistant,
 } from '@fluxcore/db';
+import { inArray } from 'drizzle-orm';
+import { templateService } from '../template.service';
+
+const TEMPLATES_TOOL_DEF_ID = '9e8c7b6a-5d4e-4f3a-2b1c-0d9e8f7a6b5c';
 
 export type FluxcoreAssistantWithRelations = FluxcoreAssistant & {
     instructionIds: string[];
@@ -27,13 +32,8 @@ export interface CreateAssistantDTO extends NewFluxcoreAssistant {
     toolIds?: string[];
 }
 
-type FluxcoreConflictError = Error & {
-    statusCode?: number;
-    details?: any;
-};
-
 // ============================================================================
-// DYNAMIC CONTENT GENERATION
+// ASSISTANTS LOGIC
 // ============================================================================
 
 /**
@@ -100,6 +100,34 @@ export async function generateManagedInstructionContent(accountId: string): Prom
 `);
 
     return sections.join('\n');
+}
+
+/**
+ * Construye el bloque de instrucciones para el uso de plantillas
+ */
+export async function buildTemplatesInstructionBlock(accountId: string): Promise<string> {
+    const aiTemplates = await templateService.listAITemplates(accountId);
+    if (aiTemplates.length === 0) return '';
+
+    const templatesList = aiTemplates.map(t =>
+        `| ${t.id} | ${t.name} | ${t.variables.map(v => v.name).join(', ') || 'n/a'} |`
+    ).join('\n');
+
+    return `
+# REGLA DE ORO: DISPARADOR DE PLANTILLAS OFICIALES (SIN ACCESO A CONTENIDO)
+
+Actúa como un selector de respuestas oficiales. Para garantizar la entrega de documentos (PDFs, imágenes) y el formato exacto, TIENES PROHIBIDO redactar respuestas para las intenciones listadas abajo.
+
+REGLA DE SILENCIO TOTAL:
+1. Si la intención del usuario coincide con un "Nombre de Plantilla", DEBES llamar a \`send_template\`.
+2. Tu respuesta de texto debe estar totalmente VACÍA. Solo emite la llamada a la herramienta.
+3. NO conoces el contenido de la plantilla, por lo que NO puedes parafrasearla. Confía en el sistema para entregar el mensaje oficial.
+
+## LIBRERÍA DE INTENCIONES AUTORIZADAS:
+| ID (template_id) | Nombre de Plantilla (Intención) | Variables Requeridas |
+|---|---|---|
+${templatesList}
+    `.trim();
 }
 
 // ============================================================================
@@ -284,10 +312,27 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
                 }
             }
 
+            // Inyectar plantillas si la herramienta está activa
+            let finalInstructions = assistantData.description || 'You are a helpful assistant.';
+            if (toolIds && toolIds.length > 0) {
+                const connections = await tx
+                    .select()
+                    .from(fluxcoreToolConnections)
+                    .where(inArray(fluxcoreToolConnections.id, toolIds));
+
+                const hasTemplates = connections.some(c => c.toolDefinitionId === TEMPLATES_TOOL_DEF_ID);
+                if (hasTemplates) {
+                    const templateBlock = await buildTemplatesInstructionBlock(assistantData.accountId);
+                    if (templateBlock) {
+                        finalInstructions = `${templateBlock}\n\n${finalInstructions}`;
+                    }
+                }
+            }
+
             externalId = await openaiSync.createOpenAIAssistant({
                 name: assistantData.name,
                 description: assistantData.description || undefined,
-                instructions: assistantData.description || 'You are a helpful assistant.',
+                instructions: finalInstructions,
                 modelConfig: assistantData.modelConfig as any,
                 vectorStoreIds: openaiVectorStoreExternalIds.length > 0 ? openaiVectorStoreExternalIds : undefined,
             });
@@ -419,11 +464,41 @@ export async function updateAssistant(
                 }
             }
 
+            // Inyectar plantillas si la herramienta está activa
+            let finalInstructions = instructions || 'You are a helpful assistant.';
+
+            // Determinar si Templates está activo (ya sea en toolIds nuevos o existentes)
+            let isTemplatesActive = false;
+            if (toolIds !== undefined) {
+                if (toolIds.length > 0) {
+                    const connections = await tx
+                        .select()
+                        .from(fluxcoreToolConnections)
+                        .where(inArray(fluxcoreToolConnections.id, toolIds));
+                    isTemplatesActive = connections.some(c => c.toolDefinitionId === TEMPLATES_TOOL_DEF_ID);
+                }
+            } else {
+                // Chequear conexiones actuales del asistente
+                const currentTools = await tx
+                    .select({ defId: fluxcoreToolConnections.toolDefinitionId })
+                    .from(fluxcoreAssistantTools)
+                    .innerJoin(fluxcoreToolConnections, eq(fluxcoreAssistantTools.toolConnectionId, fluxcoreToolConnections.id))
+                    .where(eq(fluxcoreAssistantTools.assistantId, id));
+                isTemplatesActive = currentTools.some(t => t.defId === TEMPLATES_TOOL_DEF_ID);
+            }
+
+            if (isTemplatesActive) {
+                const templateBlock = await buildTemplatesInstructionBlock(accountId);
+                if (templateBlock) {
+                    finalInstructions = `${templateBlock}\n\n${finalInstructions}`;
+                }
+            }
+
             await openaiSync.updateOpenAIAssistant({
                 externalId: assistant.externalId,
                 name: assistantData.name,
-                description: assistantData.description !== null ? assistantData.description : undefined,
-                instructions,
+                description: typeof assistantData.description === 'string' ? assistantData.description : undefined,
+                instructions: finalInstructions,
                 modelConfig: assistantData.modelConfig as any,
                 vectorStoreIds: openaiVectorStoreExternalIds.length > 0 ? openaiVectorStoreExternalIds : undefined,
             });
@@ -450,6 +525,18 @@ export async function updateAssistant(
                             }))
                         );
                     }
+                }
+            }
+
+            if (toolIds !== undefined) {
+                await tx.delete(fluxcoreAssistantTools).where(eq(fluxcoreAssistantTools.assistantId, id));
+                if (toolIds.length > 0) {
+                    await tx.insert(fluxcoreAssistantTools).values(
+                        toolIds.map((toolConnectionId) => ({
+                            assistantId: id,
+                            toolConnectionId,
+                        }))
+                    );
                 }
             }
 

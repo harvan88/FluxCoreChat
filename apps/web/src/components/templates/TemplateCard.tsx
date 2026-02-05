@@ -6,7 +6,7 @@
  */
 
 import { memo } from 'react';
-import { FileText, Copy, Clock, Hash, Pencil } from 'lucide-react';
+import { FileText, Copy, Clock, Hash, Pencil, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { Badge } from '../ui/Badge';
 import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
@@ -31,46 +31,101 @@ function TemplateCardComponent({
   onDuplicate,
 }: TemplateCardProps) {
   const categoryLabel = TEMPLATE_CATEGORIES.find(c => c.value === template.category)?.label || template.category;
-  
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('es-ES', { 
-      day: 'numeric', 
+    return date.toLocaleDateString('es-ES', {
+      day: 'numeric',
       month: 'short',
-      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined 
+      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     });
   };
 
   return (
-    <div
+    <tr
       onClick={onSelect}
       onDoubleClick={onEdit}
       className={clsx(
-        'group relative p-3 rounded-lg border transition-all cursor-pointer',
-        'hover:bg-hover',
-        isSelected 
-          ? 'border-accent bg-accent/5' 
-          : 'border-subtle bg-surface'
+        'group border-b border-subtle hover:bg-hover cursor-pointer transition-colors',
+        isSelected && 'bg-accent/5'
       )}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+      {/* Nombre */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
           <div className={clsx(
-            'p-1.5 rounded-md',
+            'p-1.5 rounded-md flex-shrink-0',
             template.isActive ? 'bg-accent/10 text-accent' : 'bg-muted/10 text-muted'
           )}>
             <FileText size={14} />
           </div>
-          <div className="min-w-0 flex-1">
-            <h4 className="font-medium text-sm text-primary truncate">
-              {template.name}
-            </h4>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              {template.isActive && (
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+              )}
+              <span className="font-medium text-sm text-primary truncate">
+                {template.name}
+              </span>
+              <div
+                className={clsx(
+                  "flex-shrink-0 ml-1 transition-colors",
+                  template.authorizeForAI ? "text-accent" : "text-muted/20"
+                )}
+                title={template.authorizeForAI ? "Autorizada para uso por IA" : "No autorizada para IA"}
+              >
+                <Sparkles size={14} />
+              </div>
+            </div>
           </div>
         </div>
-        
-        {/* Actions - visible on hover */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      </td>
+
+      {/* Contenido (Preview) */}
+      <td className="px-4 py-3 hidden md:table-cell max-w-xs lg:max-w-md">
+        <p className="text-xs text-secondary truncate">
+          {template.content.replace(/\n/g, ' ')}
+        </p>
+      </td>
+
+      {/* Categoría */}
+      <td className="px-4 py-3">
+        {categoryLabel && (
+          <Badge variant="neutral" size="sm" className="whitespace-nowrap">
+            {categoryLabel}
+          </Badge>
+        )}
+      </td>
+
+      {/* Detalles (Vars & Tags) */}
+      <td className="px-4 py-3 hidden lg:table-cell">
+        <div className="flex items-center gap-2">
+          {template.variables.length > 0 && (
+            <span className="flex items-center gap-1 text-xs text-muted" title={`${template.variables.length} variables`}>
+              <Hash size={12} />
+              {template.variables.length}
+            </span>
+          )}
+          {template.tags.slice(0, 2).map(tag => (
+            <span key={tag} className="text-[10px] text-muted border border-subtle px-1.5 py-0.5 rounded-full">
+              {tag}
+            </span>
+          ))}
+          {template.tags.length > 2 && <span className="text-[10px] text-muted">+{template.tags.length - 2}</span>}
+        </div>
+      </td>
+
+      {/* Actualizada */}
+      <td className="px-4 py-3 text-secondary text-xs hidden sm:table-cell whitespace-nowrap">
+        <div className="flex items-center gap-1.5">
+          <Clock size={12} className="text-muted" />
+          {formatDate(template.updatedAt)}
+        </div>
+      </td>
+
+      {/* Acciones */}
+      <td className="px-4 py-3 text-right sticky right-0 bg-surface group-hover:bg-hover">
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -96,42 +151,8 @@ function TemplateCardComponent({
             size={14}
           />
         </div>
-      </div>
-      
-      {/* Content preview */}
-      <p className="text-xs text-secondary line-clamp-2 mb-2">
-        {template.content}
-      </p>
-      
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          {categoryLabel && (
-            <Badge variant="neutral" size="sm">
-              {categoryLabel}
-            </Badge>
-          )}
-          {!template.isActive && (
-            <Badge variant="warning" size="sm">
-              Inactiva
-            </Badge>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-3 text-xs text-muted">
-          {template.variables.length > 0 && (
-            <span className="flex items-center gap-1" title={`${template.variables.length} variables`}>
-              <Hash size={12} />
-              {template.variables.length}
-            </span>
-          )}
-          <span className="flex items-center gap-1" title={`Actualizada: ${formatDate(template.updatedAt)}`}>
-            <Clock size={12} />
-            {formatDate(template.updatedAt)}
-          </span>
-        </div>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 

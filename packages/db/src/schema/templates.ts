@@ -29,6 +29,7 @@ export const templates = pgTable('templates', {
     .default(sql`'[]'::jsonb`),
 
   isActive: boolean('is_active').notNull().default(true),
+  authorizeForAI: boolean('authorize_for_ai').notNull().default(false),
   usageCount: integer('usage_count').notNull().default(0),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

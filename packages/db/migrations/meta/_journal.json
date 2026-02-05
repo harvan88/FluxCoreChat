@@ -36,6 +36,13 @@
       "when": 1769293239361,
       "tag": "0004_acoustic_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1770310719007,
+      "tag": "0005_equal_vampiro",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { messageService } from '../services/message.service';
 import { conversationService } from '../services/conversation.service';
 import { relationshipService } from '../services/relationship.service';
 import { extensionHost, type ProcessMessageResult } from '../services/extension-host.service';
+import { logTrace } from '../utils/file-logger';
 import { automationController, type TriggerEvaluation } from '../services/automation-controller.service';
 
 import { coreEventBus } from './events';
@@ -139,7 +140,9 @@ export class MessageCore {
       };
 
       // R-02.1: Emitir evento para desacoplar lógica (IA, Analytics)
-      console.log(`[FluxCoreTrace] 📤 Emitting core:message_received. Target: ${envelope.targetAccountId}, Auto: ${automationResult?.mode}`);
+      const emitMsg = `[FluxCoreTrace] 📤 Emitting core:message_received for message ${message.id}. Target: ${envelope.targetAccountId}`;
+      console.log(emitMsg);
+      logTrace(emitMsg);
       coreEventBus.emit('core:message_received', { envelope, result });
 
       return result;

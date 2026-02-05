@@ -130,26 +130,42 @@ export function TemplateList({
       </div>
 
       {/* Template list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4">
         {templates.length === 0 ? (
-          <div className="text-center py-8 text-muted">
+          <div className="text-center py-8 text-muted bg-surface rounded-lg border border-subtle">
             <p className="text-sm">No se encontraron plantillas</p>
             {filters.search && (
               <p className="text-xs mt-1">Intenta con otros términos de búsqueda</p>
             )}
           </div>
         ) : (
-          templates.map(template => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              isSelected={template.id === selectedId}
-              onSelect={() => onSelect(template)}
-              onEdit={() => onEdit(template)}
-              onDelete={() => onDelete(template)}
-              onDuplicate={() => onDuplicate(template)}
-            />
-          ))
+          <div className="bg-surface rounded-lg border border-subtle overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-subtle bg-base/50">
+                  <th className="px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Nombre</th>
+                  <th className="px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden md:table-cell">Contenido</th>
+                  <th className="px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider">Categoría</th>
+                  <th className="px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden lg:table-cell">Detalles</th>
+                  <th className="px-4 py-3 text-xs font-medium text-muted uppercase tracking-wider hidden sm:table-cell">Actualizada</th>
+                  <th className="px-4 py-3 sticky right-0 bg-base/50"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map(template => (
+                  <TemplateCard
+                    key={template.id}
+                    template={template}
+                    isSelected={template.id === selectedId}
+                    onSelect={() => onSelect(template)}
+                    onEdit={() => onEdit(template)}
+                    onDelete={() => onDelete(template)}
+                    onDuplicate={() => onDuplicate(template)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

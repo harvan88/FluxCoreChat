@@ -6,9 +6,9 @@
  */
 
 import { db } from '@fluxcore/db';
-import { 
-    assets, 
-    type Asset, 
+import {
+    assets,
+    type Asset,
     type NewAsset,
     type CreateAssetParams,
     type AssetSearchParams,
@@ -21,6 +21,7 @@ import { getStorageAdapter, generateStorageKey } from './storage';
 import { assetGatewayService } from './asset-gateway.service';
 
 const DEBUG_PREFIX = '[AssetRegistry]';
+const DEFAULT_RETENTION_DAYS = 30;
 
 export interface CreateAssetFromUploadParams {
     sessionId: string;
@@ -60,7 +61,7 @@ export class AssetRegistryService {
             const existing = await this.findByChecksum(accountId, checksumSHA256, workspaceId, policy);
             if (existing) {
                 console.log(`${DEBUG_PREFIX} Dedup applied: existing asset ${existing.id}`);
-                
+
                 // Limpiar archivo temporal
                 const storage = getStorageAdapter();
                 try {
@@ -107,10 +108,10 @@ export class AssetRegistryService {
         // Mover a ubicación final
         const finalStorageKey = generateStorageKey(accountId, asset.id, 1);
         const storage = getStorageAdapter();
-        
+
         try {
             await storage.move(tempStorageKey, finalStorageKey);
-            
+
             await db.update(assets)
                 .set({ storageKey: finalStorageKey, updatedAt: new Date() })
                 .where(eq(assets.id, asset.id));
@@ -205,8 +206,8 @@ export class AssetRegistryService {
      * Buscar por checksum para deduplicación
      */
     async findByChecksum(
-        accountId: string, 
-        checksumSHA256: string, 
+        accountId: string,
+        checksumSHA256: string,
         workspaceId?: string,
         policy: DedupPolicy = 'intra_account'
     ): Promise<Asset | null> {
@@ -279,8 +280,18 @@ export class AssetRegistryService {
      * Eliminar asset (soft delete)
      */
     async delete(assetId: string): Promise<void> {
-        await this.updateStatus(assetId, 'deleted');
-        console.log(`${DEBUG_PREFIX} Asset deleted (soft): ${assetId}`);
+        const hardDeleteAt = new Date();
+        hardDeleteAt.setDate(hardDeleteAt.getDate() + DEFAULT_RETENTION_DAYS);
+
+        await db.update(assets)
+            .set({
+                status: 'deleted',
+                hardDeleteAt,
+                updatedAt: new Date()
+            })
+            .where(eq(assets.id, assetId));
+
+        console.log(`${DEBUG_PREFIX} Asset marked for deletion (soft): ${assetId}, hardDeleteAt: ${hardDeleteAt.toISOString()}`);
     }
 
     /**
@@ -368,7 +379,7 @@ export class AssetRegistryService {
             const versionStr = key.split('/').pop();
             const version = parseInt(versionStr || '1', 10);
             const meta = await storage.getMetadata(key);
-            
+
             versions.push({
                 version,
                 storageKey: key,
@@ -441,15 +452,28 @@ export class AssetRegistryService {
 
         for (const asset of accountAssets) {
             stats.totalSizeBytes += asset.sizeBytes || 0;
-            
+
             const status = asset.status || 'unknown';
             stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
-            
+
             const scope = asset.scope || 'unknown';
             stats.byScope[scope] = (stats.byScope[scope] || 0) + 1;
         }
 
         return stats;
+    }
+
+    /**
+     * Obtener assets marcados para eliminación que ya cumplieron su periodo de retención
+     */
+    async getExpiredAssetsForPurge(): Promise<Asset[]> {
+        const now = new Date();
+        return db.select()
+            .from(assets)
+            .where(and(
+                eq(assets.status, 'deleted'),
+                sql`${assets.hardDeleteAt} <= ${now}`
+            ));
     }
 }
 

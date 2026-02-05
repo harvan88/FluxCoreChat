@@ -42,6 +42,7 @@ import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-han
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { aiOrchestrator } from './services/ai-orchestrator.service';
+import { mediaOrchestrator } from './services/media-orchestrator.service';
 import { accountDeletionWorker } from './workers/account-deletion.worker';
 import { featureFlags } from './config/feature-flags';
 import { startAccountDeletionQueue, stopAccountDeletionQueue } from './workers/account-deletion.queue';
@@ -441,6 +442,7 @@ console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
 
 automationScheduler.init();
 aiOrchestrator.init();
+mediaOrchestrator.init();
 
 const cleanupTasks: Array<() => Promise<void> | void> = [];
 

@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react';
 import {
   Atom, Bot, Save, Trash2, Plus, X, Loader2,
-  Database, ExternalLink, Expand
+  Database, ExternalLink, Expand, Wrench
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { usePanelStore } from '../../../store/panelStore';
@@ -36,6 +36,8 @@ interface OpenAIAssistant {
   status: string;
   createdAt: string;
   updatedAt: string;
+  vectorStoreIds?: string[];
+  toolIds?: string[]; // Connection IDs
 }
 
 interface OpenAIVectorStore {
@@ -43,6 +45,29 @@ interface OpenAIVectorStore {
   name: string;
   externalId: string | null;
   fileCount: number;
+  status: string;
+}
+
+interface ToolDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+}
+
+interface ToolConnection {
+  id: string; // Connection ID
+  toolDefinitionId: string;
+  accountId: string;
+  status: string;
+}
+
+interface EnrichedTool {
+  connectionId: string;
+  definitionId: string;
+  name: string;
+  description?: string;
+  category: string;
   status: string;
 }
 
@@ -96,7 +121,10 @@ export function OpenAIAssistantConfigView({
   const [saving, setSaving] = useState(false);
   const [assistant, setAssistant] = useState<OpenAIAssistant | null>(null);
   const [vectorStores, setVectorStores] = useState<OpenAIVectorStore[]>([]);
+  const [availableTools, setAvailableTools] = useState<EnrichedTool[]>([]);
   const [selectedVectorStoreIds, setSelectedVectorStoreIds] = useState<string[]>([]);
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
+  const [authorizedTemplateCount, setAuthorizedTemplateCount] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
@@ -127,6 +155,7 @@ export function OpenAIAssistantConfigView({
   useEffect(() => {
     loadAssistant();
     loadOpenAIVectorStores();
+    loadTools();
   }, [assistantId]);
 
   const loadAssistant = async () => {
@@ -143,6 +172,7 @@ export function OpenAIAssistantConfigView({
         setModel(data.modelConfig?.model || 'gpt-4o');
         setTemperature(data.modelConfig?.temperature || 0.7);
         setSelectedVectorStoreIds(data.vectorStoreIds || []);
+        setSelectedToolIds(data.toolIds || []);
         setTopP(typeof data.modelConfig?.topP === 'number' ? data.modelConfig.topP : 1);
         setResponseFormat((data.modelConfig?.responseFormat as 'text' | 'json') || 'text');
       }
@@ -276,6 +306,49 @@ export function OpenAIAssistantConfigView({
     }
   };
 
+  const loadTools = async () => {
+    try {
+      const { token } = useAuthStore.getState();
+
+      // Use raw fetch for templates to avoid /api/fluxcore prefix
+      const templatesResponse = await fetch(`/api/templates?accountId=${accountId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(r => r.json()).catch(() => ({ success: false, data: [] }));
+
+      if (templatesResponse.success && Array.isArray(templatesResponse.data)) {
+        const authorized = templatesResponse.data.filter((t: any) => t.authorizeForAI).length;
+        setAuthorizedTemplateCount(authorized);
+      }
+
+      const [defsRes, connsRes] = await Promise.all([
+        request(`/tools/definitions`),
+        request(`/tools/connections?accountId=${accountId}`)
+      ]);
+
+      if (defsRes.success && connsRes.success) {
+        const defs: ToolDefinition[] = defsRes.data || [];
+        const conns: ToolConnection[] = connsRes.data || [];
+
+        // Match definitions with connections to build enriched tools list
+        const enriched: EnrichedTool[] = conns.map(conn => {
+          const def = defs.find(d => d.id === conn.toolDefinitionId);
+          return {
+            connectionId: conn.id,
+            definitionId: conn.toolDefinitionId,
+            name: def?.name || 'Unknown Tool',
+            description: def?.description,
+            category: def?.category || 'General',
+            status: conn.status
+          };
+        }).filter(t => t.status !== 'error'); // Optional filtering
+
+        setAvailableTools(enriched);
+      }
+    } catch (err) {
+      console.error('Error loading tools:', err);
+    }
+  };
+
   // ──────────────────────────────────────────────────────────────────────────
   // Actions
   // ──────────────────────────────────────────────────────────────────────────
@@ -302,6 +375,7 @@ export function OpenAIAssistantConfigView({
             responseFormat,
           },
           vectorStoreIds: selectedVectorStoreIds,
+          toolIds: selectedToolIds,
         }),
       });
 
@@ -356,6 +430,14 @@ export function OpenAIAssistantConfigView({
       setSelectedVectorStoreIds(selectedVectorStoreIds.filter(id => id !== vsId));
     } else {
       setSelectedVectorStoreIds([...selectedVectorStoreIds, vsId]);
+    }
+  };
+
+  const toggleTool = (connectionId: string) => {
+    if (selectedToolIds.includes(connectionId)) {
+      setSelectedToolIds(selectedToolIds.filter(id => id !== connectionId));
+    } else {
+      setSelectedToolIds([...selectedToolIds, connectionId]);
     }
   };
 
@@ -521,6 +603,85 @@ export function OpenAIAssistantConfigView({
           </div>
         </section>
 
+        {/* Herramientas (Tools) */}
+        <section className="space-y-4">
+          <h3 className="text-sm font-medium text-secondary flex items-center gap-2">
+            <Wrench size={16} />
+            Herramientas (Functions)
+          </h3>
+
+          {availableTools.length === 0 ? (
+            <div className="p-4 bg-elevated rounded-lg text-center">
+              <Wrench className="w-8 h-8 text-muted mx-auto mb-2" />
+              <p className="text-sm text-muted">No hay herramientas conectadas</p>
+              <p className="text-xs text-muted mt-1">
+                Conecta servicios en la sección Herramientas
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {availableTools.map((tool) => (
+                <div
+                  key={tool.connectionId}
+                  onClick={() => toggleTool(tool.connectionId)}
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedToolIds.includes(tool.connectionId)
+                    ? 'border-accent bg-accent/10'
+                    : 'border-subtle bg-elevated hover:border-default'
+                    }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wrench size={16} className="text-muted" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-primary block">{tool.name}</span>
+                          {/* System Tool: Templates (ID: 9e8c7b6a-5d4e-4f3a-2b1c-0d9e8f7a6b5c) */}
+                          {tool.definitionId === '9e8c7b6a-5d4e-4f3a-2b1c-0d9e8f7a6b5c' && (
+                            <>
+                              <span className="text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full">
+                                {authorizedTemplateCount} activas
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openTab('editor', {
+                                    type: 'template-panel',
+                                    identity: `template-panel:${accountId}`,
+                                    title: 'Plantillas',
+                                    icon: 'FileText',
+                                    closable: true,
+                                    context: { accountId },
+                                  });
+                                }}
+                                className="text-xs text-accent hover:underline ml-1"
+                              >
+                                Gest.
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {tool.description && (
+                          <span className="text-xs text-muted block max-w-sm truncate" title={tool.description}>
+                            {tool.description}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      {selectedToolIds.includes(tool.connectionId) && (
+                        <div className="w-4 h-4 bg-accent rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs">✓</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Vector Stores OpenAI */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
@@ -552,8 +713,8 @@ export function OpenAIAssistantConfigView({
                   key={vs.id}
                   onClick={() => toggleVectorStore(vs.id)}
                   className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedVectorStoreIds.includes(vs.id)
-                      ? 'border-accent bg-accent/10'
-                      : 'border-subtle bg-elevated hover:border-default'
+                    ? 'border-accent bg-accent/10'
+                    : 'border-subtle bg-elevated hover:border-default'
                     }`}
                 >
                   <div className="flex items-center justify-between">

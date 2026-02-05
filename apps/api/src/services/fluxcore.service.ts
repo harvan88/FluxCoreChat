@@ -9,7 +9,7 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { eq, and, desc, ne, isNotNull } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import * as vectorStoreService from './fluxcore/vector-store.service';
 import * as assistantsService from './fluxcore/assistants.service';
 import * as runtimeService from './fluxcore/runtime.service';
@@ -25,7 +25,6 @@ import {
   type NewFluxcoreInstruction,
   type FluxcoreToolConnection,
   type NewFluxcoreToolConnection,
-  type FluxcoreToolDefinition,
 } from '@fluxcore/db';
 
 export type FluxcoreInstructionWithContent = FluxcoreInstruction & {
@@ -295,12 +294,40 @@ export * from './fluxcore/vector-store.service';
 // TOOLS
 // ============================================================================
 
+const TEMPLATES_TOOL_DEF_ID = '9e8c7b6a-5d4e-4f3a-2b1c-0d9e8f7a6b5c';
+
+async function ensureSystemTools() {
+  const [existing] = await db
+    .select()
+    .from(fluxcoreToolDefinitions)
+    .where(eq(fluxcoreToolDefinitions.id, TEMPLATES_TOOL_DEF_ID));
+
+  if (!existing) {
+    // Si no existe, lo creamos. Si ya existe slug duplicado, podría fallar,
+    // pero asumimos que este ID es el canónico para este slug.
+    await db.insert(fluxcoreToolDefinitions).values({
+      id: TEMPLATES_TOOL_DEF_ID,
+      slug: 'templates',
+      name: 'Envío de Plantillas',
+      description: 'Permite a la IA seleccionar y enviar plantillas de mensajes predefinidas y autorizadas.',
+      category: 'Comunicación',
+      authType: 'none',
+      isEnabled: true,
+      updatedAt: new Date(),
+    });
+  }
+}
+
 export async function getToolDefinitions() {
-  return db
+  await ensureSystemTools();
+
+  const dbTools = await db
     .select()
     .from(fluxcoreToolDefinitions)
     .where(eq(fluxcoreToolDefinitions.isEnabled, true))
     .orderBy(fluxcoreToolDefinitions.category);
+
+  return dbTools;
 }
 
 async function ensureToolConnections(accountId: string): Promise<void> {
@@ -335,12 +362,16 @@ async function ensureToolConnections(accountId: string): Promise<void> {
 }
 
 export async function getToolConnections(accountId: string): Promise<FluxcoreToolConnection[]> {
+  await ensureSystemTools();
   await ensureToolConnections(accountId);
-  return db
+
+  const dbConnections = await db
     .select()
     .from(fluxcoreToolConnections)
     .where(eq(fluxcoreToolConnections.accountId, accountId))
     .orderBy(desc(fluxcoreToolConnections.updatedAt));
+
+  return dbConnections;
 }
 
 export async function createToolConnection(data: NewFluxcoreToolConnection): Promise<FluxcoreToolConnection> {

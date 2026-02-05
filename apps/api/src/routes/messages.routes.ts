@@ -8,13 +8,18 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
   .post(
     '/',
     async ({ user, body, set }) => {
+      const typedBody: any = body as any;
+      console.log(`[MessagesRoute] 📥 Incoming POST /messages request from user: ${user?.id}`, {
+        hasText: !!typedBody.content?.text,
+        mediaCount: typedBody.content?.media?.length || 0
+      });
+
       if (!user) {
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
       }
 
       try {
-        const typedBody: any = body as any;
         // Asegurar que content es un objeto, no un string
         let content: any = typedBody.content;
         if (typeof content === 'string') {
@@ -50,7 +55,7 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         conversationId: t.String(),
         senderAccountId: t.String(),
         content: t.Object({
-          text: t.String(),
+          text: t.Optional(t.String()),
           media: t.Optional(t.Array(t.Any())),
           location: t.Optional(t.Any()),
           buttons: t.Optional(t.Array(t.Any())),

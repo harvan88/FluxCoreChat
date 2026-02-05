@@ -57,14 +57,14 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const pendingConversationScrollRef = useRef(false);
-  
+
   // Obtener nombre del contacto desde las conversaciones cargadas
   const conversations = useUIStore((state) => state.conversations);
   const currentConversation = conversations.find(c => c.id === conversationId);
   const contactName = (currentConversation as any)?.contactName || `Chat ${conversationId?.slice(0, 8)}`;
   const contactAvatar = (currentConversation as any)?.contactAvatar;
   const activeRelationshipId = (currentConversation as any)?.relationshipId || relationshipId;
-  
+
   // V2-1: useOfflineMessages para persistencia local + sync
   const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
 
@@ -129,13 +129,13 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
   // C3: Estado de conexión offline-first (online/offline/syncing)
   const syncConnectionStatus = useConnectionStatus();
-  
+
   // COR-043/COR-044: AI Suggestions
-  const { 
-    suggestions, 
-    isGenerating, 
-    addSuggestion, 
-    removeSuggestion 
+  const {
+    suggestions,
+    isGenerating,
+    addSuggestion,
+    removeSuggestion
   } = useAISuggestions(conversationId);
 
   const autoReplyState = useAutoReplyStore((state) => state.conversations[conversationId]);
@@ -292,7 +292,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     if (!hasText && !hasMedia) return;
 
     if (isSending) return;
-    
+
     if (!accountId) {
       console.error('[ChatView] Cannot send: no accountId');
       return;
@@ -387,9 +387,9 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       {/* Header */}
       <div className="h-14 bg-surface border-b border-subtle px-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <Avatar 
-            src={contactAvatar} 
-            name={contactName} 
+          <Avatar
+            src={contactAvatar}
+            name={contactName}
             size="md"
             status="online"
           />
@@ -482,7 +482,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
           </button>
         </div>
       )}
-      
+
       {/* No account warning */}
       {!accountId && !isLoading && (
         <div className="mx-4 mt-3 p-3 bg-warning-muted border border-warning-muted rounded-lg text-warning text-sm flex items-start gap-2">
@@ -519,7 +519,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
                 status: msg.syncState === 'synced' ? 'synced' : 'pending_backend',
                 createdAt: msg.localCreatedAt.toISOString(),
               };
-              
+
               return (
                 <div key={msg.id} id={`msg-${msg.id}`}>
                   <MessageBubble
@@ -541,8 +541,8 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
             {isGenerating && (
               <AISuggestionCard
                 suggestion={{} as AISuggestion}
-                onApprove={() => {}}
-                onDiscard={() => {}}
+                onApprove={() => { }}
+                onDiscard={() => { }}
                 isLoading={true}
               />
             )}
@@ -550,12 +550,12 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
               const autoStateForCard =
                 autoReplyState && autoReplyState.suggestionId === suggestion.id
                   ? {
-                      phase: autoReplyState.status,
-                      etaSeconds:
-                        autoReplyState.eta != null
-                          ? Math.max(0, Math.ceil((autoReplyState.eta - Date.now()) / 1000))
-                          : null,
-                    }
+                    phase: autoReplyState.status,
+                    etaSeconds:
+                      autoReplyState.eta != null
+                        ? Math.max(0, Math.ceil((autoReplyState.eta - Date.now()) / 1000))
+                        : null,
+                  }
                   : undefined;
               return (
                 <AISuggestionCard
@@ -621,6 +621,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         isSending={isSending}
         onSend={handleSend}
         accountId={accountId}
+        conversationId={conversationId}
         relationshipId={activeRelationshipId}
         uploadAsset={uploadAssetForComposer}
         uploadAudio={uploadAudioForComposer}

@@ -14,6 +14,7 @@ export function ChatComposer(props: {
   onSend: (overrideContent?: { text: string; media?: any[] }) => Promise<void>;
 
   accountId?: string;
+  conversationId?: string;
   relationshipId?: string;
 
   uploadAsset: UploadAssetFn;

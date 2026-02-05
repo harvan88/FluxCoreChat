@@ -267,14 +267,14 @@ export function AudioRecorderPanel(props: {
   }, [cleanupPreview]);
 
   useEffect(() => {
-    if (!props.open) return;
+    if (!props.open || isRecording || isSending) return;
 
     let cancelled = false;
 
     const start = async () => {
       setError(null);
 
-      if (!canInteract) {
+      if (props.disabled) {
         setError('No disponible');
         return;
       }
@@ -384,7 +384,7 @@ export function AudioRecorderPanel(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.open, canInteract, cleanupPreview]);
+  }, [props.open, props.disabled, cleanupPreview]);
 
   useEffect(() => {
     if (props.open) return;
