@@ -24,16 +24,25 @@ class AIOrchestratorService {
                 console.error('[AIOrchestrator] Error handling message:', err)
             );
         });
+
+        // ESCUCHAR: cuando un audio es transcrito, la IA puede evaluarlo como texto
+        coreEventBus.on('media:enriched', (payload) => {
+            this.handleMediaEnriched(payload).catch(err =>
+                console.error('[AIOrchestrator] Error handling media enriched:', err)
+            );
+        });
+
         console.log('[AIOrchestrator] Service initialized and listening');
     }
 
     private async handleMessageReceived(payload: { envelope: MessageEnvelope; result: ReceiveResult }) {
         const { envelope, result } = payload;
 
-        logTrace(`📨 1. Event Received. Conversation: ${envelope.conversationId}`, {
+        logTrace(`📨 AIOrchestrator Evaluating Event: ${envelope.conversationId}`, {
             success: result.success,
             mode: result.automation?.mode,
-            targetAccount: envelope.targetAccountId
+            hasText: !!envelope.content?.text,
+            hasMedia: !!(envelope.content?.media && envelope.content.media.length > 0)
         });
 
         // 1. Validaciones básicas: éxito y automatización activa
@@ -42,28 +51,83 @@ class AIOrchestratorService {
             !result.automation ||
             result.automation.mode !== 'automatic'
         ) {
-            logTrace(`⏹️ Ignoring: Not automatic or not success.`);
+            logTrace(`⏹️ AIOrchestrator: Ignoring (Not automatic or not success).`);
             return;
         }
 
-        // 2. Validar contenido
+        // 2. Validar contenido textual
         const messageText = typeof envelope.content?.text === 'string' ? envelope.content.text : '';
         if (!messageText || messageText.trim().length === 0) {
-            logTrace(`⏹️ Ignoring: Empty text.`);
+            // Si no hay texto, tal vez sea un audio pendiente de enriquecer. NO hacemos nada aquí.
+            const hasAudio = (envelope.content?.media || []).some((m: any) =>
+                m.type === 'audio' || (m.mimeType && m.mimeType.startsWith('audio/'))
+            );
+
+            if (hasAudio) {
+                logTrace(`⏳ AIOrchestrator: No text but Audio detected. Waiting for MediaEnrichment event...`);
+            } else {
+                logTrace(`⏹️ AIOrchestrator: Ignoring (Empty text and no audio detected).`);
+            }
             return;
         }
 
-        // 3. Obtener Account ID Objetivo (quien debe responder)
-        // El envelope DEBE tener targetAccountId poblado por MessageCore antes de emitir
+        // 3. Obtener Account ID Objetivo
         const targetAccountId = envelope.targetAccountId;
         if (!targetAccountId) {
-            logTrace(`❌ ABORT: Missing targetAccountId. MessageCore did not populate it.`);
+            logTrace(`❌ AIOrchestrator ABORT: Missing targetAccountId.`);
             return;
         }
 
         // 4. Programar respuesta
-        logTrace(`✅ Scheduling Auto-Reply for Account ${targetAccountId}`);
+        logTrace(`✅ AIOrchestrator: Scheduling Auto-Reply for Account ${targetAccountId}`);
         this.scheduleAutoReply(envelope, messageText, targetAccountId, result.automation.mode, result.messageId);
+    }
+
+    /**
+     * Maneja el evento de enriquecimiento (ej. cuando Whisper termina de transcribir un audio)
+     */
+    private async handleMediaEnriched(payload: { messageId: string; accountId: string; type: string; enrichment: any }) {
+        const { messageId, accountId, type, enrichment } = payload;
+
+        // Solo nos interesa audio por ahora
+        if (type !== 'audio' || !enrichment.transcription) return;
+
+        logTrace(`[AIOrchestrator] 🎧 Media Enriched (Audio) for message ${messageId}. Re-evaluating for AI reply.`);
+
+        // 1. Obtener el mensaje original para tener el contexto de la conversación
+        const { messageService } = await import('./message.service');
+        const message = await messageService.getMessageById(messageId);
+        if (!message) {
+            logTrace(`[AIOrchestrator] ❌ Original message ${messageId} not found for enrichment.`);
+            return;
+        }
+
+        // 2. Simular un envelope compatible
+        const envelope: MessageEnvelope = {
+            conversationId: message.conversationId,
+            senderAccountId: message.senderAccountId,
+            content: { text: enrichment.transcription },
+            type: message.type as any,
+            timestamp: message.createdAt,
+            targetAccountId: accountId
+        };
+
+        // 3. Evaluar automatización (usando el texto de la transcripción como disparador)
+        const { automationController } = await import('./automation-controller.service');
+        const automation = await automationController.evaluateTrigger({
+            accountId,
+            relationshipId: '',
+            messageContent: enrichment.transcription,
+            messageType: message.type as any,
+            senderId: message.senderAccountId
+        });
+
+        if (automation.shouldProcess && automation.mode === 'automatic') {
+            logTrace(`[AIOrchestrator] 🚀 Transcription successful. Scheduling AI response based on audio text.`);
+            this.scheduleAutoReply(envelope, enrichment.transcription, accountId, automation.mode, messageId);
+        } else {
+            logTrace(`[AIOrchestrator] ⏹️ Transcription successful but automation logic says NO: ${automation.reason}`);
+        }
     }
 
     private async scheduleAutoReply(
@@ -94,6 +158,7 @@ class AIOrchestratorService {
         // Programar ejecución
         const timeout = setTimeout(async () => {
             try {
+                logTrace(`[AIOrchestrator] 🤖 Triggering AI Generation for conversation ${envelope.conversationId}`);
                 const suggestion = await extensionHost.generateAIResponse(
                     envelope.conversationId,
                     targetAccountId,
@@ -120,16 +185,19 @@ class AIOrchestratorService {
                     // Enviar respuesta
                     await messageCore.send({
                         conversationId: envelope.conversationId,
-                        senderAccountId: targetAccountId, // La IA responde como la cuenta target
+                        senderAccountId: targetAccountId,
                         content,
                         type: 'outgoing',
                         generatedBy: 'ai',
-                        targetAccountId: envelope.senderAccountId // Opcional, contexto
+                        targetAccountId: envelope.senderAccountId
                     });
+                    logTrace(`[AIOrchestrator] ✅ AI Response SENT.`);
+                } else {
+                    logTrace(`[AIOrchestrator] ⚠️ AI generated empty content.`);
                 }
             } catch (err: any) {
                 console.error('[AIOrchestrator] Error generating/sending reply:', err);
-                logTrace(`❌ Error generating reply: ${err.message}`);
+                logTrace(`❌ ERROR during AI execution: ${err.message}`);
             } finally {
                 this.autoReplyQueue.delete(debounceKey);
             }
@@ -137,8 +205,8 @@ class AIOrchestratorService {
 
         this.autoReplyQueue.set(debounceKey, timeout);
     }
+
     public init() {
-        // Simplemente referenciar la instancia dispara el constructor si no se ha hecho
         console.log('[AIOrchestrator] Explicit initialization called');
     }
 }

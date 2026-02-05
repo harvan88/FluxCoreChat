@@ -45,8 +45,13 @@ export function getStorageAdapter(options?: StorageFactoryOptions): IStorageAdap
     }
 
     if (provider === 'local') {
+        const isAlreadyInApi = process.cwd().endsWith('apps\\api') || process.cwd().endsWith('apps/api');
+        const defaultPath = isAlreadyInApi
+            ? path.join(process.cwd(), 'uploads', 'assets')
+            : path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets');
+
         _instance = new LocalStorageAdapter({
-            basePath: options?.localBasePath || path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets'),
+            basePath: options?.localBasePath || defaultPath,
             baseUrl: options?.localBaseUrl || 'http://localhost:3000/uploads/assets',
             secret: options?.signingSecret,
         });
@@ -67,8 +72,13 @@ export function getStorageAdapter(options?: StorageFactoryOptions): IStorageAdap
             }
         }
 
+        const isAlreadyInApi = process.cwd().endsWith('apps\\api') || process.cwd().endsWith('apps/api');
+        const defaultPath = isAlreadyInApi
+            ? path.join(process.cwd(), 'uploads', 'assets')
+            : path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets');
+
         _instance = new LocalStorageAdapter({
-            basePath: options?.localBasePath || path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets'),
+            basePath: options?.localBasePath || defaultPath,
             baseUrl: options?.localBaseUrl || 'http://localhost:3000/uploads/assets',
             secret: options?.signingSecret,
         });

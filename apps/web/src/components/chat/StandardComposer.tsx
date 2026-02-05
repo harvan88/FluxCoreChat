@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { api } from '../../services/api';
 import {
     Loader2,
     Mic,
@@ -12,7 +13,9 @@ import { AttachmentPanel, type AttachmentAction } from './AttachmentPanel';
 import { AudioRecorderPanel } from './AudioRecorderPanel';
 import { CameraCaptureModal } from './CameraCaptureModal';
 import { EmojiPanel } from './EmojiPanel';
+import { TemplateQuickPicker } from './TemplateQuickPicker';
 import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from './composerUploadTypes';
+import type { Template } from '../templates/types';
 
 type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
 
@@ -24,6 +27,7 @@ export function StandardComposer(props: {
     onSend: (overrideContent?: { text: string; media?: any[] }) => Promise<void>;
 
     accountId?: string;
+    conversationId?: string;
     relationshipId?: string;
 
     uploadAsset: UploadAssetFn;
@@ -36,6 +40,7 @@ export function StandardComposer(props: {
     const MAX_MESSAGE_CHARS = 4000;
 
     const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
+    const [isQuickPickerOpen, setIsQuickPickerOpen] = useState(false);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const [queuedMedia, setQueuedMedia] = useState<ComposerMediaItem[]>([]);
     const [isEmojiOpen, setIsEmojiOpen] = useState(false);
@@ -125,12 +130,28 @@ export function StandardComposer(props: {
         setIsAttachmentOpen(false);
         setIsEmojiOpen(false);
         setIsAudioRecorderOpen(false);
+        setIsQuickPickerOpen(false);
         props.onUserActivity?.('cancel');
+    };
+
+    const handleQuickSelect = async (template: Template) => {
+        setIsQuickPickerOpen(false);
+        if (!props.accountId || !props.conversationId) return;
+
+        try {
+            await api.executeTemplate(props.accountId, template.id, {
+                conversationId: props.conversationId,
+            });
+            // La UI se actualizará via WebSocket o refresh del padre
+        } catch (err) {
+            console.error('Failed to execute template:', err);
+        }
     };
 
     const handleSelectAttachment = (action: AttachmentAction) => {
         setIsAttachmentOpen(false);
         setIsEmojiOpen(false);
+        setIsQuickPickerOpen(false);
         props.onClearUploadError();
 
         switch (action) {
@@ -140,6 +161,9 @@ export function StandardComposer(props: {
             case 'audio':
                 if (props.disabled || props.isUploading || props.isSending) break;
                 setIsAudioRecorderOpen(true);
+                break;
+            case 'quick_reply':
+                setIsQuickPickerOpen(true);
                 break;
         }
     };
@@ -162,6 +186,14 @@ export function StandardComposer(props: {
 
             <AttachmentPanel open={isAttachmentOpen} onClose={() => setIsAttachmentOpen(false)} onSelect={handleSelectAttachment} />
             <EmojiPanel open={isEmojiOpen} onClose={() => setIsEmojiOpen(false)} onSelect={insertEmojiAtCursor} />
+
+            {isQuickPickerOpen && props.accountId && (
+                <TemplateQuickPicker
+                    accountId={props.accountId}
+                    onSelect={handleQuickSelect}
+                    onClose={() => setIsQuickPickerOpen(false)}
+                />
+            )}
 
             <input type="file" accept="image/*" className="hidden" ref={(el) => { openGalleryRef.current = () => el?.click(); }} onChange={async (e) => {
                 const file = e.target.files?.[0];

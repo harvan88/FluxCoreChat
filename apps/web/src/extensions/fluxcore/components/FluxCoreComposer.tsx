@@ -1,5 +1,5 @@
-
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { api } from '../../../services/api';
 import {
     AudioLines,
     Bot,
@@ -20,8 +20,10 @@ import { AttachmentPanel, type AttachmentAction } from '../../../components/chat
 import { AudioRecorderPanel } from '../../../components/chat/AudioRecorderPanel';
 import { CameraCaptureModal } from '../../../components/chat/CameraCaptureModal';
 import { EmojiPanel } from '../../../components/chat/EmojiPanel';
+import { TemplateQuickPicker } from '../../../components/chat/TemplateQuickPicker';
 import { useAutomation, type AutomationMode } from '../../../hooks/useAutomation';
 import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from '../../../components/chat/composerUploadTypes';
+import type { Template } from '../../../components/templates/types';
 
 type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
 
@@ -33,6 +35,7 @@ export function FluxCoreComposer(props: {
     onSend: (overrideContent?: { text: string; media?: any[] }) => Promise<void>;
 
     accountId?: string;
+    conversationId?: string;
     relationshipId?: string;
 
     uploadAsset: UploadAssetFn;
@@ -45,6 +48,7 @@ export function FluxCoreComposer(props: {
     const MAX_MESSAGE_CHARS = 4000;
 
     const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
+    const [isQuickPickerOpen, setIsQuickPickerOpen] = useState(false);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const [queuedMedia, setQueuedMedia] = useState<ComposerMediaItem[]>([]);
     const [isAIModeOpen, setIsAIModeOpen] = useState(false);
@@ -142,7 +146,22 @@ export function FluxCoreComposer(props: {
         setIsAIModeOpen(false);
         setIsEmojiOpen(false);
         setIsAudioRecorderOpen(false);
+        setIsQuickPickerOpen(false);
         props.onUserActivity?.('cancel');
+    };
+
+    const handleQuickSelect = async (template: Template) => {
+        setIsQuickPickerOpen(false);
+        if (!props.accountId || !props.conversationId) return;
+
+        try {
+            await api.executeTemplate(props.accountId, template.id, {
+                conversationId: props.conversationId,
+            });
+            // La UI se actualizará via WebSocket o refresh del padre
+        } catch (err) {
+            console.error('Failed to execute template:', err);
+        }
     };
 
     const setAIMode = async (mode: AutomationMode) => {
@@ -187,6 +206,10 @@ export function FluxCoreComposer(props: {
                 setIsAudioRecorderOpen(true);
                 setIsAIModeOpen(false);
                 setIsEmojiOpen(false);
+                setIsQuickPickerOpen(false);
+                break;
+            case 'quick_reply':
+                setIsQuickPickerOpen(true);
                 break;
         }
     };
@@ -286,6 +309,14 @@ export function FluxCoreComposer(props: {
             }} />
             <AttachmentPanel open={isAttachmentOpen} onClose={() => setIsAttachmentOpen(false)} onSelect={handleSelectAttachment} />
             <EmojiPanel open={isEmojiOpen} onClose={() => setIsEmojiOpen(false)} onSelect={insertEmojiAtCursor} />
+
+            {isQuickPickerOpen && props.accountId && (
+                <TemplateQuickPicker
+                    accountId={props.accountId}
+                    onSelect={handleQuickSelect}
+                    onClose={() => setIsQuickPickerOpen(false)}
+                />
+            )}
             <input
                 type="file"
                 accept="image/*"

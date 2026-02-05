@@ -63,10 +63,11 @@ Según `PLAN_TEMPLATE_MANAGER.md`:
 - Verificación de integridad de archivos
 
 ### ¿Se pueden ver plantillas desde el input del chat y enviarlas?
-**NO IMPLEMENTADO.** Falta:
-- Botón/comando en ChatComposer para abrir selector de plantillas
-- Lógica de envío archivo-por-archivo (respetando políticas WhatsApp)
-- Integración con el flujo de mensajes
+**SÍ (IMPLEMENTADO):**
+- ✅ Botón "Plantillas" integrado en `StandardComposer` y `FluxCoreComposer`.
+- ✅ Lógica de envío unificada en el backend via `templateService.executeTemplate`.
+- ✅ Envío de assets y texto en una sola operación atómica.
+- ✅ Los assets se vinculan correctamente en `message_assets`.
 
 ### ¿Es esta solución escalable y robusta?
 **PARCIALMENTE:**
@@ -78,10 +79,11 @@ Según `PLAN_TEMPLATE_MANAGER.md`:
 - ❌ Sin manejo de errores robusto
 
 ### ¿Podrá la IA consumir y enviar automáticamente plantillas?
-**ARQUITECTURA PREPARADA, NO IMPLEMENTADO:**
-- El ExtensionHost puede inyectar mensajes
-- Falta: API interna para que FluxCore consulte/envíe plantillas
-- Falta: Comando de IA tipo "envía la plantilla de bienvenida"
+**SÍ (IMPLEMENTADO):**
+- ✅ El AI Engine utiliza la herramienta `send_template`.
+- ✅ `AITemplateService` actúa como validador de permisos.
+- ✅ El núcleo (`TemplateService`) ejecuta la acción real.
+- ✅ La IA dispara el envío pero no conoce el contenido sensible (Blind Trigger).
 
 ---
 
@@ -97,9 +99,10 @@ Según `PLAN_TEMPLATE_MANAGER.md`:
 | `hooks/useTemplates.ts` | ✓ | ⚠️ | Básico, sin React Query |
 | `store/templateStore.ts` | ✓ | ✅ | Funcional |
 | `types.ts` | ✓ | ✅ | Completo |
-| **ViewRegistry integration** | ✓ | ❌ | No registrado |
-| **ChatComposer integration** | ✓ | ❌ | No implementado |
-| **Autosave** | Implícito | ❌ | No implementado |
+| **ViewRegistry integration** | ✓ | ✅ | Registrado via `chatcore-views.tsx` |
+| **ChatComposer integration** | ✓ | ✅ | Implementado en composers |
+| **Soberanía de Chat Core** | ✓ | ✅ | Lógica centralizada en backend |
+| **Autosave** | Implícito | ❌ | Pendiente (PRUEBA DE ESTABILIDAD PRIMERO) |
 | **Tests E2E** | ✓ | ❌ | No existen |
 
 ---
@@ -129,11 +132,11 @@ Según `PLAN_TEMPLATE_MANAGER.md`:
 - [ ] **TM-012**: Persistir drafts en localStorage
 
 ### Fase 3: Integración Chat (4h)
-- [ ] **TM-020**: Botón "Plantillas" en ChatComposer
-- [ ] **TM-021**: Modal/Popover selector de plantillas
-- [ ] **TM-022**: Lógica de inserción de contenido
-- [ ] **TM-023**: Envío de assets archivo-por-archivo
-- [ ] **TM-024**: Respeto de límites por canal
+- [x] **TM-020**: Botón "Plantillas" en ChatComposer
+- [x] **TM-021**: Modal/Popover selector de plantillas
+- [x] **TM-022**: Lógica de inserción de contenido (Refactorizado a ejecución backend)
+- [x] **TM-023**: Envío de assets (Refactorizado a ejecución backend)
+- [ ] **TM-024**: Respeto de límites por canal (En progreso)
 
 ### Fase 4: Visualización de Assets (2h)
 - [ ] **TM-030**: Thumbnails de imágenes en TemplateCard
@@ -147,9 +150,9 @@ Según `PLAN_TEMPLATE_MANAGER.md`:
 - [ ] **TM-043**: Test unitario: templateStore
 
 ### Fase 6: IA Integration (3h)
-- [ ] **TM-050**: Endpoint `/api/templates/search` para IA
-- [ ] **TM-051**: Comando FluxCore "enviar plantilla X"
-- [ ] **TM-052**: Respuesta estructurada con assets
+- [x] **TM-050**: Endpoint `/api/templates/execute` para ejecución unificada
+- [x] **TM-051**: Comando FluxCore "enviar plantilla X" (Tool logic)
+- [x] **TM-052**: Respuesta estructurada con assets (Backend integration)
 
 ---
 

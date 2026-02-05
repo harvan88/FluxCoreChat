@@ -27,15 +27,15 @@ const items: Array<{
   colorClassName: string;
   enabled: boolean;
 }> = [
-  { id: 'document', label: 'Documento', Icon: File, colorClassName: 'text-info', enabled: true },
-  { id: 'camera', label: 'Cámara', Icon: Camera, colorClassName: 'text-accent', enabled: true },
-  { id: 'gallery', label: 'Galería', Icon: Images, colorClassName: 'text-error', enabled: true },
-  { id: 'audio', label: 'Audio', Icon: AudioLines, colorClassName: 'text-error', enabled: true },
-  { id: 'receipt', label: 'Recibo', Icon: ReceiptText, colorClassName: 'text-error', enabled: true },
-  { id: 'location', label: 'Ubicación', Icon: MapPin, colorClassName: 'text-success', enabled: false },
-  { id: 'quick_reply', label: 'Quick Reply', Icon: Zap, colorClassName: 'text-warning', enabled: false },
-  { id: 'contact', label: 'Contacto', Icon: UserRound, colorClassName: 'text-info', enabled: false },
-];
+    { id: 'document', label: 'Documento', Icon: File, colorClassName: 'text-info', enabled: true },
+    { id: 'camera', label: 'Cámara', Icon: Camera, colorClassName: 'text-accent', enabled: true },
+    { id: 'gallery', label: 'Galería', Icon: Images, colorClassName: 'text-error', enabled: true },
+    { id: 'audio', label: 'Audio', Icon: AudioLines, colorClassName: 'text-error', enabled: true },
+    { id: 'receipt', label: 'Recibo', Icon: ReceiptText, colorClassName: 'text-error', enabled: true },
+    { id: 'location', label: 'Ubicación', Icon: MapPin, colorClassName: 'text-success', enabled: false },
+    { id: 'quick_reply', label: 'Respuesta rápida', Icon: Zap, colorClassName: 'text-warning', enabled: true },
+    { id: 'contact', label: 'Contacto', Icon: UserRound, colorClassName: 'text-info', enabled: false },
+  ];
 
 export function AttachmentPanel(props: {
   open: boolean;

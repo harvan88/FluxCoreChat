@@ -8,9 +8,10 @@ export interface TemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   isActive?: boolean;
+  authorizeForAI?: boolean;
 }
 
-export interface TemplateUpdateInput extends Partial<TemplateInput> {}
+export interface TemplateUpdateInput extends Partial<TemplateInput> { }
 
 export interface TemplateWithAssets extends Template {
   assets: TemplateAssetLink[];
@@ -28,13 +29,23 @@ export interface TemplateAssetLink {
 }
 
 export class TemplateService {
-  constructor(private readonly orm = db) {}
+  constructor(private readonly orm = db) { }
 
   async listTemplates(accountId: string): Promise<TemplateWithAssets[]> {
     const rows = await this.orm
       .select()
       .from(templates)
       .where(eq(templates.accountId, accountId))
+      .orderBy(desc(templates.updatedAt));
+
+    return this.attachAssets(rows);
+  }
+
+  async listAITemplates(accountId: string): Promise<TemplateWithAssets[]> {
+    const rows = await this.orm
+      .select()
+      .from(templates)
+      .where(and(eq(templates.accountId, accountId), eq(templates.authorizeForAI, true), eq(templates.isActive, true)))
       .orderBy(desc(templates.updatedAt));
 
     return this.attachAssets(rows);
@@ -60,6 +71,7 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? true,
+        authorizeForAI: payload.authorizeForAI ?? false,
       })
       .returning();
 
@@ -77,6 +89,7 @@ export class TemplateService {
       variables: data.variables ?? existing!.variables,
       tags: data.tags ?? existing!.tags,
       isActive: data.isActive ?? existing!.isActive,
+      authorizeForAI: data.authorizeForAI ?? existing!.authorizeForAI,
     });
 
     const [updated] = await this.orm
@@ -88,6 +101,7 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? existing!.isActive,
+        authorizeForAI: payload.authorizeForAI ?? existing!.authorizeForAI,
         updatedAt: new Date(),
       })
       .where(and(eq(templates.id, templateId), eq(templates.accountId, accountId)))
@@ -104,6 +118,75 @@ export class TemplateService {
     await this.orm
       .delete(templates)
       .where(and(eq(templates.id, templateId), eq(templates.accountId, accountId)));
+  }
+
+  /**
+   * Ejecuta el envío de una plantilla
+   * Centraliza la lógica de reemplazo de variables, envío de mensaje y vinculación de assets.
+   */
+  async executeTemplate(params: {
+    accountId: string;
+    templateId: string;
+    conversationId: string;
+    variables?: Record<string, string>;
+    generatedBy?: 'human' | 'ai';
+  }) {
+    const { accountId, templateId, conversationId, variables, generatedBy = 'human' } = params;
+
+    // 1. Obtener la plantilla con sus assets
+    const template = await this.getTemplate(accountId, templateId);
+
+    // 2. Procesar variables en el contenido
+    let finalContent = template.content;
+    if (variables) {
+      Object.entries(variables).forEach(([key, value]) => {
+        finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), value);
+      });
+    }
+
+    // 3. Preparar media items (mapeo canónico para el mensaje)
+    const media: any[] = (template.assets || []).map(asset => ({
+      assetId: asset.assetId,
+      name: asset.name,
+      mimeType: asset.mimeType,
+      sizeBytes: asset.sizeBytes,
+      type: asset.mimeType?.startsWith('image/') ? 'image' :
+        asset.mimeType?.startsWith('audio/') ? 'audio' :
+          asset.mimeType?.startsWith('video/') ? 'video' : 'document',
+      status: asset.status,
+      version: asset.version,
+      slot: asset.slot
+    }));
+
+    // 4. Delegar envío a MessageCore
+    const { messageCore } = await import('../core/message-core');
+    const result = await messageCore.send({
+      conversationId,
+      senderAccountId: accountId,
+      content: {
+        text: finalContent,
+        media: media.length > 0 ? media : undefined
+      },
+      type: 'outgoing',
+      generatedBy
+    });
+
+    // 5. Vincular formalmente en message_assets para consistencia del sistema
+    if (result.success && result.messageId && template.assets.length > 0) {
+      const { getAssetRelationsService } = await import('./asset-relations.service');
+      const assetRelationsService = getAssetRelationsService();
+      for (const asset of template.assets) {
+        await assetRelationsService.linkAssetToMessage({
+          messageId: result.messageId,
+          assetId: asset.assetId,
+          version: asset.version,
+          position: 0,
+          accountId
+        });
+      }
+    }
+
+    return result;
   }
 
   private async findTemplate(templateId: string) {
@@ -133,7 +216,7 @@ export class TemplateService {
       .from(templateAssets)
       .innerJoin(assets, eq(templateAssets.assetId, assets.id))
       .where(eq(templateAssets.templateId, templateId));
-    
+
     return results.map(asset => ({
       assetId: asset.assetId,
       slot: asset.slot,
@@ -200,6 +283,7 @@ export function normalizeTemplateInput(input: TemplateInput): Required<Omit<Temp
     variables: input.variables ?? [],
     tags: input.tags ?? [],
     isActive: input.isActive ?? true,
+    authorizeForAI: input.authorizeForAI ?? false,
   };
 }
 

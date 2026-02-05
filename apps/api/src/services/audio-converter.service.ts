@@ -32,16 +32,22 @@ export class AudioConverterService {
       ]);
 
       const mp3Buffer = await Bun.file(outputPath).arrayBuffer();
+
+      // Asegurar extensión .mp3 para que la API de OpenAI la reconozca
+      const baseName = inputFile.name.includes('.')
+        ? inputFile.name.substring(0, inputFile.name.lastIndexOf('.'))
+        : 'audio';
+
       const mp3File = new File(
         [mp3Buffer],
-        inputFile.name.replace(/\.(webm|ogg|wav)$/i, '.mp3'),
+        `${baseName}.mp3`,
         { type: 'audio/mpeg' }
       );
 
       return mp3File;
     } finally {
-      try { await unlink(inputPath); } catch {}
-      try { await unlink(outputPath); } catch {}
+      try { await unlink(inputPath); } catch { }
+      try { await unlink(outputPath); } catch { }
     }
   }
 
@@ -72,8 +78,8 @@ export class AudioConverterService {
 
       return oggFile;
     } finally {
-      try { await unlink(inputPath); } catch {}
-      try { await unlink(outputPath); } catch {}
+      try { await unlink(inputPath); } catch { }
+      try { await unlink(outputPath); } catch { }
     }
   }
 

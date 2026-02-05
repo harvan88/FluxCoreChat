@@ -775,4 +775,18 @@ export function useAutoSave<T>(
 
 ---
 
+## 🚀 Case Study: Soberanía de Chat Core (Plantillas)
+
+**Problema:** La lógica de envío de plantillas estaba duplicada entre el Frontend (que enviaba múltiples mensajes manuales) y el `AITemplateService` (que reconstruía el mensaje para la IA).
+
+**Solución (Febrero 2026):**
+1. **Centralización:** Se creó `templateService.executeTemplate` en el backend como fuente de verdad.
+2. **Atomicidad:** El envío de texto + múltiples assets ahora es una sola operación atómica via API.
+3. **IA Blind Trigger:** La IA ya no "construye" el mensaje; solo invoca el ID de la plantilla. El núcleo se encarga de la seguridad y ejecución.
+4. **Frontend Delegado:** Los componentes de UI (`StandardComposer`) ahora son simples invocadores del endpoint `/execute`.
+
+**Resultado:** Reducción de ~150 líneas de código inconsistente y eliminación de condiciones de carrera en el cliente.
+
+---
+
 *Este documento es un análisis vivo y debe actualizarse conforme avance la refactorización.*

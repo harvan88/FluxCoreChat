@@ -11,7 +11,8 @@ export function logTrace(msg: string, data?: any) {
     const line = `[${timestamp}] ${msg} ${dataStr}\n`;
 
     try {
-        console.log(`[FileLogger] Writing to: ${logPath}`);
+        // Log a consola de forma limpia para el usuario
+        console.log(`[TRACE] ${msg} ${dataStr}`);
         fs.appendFileSync(logPath, line);
     } catch (e) {
         console.error('Failed to write to trace log', e);

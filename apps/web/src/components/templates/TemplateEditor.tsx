@@ -5,9 +5,8 @@
  * Se abre como tab en el ViewPort.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Save,
   X,
   Eye,
   Code,
@@ -20,10 +19,10 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '../ui/Button';
-import { Badge } from '../ui/Badge';
 import { Input, Textarea, Select, Checkbox } from '../ui';
 import { useTemplateStore } from './store/templateStore';
 import { TemplateAssetPicker } from './TemplateAssetPicker';
+import { TemplatePreview } from './TemplatePreview';
 import type { TemplateVariable, UpdateTemplateInput } from './types';
 import { TEMPLATE_CATEGORIES, VARIABLE_TYPES } from './types';
 
@@ -34,7 +33,23 @@ interface TemplateEditorProps {
 }
 
 export function TemplateEditor({ templateId, accountId, onClose }: TemplateEditorProps) {
-  const { getTemplateById, updateTemplate, isUpdating, fetchTemplates, templates } = useTemplateStore();
+  const { getTemplateById, updateTemplate, fetchTemplates, templates } = useTemplateStore();
+  const initializedId = useRef<string | null>(null);
+
+  // Form state
+  const [name, setName] = useState('');
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState<string>('');
+  const [variables, setVariables] = useState<TemplateVariable[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [authorizeForAI, setAuthorizeForAI] = useState(false);
+  const [newTag, setNewTag] = useState('');
+
+  // UI state
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Fetch templates if not loaded
   useEffect(() => {
@@ -45,44 +60,61 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
 
   const originalTemplate = getTemplateById(templateId);
 
-  // Form state
-  const [name, setName] = useState('');
-  const [content, setContent] = useState('');
-  const [category, setCategory] = useState<string>('');
-  const [variables, setVariables] = useState<TemplateVariable[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
-
-  // UI state
-  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  // Load template data
+  // Load template data - Only on mount or ID change
   useEffect(() => {
-    if (originalTemplate) {
+    if (originalTemplate && originalTemplate.id !== initializedId.current) {
       setName(originalTemplate.name);
       setContent(originalTemplate.content);
       setCategory(originalTemplate.category || '');
       setVariables([...originalTemplate.variables]);
       setTags([...originalTemplate.tags]);
+      setAuthorizeForAI(originalTemplate.authorizeForAI || false);
+      initializedId.current = originalTemplate.id;
     }
   }, [originalTemplate]);
 
-  // Track changes
+  // Auto-save effect
   useEffect(() => {
-    if (!originalTemplate) return;
+    if (!originalTemplate || !initializedId.current) return;
 
-    const changed =
+    // Check for changes
+    const hasChanges =
       name !== originalTemplate.name ||
       content !== originalTemplate.content ||
       category !== (originalTemplate.category || '') ||
       JSON.stringify(variables) !== JSON.stringify(originalTemplate.variables) ||
-      JSON.stringify(tags) !== JSON.stringify(originalTemplate.tags);
+      JSON.stringify(tags) !== JSON.stringify(originalTemplate.tags) ||
+      authorizeForAI !== originalTemplate.authorizeForAI;
 
-    setHasChanges(changed);
-  }, [name, content, category, variables, tags, originalTemplate]);
+    if (!hasChanges) {
+      if (saveStatus !== 'error') setSaveStatus('saved');
+      return;
+    }
+
+    setSaveStatus('saving');
+
+    const timer = setTimeout(async () => {
+      try {
+        const updates: UpdateTemplateInput = {
+          name,
+          content,
+          category: category || undefined,
+          variables,
+          tags,
+          authorizeForAI,
+        };
+
+        await updateTemplate(accountId, templateId, updates);
+        setSaveStatus('saved');
+        setSaveError(null);
+      } catch (err) {
+        setSaveStatus('error');
+        setSaveError(err instanceof Error ? err.message : 'Error al guardar');
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [name, content, category, variables, tags, authorizeForAI, originalTemplate, accountId, templateId, updateTemplate]);
 
   // Extract variables from content
   const detectedVariables = useMemo(() => {
@@ -91,44 +123,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
     return [...new Set([...matches].map(m => m[1]))];
   }, [content]);
 
-  // Preview with sample values
-  const previewContent = useMemo(() => {
-    let preview = content;
-    variables.forEach(v => {
-      const sampleValue = v.defaultValue || `[${v.label || v.name}]`;
-      preview = preview.replace(new RegExp(`\\{\\{${v.name}\\}\\}`, 'g'), sampleValue);
-    });
-    return preview;
-  }, [content, variables]);
-
-  // Handlers
-  const handleSave = async () => {
-    setSaveError(null);
-
-    try {
-      const updates: UpdateTemplateInput = {
-        name,
-        content,
-        category: category || undefined,
-        variables,
-        tags,
-      };
-
-      await updateTemplate(accountId, templateId, updates);
-      setHasChanges(false);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Error al guardar');
-    }
-  };
-
   const handleClose = () => {
-    if (hasChanges) {
-      if (confirm('Tienes cambios sin guardar. ¿Deseas salir?')) {
-        onClose();
-      }
-    } else {
-      onClose();
-    }
+    onClose();
   };
 
   const handleCopyContent = async () => {
@@ -189,8 +185,14 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
             placeholder="Nombre de la plantilla"
             fullWidth={false}
           />
-          {hasChanges && (
-            <Badge variant="warning" size="sm">Sin guardar</Badge>
+          {saveStatus === 'saving' && (
+            <span className="text-xs text-muted animate-pulse">Guardando...</span>
+          )}
+          {saveStatus === 'error' && (
+            <span className="text-xs text-error">Error al guardar</span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className="text-xs text-muted">Guardado</span>
           )}
         </div>
 
@@ -230,15 +232,6 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
             title="Copiar contenido"
           >
             {copied ? <Check size={16} /> : <Copy size={16} />}
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={!hasChanges || isUpdating}
-          >
-            <Save size={14} className="mr-1.5" />
-            {isUpdating ? 'Guardando...' : 'Guardar'}
           </Button>
 
           <Button
@@ -304,10 +297,15 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
               )}
             </div>
           ) : (
-            <div className="flex-1 p-4 overflow-auto">
-              <label className="text-sm text-muted mb-2 block">Vista previa</label>
-              <div className="p-4 bg-surface border border-subtle rounded-lg">
-                <p className="text-primary whitespace-pre-wrap">{previewContent}</p>
+            <div className="flex-1 p-4 overflow-auto bg-base/50">
+              <label className="text-sm text-muted mb-4 block font-medium">Vista previa del mensaje</label>
+              <div className="max-w-md">
+                <TemplatePreview
+                  content={content}
+                  variables={variables}
+                  assets={originalTemplate?.assets}
+                  accountId={accountId}
+                />
               </div>
             </div>
           )}
@@ -327,6 +325,24 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
               ]}
               fullWidth
             />
+          </div>
+
+          {/* AI Authorization */}
+          <div className="p-4 border-b border-subtle bg-accent/5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-semibold text-accent flex items-center gap-2">
+                <AlertCircle size={14} />
+                Inteligencia Artificial
+              </label>
+              <Checkbox
+                checked={authorizeForAI}
+                onChange={(e) => setAuthorizeForAI(e.target.checked)}
+                id="ai-auth"
+              />
+            </div>
+            <p className="text-[10px] text-muted leading-tight">
+              Permitir que la IA utilice esta plantilla automáticamente en sus respuestas.
+            </p>
           </div>
 
           {/* Variables */}

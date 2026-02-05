@@ -569,6 +569,24 @@ class ApiService {
     });
   }
 
+  async executeTemplate(
+    accountId: string,
+    templateId: string,
+    params: {
+      conversationId: string;
+      variables?: Record<string, string>;
+    }
+  ): Promise<ApiResponse<any>> {
+    return this.request<any>(`/api/templates/${templateId}/execute`, {
+      method: 'POST',
+      body: JSON.stringify({
+        accountId,
+        conversationId: params.conversationId,
+        variables: params.variables
+      }),
+    });
+  }
+
   // Forgot password
   async forgotPassword(email: string): Promise<ApiResponse<{ message: string }>> {
     return this.request<{ message: string }>('/auth/forgot-password', {
@@ -769,6 +787,7 @@ class ApiService {
   async deleteAsset(assetId: string, accountId: string): Promise<ApiResponse<void>> {
     return this.request(`/api/assets/${assetId}?accountId=${accountId}`, {
       method: 'DELETE',
+      body: JSON.stringify({ accountId }),
     });
   }
 

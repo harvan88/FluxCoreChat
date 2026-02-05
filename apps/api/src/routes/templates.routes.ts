@@ -113,6 +113,34 @@ export async function deleteTemplateHandler(
   }
 }
 
+export async function executeTemplateHandler(
+  ctx: HandlerContext<{
+    conversationId: string;
+    accountId: string;
+    variables?: Record<string, string>;
+  }, any, { templateId: string }>,
+  service: TemplateService = templateService
+) {
+  if (!ctx.user) {
+    ctx.set.status = 401;
+    return { success: false, message: 'Unauthorized' };
+  }
+
+  try {
+    const result = await service.executeTemplate({
+      templateId: ctx.params.templateId,
+      accountId: ctx.body.accountId,
+      conversationId: ctx.body.conversationId,
+      variables: ctx.body.variables,
+      generatedBy: 'human'
+    });
+    return result;
+  } catch (error: any) {
+    ctx.set.status = 400;
+    return { success: false, message: error?.message ?? 'Failed to execute template' };
+  }
+}
+
 export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
   .use(authMiddleware)
   .get('/', (ctx) => listTemplatesHandler(ctx), {
@@ -133,6 +161,7 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       variables: t.Optional(t.Array(t.Any())),
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
+      authorizeForAI: t.Optional(t.Boolean()),
     }),
     detail: {
       tags: ['Templates'],
@@ -156,6 +185,7 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       variables: t.Optional(t.Array(t.Any())),
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
+      authorizeForAI: t.Optional(t.Boolean()),
     }),
     detail: {
       tags: ['Templates'],
@@ -172,6 +202,7 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       variables: t.Optional(t.Array(t.Any())),
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
+      authorizeForAI: t.Optional(t.Boolean()),
     }),
     detail: {
       tags: ['Templates'],
@@ -184,5 +215,17 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
     detail: {
       tags: ['Templates'],
       summary: 'Delete template',
+    },
+  })
+  .post('/:templateId/execute', (ctx) => executeTemplateHandler(ctx), {
+    params: t.Object({ templateId: t.String() }),
+    body: t.Object({
+      accountId: t.String(),
+      conversationId: t.String(),
+      variables: t.Optional(t.Record(t.String(), t.String())),
+    }),
+    detail: {
+      tags: ['Templates'],
+      summary: 'Execute/Send template',
     },
   });

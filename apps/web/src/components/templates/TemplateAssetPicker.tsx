@@ -8,11 +8,12 @@
 import { useState, useEffect } from 'react';
 import { Paperclip, X, File, FileText, Image, Film, Music, Loader2, AlertCircle } from 'lucide-react';
 import { AssetUploader } from '../chat/AssetUploader';
+import { AssetPreview } from '../chat/AssetPreview';
 import { Button } from '../ui/Button';
 import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
 import { useTemplateStore } from './store/templateStore';
 import type { TemplateAsset } from './types';
-import { formatBytes, type UploadedAsset } from '../../hooks/useAssetUpload';
+import { type UploadedAsset } from '../../hooks/useAssetUpload';
 import { api } from '../../services/api';
 
 interface TemplateAssetPickerProps {
@@ -67,7 +68,8 @@ export function TemplateAssetPicker({
 
         try {
             await linkAsset(accountId, templateId, uploadedAsset.assetId);
-            setShowUploader(false);
+            // Don't close uploader automatically to allow multiple uploads
+            // setShowUploader(false); 
         } catch (err) {
             console.error('Failed to link asset:', err);
             setActionError('No se pudo adjuntar el archivo. Intenta nuevamente.');
@@ -143,37 +145,31 @@ export function TemplateAssetPicker({
 
             {/* Asset List */}
             <div className="space-y-2">
-                {assets.map(asset => {
-                    const Icon = getIcon(asset.mimeType);
+                {assets.map(asset => (
+                    <div
+                        key={asset.assetId}
+                        className="relative group border border-subtle rounded-lg bg-surface overflow-hidden"
+                    >
+                        <AssetPreview
+                            assetId={asset.assetId}
+                            accountId={accountId}
+                            name={asset.name}
+                            mimeType={asset.mimeType || 'application/octet-stream'}
+                            sizeBytes={asset.sizeBytes || 0}
+                            compact={false}
+                            className="w-full"
+                        />
 
-                    return (
-                        <div
-                            key={asset.assetId}
-                            className="flex items-center gap-3 p-3 rounded-lg border border-subtle bg-surface group"
-                        >
-                            <div className="p-2 bg-elevated rounded">
-                                <Icon size={20} className="text-secondary" />
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm /*<<< font-medium text-primary truncate">
-                                    {asset.name}
-                                </p>
-                                <p className="text-xs text-muted">
-                                    {asset.sizeBytes !== null ? formatBytes(asset.sizeBytes) : 'Tamaño desconocido'}
-                                </p>
-                            </div>
-
-                            {!readonly && (
+                        {!readonly && (
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-surface/80 backdrop-blur-sm rounded-full shadow-sm">
                                 <DoubleConfirmationDeleteButton
                                     onConfirm={() => handleDeleteAsset(asset.assetId, asset.slot)}
                                     disabled={deletingAssetId === asset.assetId}
-                                    className="opacity-0 group-hover:opacity-100"
                                 />
-                            )}
-                        </div>
-                    );
-                })}
+                            </div>
+                        )}
+                    </div>
+                ))}
 
                 {Object.entries(linkingAssets).map(([assetId, details]) => {
                     const Icon = getIcon(details.mimeType ?? null);

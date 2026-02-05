@@ -8,15 +8,15 @@
  */
 
 import { db } from '@fluxcore/db';
-import { 
-    assets, 
+import {
+    assets,
     assetUploadSessions,
     assetAuditLogs,
     messageAssets,
     templateAssets,
     planAssets,
 } from '@fluxcore/db';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { getStorageAdapter } from './storage/storage-adapter.factory';
 import { AssetAuditService } from './asset-audit.service';
 
@@ -68,8 +68,8 @@ export class AssetDeletionService {
         try {
             // 1. Obtener todos los assets de la cuenta
             const accountAssets = await db
-                .select({ 
-                    id: assets.id, 
+                .select({
+                    id: assets.id,
                     storageKey: assets.storageKey,
                     name: assets.name,
                 })
@@ -135,7 +135,7 @@ export class AssetDeletionService {
                         .from(assetUploadSessions)
                         .where(eq(assetUploadSessions.id, session.id))
                         .limit(1);
-                    
+
                     if (sessionData[0]?.tempStorageKey) {
                         await storage.delete(sessionData[0].tempStorageKey);
                     }
@@ -179,19 +179,73 @@ export class AssetDeletionService {
     }
 
     /**
-     * Eliminar un asset individual con su archivo físico
+     * Verificar si un asset es huérfano (no tiene relaciones activas)
+     */
+    async isAssetOrphaned(assetId: string): Promise<boolean> {
+        const [msgCount, tplCount, plnCount] = await Promise.all([
+            db.select({ count: sql<number>`count(*)` }).from(messageAssets).where(eq(messageAssets.assetId, assetId)),
+            db.select({ count: sql<number>`count(*)` }).from(templateAssets).where(eq(templateAssets.assetId, assetId)),
+            db.select({ count: sql<number>`count(*)` }).from(planAssets).where(eq(planAssets.assetId, assetId)),
+        ]);
+
+        const totalRelations = Number(msgCount[0]?.count || 0) +
+            Number(tplCount[0]?.count || 0) +
+            Number(plnCount[0]?.count || 0);
+
+        return totalRelations === 0;
+    }
+
+    /**
+     * Marcar un asset para eliminación (Soft Delete)
+     * No elimina el archivo físico inmediatamente.
      */
     async deleteAsset(assetId: string, accountId: string, actorId?: string): Promise<boolean> {
         try {
-            // Obtener asset
+            // Importación dinámica para evitar dependencia circular si existe
+            const { assetRegistryService } = await import('./asset-registry.service');
+
+            await assetRegistryService.delete(assetId);
+
+            // Registrar en audit
+            await this.auditService.logEvent({
+                assetId,
+                action: 'deleted',
+                actorId,
+                actorType: 'user',
+                accountId,
+                metadata: { soft: true },
+            });
+
+            return true;
+        } catch (error) {
+            console.error(`[AssetDeletion] Error marking asset for deletion:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Purgar un asset individual con su archivo físico (Hard Delete)
+     * Si checkOrphans es true, solo elimina si no tiene relaciones.
+     */
+    async purgeAsset(assetId: string, accountId: string, actorId?: string, checkOrphans: boolean = false): Promise<boolean> {
+        try {
+            // Obtener asset para storageKey
             const [asset] = await db
-                .select({ storageKey: assets.storageKey, name: assets.name })
+                .select({ storageKey: assets.storageKey })
                 .from(assets)
                 .where(eq(assets.id, assetId))
                 .limit(1);
 
             if (!asset) {
                 return false;
+            }
+
+            if (checkOrphans) {
+                const isOrphan = await this.isAssetOrphaned(assetId);
+                if (!isOrphan) {
+                    console.log(`[AssetDeletion] Skipping purge for asset ${assetId}: not orphaned`);
+                    return false;
+                }
             }
 
             // Eliminar relaciones
@@ -221,10 +275,10 @@ export class AssetDeletionService {
             // Eliminar de base de datos
             await db.delete(assets).where(eq(assets.id, assetId));
 
-            console.log(`[AssetDeletion] Asset ${assetId} deleted`);
+            console.log(`[AssetDeletion] Asset ${assetId} purged physically`);
             return true;
         } catch (error) {
-            console.error(`[AssetDeletion] Error deleting asset ${assetId}:`, error);
+            console.error(`[AssetDeletion] Error purging asset ${assetId}:`, error);
             return false;
         }
     }
