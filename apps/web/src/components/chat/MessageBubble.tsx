@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { Check, CheckCheck, Clock, AlertCircle, RotateCcw, Reply, Pencil, Trash2, Bot, File } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, RotateCcw, Reply, Pencil, Trash2, Bot, File, ShieldAlert } from 'lucide-react';
 import clsx from 'clsx';
 import type { Message, MessageStatus } from '../../types';
 import { AssetPreview } from './AssetPreview';
@@ -98,6 +98,32 @@ export function MessageBubble({
         return <Check size={14} className="text-muted" />;
     }
   };
+
+  // ── System messages (ai_blocked, etc.) ──────────────────────────────
+  if (message.generatedBy === 'system') {
+    const systemMeta = (message.content as any)?.__system as
+      | { type: string; reason?: string; requiredProvider?: string; creditBalance?: number }
+      | undefined;
+
+    return (
+      <div className="flex justify-center my-2" data-component-name="MessageBubble">
+        <div className="max-w-[85%] rounded-xl px-4 py-2.5 bg-warning/10 border border-warning/20 text-center">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <ShieldAlert size={14} className="text-warning" />
+            <span className="text-xs font-medium text-warning">
+              {systemMeta?.type === 'ai_blocked' ? 'IA no disponible' : 'Sistema'}
+            </span>
+          </div>
+          {typeof message.content.text === 'string' && message.content.text.trim().length > 0 && (
+            <p className="text-sm text-secondary">{message.content.text}</p>
+          )}
+          <div className="text-xs text-muted mt-1">
+            {formatTime(message.createdAt)}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

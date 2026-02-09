@@ -19,10 +19,32 @@ export class AIClientError extends Error {
   }
 }
 
-export interface OpenAIChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+/** Tool definition for function calling (OpenAI-compatible format) */
+export interface OpenAIToolDef {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, any>;
+  };
 }
+
+/** Tool call returned by the model */
+export interface OpenAIToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export type OpenAIChatMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string }
+  | { role: 'assistant'; content: null; tool_calls: OpenAIToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string };
 
 export interface OpenAIChatCompletionUsage {
   prompt_tokens: number;
@@ -37,7 +59,7 @@ export interface OpenAIChatCompletionResponse {
   model: string;
   choices: Array<{
     index: number;
-    message: { role: string; content: string };
+    message: { role: string; content: string | null; tool_calls?: OpenAIToolCall[] };
     finish_reason: string;
   }>;
   usage: OpenAIChatCompletionUsage;
@@ -48,6 +70,8 @@ export interface OpenAIChatCompletionRequestBody {
   messages: OpenAIChatMessage[];
   max_tokens: number;
   temperature: number;
+  tools?: OpenAIToolDef[];
+  tool_choice?: 'auto' | 'none';
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
@@ -106,12 +130,20 @@ export class OpenAICompatibleClient {
   async createChatCompletion(params: {
     apiKey: string;
     systemPrompt: string;
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    messages: Array<OpenAIChatMessage>;
     model: string;
     maxTokens: number;
     temperature: number;
     timeoutMs: number;
-  }): Promise<{ content: string; usage: OpenAIChatCompletionUsage; requestBody: OpenAIChatCompletionRequestBody }>
+    tools?: OpenAIToolDef[];
+    toolChoice?: 'auto' | 'none';
+  }): Promise<{
+    content: string | null;
+    toolCalls?: OpenAIToolCall[];
+    finishReason: string;
+    usage: OpenAIChatCompletionUsage;
+    requestBody: OpenAIChatCompletionRequestBody;
+  }>
   {
     const url = `${this.baseUrl}/chat/completions`;
 
@@ -124,6 +156,11 @@ export class OpenAICompatibleClient {
       max_tokens: params.maxTokens,
       temperature: params.temperature,
     };
+
+    if (params.tools && params.tools.length > 0) {
+      requestBody.tools = params.tools;
+      requestBody.tool_choice = params.toolChoice || 'auto';
+    }
 
     const res = await fetchWithTimeout(
       url,
@@ -145,13 +182,34 @@ export class OpenAICompatibleClient {
 
     const data = (await res.json()) as OpenAIChatCompletionResponse;
 
-    const content = data?.choices?.[0]?.message?.content;
+    const choice = data?.choices?.[0];
+    if (!choice) {
+      throw new AIClientError('No response from provider', 'unknown');
+    }
+
+    const finishReason = choice.finish_reason || 'stop';
+    const toolCalls = choice.message?.tool_calls;
+    const content = choice.message?.content;
+
+    // If the model called a tool, return tool_calls (content may be null)
+    if (finishReason === 'tool_calls' && Array.isArray(toolCalls) && toolCalls.length > 0) {
+      return {
+        content: null,
+        toolCalls,
+        finishReason,
+        usage: data.usage,
+        requestBody,
+      };
+    }
+
+    // Normal text response
     if (typeof content !== 'string' || content.trim().length === 0) {
       throw new AIClientError('No response from provider', 'unknown');
     }
 
     return {
       content,
+      finishReason,
       usage: data.usage,
       requestBody,
     };

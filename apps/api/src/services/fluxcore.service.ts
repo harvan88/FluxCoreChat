@@ -9,7 +9,7 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import * as vectorStoreService from './fluxcore/vector-store.service';
 import * as assistantsService from './fluxcore/assistants.service';
 import * as runtimeService from './fluxcore/runtime.service';
@@ -33,6 +33,7 @@ export type FluxcoreInstructionWithContent = FluxcoreInstruction & {
   tokensEstimated: number;
   wordCount: number;
   lineCount: number;
+  usedByAssistants?: string[];
 };
 
 
@@ -72,6 +73,25 @@ export async function getInstructions(accountId: string): Promise<FluxcoreInstru
     .where(eq(fluxcoreInstructions.accountId, accountId))
     .orderBy(desc(fluxcoreInstructions.updatedAt));
 
+  const instructionIds = rows.map(({ instruction }) => instruction.id).filter(Boolean);
+  const usedByMap = new Map<string, string[]>();
+  if (instructionIds.length > 0) {
+    const usedByRows = await db
+      .select({
+        instructionId: fluxcoreAssistantInstructions.instructionId,
+        assistantId: fluxcoreAssistantInstructions.assistantId,
+      })
+      .from(fluxcoreAssistantInstructions)
+      .where(inArray(fluxcoreAssistantInstructions.instructionId, instructionIds));
+
+    for (const row of usedByRows) {
+      if (!row.instructionId || !row.assistantId) continue;
+      const list = usedByMap.get(row.instructionId) ?? [];
+      list.push(row.assistantId);
+      usedByMap.set(row.instructionId, list);
+    }
+  }
+
   return rows.map(({ instruction, version }) => ({
     ...instruction,
     content: version?.content || '',
@@ -79,6 +99,7 @@ export async function getInstructions(accountId: string): Promise<FluxcoreInstru
     tokensEstimated: version?.tokensEstimated || 0,
     wordCount: version?.wordCount || 0,
     lineCount: version?.lineCount || 0,
+    usedByAssistants: usedByMap.get(instruction.id) ?? [],
   }));
 }
 
@@ -100,6 +121,13 @@ export async function getInstructionById(id: string, accountId: string): Promise
     .limit(1);
 
   if (!row) return null;
+
+  const usedByRows = await db
+    .select({ assistantId: fluxcoreAssistantInstructions.assistantId })
+    .from(fluxcoreAssistantInstructions)
+    .where(eq(fluxcoreAssistantInstructions.instructionId, id));
+
+  const usedByAssistants = usedByRows.map((link) => link.assistantId).filter(Boolean);
 
   // Si es instrucción gestionada, generar contenido dinámicamente
   let content = row.version?.content || '';
@@ -123,6 +151,7 @@ export async function getInstructionById(id: string, accountId: string): Promise
     tokensEstimated,
     wordCount,
     lineCount,
+    usedByAssistants,
   };
 }
 

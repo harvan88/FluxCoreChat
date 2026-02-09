@@ -8,7 +8,7 @@
  * para indicar si se usa configuración personalizada o defaults.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Zap, Search, FileText } from 'lucide-react';
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
 import { SliderInput } from '../../ui/SliderInput';
@@ -53,7 +53,7 @@ const DEFAULT_CONFIG: RAGConfig = {
     retrieval: {
         enabled: true,
         topK: 5,
-        minScore: 0.7,
+        minScore: 0.3,
         maxTokens: 2000,
     },
 };
@@ -82,6 +82,9 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
     const [config, setConfig] = useState<RAGConfig>(DEFAULT_CONFIG);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const latestConfigRef = useRef<RAGConfig>(DEFAULT_CONFIG);
 
     // Cargar configuración existente
     useEffect(() => {
@@ -101,6 +104,7 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
                 const data = await response.json();
                 if (data.success && data.data) {
                     setConfig(data.data);
+                    latestConfigRef.current = data.data;
                 }
             }
         } catch (error) {
@@ -110,10 +114,11 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
         }
     };
 
-    const saveConfig = async (newConfig: RAGConfig) => {
+    const persistConfig = useCallback(async (configToSave: RAGConfig) => {
         setSaving(true);
+        setSaveError(null);
         try {
-            await fetch(`/api/fluxcore/rag-config`, {
+            const response = await fetch(`/api/fluxcore/rag-config`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -122,21 +127,41 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
                 body: JSON.stringify({
                     vectorStoreId,
                     accountId,
-                    ...newConfig,
+                    ...configToSave,
                 }),
             });
-            onConfigChange?.(newConfig);
-        } catch (error) {
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.message || `HTTP ${response.status}`);
+            }
+            onConfigChange?.(configToSave);
+        } catch (error: any) {
             console.error('Error saving RAG config:', error);
+            setSaveError(error.message || 'Error al guardar');
         } finally {
             setSaving(false);
         }
-    };
+    }, [token, vectorStoreId, accountId, onConfigChange]);
+
+    const debouncedSave = useCallback((newConfig: RAGConfig) => {
+        latestConfigRef.current = newConfig;
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            persistConfig(latestConfigRef.current);
+        }, 600);
+    }, [persistConfig]);
+
+    // Cleanup debounce on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, []);
 
     const updateConfig = (updates: Partial<RAGConfig>) => {
         const newConfig = { ...config, ...updates };
         setConfig(newConfig);
-        saveConfig(newConfig);
+        debouncedSave(newConfig);
     };
 
     const updateChunking = (updates: Partial<RAGConfig['chunking']>) => {
@@ -311,10 +336,11 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
                         <SliderInput
                             value={config.retrieval.minScore}
                             onChange={(value) => updateRetrieval({ minScore: value })}
-                            min={0.5}
-                            max={0.95}
+                            min={0.1}
+                            max={0.7}
                             step={0.05}
                         />
+                        <p className="text-xs text-muted mt-1">Recomendado: 30%. Valores altos filtran demasiados resultados.</p>
                     </div>
 
                     {/* Max Tokens */}
@@ -334,11 +360,10 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
             </CollapsibleSection>
 
             {/* Status indicator */}
-            {saving && (
-                <div className="px-4 py-2 text-xs text-muted text-center">
-                    Guardando...
-                </div>
-            )}
+            <div className="px-4 py-2 text-xs text-center h-6">
+                {saving && <span className="text-muted animate-pulse">Guardando...</span>}
+                {saveError && <span className="text-red-500">{saveError}</span>}
+            </div>
         </div>
     );
 }

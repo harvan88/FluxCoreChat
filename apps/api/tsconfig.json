@@ -16,6 +16,9 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    "../extensions/fluxcore/src/**/*"
+  ],
   "exclude": ["node_modules", "dist"]
 }

@@ -38,6 +38,7 @@ import { testRoutes } from './routes/test.routes';
 import { assetsRoutes } from './routes/assets.routes';
 import { assetRelationsRoutes } from './routes/asset-relations.routes';
 import { templatesRoutes } from './routes/templates.routes';
+import { ragConfigRoutes } from './routes/rag-config.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
@@ -210,7 +211,8 @@ const elysiaApp = new Elysia()
   .use(testRoutes)
   .use(assetsRoutes)
   .use(assetRelationsRoutes)
-  .use(templatesRoutes);
+  .use(templatesRoutes)
+  .use(ragConfigRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: ReturnType<typeof Bun.serve>;

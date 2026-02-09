@@ -122,7 +122,7 @@ export interface Message {
   senderAccountId: string;
   content: MessageContent;
   type: 'incoming' | 'outgoing' | 'system';
-  generatedBy: 'human' | 'ai';
+  generatedBy: 'human' | 'ai' | 'system';
   status?: MessageStatus;
   replyToId?: string;
   aiApprovedBy?: string;
@@ -179,6 +179,80 @@ export interface ApiResponse<T> {
   data?: T;
   message?: string;
   error?: string;
+}
+
+export type AIProvider = 'groq' | 'openai';
+
+export interface AIStatusAttempt {
+  provider: string;
+  baseUrl: string;
+  keySource?: string;
+  ok: boolean;
+  errorType?: string;
+  statusCode?: number;
+  message?: string;
+}
+
+export interface AIStatusProviderSummary {
+  provider: string;
+  baseUrl: string;
+  keyCount: number;
+}
+
+export interface AIStatusResponse {
+  accountId: string;
+  entitled: boolean;
+  enabled: boolean;
+  mode: 'suggest' | 'auto' | 'off' | null;
+  allowedProviders: AIProvider[];
+  provider: AIProvider | null;
+  model: string | null;
+  configured: boolean;
+  connected: boolean | null;
+  providerKeys: AIStatusProviderSummary[];
+  attempts: AIStatusAttempt[];
+}
+
+export interface AIEligibilitySuccess {
+  canExecute: true;
+  provider: AIProvider;
+  model: string;
+  runtime: 'openai' | 'local';
+  mode: 'suggest' | 'auto' | 'off';
+  requiresCredits: boolean;
+}
+
+export interface AIBlockDetail {
+  reason: string;
+  message: string;
+  requiredProvider?: AIProvider;
+  creditBalance?: number;
+}
+
+export interface AIEligibilityBlocked {
+  canExecute: false;
+  block: AIBlockDetail;
+}
+
+export type AIEligibilityResponse = AIEligibilitySuccess | AIEligibilityBlocked;
+
+export interface PromptPreviewConfig {
+  mode: 'suggest' | 'auto' | 'off';
+  maxTokens: number;
+  temperature: number;
+  model: string;
+}
+
+export interface PromptPreviewData {
+  systemPrompt: string;
+  config: PromptPreviewConfig;
+  assistant: {
+    id: string;
+    name: string;
+    modelConfig: Record<string, unknown> | null;
+  };
+  instructionsCount: number;
+  hasKnowledgeBase: boolean;
 }
 
 // Activity types for sidebar

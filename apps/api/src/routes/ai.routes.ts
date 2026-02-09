@@ -6,6 +6,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import aiService from '../services/ai.service';
 import { accountService } from '../services/account.service';
+import { resolveExecutionPlan } from '../services/ai-execution-plan.service';
 
 export const aiRoutes = new Elysia({ prefix: '/ai' })
   .use(authMiddleware)
@@ -50,6 +51,62 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
   }, {
     query: t.Object({
       accountId: t.Optional(t.String()),
+    }),
+  })
+
+  // GET /ai/eligibility - Resolve execution plan upfront
+  .get('/eligibility', async ({ user, query, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const accountId = (query as any)?.accountId as string | undefined;
+      const conversationId = (query as any)?.conversationId as string | undefined;
+
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      if (!conversationId) {
+        set.status = 400;
+        return { success: false, message: 'conversationId is required' };
+      }
+
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
+      const plan = await resolveExecutionPlan(accountId, conversationId);
+
+      const payload = plan.canExecute
+        ? {
+            canExecute: true as const,
+            provider: plan.provider,
+            model: plan.model,
+            runtime: plan.runtime,
+            mode: plan.mode,
+            requiresCredits: plan.provider === 'openai',
+          }
+        : {
+            canExecute: false as const,
+            block: plan.block,
+          };
+
+      return { success: true, data: payload };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
+  }, {
+    query: t.Object({
+      accountId: t.String(),
+      conversationId: t.String(),
     }),
   })
 
@@ -270,14 +327,23 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
         return { success: false, message: 'Account does not belong to user' };
       }
 
-      const suggestion = await aiService.generateResponse(
+      const result = await aiService.generateResponse(
         conversationId,
         accountId,
         message,
         { mode: 'suggest' }
       );
 
-      if (!suggestion) {
+      if (!result.ok) {
+        set.status = 403;
+        return {
+          success: false,
+          message: result.block.message,
+          block: result.block,
+        };
+      }
+
+      if (!result.suggestion) {
         return {
           success: true,
           data: null,
@@ -287,7 +353,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
 
       return {
         success: true,
-        data: suggestion,
+        data: result.suggestion,
       };
     } catch (error: any) {
       set.status = 500;

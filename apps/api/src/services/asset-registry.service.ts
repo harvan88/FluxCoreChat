@@ -55,11 +55,24 @@ export class AssetRegistryService {
 
         const { storageKey: tempStorageKey, checksumSHA256, sizeBytes } = commitResult.data;
 
-        // Verificar deduplicación
+        // Verificar deduplicación y conflictos de integridad
         const policy = dedupPolicy || 'intra_account';
-        if (policy !== 'none') {
-            const existing = await this.findByChecksum(accountId, checksumSHA256, workspaceId, policy);
-            if (existing) {
+
+        // Buscar cualquier asset existente con el mismo checksum (independiente del estado)
+        // Esto previene errores de "Unique Constraint" si existen assets zombies (pending/failed)
+        const conflictConditions = [eq(assets.checksumSHA256, checksumSHA256)];
+
+        if (policy === 'intra_account') {
+            conflictConditions.push(eq(assets.accountId, accountId));
+        } else if (policy === 'intra_workspace' && workspaceId) {
+            conflictConditions.push(eq(assets.workspaceId, workspaceId));
+        }
+
+        const [existing] = await db.select().from(assets).where(and(...conflictConditions)).limit(1);
+
+        if (existing) {
+            // Si el asset está listo y podemos deduplicar -> Usar existente
+            if (existing.status === 'ready' && policy !== 'none') {
                 console.log(`${DEBUG_PREFIX} Dedup applied: existing asset ${existing.id}`);
 
                 // Limpiar archivo temporal
@@ -74,6 +87,16 @@ export class AssetRegistryService {
                 await assetGatewayService.linkAssetToSession(sessionId, existing.id);
 
                 return { success: true, asset: existing };
+            }
+
+            // Si el asset existe pero NO está listo (es pending de un upload fallido o deleted)
+            // Debemos eliminarlo para permitir que el nuevo insert funcione (evitar Unique Constraint Error)
+            if (existing.status !== 'ready') {
+                console.log(`${DEBUG_PREFIX} Pruning zombie asset conflict: ${existing.id} (status=${existing.status})`);
+                await db.delete(assets).where(eq(assets.id, existing.id));
+
+                // Intentar limpiar storage viejo si es posible
+                try { await getStorageAdapter().delete(existing.storageKey); } catch { }
             }
         }
 

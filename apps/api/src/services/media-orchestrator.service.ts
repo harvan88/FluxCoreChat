@@ -36,6 +36,12 @@ class MediaOrchestratorService {
 
         if (!result.success || !result.messageId) return;
 
+        // 0. EVITAR BUCLES: Si el mensaje ya fue transcrito, no lo re-procesamos
+        if ((envelope.content as any)?.__fluxcore?.transcribed) {
+            logTrace(`[MediaOrchestrator] ⏭️ Skipping message ${result.messageId} - Already transcribed.`);
+            return;
+        }
+
         // 1. Detectar si el mensaje tiene audio
         // El frontend suele enviar assetId. El backend/adapters antiguos suelen enviar url.
         // NOTA: Algunos navegadores graban audio como 'video/webm'

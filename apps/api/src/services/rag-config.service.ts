@@ -122,7 +122,7 @@ export class RAGConfigService {
 
             // Retrieval
             retrievalTopK: config.retrieval?.topK || 10,
-            retrievalMinScore: String(config.retrieval?.minScore || 0.5),
+            retrievalMinScore: String(Math.max(0.05, Math.min(0.7, config.retrieval?.minScore || 0.3))),
             retrievalMaxTokens: config.retrieval?.maxTokens || 2000,
             hybridSearchEnabled: config.retrieval?.hybridSearch?.enabled || false,
             hybridKeywordWeight: String(config.retrieval?.hybridSearch?.keywordWeight || 0.3),
@@ -179,9 +179,12 @@ export class RAGConfigService {
 
         // Retrieval
         if (updates.retrieval) {
-            if (updates.retrieval.topK) updateData.retrievalTopK = updates.retrieval.topK;
-            if (updates.retrieval.minScore) updateData.retrievalMinScore = String(updates.retrieval.minScore);
-            if (updates.retrieval.maxTokens) updateData.retrievalMaxTokens = updates.retrieval.maxTokens;
+            if (updates.retrieval.topK !== undefined) updateData.retrievalTopK = updates.retrieval.topK;
+            if (updates.retrieval.minScore !== undefined) {
+                const clamped = Math.max(0.05, Math.min(0.7, updates.retrieval.minScore));
+                updateData.retrievalMinScore = String(clamped);
+            }
+            if (updates.retrieval.maxTokens !== undefined) updateData.retrievalMaxTokens = updates.retrieval.maxTokens;
             if (updates.retrieval.hybridSearch) {
                 if (updates.retrieval.hybridSearch.enabled !== undefined) {
                     updateData.hybridSearchEnabled = updates.retrieval.hybridSearch.enabled;
@@ -336,7 +339,7 @@ export class RAGConfigService {
         if (params.retrieval) {
             config.retrieval = {
                 topK: params.retrieval.topK,
-                minScore: params.retrieval.minScore,
+                minScore: Math.max(0.05, Math.min(0.7, params.retrieval.minScore)),
                 maxTokens: params.retrieval.maxTokens,
                 hybridSearch: {
                     enabled: params.retrieval.hybridSearchEnabled || false,

@@ -17,6 +17,16 @@ type CreditsPolicyView = {
   durationHours: number;
 };
 
+type UpdatePolicyParams = Partial<{
+  featureKey: string;
+  engine: string;
+  model: string;
+  costCredits: number;
+  tokenBudget: number;
+  durationHours: number;
+  active: boolean;
+}>;
+
 const DEFAULT_POLICY: CreditsPolicyView = {
   featureKey: 'ai.session',
   engine: 'openai_chat',
@@ -126,6 +136,50 @@ class CreditsService {
     return { id: inserted.id };
   }
 
+  async listPolicies(filters?: { featureKey?: string; engine?: string; model?: string; active?: boolean }) {
+    const whereClauses = [] as any[];
+    if (filters?.featureKey) whereClauses.push(eq(creditsPolicies.featureKey, filters.featureKey));
+    if (filters?.engine) whereClauses.push(eq(creditsPolicies.engine, filters.engine));
+    if (filters?.model) whereClauses.push(eq(creditsPolicies.model, filters.model));
+    if (typeof filters?.active === 'boolean') whereClauses.push(eq(creditsPolicies.active, filters.active));
+
+    const rows = await db
+      .select()
+      .from(creditsPolicies)
+      .where(whereClauses.length > 0 ? and(...whereClauses) : undefined)
+      .orderBy(desc(creditsPolicies.updatedAt));
+
+    return rows;
+  }
+
+  async updatePolicy(id: string, params: UpdatePolicyParams) {
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (params.featureKey) updates.feature_key = params.featureKey;
+    if (params.engine) updates.engine = params.engine;
+    if (params.model) updates.model = params.model;
+    if (typeof params.costCredits === 'number') updates.cost_credits = Math.trunc(params.costCredits);
+    if (typeof params.tokenBudget === 'number') updates.token_budget = Math.trunc(params.tokenBudget);
+    if (typeof params.durationHours === 'number') updates.duration_hours = Math.trunc(params.durationHours);
+    if (typeof params.active === 'boolean') updates.active = params.active;
+
+    const [row] = await db
+      .update(creditsPolicies)
+      .set(updates)
+      .where(eq(creditsPolicies.id, id))
+      .returning();
+
+    return row;
+  }
+
+  async setPolicyActive(id: string, active: boolean) {
+    const [row] = await db
+      .update(creditsPolicies)
+      .set({ active, updatedAt: new Date() })
+      .where(eq(creditsPolicies.id, id))
+      .returning();
+    return row;
+  }
+
   async getEffectivePolicy(params: {
     featureKey: string;
     engine: string;
@@ -163,15 +217,8 @@ class CreditsService {
       };
     }
 
-    if (
-      params.featureKey === DEFAULT_POLICY.featureKey &&
-      params.engine === DEFAULT_POLICY.engine &&
-      params.model === DEFAULT_POLICY.model
-    ) {
-      return DEFAULT_POLICY;
-    }
-
-    throw new Error('No active pricing policy found for this feature/engine/model');
+    // No specific policy for this model → fall back to DEFAULT_POLICY
+    return DEFAULT_POLICY;
   }
 
   async getActiveConversationSession(params: {
@@ -259,6 +306,8 @@ class CreditsService {
         .orderBy(desc(creditsPolicies.updatedAt))
         .limit(1);
 
+      // Use exact-match policy if found, otherwise fall back to DEFAULT_POLICY.
+      // This ensures credits are always checked even for models without a specific policy row.
       const policy: CreditsPolicyView = policyRow
         ? {
             featureKey: policyRow.featureKey,
@@ -268,13 +317,7 @@ class CreditsService {
             tokenBudget: policyRow.tokenBudget,
             durationHours: policyRow.durationHours,
           }
-        : params.featureKey === DEFAULT_POLICY.featureKey &&
-            params.engine === DEFAULT_POLICY.engine &&
-            params.model === DEFAULT_POLICY.model
-          ? DEFAULT_POLICY
-          : (() => {
-              throw new Error('No active pricing policy found for this feature/engine/model');
-            })();
+        : DEFAULT_POLICY;
 
       await tx.insert(creditsWallets).values({ accountId: params.accountId }).onConflictDoNothing();
 

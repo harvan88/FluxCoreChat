@@ -7,6 +7,8 @@ import { join } from 'path';
 import { assetRegistryService } from './asset-registry.service';
 import { getStorageAdapter } from './storage/storage-adapter.factory';
 
+import { messageService } from './message.service';
+
 export interface AudioEnrichmentResult {
     transcription: string;
     language?: string;
@@ -18,10 +20,16 @@ class AudioEnrichmentService {
     private openai: OpenAI | null = null;
 
     constructor() {
+    }
+
+    private getOpenAI(): OpenAI | null {
+        if (this.openai) return this.openai;
         const apiKey = process.env.OPENAI_API_KEY;
         if (apiKey) {
             this.openai = new OpenAI({ apiKey });
+            return this.openai;
         }
+        return null;
     }
 
     /**
@@ -52,7 +60,53 @@ class AudioEnrichmentService {
             console.log(transMsg);
             logTrace(transMsg);
 
-            // 3. Guardar Enriquecimiento en DB
+            // 3. ACTUALIZAR MENSAJE ORIGINAL (Burn-in)
+            // Esto permite que el buscador y el contexto de la IA vean el texto nativamente
+            const originalMessage = await messageService.getMessageById(messageId);
+            if (originalMessage) {
+                const currentContent = (originalMessage.content as any) || {};
+                const updatedContent = {
+                    ...currentContent,
+                    text: transcriptionResult.transcription,
+                    __fluxcore: {
+                        ...(currentContent.__fluxcore || {}),
+                        transcribed: true,
+                        transcriptionLanguage: transcriptionResult.language,
+                        processedAt: new Date()
+                    }
+                };
+
+                await messageService.updateMessage(messageId, { content: updatedContent });
+                const burnMsg = `[AudioEnrichment] 🔥 Burn-in complete for message ${messageId}`;
+                console.log(burnMsg);
+                logTrace(burnMsg);
+
+                // 4. RE-EMITIR AL CORE EVENT BUS
+                // Al re-emitir como core:message_received, el AIOrchestrator
+                // lo detectará como un mensaje de texto "nuevo" y generará la respuesta.
+                coreEventBus.emit('core:message_received', {
+                    envelope: {
+                        conversationId: originalMessage.conversationId,
+                        senderAccountId: originalMessage.senderAccountId,
+                        content: updatedContent,
+                        type: originalMessage.type as 'incoming' | 'outgoing' | 'system',
+                        targetAccountId: accountId,
+                        timestamp: originalMessage.createdAt
+                    },
+                    result: {
+                        success: true,
+                        messageId,
+                        automation: {
+                            shouldProcess: true,
+                            mode: 'automatic', // Forzamos automático para que la IA responda a la transcripción
+                            rule: null,
+                            reason: 'Audio transcribed and burned-in to message'
+                        }
+                    }
+                });
+            }
+
+            // 5. Guardar Enriquecimiento en DB (Legacy/Metadata)
             await this.saveEnrichment(messageId, 'audio_transcription', {
                 text: transcriptionResult.transcription,
                 language: transcriptionResult.language,
@@ -61,7 +115,7 @@ class AudioEnrichmentService {
                 processedAt: new Date()
             });
 
-            // 4. Notificar al sistema
+            // 6. Notificar al sistema
             coreEventBus.emit('media:enriched', {
                 messageId,
                 accountId,
@@ -81,15 +135,6 @@ class AudioEnrichmentService {
         }
     }
 
-    private getOpenAI(): OpenAI | null {
-        if (this.openai) return this.openai;
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (apiKey) {
-            this.openai = new OpenAI({ apiKey });
-            return this.openai;
-        }
-        return null;
-    }
 
     private async preprocess(url?: string, assetId?: string, mimeType?: string): Promise<File> {
         logTrace(`[AudioEnrichment] 🔄 Pre-processing audio. URL: ${url}, AssetId: ${assetId}`);

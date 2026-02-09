@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { eq, and, desc, ne } from 'drizzle-orm';
+import { eq, and, desc, ne, sql } from 'drizzle-orm';
 import * as openaiSync from '../openai-sync.service';
 import {
     db,
@@ -11,14 +11,9 @@ import {
     fluxcoreAssistantTools,
     fluxcoreInstructionVersions,
     accounts,
-    fluxcoreToolConnections,
     type FluxcoreAssistant,
     type NewFluxcoreAssistant,
 } from '@fluxcore/db';
-import { inArray } from 'drizzle-orm';
-import { templateService } from '../template.service';
-
-const TEMPLATES_TOOL_DEF_ID = '9e8c7b6a-5d4e-4f3a-2b1c-0d9e8f7a6b5c';
 
 export type FluxcoreAssistantWithRelations = FluxcoreAssistant & {
     instructionIds: string[];
@@ -102,33 +97,6 @@ export async function generateManagedInstructionContent(accountId: string): Prom
     return sections.join('\n');
 }
 
-/**
- * Construye el bloque de instrucciones para el uso de plantillas
- */
-export async function buildTemplatesInstructionBlock(accountId: string): Promise<string> {
-    const aiTemplates = await templateService.listAITemplates(accountId);
-    if (aiTemplates.length === 0) return '';
-
-    const templatesList = aiTemplates.map(t =>
-        `| ${t.id} | ${t.name} | ${t.variables.map(v => v.name).join(', ') || 'n/a'} |`
-    ).join('\n');
-
-    return `
-# REGLA DE ORO: DISPARADOR DE PLANTILLAS OFICIALES (SIN ACCESO A CONTENIDO)
-
-Actúa como un selector de respuestas oficiales. Para garantizar la entrega de documentos (PDFs, imágenes) y el formato exacto, TIENES PROHIBIDO redactar respuestas para las intenciones listadas abajo.
-
-REGLA DE SILENCIO TOTAL:
-1. Si la intención del usuario coincide con un "Nombre de Plantilla", DEBES llamar a \`send_template\`.
-2. Tu respuesta de texto debe estar totalmente VACÍA. Solo emite la llamada a la herramienta.
-3. NO conoces el contenido de la plantilla, por lo que NO puedes parafrasearla. Confía en el sistema para entregar el mensaje oficial.
-
-## LIBRERÍA DE INTENCIONES AUTORIZADAS:
-| ID (template_id) | Nombre de Plantilla (Intención) | Variables Requeridas |
-|---|---|---|
-${templatesList}
-    `.trim();
-}
 
 // ============================================================================
 // ASSISTANTS LOGIC
@@ -192,19 +160,19 @@ export async function ensureActiveAssistant(accountId: string): Promise<Fluxcore
             name: 'Asistente por defecto',
             description: 'Asistente activo por defecto',
             status: 'active',
-            modelConfig: {
+            modelConfig: sql.raw(`'${JSON.stringify({
                 provider: 'groq',
                 model: 'llama-3.1-8b-instant',
                 temperature: 1.0,
                 topP: 1.0,
                 responseFormat: 'text',
-            },
-            timingConfig: {
+            })}'::jsonb`),
+            timingConfig: sql.raw(`'${JSON.stringify({
                 responseDelaySeconds: 2,
                 smartDelay: false,
-            },
+            })}'::jsonb`),
             updatedAt: new Date(),
-        })
+        } as any)
         .returning();
 
     // Vincular instrucción al asistente
@@ -283,6 +251,14 @@ export async function getAssistantById(id: string, accountId: string): Promise<F
 export async function createAssistant(data: CreateAssistantDTO): Promise<FluxcoreAssistant> {
     const { instructionIds, vectorStoreIds, toolIds, ...assistantData } = data;
 
+    // Defensive: ensure jsonb fields are objects, not double-serialized strings
+    if (assistantData.modelConfig) {
+        assistantData.modelConfig = safeJsonbParse(assistantData.modelConfig) as any;
+    }
+    if (assistantData.timingConfig) {
+        assistantData.timingConfig = safeJsonbParse(assistantData.timingConfig) as any;
+    }
+
     return db.transaction(async (tx) => {
         if (assistantData.status === 'active' && typeof assistantData.accountId === 'string') {
             await tx
@@ -312,34 +288,27 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
                 }
             }
 
-            // Inyectar plantillas si la herramienta está activa
-            let finalInstructions = assistantData.description || 'You are a helpful assistant.';
-            if (toolIds && toolIds.length > 0) {
-                const connections = await tx
-                    .select()
-                    .from(fluxcoreToolConnections)
-                    .where(inArray(fluxcoreToolConnections.id, toolIds));
-
-                const hasTemplates = connections.some(c => c.toolDefinitionId === TEMPLATES_TOOL_DEF_ID);
-                if (hasTemplates) {
-                    const templateBlock = await buildTemplatesInstructionBlock(assistantData.accountId);
-                    if (templateBlock) {
-                        finalInstructions = `${templateBlock}\n\n${finalInstructions}`;
-                    }
-                }
-            }
-
             externalId = await openaiSync.createOpenAIAssistant({
                 name: assistantData.name,
                 description: assistantData.description || undefined,
-                instructions: finalInstructions,
+                instructions: assistantData.description || 'You are a helpful assistant.',
                 modelConfig: assistantData.modelConfig as any,
                 vectorStoreIds: openaiVectorStoreExternalIds.length > 0 ? openaiVectorStoreExternalIds : undefined,
             });
 
+            const insertValues: Record<string, any> = { ...assistantData, externalId };
+            if (insertValues.modelConfig && typeof insertValues.modelConfig === 'object') {
+                const escaped = JSON.stringify(insertValues.modelConfig).replace(/'/g, "''");
+                insertValues.modelConfig = sql.raw(`'${escaped}'::jsonb`);
+            }
+            if (insertValues.timingConfig && typeof insertValues.timingConfig === 'object') {
+                const escaped = JSON.stringify(insertValues.timingConfig).replace(/'/g, "''");
+                insertValues.timingConfig = sql.raw(`'${escaped}'::jsonb`);
+            }
+
             const [assistant] = await tx
                 .insert(fluxcoreAssistants)
-                .values({ ...assistantData, externalId })
+                .values(insertValues)
                 .returning();
 
             if (vectorStoreIds && vectorStoreIds.length > 0) {
@@ -368,9 +337,19 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
         }
 
         // FLUJO LOCAL
+        const localInsertValues: Record<string, any> = { ...assistantData, externalId };
+        if (localInsertValues.modelConfig && typeof localInsertValues.modelConfig === 'object') {
+            const escaped = JSON.stringify(localInsertValues.modelConfig).replace(/'/g, "''");
+            localInsertValues.modelConfig = sql.raw(`'${escaped}'::jsonb`);
+        }
+        if (localInsertValues.timingConfig && typeof localInsertValues.timingConfig === 'object') {
+            const escaped = JSON.stringify(localInsertValues.timingConfig).replace(/'/g, "''");
+            localInsertValues.timingConfig = sql.raw(`'${escaped}'::jsonb`);
+        }
+
         const [assistant] = await tx
             .insert(fluxcoreAssistants)
-            .values({ ...assistantData, externalId })
+            .values(localInsertValues)
             .returning();
 
         if (instructionIds && instructionIds.length > 0) {
@@ -406,12 +385,31 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
     });
 }
 
+/**
+ * Safely parse a jsonb field that might be double-serialized as a string.
+ */
+function safeJsonbParse<T>(value: T | string | undefined): T | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value === 'string') {
+        try { return JSON.parse(value) as T; } catch { return value as unknown as T; }
+    }
+    return value;
+}
+
 export async function updateAssistant(
     id: string,
     accountId: string,
     data: Partial<CreateAssistantDTO> & { instructions?: string }
 ): Promise<FluxcoreAssistant | null> {
     const { instructionIds, vectorStoreIds, toolIds, instructions, ...assistantData } = data;
+
+    // Defensive: ensure jsonb fields are objects, not double-serialized strings
+    if (assistantData.modelConfig) {
+        assistantData.modelConfig = safeJsonbParse(assistantData.modelConfig) as any;
+    }
+    if (assistantData.timingConfig) {
+        assistantData.timingConfig = safeJsonbParse(assistantData.timingConfig) as any;
+    }
 
     return db.transaction(async (tx) => {
         const [existingAssistant] = await tx
@@ -436,9 +434,21 @@ export async function updateAssistant(
                 ));
         }
 
+        // FIX: Use sql.raw() to embed JSON directly in SQL, bypassing postgres.js
+        // parameter serialization which double-stringifies objects for jsonb columns.
+        const setPayload: Record<string, any> = { ...assistantData, updatedAt: new Date() };
+        if (setPayload.modelConfig && typeof setPayload.modelConfig === 'object') {
+            const escaped = JSON.stringify(setPayload.modelConfig).replace(/'/g, "''");
+            setPayload.modelConfig = sql.raw(`'${escaped}'::jsonb`);
+        }
+        if (setPayload.timingConfig && typeof setPayload.timingConfig === 'object') {
+            const escaped = JSON.stringify(setPayload.timingConfig).replace(/'/g, "''");
+            setPayload.timingConfig = sql.raw(`'${escaped}'::jsonb`);
+        }
+
         const [assistant] = await tx
             .update(fluxcoreAssistants)
-            .set({ ...assistantData, updatedAt: new Date() })
+            .set(setPayload)
             .where(and(
                 eq(fluxcoreAssistants.id, id),
                 eq(fluxcoreAssistants.accountId, accountId)
@@ -464,41 +474,11 @@ export async function updateAssistant(
                 }
             }
 
-            // Inyectar plantillas si la herramienta está activa
-            let finalInstructions = instructions || 'You are a helpful assistant.';
-
-            // Determinar si Templates está activo (ya sea en toolIds nuevos o existentes)
-            let isTemplatesActive = false;
-            if (toolIds !== undefined) {
-                if (toolIds.length > 0) {
-                    const connections = await tx
-                        .select()
-                        .from(fluxcoreToolConnections)
-                        .where(inArray(fluxcoreToolConnections.id, toolIds));
-                    isTemplatesActive = connections.some(c => c.toolDefinitionId === TEMPLATES_TOOL_DEF_ID);
-                }
-            } else {
-                // Chequear conexiones actuales del asistente
-                const currentTools = await tx
-                    .select({ defId: fluxcoreToolConnections.toolDefinitionId })
-                    .from(fluxcoreAssistantTools)
-                    .innerJoin(fluxcoreToolConnections, eq(fluxcoreAssistantTools.toolConnectionId, fluxcoreToolConnections.id))
-                    .where(eq(fluxcoreAssistantTools.assistantId, id));
-                isTemplatesActive = currentTools.some(t => t.defId === TEMPLATES_TOOL_DEF_ID);
-            }
-
-            if (isTemplatesActive) {
-                const templateBlock = await buildTemplatesInstructionBlock(accountId);
-                if (templateBlock) {
-                    finalInstructions = `${templateBlock}\n\n${finalInstructions}`;
-                }
-            }
-
             await openaiSync.updateOpenAIAssistant({
                 externalId: assistant.externalId,
                 name: assistantData.name,
                 description: typeof assistantData.description === 'string' ? assistantData.description : undefined,
-                instructions: finalInstructions,
+                instructions: instructions || 'You are a helpful assistant.',
                 modelConfig: assistantData.modelConfig as any,
                 vectorStoreIds: openaiVectorStoreExternalIds.length > 0 ? openaiVectorStoreExternalIds : undefined,
             });

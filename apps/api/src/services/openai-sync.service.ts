@@ -578,6 +578,7 @@ export interface CreateThreadAndRunParams {
   }>;
   instructions?: string;
   additionalInstructions?: string;
+  tools?: Array<{ type: 'function'; function: Record<string, any> }>;
   traceId?: string;
   // Context for tool execution
   accountId: string;
@@ -612,7 +613,11 @@ export async function runAssistantWithMessages(
     console.log(`${tracePrefix} Starting assistant run`, {
       assistantExternalId: params.assistantExternalId,
       messagesCount: Array.isArray(params.messages) ? params.messages.length : 0,
+      hasInstructions: typeof params.instructions === 'string' && params.instructions.length > 0,
       hasAdditionalInstructions: typeof params.additionalInstructions === 'string' && params.additionalInstructions.length > 0,
+      additionalInstructionsPreview: params.additionalInstructions?.substring(0, 80) || null,
+      toolsCount: params.tools?.length || 0,
+      toolNames: params.tools?.map(t => t.function?.name).filter(Boolean) || [],
     });
 
     // 1. Crear un nuevo thread con los mensajes
@@ -633,7 +638,8 @@ export async function runAssistantWithMessages(
       assistant_id: params.assistantExternalId,
       instructions: params.instructions, // REPLACER (Control total FluxCore)
       additional_instructions: params.additionalInstructions, // APPENDER (Opcional)
-    });
+      ...(params.tools && params.tools.length > 0 ? { tools: params.tools } : {}),
+    } as any);
 
     console.log(`${tracePrefix} Run created`, {
       threadId: thread.id,

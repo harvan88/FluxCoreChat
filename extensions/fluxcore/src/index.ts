@@ -7,7 +7,9 @@
 
 import crypto from 'node:crypto';
 import { PromptBuilder, type ContextData, type BuiltPrompt } from './prompt-builder';
-import { OpenAICompatibleClient, AIClientError, type AIErrorType } from './openai-compatible-client';
+import { OpenAICompatibleClient, AIClientError, type AIErrorType, type OpenAIToolDef, type OpenAIToolCall, type OpenAIChatMessage } from './openai-compatible-client';
+import { ToolRegistry } from './tools/registry';
+import { buildExtraInstructions } from './prompt-utils';
 
 export interface FluxCoreConfig {
   enabled: boolean;
@@ -30,13 +32,17 @@ export interface FluxCoreConfig {
 
 type ChatCompletionRequestBody = {
   model: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: OpenAIChatMessage[];
   max_tokens: number;
   temperature: number;
+  tools?: OpenAIToolDef[];
+  tool_choice?: 'auto' | 'none';
 };
 
 type ChatCompletionResult = {
-  content: string;
+  content: string | null;
+  toolCalls?: OpenAIToolCall[];
+  finishReason: string;
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   provider: 'groq' | 'openai';
   baseUrl: string;
@@ -127,6 +133,20 @@ export interface AITraceEntry {
     usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   };
   toolsUsed?: AIToolExecutionRecord[];
+  toolUse?: {
+    toolsOffered: string[];
+    toolCalled: string | null;
+    toolCalls?: Array<{ name: string; args?: any; outcome?: string; durationMs?: number }>;
+    searchQuery?: string | null;
+    originalMessage: string;
+    ragResult?: {
+      chunksUsed: number;
+      totalTokens: number;
+      sources: string[];
+    };
+    secondCallMade: boolean;
+    totalDurationMs: number;
+  };
 }
 
 // Cola de respuestas pendientes
@@ -211,6 +231,65 @@ export class FluxCoreExtension {
       return data as AssistantComposition;
     } catch (error) {
       console.warn('[fluxcore] Error fetching active assistant:', error);
+      return null;
+    }
+  }
+
+  private async listAuthorizedTemplates(accountId: string): Promise<Array<{ id: string; name?: string; category?: string; variables?: string[]; instructions?: string | null }>> {
+    try {
+      const port = process.env.PORT || 3000;
+      const url = `http://localhost:${port}/fluxcore/runtime/tools/list-templates`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[fluxcore] Failed to list templates: ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      if (data?.success && Array.isArray(data.data)) {
+        return data.data;
+      }
+      return [];
+    } catch (error) {
+      console.warn('[fluxcore] Error listing templates:', error);
+      return [];
+    }
+  }
+
+  private async sendTemplateTool(params: {
+    accountId: string;
+    conversationId: string;
+    templateId: string;
+    variables?: Record<string, string>;
+  }): Promise<{ messageId?: string; status?: string } | null> {
+    try {
+      const port = process.env.PORT || 3000;
+      const url = `http://localhost:${port}/fluxcore/runtime/tools/send-template`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        console.warn(`[fluxcore] Failed to send template: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      if (data?.success && data.data) {
+        return data.data;
+      }
+      return null;
+    } catch (error) {
+      console.warn('[fluxcore] Error sending template:', error);
       return null;
     }
   }
@@ -465,6 +544,13 @@ export class FluxCoreExtension {
       console.log('[fluxcore] hasPreferredProvider:', hasPreferredProvider);
       console.log('[fluxcore] Provider order final:', providerOrder.map(p => p.provider));
 
+      if (preferredProvider && !hasPreferredProvider) {
+        const assistantLabel = assistantMeta?.assistantName || assistantMeta?.assistantId || 'unknown assistant';
+        const missingProviderMsg = `El asistente ${assistantLabel} requiere el provider ${preferredProvider}, pero no hay credenciales configuradas para ese provider. Configurá la API key correspondiente para continuar.`;
+        console.error('[fluxcore] Provider requerido no disponible:', missingProviderMsg);
+        throw new Error(missingProviderMsg);
+      }
+
       if (hasPreferredProvider && preferredProvider) {
         providerOrder = providerOrder
           .slice()
@@ -472,30 +558,33 @@ export class FluxCoreExtension {
       }
 
       // Construir el prompt
-      const extraInstructions = Array.isArray(active?.instructions)
-        ? active!.instructions
-          .map((i) => (typeof (i as any)?.content === 'string' ? (i as any).content : ''))
-          .filter((x) => typeof x === 'string' && x.trim().length > 0)
-        : [];
+      const hasKnowledgeBase = vectorStoreIds && vectorStoreIds.length > 0;
+      const extraInstructions = buildExtraInstructions({
+        instructions: active?.instructions,
+        includeSearchKnowledge: !!hasKnowledgeBase,
+      });
 
-      // RAG-008: Obtener contexto de Vector Stores si están configurados
+      // Tool registry: decide which tools are offered based on assistant config
+      const hasTemplatesTool = Array.isArray(active?.tools)
+        ? active!.tools.some((tool: any) => tool?.slug === 'templates' && tool?.connectionStatus !== 'error')
+        : false;
+      const toolRegistry = new ToolRegistry({
+        fetchRagContext: this.fetchRAGContext.bind(this),
+        listTemplates: this.listAuthorizedTemplates.bind(this),
+        sendTemplate: this.sendTemplateTool.bind(this),
+      });
+      const llmTools = toolRegistry.getToolsForAssistant({
+        hasKnowledgeBase: !!hasKnowledgeBase,
+        hasTemplatesTool,
+      });
+      const toolsForRequest = llmTools.length > 0 ? llmTools : undefined;
+
+      // Build prompt WITHOUT ragContext — the model will request it via tool if needed
       let ragContext: ContextData['ragContext'] | undefined;
-      if (vectorStoreIds && vectorStoreIds.length > 0) {
-        const rag = await this.fetchRAGContext(recipientAccountId, event.content, vectorStoreIds);
-        ragContext = rag || {
-          context: '',
-          sources: [],
-          totalTokens: 0,
-          chunksUsed: 0,
-          vectorStoreIds,
-        };
-      }
-
-      // Inyectar RAG context en el contexto
       const enrichedContext: ContextData = {
         ...context,
         assistantMeta,
-        ragContext,
+        // ragContext intentionally omitted — will be populated after tool call if any
       };
 
       const prompt = this.promptBuilder.build(
@@ -538,9 +627,9 @@ export class FluxCoreExtension {
         Math.abs(eventCreatedAt.getTime() - lastTs.getTime()) < 15000;
 
       const shouldAppendCurrent = !hasCurrentInHistory && !(isDuplicateByText && isNearInTime);
-      const messagesWithCurrent = shouldAppendCurrent
-        ? [...prompt.messages, { role: 'user' as const, content: currentContent }]
-        : prompt.messages;
+      const messagesWithCurrent: OpenAIChatMessage[] = shouldAppendCurrent
+        ? [...prompt.messages.map(m => ({ role: m.role, content: m.content }) as OpenAIChatMessage), { role: 'user' as const, content: currentContent }]
+        : prompt.messages.map(m => ({ role: m.role, content: m.content }) as OpenAIChatMessage);
 
       const traceId = crypto.randomUUID();
       const trace: AITraceEntry = {
@@ -557,38 +646,142 @@ export class FluxCoreExtension {
         builtPrompt: {
           systemPrompt: prompt.systemPrompt,
           messages: prompt.messages,
-          messagesWithCurrent,
+          messagesWithCurrent: prompt.messages,
         },
         attempts: [],
         toolsUsed: this.createToolUsageSnapshot(assistantMeta?.tools),
       };
 
+      const modelOverride =
+        hasPreferredProvider && typeof active?.assistant?.modelConfig?.model === 'string'
+          ? active.assistant.modelConfig.model
+          : undefined;
+      const temperatureOverride =
+        hasPreferredProvider && typeof active?.assistant?.modelConfig?.temperature === 'number'
+          ? active.assistant.modelConfig.temperature
+          : undefined;
+
       let response: ChatCompletionResult;
+      const toolUseStartedAt = Date.now();
+      let toolUseSearchQuery: string | null = null;
+      let toolUseSecondCall = false;
+      const toolUseCalls: Array<{ name: string; args?: any; outcome?: string; durationMs?: number }> = [];
+
       console.log('[fluxcore] Llamando createChatCompletionWithFallback...');
-      console.log('[fluxcore] modelOverride:', hasPreferredProvider && typeof active?.assistant?.modelConfig?.model === 'string'
-        ? active.assistant.modelConfig.model
-        : 'ninguno (usando default)');
+      console.log('[fluxcore] modelOverride:', modelOverride || 'ninguno (usando default)');
+      if (toolsForRequest) {
+        console.log('[fluxcore] Tools ofrecidas:', toolsForRequest.map(t => t.function.name));
+      }
 
       try {
+        const maxToolRounds = 2;
+        let toolRound = 0;
+        let currentMessages = messagesWithCurrent;
+
         response = await this.createChatCompletionWithFallback({
           providerOrder,
           systemPrompt: prompt.systemPrompt,
-          messages: messagesWithCurrent,
+          messages: currentMessages,
           trace,
-          modelOverride:
-            hasPreferredProvider && typeof active?.assistant?.modelConfig?.model === 'string'
-              ? active.assistant.modelConfig.model
-              : undefined,
-          temperatureOverride:
-            hasPreferredProvider && typeof active?.assistant?.modelConfig?.temperature === 'number'
-              ? active.assistant.modelConfig.temperature
-              : undefined,
+          modelOverride,
+          temperatureOverride,
+          tools: toolsForRequest,
+          toolChoice: toolsForRequest ? 'auto' : undefined,
         });
-        console.log('[fluxcore] ✓ Respuesta recibida de provider:', response.provider);
+        console.log('[fluxcore] ✓ Primera respuesta — finishReason:', response.finishReason, 'provider:', response.provider);
+
+        while (toolsForRequest && response.toolCalls && response.toolCalls.length > 0 && toolRound < maxToolRounds) {
+          toolRound += 1;
+          const toolMessages: OpenAIChatMessage[] = [];
+
+          for (const toolCall of response.toolCalls) {
+            const toolStartedAt = Date.now();
+            const toolResponse = await toolRegistry.executeToolCall(toolCall, {
+              accountId: recipientAccountId,
+              conversationId: event.conversationId,
+              eventContent: event.content,
+              vectorStoreIds,
+            });
+            const toolDurationMs = Date.now() - toolStartedAt;
+
+            toolMessages.push(toolResponse.message);
+            if (toolResponse.ragContext && !ragContext) {
+              ragContext = toolResponse.ragContext;
+            }
+
+            if (toolResponse.name === 'search_knowledge' && toolResponse.parsedArgs?.query && !toolUseSearchQuery) {
+              toolUseSearchQuery = toolResponse.parsedArgs.query;
+            }
+
+            toolUseCalls.push({
+              name: toolResponse.name,
+              args: toolResponse.parsedArgs,
+              outcome: toolResponse.result.outcome,
+              durationMs: toolDurationMs,
+            });
+
+            this.recordToolExecution({
+              traceId,
+              toolId: toolResponse.name,
+              name: toolResponse.name,
+              status: toolResponse.result.outcome === 'error' ? 'error' : 'success',
+              startedAt: new Date(toolStartedAt),
+              durationMs: toolDurationMs,
+              input: toolResponse.parsedArgs,
+              output: toolResponse.result,
+            });
+          }
+
+          currentMessages = [
+            ...currentMessages,
+            { role: 'assistant' as const, content: null, tool_calls: response.toolCalls },
+            ...toolMessages,
+          ];
+
+          toolUseSecondCall = true;
+          console.log('[fluxcore] Ejecutando segunda llamada con resultados de tools...');
+
+          response = await this.createChatCompletionWithFallback({
+            providerOrder,
+            systemPrompt: prompt.systemPrompt,
+            messages: currentMessages,
+            trace,
+            modelOverride,
+            temperatureOverride,
+            tools: toolsForRequest,
+            toolChoice: toolsForRequest ? 'auto' : undefined,
+          });
+          console.log('[fluxcore] ✓ Respuesta posterior — finishReason:', response.finishReason, 'provider:', response.provider);
+        }
+
+        if (response.toolCalls && response.toolCalls.length > 0 && toolRound >= maxToolRounds) {
+          console.warn('[fluxcore] Máximo de rounds de tools alcanzado; suprimiendo tool_calls restantes.');
+        }
       } catch (error: any) {
         console.log('[fluxcore] ❌ Error en createChatCompletionWithFallback:', error.message);
         addTrace(trace);
         throw error;
+      }
+
+      // Populate toolUse telemetry
+      trace.toolUse = {
+        toolsOffered: toolsForRequest ? toolsForRequest.map(t => t.function.name) : [],
+        toolCalled: toolUseCalls.length > 0 ? toolUseCalls[0].name : null,
+        toolCalls: toolUseCalls.length > 0 ? toolUseCalls : undefined,
+        searchQuery: toolUseSearchQuery,
+        originalMessage: event.content,
+        ragResult: ragContext ? {
+          chunksUsed: ragContext.chunksUsed,
+          totalTokens: ragContext.totalTokens,
+          sources: ragContext.sources?.map(s => s.source) || [],
+        } : undefined,
+        secondCallMade: toolUseSecondCall,
+        totalDurationMs: Date.now() - toolUseStartedAt,
+      };
+
+      // Update enrichedContext with ragContext for the trace (if RAG was used)
+      if (ragContext) {
+        enrichedContext.ragContext = ragContext;
       }
 
       trace.model = response.requestBody.model;
@@ -616,6 +809,13 @@ export class FluxCoreExtension {
       const cleanedContent = typeof response.content === 'string'
         ? response.content.replace(timestampPrefixRegex, '').trim()
         : '';
+
+      // Guard: never surface empty content to the user (e.g. unresolved tool_calls)
+      if (!cleanedContent) {
+        console.warn('[fluxcore] ⚠ Response content is empty after processing (possible unresolved tool_calls). Suppressing suggestion.');
+        addTrace(trace);
+        return null;
+      }
 
       // Crear sugerencia
       const suggestion: AISuggestion = {
@@ -893,9 +1093,9 @@ export class FluxCoreExtension {
           return true;
         } catch (error: any) {
           const err = this.normalizeError(error);
-          const canFallback = this.shouldFallback(err.type);
+          const canFallback = this.shouldFallback(err.type, err.statusCode);
           if (!canFallback) {
-            return false;
+            throw error;
           }
         }
       }
@@ -966,7 +1166,12 @@ export class FluxCoreExtension {
     return { type: 'unknown', message: error?.message || 'Unknown error' };
   }
 
-  private shouldFallback(type: AIErrorType): boolean {
+  private shouldFallback(type: AIErrorType, statusCode?: number): boolean {
+    if (type === 'bad_request' && statusCode === 413) {
+      // Groq Dev tier: 413 se usa para TPM exceeded → intentar siguiente provider
+      return true;
+    }
+
     return (
       type === 'timeout' ||
       type === 'network_error' ||
@@ -1015,12 +1220,14 @@ export class FluxCoreExtension {
   private async createChatCompletionWithFallback(params: {
     providerOrder: Array<{ provider: 'groq' | 'openai'; baseUrl: string; apiKey: string; keySource?: string }>;
     systemPrompt: string;
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    messages: Array<OpenAIChatMessage>;
     trace: AITraceEntry;
     modelOverride?: string;
     maxTokensOverride?: number;
     temperatureOverride?: number;
-  }): Promise<{ content: string; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }; provider: 'groq' | 'openai'; baseUrl: string; requestBody: ChatCompletionRequestBody }> {
+    tools?: OpenAIToolDef[];
+    toolChoice?: 'auto' | 'none';
+  }): Promise<ChatCompletionResult> {
     const timeoutMs = this.config.timeoutMs || 15000;
     const maxAttemptsPerProvider = 2;
 
@@ -1046,10 +1253,15 @@ export class FluxCoreExtension {
           messages: [
             { role: 'system' as const, content: params.systemPrompt },
             ...params.messages,
-          ],
+          ] as any,
           max_tokens: maxTokens,
           temperature,
         };
+
+        if (params.tools && params.tools.length > 0) {
+          requestBody.tools = params.tools;
+          requestBody.tool_choice = params.toolChoice || 'auto';
+        }
 
         const traceAttempt: AITraceAttempt = {
           provider: provider.provider,
@@ -1070,16 +1282,20 @@ export class FluxCoreExtension {
             maxTokens,
             temperature,
             timeoutMs,
+            tools: params.tools,
+            toolChoice: params.toolChoice,
           });
 
           traceAttempt.ok = true;
           traceAttempt.durationMs = Date.now() - startedAt;
           traceAttempt.requestBody = res.requestBody as unknown as ChatCompletionRequestBody;
-          traceAttempt.response = { content: res.content, usage: res.usage };
+          traceAttempt.response = { content: res.content ?? '', usage: res.usage };
           params.trace.attempts.push(traceAttempt);
 
           return {
             content: res.content,
+            toolCalls: res.toolCalls,
+            finishReason: res.finishReason,
             usage: res.usage,
             provider: provider.provider,
             baseUrl: provider.baseUrl,
@@ -1088,7 +1304,7 @@ export class FluxCoreExtension {
         } catch (error: any) {
           lastError = error;
           const err = this.normalizeError(error);
-          const retryable = this.shouldFallback(err.type);
+          const retryable = this.shouldFallback(err.type, err.statusCode);
 
           traceAttempt.ok = false;
           traceAttempt.durationMs = Date.now() - startedAt;
@@ -1098,6 +1314,14 @@ export class FluxCoreExtension {
             statusCode: err.statusCode,
           };
           params.trace.attempts.push(traceAttempt);
+
+          // If tools caused a bad_request, retry without tools (fallback to no-tool behavior)
+          if (err.type === 'bad_request' && params.tools && params.tools.length > 0) {
+            console.warn('[fluxcore] Tool calling caused bad_request, retrying without tools...');
+            params.tools = undefined;
+            params.toolChoice = undefined;
+            continue;
+          }
 
           if (retryable && attempt < maxAttemptsPerProvider) {
             await new Promise((resolve) => setTimeout(resolve, 250 * Math.pow(2, attempt - 1)));

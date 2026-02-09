@@ -66,3 +66,4 @@ export * from './message-assets';
 export * from './template-assets';
 export * from './plan-assets';
 export * from './templates';
+export * from './fluxcore-template-settings';

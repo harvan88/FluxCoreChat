@@ -36,6 +36,7 @@ export function AssistantsView({
     deleteAssistant,
     activateAssistant,
     getActiveConfig,
+    getAssistantFromDB,
     refresh,
     setError
   } = useAssistants(accountId);
@@ -51,6 +52,7 @@ export function AssistantsView({
   const [detailActivateConfirm, setDetailActivateConfirm] = useState(false);
   const [isLocalSaving, setIsLocalSaving] = useState(false);
   const [localSelectedAssistant, setLocalSelectedAssistant] = useState<Assistant | null>(null);
+  const localSelectedRef = useRef<Assistant | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const creationProcessedRef = useRef(false);
   const [creatingAssistant, setCreatingAssistant] = useState(false);
@@ -68,6 +70,7 @@ export function AssistantsView({
       // SOLO actualizamos el estado local si el asistente es distinto al actual o es una selección inicial
       setLocalSelectedAssistant(prev => {
         if (prev?.id === assistant.id) return prev;
+        localSelectedRef.current = assistant;
         return assistant;
       });
     }
@@ -110,6 +113,7 @@ export function AssistantsView({
       });
     } else {
       setLocalSelectedAssistant(assistant);
+      localSelectedRef.current = assistant;
       selectEntity(assistant);
     }
   }, [onOpenTab, selectEntity, accountId]);
@@ -126,7 +130,7 @@ export function AssistantsView({
     const performSave = async () => {
       setIsLocalSaving(true);
       const payload = buildAssistantPayload(assistant);
-      await updateAssistant(assistant.id, payload as any);
+      const result = await updateAssistant(assistant.id, payload as any);
       setIsLocalSaving(false);
     };
 
@@ -138,18 +142,20 @@ export function AssistantsView({
   }, [updateAssistant, buildAssistantPayload]);
 
   const handleUpdate = useCallback((updates: Partial<Assistant>, saveStrategy: 'none' | 'debounce' | 'immediate') => {
-    if (!localSelectedAssistant) return;
+    const current = localSelectedRef.current;
+    if (!current) return;
 
     // 1. Actualización local inmediata (Para estabilidad del Form)
-    const next = { ...localSelectedAssistant, ...updates };
+    const next = { ...current, ...updates };
     setLocalSelectedAssistant(next);
+    localSelectedRef.current = next;
 
     // 2. Sincronizar optimísticamente con la lista global
-    updateLocalAssistant(localSelectedAssistant.id, updates);
+    updateLocalAssistant(current.id, updates);
 
     if (saveStrategy === 'none') return;
     scheduleSave(next, saveStrategy === 'immediate');
-  }, [localSelectedAssistant, updateLocalAssistant, scheduleSave]);
+  }, [updateLocalAssistant, scheduleSave]);
 
   const handleCreate = useCallback(async (runtime: 'local' | 'openai', customInitialData?: any) => {
     setShowRuntimeModal(false);
@@ -191,6 +197,7 @@ export function AssistantsView({
         });
       } else {
         setLocalSelectedAssistant(newAssistant);
+        localSelectedRef.current = newAssistant;
         selectEntity(newAssistant);
       }
     }
@@ -220,12 +227,45 @@ export function AssistantsView({
   }, [onOpenTab]);
 
   const handleCopyActiveConfig = async () => {
-    const config = await getActiveConfig();
-    if (config) {
-      await copy(JSON.stringify(config, null, 2));
-    } else {
-      setError('Error al obtener la configuración activa');
+    const uiAssistant = localSelectedRef.current;
+    if (!uiAssistant) return;
+    const dbAssistant = await getAssistantFromDB(uiAssistant.id);
+    if (!dbAssistant) {
+      setError('Error al obtener la configuración desde la DB');
+      return;
     }
+    const comparison = {
+      _label: 'UI vs DB Persistence Check',
+      _assistantId: uiAssistant.id,
+      _timestamp: new Date().toISOString(),
+      ui: {
+        name: uiAssistant.name,
+        status: uiAssistant.status,
+        modelConfig: uiAssistant.modelConfig,
+        timingConfig: uiAssistant.timingConfig,
+        instructionIds: uiAssistant.instructionIds,
+        vectorStoreIds: uiAssistant.vectorStoreIds,
+        toolIds: uiAssistant.toolIds,
+      },
+      db: {
+        name: dbAssistant.name,
+        status: dbAssistant.status,
+        modelConfig: dbAssistant.modelConfig,
+        timingConfig: dbAssistant.timingConfig,
+        instructionIds: dbAssistant.instructionIds,
+        vectorStoreIds: dbAssistant.vectorStoreIds,
+        toolIds: dbAssistant.toolIds,
+      },
+      match: {
+        name: uiAssistant.name === dbAssistant.name,
+        provider: uiAssistant.modelConfig?.provider === dbAssistant.modelConfig?.provider,
+        model: uiAssistant.modelConfig?.model === dbAssistant.modelConfig?.model,
+        temperature: uiAssistant.modelConfig?.temperature === dbAssistant.modelConfig?.temperature,
+        status: uiAssistant.status === dbAssistant.status,
+      },
+    };
+    console.log('[FluxCore] Persistence Check:', comparison);
+    await copy(JSON.stringify(comparison, null, 2));
   };
 
   // Cleanup cleanup cleanup
@@ -269,6 +309,7 @@ export function AssistantsView({
             });
           }
           setLocalSelectedAssistant(null);
+          localSelectedRef.current = null;
           clearSelection();
           resetCreationState();
         }}
@@ -281,6 +322,7 @@ export function AssistantsView({
         onCopyConfig={handleCopyActiveConfig}
         onClose={() => {
           setLocalSelectedAssistant(null);
+          localSelectedRef.current = null;
           if (onOpenTab) clearSelection();
           else selectEntity(null as any);
           resetCreationState();

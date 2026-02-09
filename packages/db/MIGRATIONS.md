@@ -47,6 +47,7 @@ Estas migraciones se ejecutaron manualmente y NO están en el journal de Drizzle
 | `migrate-workspaces.ts` | workspaces, workspace_members, workspace_invitations | ✅ Aplicada | Workspaces colaborativos |
 | `migrate-website-configs.ts` / `007_website_configs.sql` | website_configs | ✅ Aplicada | Website builder (Karen) |
 | `migrate-all.ts` | appointments*, extensions (legacy) | ✅ Aplicada | **DEPRECATED** |
+| `009_credits_policies_seed.sql` | credits_policies (seed OpenAI/Groq) | ⚠️ Pendiente | Inserta políticas base para applyCreditsGating (AI session) |
 
 ### 📋 Schemas Actualizados (HITO 16)
 
@@ -58,6 +59,32 @@ Los schemas de Drizzle fueron actualizados para reflejar las migraciones manuale
 | `actors.ts` | actor_type, extension_id, display_name (nullable) | 2024-12-09 |
 | `accounts.ts` | alias | 2024-12-09 |
 | `appointments.ts` | **NUEVO** - appointmentServices, appointmentStaff, appointments | 2024-12-09 |
+
+### 📦 Tablas FluxCore documentadas (schema/index.ts)
+
+> Resultado de la auditoría 2026-02-08: estas tablas ya existen y están soportadas por los schemas dentro de `packages/db/src/schema`. No forman parte de las migraciones 0000/0001 originales, por lo que quedaban “inesperadas” hasta ahora.
+
+| Grupo / Hito | Tablas | Estado | Notas |
+|--------------|--------|--------|-------|
+| Account AI Entitlements | `account_ai_entitlements` | ✅ En uso | Gateo de proveedores IA por cuenta |
+| Créditos (billing base) | `credits_wallets`, `credits_ledger`, `credits_policies`, `credits_conversation_sessions` | ✅ En uso | Sistema de créditos / applyCreditsGating |
+| System Admins | `system_admins` | ✅ En uso | Scopes internos (`hasInternalAccess`) |
+| Account Deletion | `account_deletion_jobs`, `account_deletion_logs` | ✅ En uso | Worker de borrado de cuentas |
+| Extensiones (legacy) | `extensions` | ⚠️ Legacy | Tabla histórica, solo lectura |
+| Fluxcore Assistants | `fluxcore_assistants`, `fluxcore_assistant_instructions`, `fluxcore_assistant_vector_stores` | ✅ En uso | Arquitectura de asistentes IA |
+| Fluxcore Instructions | `fluxcore_instructions`, `fluxcore_instruction_versions` | ✅ En uso | Versionado de instrucciones |
+| Fluxcore Tools | `fluxcore_tool_definitions`, `fluxcore_tool_connections`, `fluxcore_usage_logs` | ✅ En uso | Tool registry / telemetría |
+| Fluxcore Vector Stores | `fluxcore_vector_stores`, `fluxcore_vector_store_files`, `fluxcore_document_chunks` | ✅ En uso | RAG + pgvector |
+| Fluxcore Assets & Files | `fluxcore_files`, `fluxcore_asset_permissions`, `assets`, `asset_upload_sessions`, `asset_policies`, `asset_audit_logs`, `plan_assets`, `template_assets`, `message_assets` | ✅ En uso | Gestor de assets / archivos compartidos |
+| Fluxcore Marketplace | `fluxcore_marketplace_listings`, `fluxcore_marketplace_reviews`, `fluxcore_marketplace_subscriptions` | ✅ En uso | Distribución de vector stores/templates |
+| Fluxcore Billing extra | `fluxcore_account_credits`, `fluxcore_credit_transactions`, `fluxcore_usage_logs` | ✅ En uso | Métricas y consumo detallado |
+| Fluxcore Templates | `templates`, `fluxcore_template_settings` | ✅ En uso | Sistema de plantillas + settings IA |
+| Fluxcore RAG Config | `fluxcore_rag_configurations` | ✅ En uso | RAG granular por cuenta |
+| Fluxcore Files/Chunks helper | `fluxcore_vector_store_files`, `fluxcore_document_chunks` | ✅ En uso | Duplicado explícito para auditoría |
+| Media Attachments | `media_attachments`, `message_assets` | ✅ En uso | PC-9 / adjuntos |
+| Misc seguridad | `protected_accounts` | ✅ En uso | Reservas / cuentas protegidas |
+
+> Cualquier tabla nueva debe agregarse aquí (y, si aplica, a la tabla de scripts manuales) para que `audit-database.ts` no la marque como inesperada.
 
 ---
 

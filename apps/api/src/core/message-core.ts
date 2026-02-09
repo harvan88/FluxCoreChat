@@ -190,12 +190,41 @@ export class MessageCore {
     const callback = this.notificationCallbacks.get(relationshipId);
     if (callback) {
       callback(data);
+    } else {
+      console.warn(`[MessageCore] broadcast: no notificationCallback for relationship ${relationshipId} (registered: ${[...this.notificationCallbacks.keys()].join(', ') || 'none'})`);
     }
   }
 
   registerConversation(conversationId: string, relationshipId: string) {
     this.conversations.set(conversationId, { relationshipId });
     console.log(`[MessageCore] Registered conversation ${conversationId} with relationship ${relationshipId}`);
+  }
+
+  /**
+   * Emit a WebSocket-only notification for a conversation (no DB persistence).
+   * Used for transient notifications like ai_blocked that should not be stored.
+   * Looks up the relationshipId from DB if not cached in-memory.
+   */
+  async broadcastToConversation(conversationId: string, data: any) {
+    let conv = this.conversations.get(conversationId);
+
+    // If not cached, look up from DB and cache for future use
+    if (!conv) {
+      const conversation = await conversationService.getConversationById(conversationId);
+      if (conversation?.relationshipId) {
+        this.registerConversation(conversationId, conversation.relationshipId);
+        conv = { relationshipId: conversation.relationshipId };
+      }
+    }
+
+    if (conv) {
+      // Use broadcastToRelationship directly (bypasses notificationCallbacks)
+      // Dynamic import to avoid circular dependency (ws-handler imports message-core)
+      const { broadcastToRelationship } = await import('../websocket/ws-handler');
+      broadcastToRelationship(conv.relationshipId, data);
+    } else {
+      console.warn(`[MessageCore] broadcastToConversation: no relationship found for conversation ${conversationId}`);
+    }
   }
 
   /**

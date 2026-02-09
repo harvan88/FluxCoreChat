@@ -25,13 +25,6 @@ class AIOrchestratorService {
             );
         });
 
-        // ESCUCHAR: cuando un audio es transcrito, la IA puede evaluarlo como texto
-        coreEventBus.on('media:enriched', (payload) => {
-            this.handleMediaEnriched(payload).catch(err =>
-                console.error('[AIOrchestrator] Error handling media enriched:', err)
-            );
-        });
-
         console.log('[AIOrchestrator] Service initialized and listening');
     }
 
@@ -83,53 +76,6 @@ class AIOrchestratorService {
         this.scheduleAutoReply(envelope, messageText, targetAccountId, result.automation.mode, result.messageId);
     }
 
-    /**
-     * Maneja el evento de enriquecimiento (ej. cuando Whisper termina de transcribir un audio)
-     */
-    private async handleMediaEnriched(payload: { messageId: string; accountId: string; type: string; enrichment: any }) {
-        const { messageId, accountId, type, enrichment } = payload;
-
-        // Solo nos interesa audio por ahora
-        if (type !== 'audio' || !enrichment.transcription) return;
-
-        logTrace(`[AIOrchestrator] 🎧 Media Enriched (Audio) for message ${messageId}. Re-evaluating for AI reply.`);
-
-        // 1. Obtener el mensaje original para tener el contexto de la conversación
-        const { messageService } = await import('./message.service');
-        const message = await messageService.getMessageById(messageId);
-        if (!message) {
-            logTrace(`[AIOrchestrator] ❌ Original message ${messageId} not found for enrichment.`);
-            return;
-        }
-
-        // 2. Simular un envelope compatible
-        const envelope: MessageEnvelope = {
-            conversationId: message.conversationId,
-            senderAccountId: message.senderAccountId,
-            content: { text: enrichment.transcription },
-            type: message.type as any,
-            timestamp: message.createdAt,
-            targetAccountId: accountId
-        };
-
-        // 3. Evaluar automatización (usando el texto de la transcripción como disparador)
-        const { automationController } = await import('./automation-controller.service');
-        const automation = await automationController.evaluateTrigger({
-            accountId,
-            relationshipId: '',
-            messageContent: enrichment.transcription,
-            messageType: message.type as any,
-            senderId: message.senderAccountId
-        });
-
-        if (automation.shouldProcess && automation.mode === 'automatic') {
-            logTrace(`[AIOrchestrator] 🚀 Transcription successful. Scheduling AI response based on audio text.`);
-            this.scheduleAutoReply(envelope, enrichment.transcription, accountId, automation.mode, messageId);
-        } else {
-            logTrace(`[AIOrchestrator] ⏹️ Transcription successful but automation logic says NO: ${automation.reason}`);
-        }
-    }
-
     private async scheduleAutoReply(
         envelope: MessageEnvelope,
         messageText: string,
@@ -159,7 +105,7 @@ class AIOrchestratorService {
         const timeout = setTimeout(async () => {
             try {
                 logTrace(`[AIOrchestrator] 🤖 Triggering AI Generation for conversation ${envelope.conversationId}`);
-                const suggestion = await extensionHost.generateAIResponse(
+                const result = await extensionHost.generateAIResponse(
                     envelope.conversationId,
                     targetAccountId,
                     messageText,
@@ -171,8 +117,25 @@ class AIOrchestratorService {
                     }
                 );
 
+                // ── Blocked: notify account owner via WebSocket only (not persisted) ──
+                if (!result.ok) {
+                    logTrace(`[AIOrchestrator] 🚫 BLOCKED: ${result.block.reason} — ${result.block.message}`);
+                    const payload = {
+                        type: 'ai:execution_blocked',
+                        data: {
+                            conversationId: envelope.conversationId,
+                            accountId: targetAccountId,
+                            block: result.block,
+                        },
+                    };
+                    logTrace(`[AIOrchestrator] 📡 Broadcasting ai:execution_blocked to conversation ${envelope.conversationId}`);
+                    await messageCore.broadcastToConversation(envelope.conversationId, payload);
+                    return;
+                }
+
+                // ── Success with content ────────────────────────────────
+                const suggestion = result.suggestion;
                 if (suggestion?.content) {
-                    // Procesar branding
                     const stripped = extensionHost.stripFluxCorePromoMarker(suggestion.content);
                     const finalText = stripped.promo
                         ? extensionHost.appendFluxCoreBrandingFooter(stripped.text)
@@ -182,7 +145,6 @@ class AIOrchestratorService {
                         ? { text: finalText, __fluxcore: { branding: true } }
                         : { text: finalText };
 
-                    // Enviar respuesta
                     await messageCore.send({
                         conversationId: envelope.conversationId,
                         senderAccountId: targetAccountId,

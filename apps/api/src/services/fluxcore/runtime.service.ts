@@ -16,6 +16,7 @@ import {
     type FluxcoreToolDefinition,
 } from '@fluxcore/db';
 import * as assistantsService from './assistants.service';
+import { templateRegistryService } from './template-registry.service';
 
 export interface AssistantComposition {
     assistant: FluxcoreAssistant;
@@ -155,57 +156,24 @@ export async function getAssistantComposition(assistantId: string): Promise<Assi
         connectionStatus: conn.status,
     }));
 
-    // 5. Inyección dinámica de contexto de plantillas si la herramienta está activa
+    // 5. Inyección dinámica de contexto de plantillas via TemplateRegistry (Single Source of Truth)
     const hasTemplatesTool = tools.some(t => t.slug === 'templates');
     if (hasTemplatesTool) {
-        const { templateService } = await import('../template.service');
-        const aiTemplates = await templateService.listAITemplates(assistant.accountId);
+        // Limpiar bloques heredados de inyección estática anterior
+        for (const inst of instructions) {
+            inst.content = templateRegistryService.stripLegacyBlocks(inst.content);
+        }
 
-        if (aiTemplates.length > 0) {
-            // Limpiar CUALQUIER bloque previo (nuevo o antiguo) para evitar duplicados en el prompt final
-            const legacyPatterns = [
-                /# INSTRUCCIONES DE USO DE PLANTILLAS[\s\S]*?(?=#|$)/gi,
-                /# LIBRERÍA DE PLANTILLAS[\s\S]*?(?=#|$)/gi,
-                /# LISTA DE PLANTILLAS AUTORIZADAS[\s\S]*?(?=#|$)/gi,
-                /# REGLA DE ORO: SISTEMA DE PLANTILLAS OFICIALES[\s\S]*?(?=#|$)/gi,
-                /## LIBRERÍA DE PLANTILLAS[\s\S]*?(?=#|$)/gi,
-                /## LISTA DE PLANTILLAS AUTORIZADAS[\s\S]*?(?=#|$)/gi
-            ];
+        const templateBlock = await templateRegistryService.buildInstructionBlock(assistant.accountId);
 
-            instructions.forEach(inst => {
-                legacyPatterns.forEach(pattern => {
-                    inst.content = inst.content.replace(pattern, '').trim();
-                });
-            });
-
-            const templatesList = aiTemplates.map(t =>
-                `| ${t.id} | ${t.name} | ${t.variables.map(v => v.name).join(', ') || 'n/a'} |`
-            ).join('\n');
-
-            const templateInstruction = {
+        if (templateBlock) {
+            instructions.push({
                 id: 'system-templates-context',
                 name: 'SYSTEM: Tool Templates',
-                content: `
-# REGLA DE ORO: DISPARADOR DE PLANTILLAS OFICIALES (SIN ACCESO A CONTENIDO)
-
-Actúa como un selector de respuestas oficiales. Para garantizar la entrega de documentos (PDFs, imágenes) y el formato exacto, TIENES PROHIBIDO redactar respuestas para las intenciones listadas abajo.
-
-REGLA DE SILENCIO TOTAL:
-1. Si la intención del usuario coincide con un "Nombre de Plantilla", DEBES llamar a \`send_template\`.
-2. Tu respuesta de texto debe estar totalmente VACÍA. Solo emite la llamada a la herramienta.
-3. NO conoces el contenido de la plantilla, por lo que NO puedes parafrasearla. Confía en el sistema para entregar el mensaje oficial.
-
-## LIBRERÍA DE INTENCIONES AUTORIZADAS:
-| ID (template_id) | Nombre de Plantilla (Intención) | Variables Requeridas |
-|---|---|---|
-${templatesList}
-                `.trim(),
-                order: -100, // Máxima prioridad, al principio de todo
-                versionId: null
-            };
-
-            instructions.push(templateInstruction as any);
-            // Re-sort instructions to honor the new order
+                content: templateBlock.content,
+                order: -100,
+                versionId: null,
+            } as any);
             instructions.sort((a, b) => a.order - b.order);
         }
     }
