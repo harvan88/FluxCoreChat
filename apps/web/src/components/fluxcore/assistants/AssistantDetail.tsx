@@ -58,6 +58,9 @@ export function AssistantDetail({
         model: false
     });
 
+    const hiddenToolNames = new Set(['Búsqueda en archivos']);
+    const visibleTools = (tools || []).filter(tool => !hiddenToolNames.has(tool.name));
+
     const handleNameSave = (newName: string) => {
         onUpdate({ name: newName }, 'immediate');
     };
@@ -265,7 +268,7 @@ export function AssistantDetail({
                             <label className="block text-sm text-muted mb-1">Herramientas</label>
                             <div className="flex flex-wrap gap-2 mb-2">
                                 {(assistant.toolIds || []).map((id) => {
-                                    const tool = (tools || []).find(t => t.id === id);
+                                    const tool = visibleTools.find(t => t.id === id);
                                     return tool ? (
                                         <Badge key={id} variant="info" className="flex items-center gap-1">
                                             {tool.name}
@@ -285,7 +288,7 @@ export function AssistantDetail({
                             <div className="relative">
                                 {(() => {
                                     const used = new Set(assistant.toolIds || []);
-                                    const selectable = (tools || []).filter((t) => !used.has(t.id));
+                                    const selectable = visibleTools.filter((t) => !used.has(t.id));
                                     return (
                                         <select
                                             className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"

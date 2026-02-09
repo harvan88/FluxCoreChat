@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback, type KeyboardEvent } from 'react';
 import { api } from '../../../services/api';
 import {
+    AlertTriangle,
     AudioLines,
     Bot,
     BotMessageSquare,
@@ -22,8 +23,11 @@ import { CameraCaptureModal } from '../../../components/chat/CameraCaptureModal'
 import { EmojiPanel } from '../../../components/chat/EmojiPanel';
 import { TemplateQuickPicker } from '../../../components/chat/TemplateQuickPicker';
 import { useAutomation, type AutomationMode } from '../../../hooks/useAutomation';
+import { useAIStatus } from '../../../hooks/fluxcore';
 import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from '../../../components/chat/composerUploadTypes';
 import type { Template } from '../../../components/templates/types';
+import { usePanelStore } from '../../../store/panelStore';
+import { useUIStore } from '../../../store/uiStore';
 
 type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
 
@@ -55,9 +59,18 @@ export function FluxCoreComposer(props: {
     const [isEmojiOpen, setIsEmojiOpen] = useState(false);
     const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
     const [wasTextTruncated, setWasTextTruncated] = useState(false);
+    const openTab = usePanelStore((state) => state.openTab);
+    const setActiveActivity = useUIStore((state) => state.setActiveActivity);
 
     // Hook de automatización (Propiedad de FluxCore)
     const { currentMode, isLoading: isAutomationLoading, loadMode, setRule } = useAutomation(props.accountId ?? null, props.relationshipId);
+    const {
+        status: aiStatus,
+        eligibility: aiEligibility,
+        isLoading: isAIStatusLoading,
+        error: aiStatusError,
+        refresh: refreshAIStatus,
+    } = useAIStatus({ accountId: props.accountId ?? null, conversationId: props.conversationId ?? null });
 
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const openGalleryRef = useRef<(() => void) | null>(null);
@@ -67,8 +80,55 @@ export function FluxCoreComposer(props: {
     const isAutomaticMode = effectiveAIMode === 'automatic';
     const hasQueuedMedia = queuedMedia.length > 0;
     const hasText = props.value.trim().length > 0;
+    const aiBlockInfo = useMemo(() => {
+        if (!props.accountId) {
+            return null;
+        }
+
+        if (aiEligibility && !aiEligibility.canExecute) {
+            return {
+                title: 'IA no disponible',
+                description: aiEligibility.block.message,
+                reason: aiEligibility.block.reason,
+            };
+        }
+
+        if (aiStatus) {
+            if (!aiStatus.entitled) {
+                return {
+                    title: 'Cuenta sin permisos de IA',
+                    description: 'Otorga entitlements de IA a esta cuenta desde el panel administrativo.',
+                };
+            }
+
+            if (!aiStatus.enabled) {
+                return {
+                    title: 'IA deshabilitada',
+                    description: 'Activa la extensión FluxCore para esta cuenta para usar respuestas automáticas.',
+                };
+            }
+
+            if (!aiStatus.configured) {
+                return {
+                    title: 'Faltan credenciales de IA',
+                    description: 'Configura un proveedor (OpenAI o Groq) en FluxCore antes de habilitar la IA automática.',
+                };
+            }
+
+            if (aiStatus.connected === false) {
+                return {
+                    title: 'Credenciales con error',
+                    description: 'Las claves del proveedor seleccionado rechazaron la conexión. Revisa los datos en FluxCore.',
+                };
+            }
+        }
+
+        return null;
+    }, [aiEligibility, aiStatus, props.accountId]);
+
+    const isAutomationBlocked = Boolean(aiBlockInfo);
     const canSend = !props.disabled && !props.isSending && !isAutomaticMode && (hasText || hasQueuedMedia);
-    const canOpenAIModeSelector = !!props.accountId && !props.disabled;
+    const canOpenAIModeSelector = !!props.accountId && !props.disabled && !isAutomationBlocked;
 
     useEffect(() => {
         if (isAudioRecorderOpen) {
@@ -267,13 +327,35 @@ export function FluxCoreComposer(props: {
         </div>
     );
 
+    const handleOpenAssistantsPanel = useCallback(() => {
+        const extensionId = '@fluxcore/fluxcore';
+        openTab('extensions', {
+            type: 'extension',
+            identity: `extension:${extensionId}:assistants:${props.accountId ?? 'global'}`,
+            title: 'FluxCore · Asistentes',
+            icon: 'Bot',
+            closable: true,
+            context: {
+                extensionId,
+                extensionName: 'FluxCore',
+                view: 'assistants',
+                accountId: props.accountId ?? undefined,
+            },
+        });
+        setActiveActivity?.(`ext:${extensionId}` as any);
+    }, [openTab, setActiveActivity, props.accountId]);
+
+    const handleRefreshAIStatus = useCallback(() => {
+        void refreshAIStatus();
+    }, [refreshAIStatus]);
+
     const renderAutomaticMode = () => (
         <div className="flex items-center gap-3">
             <button onClick={() => setAIMode('disabled')} disabled={!props.accountId || props.disabled} className="px-5 h-12 rounded-full border bg-surface border-default text-primary hover:bg-hover">Desactivar</button>
             <div className="flex-1 min-w-0 bg-surface border border-default rounded-full px-4 h-12 flex items-center justify-center">
                 <div className="text-sm text-primary text-center truncate">Fluxcore responderá automáticamente</div>
             </div>
-            <button onClick={() => { if (canOpenAIModeSelector) setIsAIModeOpen(true); }} className="w-12 h-12 rounded-full flex items-center justify-center border bg-surface border-default hover:bg-hover">
+            <button onClick={() => { if (canOpenAIModeSelector) setIsAIModeOpen(true); }} disabled={!canOpenAIModeSelector} className={clsx('w-12 h-12 rounded-full flex items-center justify-center border bg-surface border-default transition-colors', !canOpenAIModeSelector ? 'opacity-50 cursor-not-allowed' : 'hover:bg-hover')}>
                 <AIIcon size={20} className={aiColorClassName} />
             </button>
         </div>
@@ -290,7 +372,7 @@ export function FluxCoreComposer(props: {
             <button onClick={() => {
                 if (canSend) handleSend();
                 else if (canOpenAIModeSelector) setIsAIModeOpen(true);
-            }} disabled={props.disabled || props.isSending} className={clsx('w-12 h-12 rounded-full flex items-center justify-center transition-colors', canSend ? 'bg-accent text-inverse' : 'bg-surface border border-default text-muted')}>
+            }} disabled={props.disabled || props.isSending} className={clsx('w-12 h-12 rounded-full flex items-center justify-center transition-colors', canSend ? 'bg-accent text-inverse' : 'bg-surface border border-default text-muted', (!canSend && !canOpenAIModeSelector) ? 'cursor-not-allowed opacity-60' : undefined)}>
                 {props.isSending ? <Loader2 className="animate-spin" size={20} /> : canSend ? <MoveUp size={20} /> : <AIIcon size={20} className={aiColorClassName} />}
             </button>
         </div>
@@ -390,6 +472,37 @@ export function FluxCoreComposer(props: {
                             </div>
                         );
                     })}
+                </div>
+            )}
+
+            {aiBlockInfo && (
+                <div className="mb-3 rounded-2xl border border-warning bg-warning/10 p-3">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle size={18} className="text-warning mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-warning">{aiBlockInfo.title}</div>
+                            <p className="text-xs text-secondary mt-1 text-primary">
+                                {aiBlockInfo.description}
+                            </p>
+                            {aiStatusError && (
+                                <p className="mt-1 text-xs text-error">{aiStatusError}</p>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <button type="button" onClick={handleOpenAssistantsPanel} className="px-3 py-1.5 text-xs rounded-full border border-default bg-surface hover:bg-hover text-primary">
+                                    Gestionar asistentes
+                                </button>
+                                <button type="button" onClick={handleRefreshAIStatus} disabled={isAIStatusLoading} className="px-3 py-1.5 text-xs rounded-full border border-subtle hover:bg-hover text-secondary disabled:opacity-50">
+                                    {isAIStatusLoading ? (
+                                        <span className="inline-flex items-center gap-1">
+                                            <Loader2 size={12} className="animate-spin" /> Actualizando
+                                        </span>
+                                    ) : (
+                                        'Reintentar validación'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 

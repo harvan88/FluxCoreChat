@@ -9,7 +9,7 @@ export interface MessageEnvelope {
     senderAccountId: string;
     content: MessageContent;
     type: 'incoming' | 'outgoing' | 'system';
-    generatedBy?: 'human' | 'ai';
+    generatedBy?: 'human' | 'ai' | 'system';
     timestamp?: Date;
     // Contexto adicional para extensiones
     targetAccountId?: string;  // La cuenta que recibe el mensaje

@@ -20,6 +20,7 @@ import { eq, sql } from 'drizzle-orm';
 import { chunkingService } from './chunking.service';
 import { embeddingService } from './embedding.service';
 import { ragConfigService } from './rag-config.service';
+import { syncVectorStoreStats } from './fluxcore/vector-store.service';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Types
@@ -245,6 +246,9 @@ export class DocumentProcessingService {
                 .set({ status: 'completed' })
                 .where(eq(fluxcoreVectorStoreFiles.id, fileId));
 
+            // 9. Sincronizar stats del vector store padre
+            await syncVectorStoreStats(vectorStoreId);
+
             updateJob(job.id, {
                 status: 'completed',
                 progress: 100,
@@ -270,6 +274,8 @@ export class DocumentProcessingService {
                     errorMessage: error.message,
                 })
                 .where(eq(fluxcoreVectorStoreFiles.id, fileId));
+
+            await syncVectorStoreStats(vectorStoreId);
 
             updateJob(job.id, {
                 status: 'failed',

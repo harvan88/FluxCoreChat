@@ -52,6 +52,149 @@ export const creditsRoutes = new Elysia({ prefix: '/credits' })
       detail: { tags: ['Credits'], summary: 'Admin: Search accounts with credits balance' },
     }
   )
+  .get(
+    '/admin/policies',
+    async ({ user, query, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const allowed = await systemAdminService.hasScope(user.id, 'policies');
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Forbidden' };
+      }
+
+      const filters = {
+        featureKey: ((query as any)?.featureKey as string | undefined)?.trim() || undefined,
+        engine: ((query as any)?.engine as string | undefined)?.trim() || undefined,
+        model: ((query as any)?.model as string | undefined)?.trim() || undefined,
+        active: typeof (query as any)?.active === 'string'
+          ? ((query as any).active === 'true' ? true : (query as any).active === 'false' ? false : undefined)
+          : undefined,
+      };
+
+      const rows = await creditsService.listPolicies(filters);
+      return { success: true, data: rows };
+    },
+    {
+      query: t.Object({
+        featureKey: t.Optional(t.String()),
+        engine: t.Optional(t.String()),
+        model: t.Optional(t.String()),
+        active: t.Optional(t.String()),
+      }),
+      detail: { tags: ['Credits'], summary: 'Admin: List credits policies' },
+    }
+  )
+  .post(
+    '/admin/policies',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const allowed = await systemAdminService.hasScope(user.id, 'policies');
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Forbidden' };
+      }
+
+      try {
+        const result = await creditsService.createPolicy(body as any);
+        return { success: true, data: result };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      body: t.Object({
+        featureKey: t.String(),
+        engine: t.String(),
+        model: t.String(),
+        costCredits: t.Number(),
+        tokenBudget: t.Number(),
+        durationHours: t.Optional(t.Number()),
+        active: t.Optional(t.Boolean()),
+      }),
+      detail: { tags: ['Credits'], summary: 'Admin: Create credits policy' },
+    }
+  )
+  .put(
+    '/admin/policies/:id',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const allowed = await systemAdminService.hasScope(user.id, 'policies');
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Forbidden' };
+      }
+
+      try {
+        const updated = await creditsService.updatePolicy(params.id, body as any);
+        if (!updated) {
+          set.status = 404;
+          return { success: false, message: 'Policy not found' };
+        }
+        return { success: true, data: updated };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        featureKey: t.Optional(t.String()),
+        engine: t.Optional(t.String()),
+        model: t.Optional(t.String()),
+        costCredits: t.Optional(t.Number()),
+        tokenBudget: t.Optional(t.Number()),
+        durationHours: t.Optional(t.Number()),
+        active: t.Optional(t.Boolean()),
+      }),
+      detail: { tags: ['Credits'], summary: 'Admin: Update credits policy' },
+    }
+  )
+  .post(
+    '/admin/policies/:id/toggle',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const allowed = await systemAdminService.hasScope(user.id, 'policies');
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Forbidden' };
+      }
+
+      try {
+        const updated = await creditsService.setPolicyActive(params.id, body.active);
+        if (!updated) {
+          set.status = 404;
+          return { success: false, message: 'Policy not found' };
+        }
+        return { success: true, data: updated };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ active: t.Boolean() }),
+      detail: { tags: ['Credits'], summary: 'Admin: Toggle credits policy state' },
+    }
+  )
   .post(
     '/admin/grant',
     async ({ user, body, set }) => {

@@ -8,7 +8,6 @@ export interface TemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   isActive?: boolean;
-  authorizeForAI?: boolean;
 }
 
 export interface TemplateUpdateInput extends Partial<TemplateInput> { }
@@ -41,16 +40,6 @@ export class TemplateService {
     return this.attachAssets(rows);
   }
 
-  async listAITemplates(accountId: string): Promise<TemplateWithAssets[]> {
-    const rows = await this.orm
-      .select()
-      .from(templates)
-      .where(and(eq(templates.accountId, accountId), eq(templates.authorizeForAI, true), eq(templates.isActive, true)))
-      .orderBy(desc(templates.updatedAt));
-
-    return this.attachAssets(rows);
-  }
-
   async getTemplate(accountId: string, templateId: string): Promise<TemplateWithAssets> {
     const template = await this.findTemplate(templateId);
     assertTemplateScope(template?.accountId, accountId);
@@ -71,7 +60,6 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? true,
-        authorizeForAI: payload.authorizeForAI ?? false,
       })
       .returning();
 
@@ -89,7 +77,6 @@ export class TemplateService {
       variables: data.variables ?? existing!.variables,
       tags: data.tags ?? existing!.tags,
       isActive: data.isActive ?? existing!.isActive,
-      authorizeForAI: data.authorizeForAI ?? existing!.authorizeForAI,
     });
 
     const [updated] = await this.orm
@@ -101,15 +88,14 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? existing!.isActive,
-        authorizeForAI: payload.authorizeForAI ?? existing!.authorizeForAI,
         updatedAt: new Date(),
       })
       .where(and(eq(templates.id, templateId), eq(templates.accountId, accountId)))
       .returning();
 
-    const assets = await this.getTemplateAssets(templateId);
-    return { ...updated, assets };
+    return { ...updated, assets: await this.getTemplateAssets(templateId) };
   }
+
 
   async deleteTemplate(accountId: string, templateId: string): Promise<void> {
     const existing = await this.findTemplate(templateId);
@@ -273,6 +259,36 @@ export class TemplateService {
       assets: grouped.get(template.id) || [],
     }));
   }
+  async linkAsset(accountId: string, templateId: string, assetId: string, slot: string = 'attachment') {
+    const template = await this.findTemplate(templateId);
+    assertTemplateScope(template?.accountId, accountId);
+
+    const { templateAssets } = await import('@fluxcore/db');
+
+    await this.orm.insert(templateAssets).values({
+      templateId,
+      assetId,
+      slot,
+      version: 1,
+    }).onConflictDoUpdate({
+      target: [templateAssets.templateId, templateAssets.assetId, templateAssets.slot],
+      set: { linkedAt: new Date() },
+    });
+  }
+
+  async unlinkAsset(accountId: string, templateId: string, assetId: string, slot: string = 'attachment') {
+    const template = await this.findTemplate(templateId);
+    assertTemplateScope(template?.accountId, accountId);
+
+    const { templateAssets } = await import('@fluxcore/db');
+
+    await this.orm.delete(templateAssets)
+      .where(and(
+        eq(templateAssets.templateId, templateId),
+        eq(templateAssets.assetId, assetId),
+        eq(templateAssets.slot, slot)
+      ));
+  }
 }
 
 export function normalizeTemplateInput(input: TemplateInput): Required<Omit<TemplateInput, 'category'>> & Pick<TemplateInput, 'category'> {
@@ -283,7 +299,6 @@ export function normalizeTemplateInput(input: TemplateInput): Required<Omit<Temp
     variables: input.variables ?? [],
     tags: input.tags ?? [],
     isActive: input.isActive ?? true,
-    authorizeForAI: input.authorizeForAI ?? false,
   };
 }
 

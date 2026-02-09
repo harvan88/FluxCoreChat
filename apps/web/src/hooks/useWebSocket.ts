@@ -202,6 +202,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
                 }
                 break;
 
+              case 'ai:execution_blocked': {
+                const blockedAccountId = message.data?.accountId;
+                const currentAccountId = useUIStore.getState().selectedAccountId;
+                // Only show toast to the account owner whose AI was blocked
+                if (message.data?.block && blockedAccountId === currentAccountId) {
+                  useUIStore.getState().pushToast({
+                    type: 'warning',
+                    title: 'IA no disponible',
+                    description: message.data.block.message || 'No se pudo generar una respuesta de IA.',
+                  });
+                }
+                return;
+              }
+
               case 'user_activity_state':
                 if (onActivityStateCallback) {
                   onActivityStateCallback({

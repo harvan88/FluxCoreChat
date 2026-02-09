@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import type { Assistant, AssistantCreate, AssistantUpdate } from '../../types/fluxcore';
+import { emitAssistantUpdateEvent } from './events';
 
 /**
  * useAssistants Hook
@@ -58,6 +59,7 @@ export function useAssistants(accountId: string) {
             const result = await res.json();
             if (result.success && result.data) {
                 setAssistants(prev => [...prev, result.data]);
+                emitAssistantUpdateEvent({ accountId, assistantId: result.data.id, action: 'create' });
                 return result.data as Assistant;
             } else {
                 setError(result.message || 'Error al crear asistente');
@@ -82,19 +84,18 @@ export function useAssistants(accountId: string) {
         setIsSaving(true);
         setError(null);
         try {
+            const bodyPayload = { ...updates, accountId };
             const res = await fetch(`/api/fluxcore/assistants/${id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ ...updates, accountId })
+                body: JSON.stringify(bodyPayload)
             });
             const result = await res.json();
             if (result.success) {
-                // En el original NO se sincronizaba con result.data porque el PUT 
-                // para asistentes en este backend puede no devolver relaciones.
-                // Confiamos en la actualización optimista de arriba.
+                emitAssistantUpdateEvent({ accountId, assistantId: id, action: 'update' });
                 return result.data as Assistant;
             } else {
                 setError(result.message || 'Error al guardar cambios');
@@ -125,6 +126,7 @@ export function useAssistants(accountId: string) {
             const result = await res.json();
             if (result.success) {
                 setAssistants(prev => prev.filter(a => a.id !== id));
+                emitAssistantUpdateEvent({ accountId, assistantId: id, action: 'delete' });
                 return true;
             } else {
                 setError(result.message || 'Error al eliminar asistente');
@@ -154,6 +156,7 @@ export function useAssistants(accountId: string) {
             });
             const result = await res.json();
             if (result.success) {
+                emitAssistantUpdateEvent({ accountId, assistantId: id, action: 'activate' });
                 // Al activar uno, otros podrían haber cambiado de estado en el backend
                 // Mejor recargar la lista completa para sincronizar estados de 'active' -> 'disabled'
                 await loadAssistants();
@@ -182,6 +185,23 @@ export function useAssistants(accountId: string) {
             return result.success ? result.data : null;
         } catch (err) {
             console.error('Error getting active config:', err);
+            return null;
+        }
+    }, [accountId, token]);
+
+    /**
+     * Obtener estado raw de un asistente desde la DB (para verificación de persistencia)
+     */
+    const getAssistantFromDB = useCallback(async (assistantId: string) => {
+        if (!accountId || !token || !assistantId) return null;
+        try {
+            const res = await fetch(`/api/fluxcore/assistants/${assistantId}?accountId=${encodeURIComponent(accountId)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const result = await res.json();
+            return result.success ? result.data : null;
+        } catch (err) {
+            console.error('Error getting assistant from DB:', err);
             return null;
         }
     }, [accountId, token]);
@@ -222,6 +242,7 @@ export function useAssistants(accountId: string) {
         deleteAssistant,
         activateAssistant,
         getActiveConfig,
+        getAssistantFromDB,
         refresh: loadAssistants,
         setError
     };

@@ -1,12 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
-import { Copy, Plus } from 'lucide-react';
+import { Copy, Plus, Loader2 } from 'lucide-react';
 import { DoubleConfirmationDeleteButton, CollapsibleSection, Button } from '../../ui';
 import { RAGConfigSection } from '../components/RAGConfigSection';
 import { VectorStoreFilesSection } from '../components/VectorStoreFilesSection';
+import { VectorStoreTestQuery } from './VectorStoreTestQuery';
 import type { VectorStore } from '../../../types/fluxcore';
 import { formatSize } from '../../../lib/fluxcore';
 import { EditableName } from '../detail/EditableName';
 import { useAssistants } from '../../../hooks/fluxcore/useAssistants';
+import { useAuthStore } from '../../../store/authStore';
 
 interface LocalVectorStoreDetailProps {
     store: VectorStore;
@@ -29,6 +31,7 @@ export function LocalVectorStoreDetail({
     saveError,
     onOpenTab
 }: LocalVectorStoreDetailProps) {
+    const { token } = useAuthStore();
     const nameInputRef = useRef<HTMLInputElement>(null);
     const [fileStats, setFileStats] = useState({
         count: store.fileCount ?? 0,
@@ -68,9 +71,29 @@ export function LocalVectorStoreDetail({
         await onSave();
     };
 
+    const [copyingSnapshot, setCopyingSnapshot] = useState(false);
+
     const handleCopyConfig = async () => {
-        const config = { vectorStore: store };
-        await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+        setCopyingSnapshot(true);
+        try {
+            const response = await fetch(
+                `/api/fluxcore/runtime/vector-store-snapshot/${store.id}?accountId=${accountId}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const json = await response.json();
+            if (json.success && json.data) {
+                await navigator.clipboard.writeText(JSON.stringify(json.data, null, 2));
+            } else {
+                throw new Error(json.message || 'Snapshot failed');
+            }
+        } catch (err) {
+            console.error('Error fetching snapshot:', err);
+            const fallback = { vectorStore: store, _source: 'ui_fallback' };
+            await navigator.clipboard.writeText(JSON.stringify(fallback, null, 2));
+        } finally {
+            setCopyingSnapshot(false);
+        }
     };
 
     return (
@@ -164,6 +187,12 @@ export function LocalVectorStoreDetail({
                             vectorStoreId={store.id}
                             accountId={accountId}
                         />
+                        <div className="pt-4 border-t border-dashed border-subtle">
+                            <VectorStoreTestQuery
+                                vectorStoreId={store.id}
+                                accountId={accountId}
+                            />
+                        </div>
                     </div>
 
                     <div className="space-y-3 py-4 border-b border-subtle">
@@ -210,10 +239,11 @@ export function LocalVectorStoreDetail({
             <div className="px-6 py-3 border-t border-subtle bg-surface flex items-center justify-between">
                 <button
                     onClick={handleCopyConfig}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded transition-all"
+                    disabled={copyingSnapshot}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded transition-all disabled:opacity-50"
                 >
-                    <Copy size={16} />
-                    <span>Copiar Configuración JSON</span>
+                    {copyingSnapshot ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+                    <span>{copyingSnapshot ? 'Cargando desde DB...' : 'Copiar Configuración JSON'}</span>
                 </button>
                 <DoubleConfirmationDeleteButton onConfirm={onDelete} size={16} />
             </div>

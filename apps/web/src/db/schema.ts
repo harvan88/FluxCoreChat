@@ -62,7 +62,7 @@ export interface LocalMessage {
   toActorId?: string;
   
   // AI metadata
-  generatedBy?: 'human' | 'ai';
+  generatedBy?: 'human' | 'ai' | 'system';
 }
 
 /**

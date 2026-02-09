@@ -19,6 +19,7 @@ export interface Template {
   assets?: TemplateAsset[];
   isActive: boolean;
   authorizeForAI: boolean;
+  aiUsageInstructions: string | null;
   usageCount: number;
   createdAt: string;
   updatedAt: string;
@@ -55,6 +56,7 @@ export interface CreateTemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   authorizeForAI?: boolean;
+  aiUsageInstructions?: string;
 }
 
 export interface UpdateTemplateInput {
@@ -65,6 +67,7 @@ export interface UpdateTemplateInput {
   tags?: string[];
   isActive?: boolean;
   authorizeForAI?: boolean;
+  aiUsageInstructions?: string;
 }
 
 // ============================================================================

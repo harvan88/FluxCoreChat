@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { templateService, type TemplateService } from '../services/template.service';
+import { fluxCoreTemplateSettingsService } from '../services/fluxcore/template-settings.service';
 
 interface HandlerContext<TBody = any, TQuery = any, TParams = any> {
   user: { id: string } | null;
@@ -26,7 +27,18 @@ export async function listTemplatesHandler(
   }
 
   const templates = await service.listTemplates(accountId);
-  return { success: true, data: templates };
+
+  // Enriquecer con FluxCore Settings
+  const ids = templates.map(t => t.id);
+  const settingsMap = await fluxCoreTemplateSettingsService.getSettingsMap(ids);
+
+  const enriched = templates.map(t => ({
+    ...t,
+    authorizeForAI: settingsMap.get(t.id)?.authorizeForAI || false,
+    aiUsageInstructions: settingsMap.get(t.id)?.aiUsageInstructions || null
+  }));
+
+  return { success: true, data: enriched };
 }
 
 export async function getTemplateHandler(
@@ -46,7 +58,18 @@ export async function getTemplateHandler(
 
   try {
     const template = await service.getTemplate(accountId, ctx.params.templateId);
-    return { success: true, data: template };
+
+    // Enriquecer con FluxCore Settings
+    const settings = await fluxCoreTemplateSettingsService.getSettings(template.id);
+
+    return {
+      success: true,
+      data: {
+        ...template,
+        authorizeForAI: settings.authorizeForAI,
+        aiUsageInstructions: settings.aiUsageInstructions
+      }
+    };
   } catch (error: any) {
     ctx.set.status = 404;
     return { success: false, message: error?.message ?? 'Template not found' };
@@ -63,8 +86,26 @@ export async function createTemplateHandler(
   }
 
   try {
-    const template = await service.createTemplate(ctx.body.accountId, ctx.body as any);
-    return { success: true, data: template };
+    const input = ctx.body as any;
+    const template = await service.createTemplate(input.accountId, input);
+
+    // Guardar configuración de FluxCore
+    if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions) {
+      await fluxCoreTemplateSettingsService.updateSettings(
+        template.id,
+        input.authorizeForAI ?? false,
+        input.aiUsageInstructions
+      );
+    }
+
+    return {
+      success: true,
+      data: {
+        ...template,
+        authorizeForAI: input.authorizeForAI ?? false,
+        aiUsageInstructions: input.aiUsageInstructions
+      }
+    };
   } catch (error: any) {
     ctx.set.status = 400;
     return { success: false, message: error?.message ?? 'Failed to create template' };
@@ -81,8 +122,30 @@ export async function updateTemplateHandler(
   }
 
   try {
-    const template = await service.updateTemplate(ctx.body.accountId, ctx.params.templateId, ctx.body as any);
-    return { success: true, data: template };
+    const input = ctx.body as any;
+    const template = await service.updateTemplate(input.accountId, ctx.params.templateId, input);
+
+    // Actualizar configuración de FluxCore (si viene en el body)
+    if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions !== undefined) {
+      const current = await fluxCoreTemplateSettingsService.getSettings(template.id);
+      await fluxCoreTemplateSettingsService.updateSettings(
+        template.id,
+        input.authorizeForAI ?? current.authorizeForAI,
+        input.aiUsageInstructions !== undefined ? input.aiUsageInstructions : current.aiUsageInstructions
+      );
+    }
+
+    // Obtener estado final
+    const finalSettings = await fluxCoreTemplateSettingsService.getSettings(template.id);
+
+    return {
+      success: true,
+      data: {
+        ...template,
+        authorizeForAI: finalSettings.authorizeForAI,
+        aiUsageInstructions: finalSettings.aiUsageInstructions
+      }
+    };
   } catch (error: any) {
     ctx.set.status = 400;
     return { success: false, message: error?.message ?? 'Failed to update template' };
@@ -141,6 +204,50 @@ export async function executeTemplateHandler(
   }
 }
 
+export async function linkTemplateAssetHandler(
+  ctx: HandlerContext<{ assetId: string; slot?: string }, { accountId?: string }, { templateId: string }>,
+  service: TemplateService = templateService
+) {
+  if (!ctx.user) {
+    ctx.set.status = 401;
+    return { success: false, message: 'Unauthorized' };
+  }
+  const accountId = ctx.query.accountId;
+  if (!accountId) {
+    ctx.set.status = 400;
+    return { success: false, message: 'accountId is required' };
+  }
+  try {
+    await service.linkAsset(accountId, ctx.params.templateId, ctx.body.assetId, ctx.body.slot);
+    return { success: true };
+  } catch (error: any) {
+    ctx.set.status = 400;
+    return { success: false, message: error?.message ?? 'Failed to link asset' };
+  }
+}
+
+export async function unlinkTemplateAssetHandler(
+  ctx: HandlerContext<unknown, { accountId?: string, slot?: string }, { templateId: string, assetId: string }>,
+  service: TemplateService = templateService
+) {
+  if (!ctx.user) {
+    ctx.set.status = 401;
+    return { success: false, message: 'Unauthorized' };
+  }
+  const accountId = ctx.query.accountId;
+  if (!accountId) {
+    ctx.set.status = 400;
+    return { success: false, message: 'accountId is required' };
+  }
+  try {
+    await service.unlinkAsset(accountId, ctx.params.templateId, ctx.params.assetId, ctx.query.slot);
+    return { success: true };
+  } catch (error: any) {
+    ctx.set.status = 400;
+    return { success: false, message: error?.message ?? 'Failed to unlink asset' };
+  }
+}
+
 export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
   .use(authMiddleware)
   .get('/', (ctx) => listTemplatesHandler(ctx), {
@@ -162,6 +269,7 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
       authorizeForAI: t.Optional(t.Boolean()),
+      aiUsageInstructions: t.Optional(t.String()),
     }),
     detail: {
       tags: ['Templates'],
@@ -176,22 +284,6 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       summary: 'Get template by id',
     },
   })
-  .post('/', (ctx) => createTemplateHandler(ctx), {
-    body: t.Object({
-      accountId: t.String(),
-      name: t.String({ minLength: 1, maxLength: 255 }),
-      content: t.String({ minLength: 1 }),
-      category: t.Optional(t.String({ maxLength: 100 })),
-      variables: t.Optional(t.Array(t.Any())),
-      tags: t.Optional(t.Array(t.String())),
-      isActive: t.Optional(t.Boolean()),
-      authorizeForAI: t.Optional(t.Boolean()),
-    }),
-    detail: {
-      tags: ['Templates'],
-      summary: 'Create template',
-    },
-  })
   .put('/:templateId', (ctx) => updateTemplateHandler(ctx), {
     params: t.Object({ templateId: t.String() }),
     body: t.Object({
@@ -203,6 +295,7 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
       authorizeForAI: t.Optional(t.Boolean()),
+      aiUsageInstructions: t.Optional(t.String()),
     }),
     detail: {
       tags: ['Templates'],
@@ -227,5 +320,25 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
     detail: {
       tags: ['Templates'],
       summary: 'Execute/Send template',
+    },
+  })
+  .post('/:templateId/assets', (ctx) => linkTemplateAssetHandler(ctx as any), {
+    params: t.Object({ templateId: t.String() }),
+    body: t.Object({
+      assetId: t.String(),
+      slot: t.Optional(t.String()),
+    }),
+    query: t.Object({ accountId: t.String() }),
+    detail: {
+      tags: ['Templates'],
+      summary: 'Link asset to template',
+    },
+  })
+  .delete('/:templateId/assets/:assetId', (ctx) => unlinkTemplateAssetHandler(ctx as any), {
+    params: t.Object({ templateId: t.String(), assetId: t.String() }),
+    query: t.Object({ accountId: t.String(), slot: t.Optional(t.String()) }),
+    detail: {
+      tags: ['Templates'],
+      summary: 'Unlink asset from template',
     },
   });

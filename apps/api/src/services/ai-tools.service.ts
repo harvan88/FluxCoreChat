@@ -1,5 +1,4 @@
 import { aiTemplateService } from './ai-template.service';
-import { templateService } from './template.service';
 
 export interface ToolDefinition {
     type: 'function';
@@ -52,7 +51,6 @@ export class AIToolService {
                         required: ['template_id'],
                         additionalProperties: false,
                     },
-                    strict: true,
                 },
             },
             {
@@ -130,7 +128,7 @@ export class AIToolService {
     }
 
     private async executeListTemplates(accountId: string): Promise<string> {
-        const templates = await templateService.listAITemplates(accountId);
+        const templates = await aiTemplateService.getAvailableTemplates(accountId);
 
         const simplified = templates.map(t => ({
             id: t.id,

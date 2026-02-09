@@ -16,6 +16,9 @@ import { pathToFileURL } from 'url';
 import { aiEntitlementsService, type AIProviderId } from './ai-entitlements.service';
 import { creditsService } from './credits.service';
 import { aiToolService } from './ai-tools.service';
+import { resolveExecutionPlan } from './ai-execution-plan.service';
+import type { GenerateResponseResult, EligiblePlan } from './ai-execution-plan';
+import { buildExtraInstructions } from '../../../../extensions/fluxcore/src/prompt-utils';
 
 type AISuggestion = {
   id: string;
@@ -305,13 +308,13 @@ class AIService {
         elapsedMs: Date.now() - start,
       });
 
-      // 🔧 NUEVO: Construir system prompt desde instructions del asistente
-      let systemPrompt = '';
-      if (composition?.instructions) {
-        for (const instruction of composition.instructions) {
-          systemPrompt += instruction.content + '\n\n';
-        }
-      }
+      // 🔧 NUEVO: Construir system prompt desde instructions del asistente, incluyendo aviso de RAG cuando aplique
+      const hasKnowledgeBase = Array.isArray(composition?.vectorStores) && composition.vectorStores.length > 0;
+      const extraInstructions = buildExtraInstructions({
+        instructions: composition?.instructions,
+        includeSearchKnowledge: hasKnowledgeBase,
+      });
+      const systemPrompt = extraInstructions.join('\n\n');
 
       // Crear evento de mensaje
       const event: MessageEvent = {
@@ -401,6 +404,7 @@ class AIService {
         console.log('[ai-service] 🚀 Usando flujo de OpenAI Assistants API');
 
         const { runAssistantWithMessages } = await import('./openai-sync.service');
+        const { templateRegistryService } = await import('./fluxcore/template-registry.service');
 
         // Construir mensajes para el thread de OpenAI
         const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -427,11 +431,22 @@ class AIService {
           });
         }
 
-        // Ejecutar el asistente de OpenAI
+        // Inyección dinámica de plantillas via additional_instructions
+        const templateBlock = await templateRegistryService.buildInstructionBlock(recipientAccountId);
+        const additionalInstructions = templateBlock?.content || undefined;
+
+        if (templateBlock) {
+          console.log(`${tracePrefix} template registry: ${templateBlock.templateCount} plantillas inyectadas via additional_instructions`);
+        }
+
+        // Ejecutar el asistente de OpenAI (tools inyectados dinámicamente para garantizar disponibilidad)
+        const { aiToolService: toolService } = await import('./ai-tools.service');
         const result = await runAssistantWithMessages({
           assistantExternalId,
           messages: threadMessages,
           instructions: systemPrompt.trim() || undefined,
+          additionalInstructions,
+          tools: toolService.getTools(),
           traceId,
           accountId: recipientAccountId,
           conversationId,
@@ -1251,52 +1266,64 @@ class AIService {
   }
 
   /**
-   * Generar respuesta manualmente
+   * Genera una respuesta de IA para una conversación.
+   *
+   * Usa ExecutionPlan como single source of truth: toda la resolución de
+   * asistente, provider, créditos y elegibilidad ocurre en un solo paso
+   * ANTES de tocar la extensión FluxCore.
+   *
+   * @returns GenerateResponseResult — discriminated union:
+   *   - { ok: true, suggestion }  → respuesta generada (o null si vacía)
+   *   - { ok: false, block }      → bloqueado con motivo (créditos, API key, etc.)
    */
   async generateResponse(
     conversationId: string,
     recipientAccountId: string,
     lastMessageContent: string,
     options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date; traceId?: string } = {}
-  ): Promise<AISuggestion | null> {
+  ): Promise<GenerateResponseResult> {
     const tracePrefix = options.traceId ? `[ai-service][${options.traceId}]` : '[ai-service]';
     const start = Date.now();
 
-    console.log(`${tracePrefix} generateResponse start`, {
-      conversationId,
-      recipientAccountId,
-      mode: options.mode,
-      triggerMessageId: options.triggerMessageId,
-    });
+    // ── 1. Resolve execution plan (single source of truth) ──────────────
+    const plan = await resolveExecutionPlan(recipientAccountId, conversationId);
 
-    const extension = await this.getFluxCoreExtension();
-    if (!extension) return null;
-
-    const config = await this.getAccountConfig(recipientAccountId);
-    const gated = await this.applyCreditsGating({
-      accountId: recipientAccountId,
-      conversationId,
-      config,
-    });
-
-    if (!gated.config.enabled || gated.config.mode === 'off') {
-      return null;
+    if (!plan.canExecute) {
+      console.log(`${tracePrefix} BLOCKED: ${plan.block.reason} — ${plan.block.message}`);
+      return { ok: false, block: plan.block };
     }
 
-    const modeForPrompt = options.mode || config.mode;
-
-    await extension.onConfigChange(recipientAccountId, {
-      enabled: gated.config.enabled,
-      mode: modeForPrompt,
-      responseDelay: gated.config.responseDelay,
-      provider: gated.config.provider,
-      model: gated.config.model || 'llama-3.1-8b-instant',
-      maxTokens: gated.config.maxTokens || 256,
-      temperature: gated.config.temperature || 0.7,
-      timeoutMs: 15000,
-      providerOrder: gated.config.providerOrder,
+    console.log(`${tracePrefix} plan resolved`, {
+      runtime: plan.runtime,
+      provider: plan.provider,
+      model: plan.model,
+      mode: plan.mode,
+      creditsSession: plan.creditsSessionId ? 'active' : 'none',
+      elapsedMs: Date.now() - start,
     });
 
+    // ── 2. Load extension ───────────────────────────────────────────────
+    const extension = await this.getFluxCoreExtension();
+    if (!extension) {
+      return { ok: false, block: { reason: 'no_extension', message: 'La extensión FluxCore no está disponible.' } };
+    }
+
+    // ── 3. Configure extension with plan data ───────────────────────────
+    const modeForPrompt = options.mode || plan.mode;
+
+    await extension.onConfigChange(recipientAccountId, {
+      enabled: true,
+      mode: modeForPrompt,
+      responseDelay: plan.responseDelay,
+      provider: plan.provider,
+      model: plan.model,
+      maxTokens: plan.maxTokens,
+      temperature: plan.temperature,
+      timeoutMs: 15000,
+      providerOrder: plan.providerOrder,
+    });
+
+    // ── 4. Build context ────────────────────────────────────────────────
     const context = await this.buildContext(recipientAccountId, conversationId);
 
     const event: MessageEvent = {
@@ -1309,307 +1336,23 @@ class AIService {
       createdAt: options.triggerMessageCreatedAt || new Date(),
     };
 
-    try {
-      const { fluxcoreService } = await import('./fluxcore.service');
-      const composition = await fluxcoreService.resolveActiveAssistant(recipientAccountId);
-
-      const assistantRuntime = composition?.assistant?.runtime;
-      const assistantExternalId = composition?.assistant?.externalId;
-
-      if (assistantRuntime === 'openai' && assistantExternalId) {
-        const assistantModelConfig = (composition?.assistant?.modelConfig as Record<string, any>) || {};
-        const assistantModel = typeof assistantModelConfig.model === 'string' ? assistantModelConfig.model : null;
-        const assistantMaxTokens = typeof assistantModelConfig.maxTokens === 'number'
-          ? assistantModelConfig.maxTokens
-          : gated.config.maxTokens || 256;
-        const assistantTemperature = typeof assistantModelConfig.temperature === 'number'
-          ? assistantModelConfig.temperature
-          : gated.config.temperature || 0.7;
-
-        const { runAssistantWithMessages } = await import('./openai-sync.service');
-
-        const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-
-        if (Array.isArray((context as any)?.messages)) {
-          for (const msg of (context as any).messages) {
-            const role = msg.senderAccountId === recipientAccountId ? 'assistant' : 'user';
-
-            const ts = msg.createdAt instanceof Date
-              ? msg.createdAt.toISOString()
-              : new Date(msg.createdAt as any).toISOString();
-
-            const content = typeof msg.content === 'string' ? msg.content : String(msg.content);
-            const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(content);
-
-            threadMessages.push({
-              role,
-              content: alreadyPrefixed ? content : `[${ts}] ${content}`,
-            });
-          }
-        }
-
-        const currentTs = event.createdAt instanceof Date
-          ? event.createdAt.toISOString()
-          : new Date(event.createdAt as any).toISOString();
-
-        const currentContent = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(lastMessageContent)
-          ? lastMessageContent
-          : `[${currentTs}] ${lastMessageContent}`;
-
-        const currentMsgInHistory = threadMessages.some((m) =>
-          m.content.includes(lastMessageContent) || lastMessageContent.includes(m.content)
-        );
-        let appendedCurrentMessage = false;
-        if (!currentMsgInHistory) {
-          threadMessages.push({
-            role: 'user',
-            content: currentContent,
-          });
-          appendedCurrentMessage = true;
-        }
-
-        const instructionIds = Array.isArray(composition?.instructions)
-          ? composition!.instructions
-            .map((i: any) => (typeof i?.id === 'string' ? i.id : ''))
-            .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
-          : undefined;
-
-        const instructionLinks = Array.isArray(composition?.instructions)
-          ? composition!.instructions
-            .map((i: any) => ({
-              id: typeof i?.id === 'string' ? i.id : '',
-              name: typeof i?.name === 'string' ? i.name : undefined,
-              order: typeof i?.order === 'number' ? i.order : undefined,
-              versionId: typeof i?.versionId === 'string' ? i.versionId : null,
-            }))
-            .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
-          : undefined;
-
-        const instructionContents = Array.isArray(composition?.instructions)
-          ? composition!.instructions
-            .map((i: any) => (typeof i?.content === 'string' ? i.content : ''))
-            .filter((x: string) => x.trim().length > 0)
-          : [];
-
-        const vectorStoreIds = Array.isArray(composition?.vectorStores)
-          ? composition!.vectorStores
-            .map((vs: any) => (typeof vs?.id === 'string' ? vs.id : ''))
-            .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
-          : undefined;
-
-        const vectorStores = Array.isArray(composition?.vectorStores)
-          ? composition!.vectorStores
-            .map((vs: any) => ({
-              id: typeof vs?.id === 'string' ? vs.id : '',
-              name: typeof vs?.name === 'string' ? vs.name : undefined,
-            }))
-            .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
-          : undefined;
-
-        const toolIds = Array.isArray(composition?.tools)
-          ? composition!.tools
-            .map((t: any) => (typeof t?.connectionId === 'string' ? t.connectionId : (typeof t?.id === 'string' ? t.id : '')))
-            .filter((x: string) => typeof x === 'string' && x.trim().length > 0)
-          : undefined;
-
-        const tools = Array.isArray(composition?.tools)
-          ? composition!.tools
-            .map((t: any) => ({
-              id: typeof t?.connectionId === 'string' ? t.connectionId : (typeof t?.id === 'string' ? t.id : ''),
-              name: typeof t?.name === 'string' ? t.name : undefined,
-            }))
-            .filter((x: any) => typeof x?.id === 'string' && x.id.trim().length > 0)
-          : undefined;
-
-        const assistantMeta = composition?.assistant ? {
-          assistantId: composition.assistant.id,
-          assistantName: typeof composition.assistant?.name === 'string' ? composition.assistant.name : undefined,
-          instructionIds,
-          instructionLinks,
-          vectorStoreIds,
-          vectorStores,
-          toolIds,
-          tools,
-          modelConfig: composition.assistant?.modelConfig
-            ? {
-              provider: composition.assistant.modelConfig.provider,
-              model: composition.assistant.modelConfig.model,
-              temperature: composition.assistant.modelConfig.temperature,
-              topP: composition.assistant.modelConfig.topP,
-              responseFormat: (composition.assistant.modelConfig as any)?.responseFormat,
-            }
-            : undefined,
-          effective: undefined as any, // Initialize for later assignment
-        } : undefined;
-
-        const traceContext = {
-          ...context,
-          assistantMeta,
-        };
-
-        const systemPromptSections: string[] = [];
-        if (instructionContents.length > 0) {
-          systemPromptSections.push(instructionContents.join('\n\n'));
-        } else {
-          systemPromptSections.push('Instrucciones gestionadas en OpenAI Assistants.');
-        }
-        systemPromptSections.push(`assistantExternalId: ${assistantExternalId}`);
-        const systemPromptText = systemPromptSections.join('\n\n');
-
-        const baseMessages = appendedCurrentMessage
-          ? threadMessages.slice(0, -1)
-          : [...threadMessages];
-        const messagesWithCurrent = [...threadMessages];
-
-        const requestBodyForTrace = {
-          model: assistantModel || 'openai-assistant',
-          messages: [
-            { role: 'system', content: systemPromptText },
-            ...messagesWithCurrent,
-          ],
-          max_tokens: assistantMaxTokens,
-          temperature: assistantTemperature,
-        };
-
-        const attemptStartedAt = Date.now();
-        const result = await runAssistantWithMessages({
-          assistantExternalId,
-          messages: threadMessages,
-          traceId: options.traceId,
-          accountId: recipientAccountId,
-          conversationId,
-        });
-
-        const traceAttempt: any = {
-          provider: 'openai',
-          baseUrl: 'assistants://api.openai.com',
-          keySource: 'openai_assistants_api',
-          attempt: 1,
-          startedAt: new Date(attemptStartedAt).toISOString(),
-          durationMs: Date.now() - attemptStartedAt,
-          requestBody: requestBodyForTrace,
-          ok: result.success && !!result.content,
-        };
-
-        if (traceAttempt.ok && result.usage) {
-          traceAttempt.response = {
-            content: result.content,
-            usage: {
-              prompt_tokens: result.usage.promptTokens,
-              completion_tokens: result.usage.completionTokens,
-              total_tokens: result.usage.totalTokens,
-            },
-          };
-        } else if (!traceAttempt.ok) {
-          traceAttempt.error = {
-            type: 'unknown',
-            message: result.error || 'Assistant run failed',
-          };
-        }
-
-        if (assistantMeta) {
-          assistantMeta.effective = {
-            provider: 'openai',
-            baseUrl: 'assistants://api.openai.com',
-            model: assistantModel || 'openai-assistant',
-            maxTokens: assistantMaxTokens,
-            temperature: assistantTemperature,
-          };
-        }
-
-        const traceEntry = {
-          id: options.traceId || crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          accountId: recipientAccountId,
-          conversationId,
-          messageId: event.messageId,
-          mode: modeForPrompt === 'auto' ? 'auto' : 'suggest',
-          model: assistantModel || 'openai-assistant',
-          maxTokens: assistantMaxTokens,
-          temperature: assistantTemperature,
-          context: traceContext,
-          builtPrompt: {
-            systemPrompt: systemPromptText,
-            messages: baseMessages,
-            messagesWithCurrent,
-          },
-          attempts: [traceAttempt],
-          final: traceAttempt.ok && result.usage
-            ? {
-              provider: 'openai',
-              baseUrl: 'assistants://api.openai.com',
-              usage: {
-                prompt_tokens: result.usage.promptTokens,
-                completion_tokens: result.usage.completionTokens,
-                total_tokens: result.usage.totalTokens,
-              },
-            }
-            : undefined,
-        };
-
-        try {
-          const extension = await this.getFluxCoreExtension();
-          if (extension && typeof extension.recordTrace === 'function') {
-            extension.recordTrace(traceEntry);
-          }
-        } catch (traceError) {
-          console.warn('[ai-service] Failed to record OpenAI trace', traceError);
-        }
-
-        if (!result.success || !result.content) {
-          return null;
-        }
-
-        const suggestion: AISuggestion = {
-          id: crypto.randomUUID(),
-          conversationId,
-          content: result.content,
-          generatedAt: new Date(),
-          model: assistantModel || 'gpt-4o',
-          provider: 'openai',
-          usage: result.usage
-            ? {
-              promptTokens: result.usage.promptTokens,
-              completionTokens: result.usage.completionTokens,
-              totalTokens: result.usage.totalTokens,
-            }
-            : {
-              promptTokens: 0,
-              completionTokens: 0,
-              totalTokens: 0,
-            },
-          status: 'pending',
-        };
-
-        this.suggestions.set(suggestion.id, suggestion);
-
-        if (
-          gated.sessionId &&
-          suggestion.usage.totalTokens &&
-          typeof suggestion.usage.totalTokens === 'number'
-        ) {
-          await creditsService.consumeSessionTokens({
-            sessionId: gated.sessionId,
-            tokens: suggestion.usage.totalTokens,
-          });
-        }
-
-        return suggestion;
+    // ── 5. Execute: OpenAI Assistants API path ──────────────────────────
+    if (plan.runtime === 'openai' && plan.externalId) {
+      try {
+        const suggestion = await this.executeOpenAIAssistantsPath(plan, context, event, lastMessageContent, options);
+        return { ok: true, suggestion };
+      } catch (error: any) {
+        console.error(`${tracePrefix} OpenAI Assistants path failed:`, error?.message);
+        // Fall through to local runtime as last resort
       }
-
-      console.log(`${tracePrefix} fallback to local runtime`, {
-        reason: assistantRuntime !== 'openai' ? 'runtime_not_openai' : 'missing_externalId',
-        runtime: assistantRuntime,
-        externalId: assistantExternalId,
-        elapsedMs: Date.now() - start,
-      });
-    } catch (error: any) {
-      console.warn(`${tracePrefix} Failed to resolve assistant runtime for generateResponse`, {
-        message: error?.message || String(error),
-        stack: error?.stack,
-        elapsedMs: Date.now() - start,
-      });
     }
+
+    // ── 6. Execute: Local runtime (FluxCore extension) ──────────────────
+    console.log(`${tracePrefix} executing local runtime`, {
+      provider: plan.provider,
+      model: plan.model,
+      elapsedMs: Date.now() - start,
+    });
 
     const suggestion = await extension.generateSuggestion(event, context, recipientAccountId);
 
@@ -1617,14 +1360,155 @@ class AIService {
       this.suggestions.set(suggestion.id, suggestion);
     }
 
-    if (
-      gated.sessionId &&
-      suggestion?.provider === 'openai' &&
-      suggestion?.usage?.totalTokens &&
-      typeof suggestion.usage.totalTokens === 'number'
-    ) {
+    // Consume credits if applicable
+    if (plan.creditsSessionId && suggestion?.provider === 'openai' && suggestion?.usage?.totalTokens) {
       await creditsService.consumeSessionTokens({
-        sessionId: gated.sessionId,
+        sessionId: plan.creditsSessionId,
+        tokens: suggestion.usage.totalTokens,
+      });
+    }
+
+    return { ok: true, suggestion: suggestion || null };
+  }
+
+  /**
+   * OpenAI Assistants API execution path.
+   * Extracted from generateResponse for clarity.
+   */
+  private async executeOpenAIAssistantsPath(
+    plan: EligiblePlan,
+    context: any,
+    event: MessageEvent,
+    lastMessageContent: string,
+    options: { traceId?: string; mode?: string },
+  ): Promise<AISuggestion | null> {
+    const { composition } = plan;
+    const externalId = plan.externalId!;
+    const tracePrefix = options.traceId ? `[ai-service][${options.traceId}]` : '[ai-service]';
+
+    const { runAssistantWithMessages } = await import('./openai-sync.service');
+
+    // Build thread messages from context
+    const threadMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+    if (Array.isArray((context as any)?.messages)) {
+      for (const msg of (context as any).messages) {
+        const role = msg.senderAccountId === plan.accountId ? 'assistant' : 'user';
+        const ts = msg.createdAt instanceof Date
+          ? msg.createdAt.toISOString()
+          : new Date(msg.createdAt as any).toISOString();
+        const content = typeof msg.content === 'string' ? msg.content : String(msg.content);
+        const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(content);
+        threadMessages.push({
+          role,
+          content: alreadyPrefixed ? content : `[${ts}] ${content}`,
+        });
+      }
+    }
+
+    // Append current message if not in history
+    const currentTs = event.createdAt instanceof Date
+      ? event.createdAt.toISOString()
+      : new Date(event.createdAt as any).toISOString();
+    const currentContent = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(lastMessageContent)
+      ? lastMessageContent
+      : `[${currentTs}] ${lastMessageContent}`;
+    const currentMsgInHistory = threadMessages.some((m) =>
+      m.content.includes(lastMessageContent) || lastMessageContent.includes(m.content)
+    );
+    if (!currentMsgInHistory) {
+      threadMessages.push({ role: 'user', content: currentContent });
+    }
+
+    // Build system prompt from instructions
+    const instructionContents = composition.instructions
+      .map((i) => i.content)
+      .filter((c) => c.trim().length > 0);
+
+    const systemPromptSections: string[] = [];
+    if (instructionContents.length > 0) {
+      systemPromptSections.push(instructionContents.join('\n\n'));
+    } else {
+      systemPromptSections.push('Instrucciones gestionadas en OpenAI Assistants.');
+    }
+    systemPromptSections.push(`assistantExternalId: ${externalId}`);
+    const systemPromptText = systemPromptSections.join('\n\n');
+
+    // Template injection
+    const { templateRegistryService } = await import('./fluxcore/template-registry.service');
+    const { aiToolService: toolService } = await import('./ai-tools.service');
+    const templateBlock = await templateRegistryService.buildInstructionBlock(plan.accountId);
+    const additionalInstructions = templateBlock?.content || undefined;
+    const runtimeTools = toolService.getTools();
+
+    if (templateBlock) {
+      console.log(`${tracePrefix} template registry: ${templateBlock.templateCount} plantillas inyectadas`);
+    }
+
+    // Execute
+    const attemptStartedAt = Date.now();
+    const result = await runAssistantWithMessages({
+      assistantExternalId: externalId,
+      messages: threadMessages,
+      instructions: systemPromptText,
+      additionalInstructions,
+      tools: runtimeTools,
+      traceId: options.traceId,
+      accountId: plan.accountId,
+      conversationId: plan.conversationId,
+    });
+
+    // Record trace
+    try {
+      const ext = await this.getFluxCoreExtension();
+      if (ext && typeof ext.recordTrace === 'function') {
+        ext.recordTrace({
+          id: options.traceId || crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          accountId: plan.accountId,
+          conversationId: plan.conversationId,
+          messageId: event.messageId,
+          mode: plan.mode === 'auto' ? 'auto' : 'suggest',
+          model: plan.model,
+          maxTokens: plan.maxTokens,
+          temperature: plan.temperature,
+          attempts: [{
+            provider: 'openai',
+            baseUrl: 'assistants://api.openai.com',
+            attempt: 1,
+            startedAt: new Date(attemptStartedAt).toISOString(),
+            durationMs: Date.now() - attemptStartedAt,
+            ok: result.success && !!result.content,
+          }],
+        });
+      }
+    } catch (traceError) {
+      console.warn('[ai-service] Failed to record OpenAI trace', traceError);
+    }
+
+    if (!result.success || !result.content) {
+      return null;
+    }
+
+    const suggestion: AISuggestion = {
+      id: crypto.randomUUID(),
+      conversationId: plan.conversationId,
+      content: result.content,
+      generatedAt: new Date(),
+      model: plan.model,
+      provider: 'openai',
+      usage: result.usage
+        ? { promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens, totalTokens: result.usage.totalTokens }
+        : { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      status: 'pending',
+    };
+
+    this.suggestions.set(suggestion.id, suggestion);
+
+    // Consume credits
+    if (plan.creditsSessionId && suggestion.usage.totalTokens) {
+      await creditsService.consumeSessionTokens({
+        sessionId: plan.creditsSessionId,
         tokens: suggestion.usage.totalTokens,
       });
     }

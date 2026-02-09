@@ -69,7 +69,7 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
           
           // Registrar en MessageCore también
           messageCore.subscribe(data.relationshipId, (payload) => {
-            broadcast(data.relationshipId!, payload);
+            broadcastToRelationship(data.relationshipId!, payload);
           });
           
           ws.send(JSON.stringify({ 
@@ -273,7 +273,7 @@ export function handleWSClose(ws: any): void {
   }
 }
 
-function broadcast(relationshipId: string, payload: any): void {
+export function broadcastToRelationship(relationshipId: string, payload: any): void {
   const subs = subscriptions.get(relationshipId);
   if (subs) {
     const message = JSON.stringify(payload);
@@ -353,7 +353,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       }));
 
       const lastMessage = data.content?.text || 'Mensaje del usuario';
-      const aiSuggestion = await extensionHost.generateAIResponse(
+      const result = await extensionHost.generateAIResponse(
         conversationId!,
         accountId!,
         lastMessage,
@@ -365,6 +365,16 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
         }
       );
 
+      if (!result.ok) {
+        ws.send(JSON.stringify({
+          type: 'suggestion:unavailable',
+          reason: result.block.message,
+          conversationId,
+        }));
+        return null;
+      }
+
+      const aiSuggestion = result.suggestion;
       if (!aiSuggestion) {
         ws.send(JSON.stringify({
           type: 'suggestion:unavailable',
@@ -381,9 +391,9 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
         extensionId: '@fluxcore/fluxcore',
         suggestedText: stripped.text,
         confidence: 0.9,
-        reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage.totalTokens} tokens)`,
+        reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage?.totalTokens ?? 0} tokens)`,
         alternatives: [],
-        createdAt: aiSuggestion.generatedAt.toISOString(),
+        createdAt: aiSuggestion.generatedAt?.toISOString() ?? new Date().toISOString(),
         mode: evaluation.mode,
       };
     };

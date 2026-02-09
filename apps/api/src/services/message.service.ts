@@ -11,7 +11,7 @@ export class MessageService {
     senderAccountId: string;
     content: MessageContent;
     type: 'incoming' | 'outgoing' | 'system';
-    generatedBy?: 'human' | 'ai';
+    generatedBy?: 'human' | 'ai' | 'system';
     aiApprovedBy?: string;
   }) {
     const [message] = await db

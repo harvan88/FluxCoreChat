@@ -161,7 +161,89 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
         }
       }
 
-      await copyToClipboard(JSON.stringify(details, null, 2));
+      // Generar reporte legible en Markdown
+      const report = details.map((d: any) => {
+        if (d.error) return `# Trace ${d.id}\n\n**Error:** ${d.error}\n\n---\n`;
+
+        const assistantMeta = d.context?.assistantMeta || {};
+        const modelConfig = assistantMeta.modelConfig || {};
+        const effective = assistantMeta.effective || {};
+
+        const instructionNames = (assistantMeta.instructionLinks || [])
+          .map((x: any) => `${x?.name || '—'} (${x?.id || '—'})`)
+          .join(', ') || '—';
+
+        const vectorStoreNames = (assistantMeta.vectorStores || [])
+          .map((x: any) => x?.name || '—')
+          .join(', ') || (assistantMeta.vectorStoreIds?.join(', ') || '—');
+
+        const toolNames = (assistantMeta.tools || [])
+          .map((x: any) => x?.name || '—')
+          .join(', ') || '—';
+
+        const usageFinal = d.final?.usage
+          ? `${d.final.usage.prompt_tokens} + ${d.final.usage.completion_tokens} = ${d.final.usage.total_tokens}`
+          : '—';
+
+        const messagesText = JSON.stringify(d.builtPrompt?.messagesWithCurrent || [], null, 2);
+        const contextText = JSON.stringify(d.context || {}, null, 2);
+
+        const toolsUsedSection = Array.isArray(d.toolsUsed) && d.toolsUsed.length > 0
+          ? `Herramientas ejecutadas\n\n${d.toolsUsed.map((tool: any, idx: number) => {
+            const status = tool?.status || 'not_invoked';
+            return `${tool?.name || 'Tool'}\n${status}\nconnectionId: ${tool?.connectionId || '—'}\n${status === 'not_invoked' ? 'Pendiente de ejecución' : ''}`;
+          }).join('\n\n')}`
+          : '';
+
+        const attemptsSection = (d.attempts || []).map((a: any, idx: number) => {
+          return `Attempt ${idx + 1}: ${a.provider} (${a.ok ? 'ok' : 'error'})\n\n${a.baseUrl}\n${typeof a.durationMs === 'number' ? `${a.durationMs} ms` : ''}\n\`\`\`json\n${JSON.stringify(a.requestBody, null, 2)}\n\`\`\`\n${a.error ? `\n**Error:**\n\`\`\`json\n${JSON.stringify(a.error, null, 2)}\n\`\`\`` : ''}`;
+        }).join('\n\n');
+
+        return `Resumen
+
+traceId
+${d.id}
+createdAt
+${d.createdAt}
+conversationId
+${d.conversationId}
+model
+${d.model}
+final usage
+${usageFinal}
+Runtime
+
+assistant
+${assistantMeta.assistantName || '—'} (${assistantMeta.assistantId || '—'})
+instructions
+${instructionNames}
+vector stores
+${vectorStoreNames}
+requested model
+${modelConfig.provider || '—'} / ${modelConfig.model || '—'}
+effective model
+${effective.provider || '—'} / ${effective.model || '—'}
+effective baseUrl
+${effective.baseUrl || '—'}
+System Prompt
+
+${d.builtPrompt?.systemPrompt || ''}
+
+assistantExternalId: ${assistantMeta.assistantExternalId || d.context?.assistantExternalId || '—'}
+Messages (with current)
+
+${messagesText}
+ContextData
+
+${contextText}
+${toolsUsedSection}
+${attemptsSection}
+
+---
+`;
+      }).join('\n\n');
+
+      await copyToClipboard(report);
     } catch (e: any) {
       setError(e?.message || 'Error al copiar trazas');
     } finally {

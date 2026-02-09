@@ -242,7 +242,7 @@ export function toRAGConfig(record: FluxcoreRagConfiguration): RAGConfig {
 
         retrieval: {
             topK: record.retrievalTopK || 10,
-            minScore: parseFloat(record.retrievalMinScore || '0.5'),
+            minScore: parseFloat(record.retrievalMinScore || '0.3'),
             maxTokens: record.retrievalMaxTokens || 2000,
             hybridSearch: {
                 enabled: record.hybridSearchEnabled || false,
@@ -291,7 +291,7 @@ export const DEFAULT_RAG_CONFIG: Omit<RAGConfig, 'id'> = {
     },
     retrieval: {
         topK: 10,
-        minScore: 0.5,
+        minScore: 0.3,
         maxTokens: 2000,
         hybridSearch: {
             enabled: false,

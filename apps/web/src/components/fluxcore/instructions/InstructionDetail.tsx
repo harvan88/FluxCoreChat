@@ -1,11 +1,12 @@
-import { RefObject } from 'react';
-import { FileText, Pencil, Code, Eye, Copy, Download, X, Plus, Loader2, ListOrdered, Type, Hash, FileCode } from 'lucide-react';
+import { RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { FileText, Pencil, Code, Eye, Copy, Download, X, Plus, Loader2, ListOrdered, Type, Hash, FileCode, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, DoubleConfirmationDeleteButton, CollapsibleSection } from '../../ui';
 import type { Instruction } from '../../../types/fluxcore';
 import type { ClipboardStatus, EditorViewMode } from '../../../types/fluxcore/instruction.types';
+import type { PromptPreviewData } from '../../../types';
 
 interface InstructionStats {
   lines: number;
@@ -48,6 +49,16 @@ interface InstructionDetailProps {
   onCreateAssistant?: () => void;
   createAssistantLoading?: boolean;
   isAutoSaving: boolean;
+  onRequestPromptPreview?: (assistantId: string, assistantName?: string) => void;
+  promptPreview?: {
+    isOpen: boolean;
+    loading: boolean;
+    data: PromptPreviewData | null;
+    error: string | null;
+    assistantId: string | null;
+    assistantName: string | null;
+  };
+  onClosePromptPreview?: () => void;
 }
 
 export function InstructionDetail({
@@ -77,8 +88,26 @@ export function InstructionDetail({
   onCreateAssistant,
   createAssistantLoading = false,
   isAutoSaving,
+  onRequestPromptPreview,
+  promptPreview,
+  onClosePromptPreview,
 }: InstructionDetailProps) {
   const lines = (instruction?.content || '').split('\n');
+  const [previewPickerOpen, setPreviewPickerOpen] = useState(false);
+  const previewPickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!previewPickerOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (previewPickerRef.current && !previewPickerRef.current.contains(event.target as Node)) {
+        setPreviewPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [previewPickerOpen]);
+
+  const canPreviewAssistant = assistantConsumers.length > 0 && typeof onRequestPromptPreview === 'function';
 
   const formatRuntime = (runtime?: string) => {
     if (!runtime) return 'Local';
@@ -95,6 +124,22 @@ export function InstructionDetail({
     if (minutes < 60) return `Autoguardado hace ${minutes} min`;
     if (hours < 24) return `Autoguardado hace ${hours} h`;
     return `Autoguardado ${lastAutosave.toLocaleDateString()} ${lastAutosave.toLocaleTimeString()}`;
+  };
+
+  const handlePromptPreviewClick = () => {
+    if (!canPreviewAssistant) return;
+    if (assistantConsumers.length === 1) {
+      const single = assistantConsumers[0];
+      onRequestPromptPreview?.(single.id, single.name);
+      setPreviewPickerOpen(false);
+      return;
+    }
+    setPreviewPickerOpen((prev) => !prev);
+  };
+
+  const handleSelectPromptPreview = (assistantId: string, assistantName?: string) => {
+    onRequestPromptPreview?.(assistantId, assistantName);
+    setPreviewPickerOpen(false);
   };
 
   return (
@@ -165,6 +210,34 @@ export function InstructionDetail({
             <Eye size={14} />
             Vista previa
           </button>
+          <div className="relative" ref={previewPickerRef}>
+            <button
+              onClick={handlePromptPreviewClick}
+              disabled={!canPreviewAssistant}
+              className={`px-3 py-1.5 text-sm rounded flex items-center gap-1 ${canPreviewAssistant ? 'text-muted hover:text-primary' : 'text-muted opacity-50 cursor-not-allowed'}`}
+              title={canPreviewAssistant ? (assistantConsumers.length === 0 ? 'Ningún asistente usa esta instrucción' : 'Ver prompt final que recibe la IA') : 'Ningún asistente utiliza esta instrucción'}
+            >
+              <Sparkles size={14} />
+              Vista final (IA)
+            </button>
+            {previewPickerOpen && assistantConsumers.length > 1 && (
+              <div className="absolute right-0 mt-2 w-64 rounded-lg border border-subtle bg-surface shadow-xl z-20">
+                <div className="px-3 py-2 text-xs text-muted uppercase tracking-wide">Elegí un asistente</div>
+                <div className="max-h-64 overflow-auto">
+                  {assistantConsumers.map((consumer) => (
+                    <button
+                      key={consumer.id}
+                      onClick={() => handleSelectPromptPreview(consumer.id, consumer.name)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-hover flex flex-col"
+                    >
+                      <span className="text-primary font-medium">{consumer.name || consumer.id}</span>
+                      <span className="text-xs text-secondary">{formatRuntime(consumer.runtime)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="w-px h-6 bg-subtle mx-2" />
           <button
             className="p-2 hover:bg-hover rounded flex items-center gap-1"
@@ -323,6 +396,48 @@ export function InstructionDetail({
           </div>
         </div>
       </div>
+
+      {promptPreview?.isOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-subtle rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            <div className="px-6 py-4 border-b border-subtle flex items-center justify-between">
+              <div>
+                <p className="text-sm text-secondary">Vista final (IA)</p>
+                <p className="text-lg font-semibold text-primary">{promptPreview.assistantName || 'Asistente'}</p>
+              </div>
+              <button className="p-2 hover:bg-hover rounded" onClick={onClosePromptPreview}>
+                <X size={18} className="text-muted" />
+              </button>
+            </div>
+            <div className="p-6 flex-1 overflow-auto">
+              {promptPreview.loading ? (
+                <div className="flex flex-col items-center justify-center text-secondary gap-3 py-12">
+                  <Loader2 size={28} className="animate-spin" />
+                  <p className="text-sm">Generando vista previa…</p>
+                </div>
+              ) : promptPreview.error ? (
+                <div className="rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error">
+                  {promptPreview.error}
+                </div>
+              ) : promptPreview.data ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-subtle bg-elevated px-4 py-3 text-xs text-secondary flex flex-wrap gap-4">
+                    <span><span className="text-muted uppercase tracking-wide text-[11px]">Modelo:</span> {promptPreview.data.config.model}</span>
+                    <span><span className="text-muted uppercase tracking-wide text-[11px]">Temperatura:</span> {promptPreview.data.config.temperature}</span>
+                    <span><span className="text-muted uppercase tracking-wide text-[11px]">Máx. tokens:</span> {promptPreview.data.config.maxTokens}</span>
+                    <span><span className="text-muted uppercase tracking-wide text-[11px]">Modo:</span> {promptPreview.data.config.mode}</span>
+                  </div>
+                  <pre className="rounded-lg border border-subtle bg-elevated/60 p-4 text-xs text-primary whitespace-pre-wrap font-mono max-h-[60vh] overflow-auto">
+                    {promptPreview.data.systemPrompt}
+                  </pre>
+                </div>
+              ) : (
+                <div className="text-sm text-secondary">Sin datos disponibles.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

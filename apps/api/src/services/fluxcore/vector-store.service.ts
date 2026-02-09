@@ -25,6 +25,43 @@ export function getOpenAIDriver(): OpenAIDriver {
 
 
 // ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Recalcula file_counts, size_bytes y fileCount en fluxcore_vector_stores
+ * a partir de los archivos reales en fluxcore_vector_store_files.
+ */
+export async function syncVectorStoreStats(vectorStoreId: string): Promise<void> {
+    const files = await db
+        .select()
+        .from(fluxcoreVectorStoreFiles)
+        .where(eq(fluxcoreVectorStoreFiles.vectorStoreId, vectorStoreId));
+
+    const total = files.length;
+    const completed = files.filter(f => f.status === 'completed').length;
+    const failed = files.filter(f => f.status === 'failed').length;
+    const inProgress = files.filter(f => f.status === 'processing' || f.status === 'pending').length;
+    const totalSize = files.reduce((sum, f) => sum + (f.sizeBytes ?? 0), 0);
+
+    await db
+        .update(fluxcoreVectorStores)
+        .set({
+            fileCount: total,
+            sizeBytes: totalSize,
+            fileCounts: {
+                total,
+                completed,
+                failed,
+                cancelled: 0,
+                in_progress: inProgress,
+            },
+            updatedAt: new Date(),
+        })
+        .where(eq(fluxcoreVectorStores.id, vectorStoreId));
+}
+
+// ============================================================================
 // VECTOR STORES
 // ============================================================================
 
@@ -210,19 +247,7 @@ export async function addVectorStoreFile(data: NewFluxcoreVectorStoreFile): Prom
         .values(data)
         .returning();
 
-    // Actualizar contador de archivos en el vector store
-    const files = await db
-        .select()
-        .from(fluxcoreVectorStoreFiles)
-        .where(eq(fluxcoreVectorStoreFiles.vectorStoreId, data.vectorStoreId));
-
-    await db
-        .update(fluxcoreVectorStores)
-        .set({
-            fileCount: files.length,
-            updatedAt: new Date()
-        })
-        .where(eq(fluxcoreVectorStores.id, data.vectorStoreId));
+    await syncVectorStoreStats(data.vectorStoreId);
 
     return file;
 }
@@ -235,6 +260,11 @@ export async function deleteVectorStoreFile(id: string, vectorStoreId: string): 
             eq(fluxcoreVectorStoreFiles.vectorStoreId, vectorStoreId)
         ))
         .returning();
+
+    if (result.length > 0) {
+        await syncVectorStoreStats(vectorStoreId);
+    }
+
     return result.length > 0;
 }
 

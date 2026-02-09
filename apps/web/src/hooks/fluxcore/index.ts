@@ -22,3 +22,4 @@ export { useAssistants } from './useAssistants';
 export { useInstructions } from './useInstructions';
 export { useVectorStores } from './useVectorStores';
 export { useTools } from './useTools';
+export { useAIStatus } from './useAIStatus';

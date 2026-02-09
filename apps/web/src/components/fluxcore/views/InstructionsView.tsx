@@ -5,18 +5,15 @@
  * durante la edición y el guardado automático.
  */
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useAuthStore } from '../../../store/authStore';
-import { usePanelStore } from '../../../store/panelStore';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  useInstructions,
   useAssistants,
-  useAutoSave,
-  useEntitySelection
+  useInstructions,
+  useEntitySelection,
 } from '../../../hooks/fluxcore';
-import type { Instruction } from '../../../types/fluxcore';
-import type { ClipboardStatus, EditorViewMode } from '../../../types/fluxcore/instruction.types';
-import { InstructionDetail } from '../instructions/InstructionDetail';
+import {
+  InstructionDetail
+} from '../instructions/InstructionDetail';
 import { InstructionList } from '../instructions/InstructionList';
 import {
   MAX_INSTRUCTION_CHARS,
@@ -25,8 +22,13 @@ import {
   countWords,
   estimateTokens,
 } from '../../../lib/fluxcore';
-
-const MAX_CHARS = MAX_INSTRUCTION_CHARS;
+import type { Instruction } from '../../../types/fluxcore';
+import type { ClipboardStatus, EditorViewMode } from '../../../types/fluxcore/instruction.types';
+import type { PromptPreviewData } from '../../../types';
+import { api } from '../../../services/api';
+import { useAuthStore } from '../../../store/authStore';
+import { usePanelStore } from '../../../store/panelStore';
+import { useAutoSave } from '../../../hooks/fluxcore/useAutoSave';
 
 interface InstructionsViewProps {
   accountId: string;
@@ -34,19 +36,39 @@ interface InstructionsViewProps {
   instructionId?: string;
 }
 
-export function InstructionsView({ accountId, onOpenTab, instructionId }: InstructionsViewProps) {
+export function InstructionsView({
+  accountId,
+  onOpenTab,
+  instructionId
+}: InstructionsViewProps) {
   const { token } = useAuthStore();
   const { openTab } = usePanelStore();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [localSelectedInstruction, setLocalSelectedInstruction] = useState<Instruction | null>(null);
-  const [viewMode, setViewMode] = useState<EditorViewMode>('code');
+  const [viewMode, setViewMode] = useState<EditorViewMode>('preview');
+  const [copyStatus, setCopyStatus] = useState<ClipboardStatus>('idle');
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<ClipboardStatus>('idle');
-  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const [lastAutosave, setLastAutosave] = useState<Date | null>(null);
+  const [promptPreviewState, setPromptPreviewState] = useState<{
+    isOpen: boolean;
+    loading: boolean;
+    data: PromptPreviewData | null;
+    error: string | null;
+    assistantId: string | null;
+    assistantName: string | null;
+  }>({
+    isOpen: false,
+    loading: false,
+    data: null,
+    error: null,
+    assistantId: null,
+    assistantName: null,
+  });
 
   // Ref para capturar el estado más reciente dentro de closures (autosave)
   const currentInstructionRef = useRef<Instruction | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
     instructions,
@@ -63,13 +85,49 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
     createAssistant: createAssistantHook,
   } = useAssistants(accountId);
 
-  const [lastAutosave, setLastAutosave] = useState<Date | null>(null);
   const [creatingAssistant, setCreatingAssistant] = useState(false);
 
   // Sincronizar el ref con el estado local cada vez que este cambie
   useEffect(() => {
     currentInstructionRef.current = localSelectedInstruction;
   }, [localSelectedInstruction]);
+
+  const handleRequestPromptPreview = useCallback(async (assistantId: string, assistantName?: string) => {
+    setPromptPreviewState({
+      isOpen: true,
+      loading: true,
+      data: null,
+      error: null,
+      assistantId,
+      assistantName: assistantName || null,
+    });
+
+    const response = await api.getPromptPreview(assistantId, accountId);
+    if (response.success && response.data) {
+      setPromptPreviewState({
+        isOpen: true,
+        loading: false,
+        data: response.data,
+        error: null,
+        assistantId,
+        assistantName: assistantName || null,
+      });
+      return;
+    }
+
+    setPromptPreviewState({
+      isOpen: true,
+      loading: false,
+      data: null,
+      error: response.error || response.message || 'No se pudo obtener la vista previa',
+      assistantId,
+      assistantName: assistantName || null,
+    });
+  }, [accountId]);
+
+  const handleClosePromptPreview = useCallback(() => {
+    setPromptPreviewState((prev) => ({ ...prev, isOpen: false }));
+  }, []);
 
   // 1. Configuración de Selección (useEntitySelection)
   const selectionOptions = useMemo(() => ({
@@ -191,7 +249,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
 
   const handleContentChange = (newContent: string) => {
     if (!localSelectedInstruction) return;
-    const truncatedContent = newContent.slice(0, MAX_CHARS);
+    const truncatedContent = newContent.slice(0, MAX_INSTRUCTION_CHARS);
 
     // Actualización local inmediata (Estabilidad)
     setLocalSelectedInstruction(prev => prev ? { ...prev, content: truncatedContent } : prev);
@@ -358,7 +416,7 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
         onSave={!isManaged ? handleSave : undefined}
         canSave={!isManaged && hasChanges && !isSaving}
         isSaving={isSaving}
-        maxChars={MAX_CHARS}
+        maxChars={MAX_INSTRUCTION_CHARS}
         deleteError={deleteError}
         onDelete={handleDeleteInstruction}
         onNameChange={handleNameChange}
@@ -380,6 +438,9 @@ export function InstructionsView({ accountId, onOpenTab, instructionId }: Instru
         onCreateAssistant={assistantConsumers.length === 0 ? handleCreateAssistantForInstruction : undefined}
         createAssistantLoading={creatingAssistant}
         isAutoSaving={isAutoSaving}
+        onRequestPromptPreview={assistantConsumers.length > 0 ? handleRequestPromptPreview : undefined}
+        onClosePromptPreview={handleClosePromptPreview}
+        promptPreview={promptPreviewState}
       />
     );
   }

@@ -15,6 +15,9 @@ import type {
   AccountDeletionLog,
   AccountDataReference,
   AccountOrphanReference,
+  AIStatusResponse,
+  AIEligibilityResponse,
+  PromptPreviewData,
 } from '../types';
 import type {
   Template,
@@ -167,6 +170,16 @@ class ApiService {
 
   async getAccount(id: string): Promise<ApiResponse<Account>> {
     return this.request<Account>(`/accounts/${id}`);
+  }
+
+  async getAIStatus(accountId: string): Promise<ApiResponse<AIStatusResponse>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<AIStatusResponse>(`/ai/status?${query.toString()}`);
+  }
+
+  async getAIEligibility(params: { accountId: string; conversationId: string }): Promise<ApiResponse<AIEligibilityResponse>> {
+    const query = new URLSearchParams({ accountId: params.accountId, conversationId: params.conversationId });
+    return this.request<AIEligibilityResponse>(`/ai/eligibility?${query.toString()}`);
   }
 
   async updateAccount(id: string, data: Partial<Account>): Promise<ApiResponse<Account>> {
@@ -375,11 +388,74 @@ class ApiService {
     });
   }
 
+  async getPromptPreview(assistantId: string, accountId?: string): Promise<ApiResponse<PromptPreviewData>> {
+    const query = new URLSearchParams();
+    if (accountId) query.set('accountId', accountId);
+    const qs = query.toString();
+    const suffix = qs ? `?${qs}` : '';
+    return this.request<PromptPreviewData>(`/fluxcore/runtime/prompt-preview/${assistantId}${suffix}`);
+  }
+
+  async creditsAdminListPolicies(filters?: {
+    featureKey?: string;
+    engine?: string;
+    model?: string;
+    active?: boolean;
+  }): Promise<ApiResponse<any[]>> {
+    const params = new URLSearchParams();
+    if (filters?.featureKey) params.set('featureKey', filters.featureKey);
+    if (filters?.engine) params.set('engine', filters.engine);
+    if (filters?.model) params.set('model', filters.model);
+    if (typeof filters?.active === 'boolean') params.set('active', filters.active ? 'true' : 'false');
+
+    const query = params.toString();
+    const endpoint = query ? `/credits/admin/policies?${query}` : '/credits/admin/policies';
+    return this.request(endpoint) as any;
+  }
+
+  async creditsAdminCreatePolicy(payload: {
+    featureKey: string;
+    engine: string;
+    model: string;
+    costCredits: number;
+    tokenBudget: number;
+    durationHours?: number;
+    active?: boolean;
+  }): Promise<ApiResponse<{ id: string }>> {
+    return this.request('/credits/admin/policies', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }) as any;
+  }
+
+  async creditsAdminUpdatePolicy(id: string, payload: {
+    featureKey?: string;
+    engine?: string;
+    model?: string;
+    costCredits?: number;
+    tokenBudget?: number;
+    durationHours?: number;
+    active?: boolean;
+  }): Promise<ApiResponse<any>> {
+    return this.request(`/credits/admin/policies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }) as any;
+  }
+
+  async creditsAdminTogglePolicy(id: string, active: boolean): Promise<ApiResponse<any>> {
+    return this.request(`/credits/admin/policies/${id}/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ active }),
+    }) as any;
+  }
+
   // Search accounts by @alias, email, or name
   async searchAccounts(query: string): Promise<ApiResponse<Account[]>> {
     return this.request<Account[]>(`/accounts/search?q=${encodeURIComponent(query)}`);
   }
 
+  // ... rest of the code remains the same ...
   // Create relationship (add contact)
   async addContact(accountAId: string, accountBId: string): Promise<ApiResponse<Relationship>> {
     return this.request<Relationship>('/relationships', {
