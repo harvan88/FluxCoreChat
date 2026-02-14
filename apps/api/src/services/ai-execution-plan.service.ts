@@ -117,7 +117,7 @@ export async function resolveExecutionPlan(
     .where(
       and(
         eq(extensionInstallations.accountId, accountId),
-        eq(extensionInstallations.extensionId, '@fluxcore/fluxcore'),
+        eq(extensionInstallations.extensionId, '@fluxcore/asistentes'),
       ),
     )
     .limit(1);
@@ -216,14 +216,27 @@ export async function resolveExecutionPlan(
         );
       }
 
+      // Special handling for FK violation which indicates a sync/integrity issue
+      if (msg.includes('foreign key constraint') && msg.includes('conversation')) {
+        console.error('[execution-plan] Critical Integrity Error: Conversation not found for credits session', { conversationId, accountId });
+        return blocked(
+          accountId,
+          conversationId,
+          'ai_disabled',
+          `IA no disponible temporalmente por error de integridad (Conversación).`,
+          undefined,
+          composition
+        );
+      }
+
       // Unexpected system/DB error — block with diagnostic info
       console.error('[execution-plan] Credits gating error:', msg);
       return blocked(
         accountId,
         conversationId,
-        'insufficient_credits',
-        `Error al verificar créditos para "${assistantName}": ${msg}`,
-        { requiredProvider: 'openai', creditBalance: balance },
+        'ai_disabled',
+        `Error al verificar créditos para "${assistantName}". Por favor, contacte a soporte.`,
+        undefined,
         composition,
       );
     }

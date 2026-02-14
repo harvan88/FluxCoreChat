@@ -9,3 +9,5 @@ export { LocalVectorStoresView } from './LocalVectorStoresView';
 export { OpenAIVectorStoresView } from './OpenAIVectorStoresView';
 export { ToolsView } from './ToolsView';
 export { UsageView } from './UsageView';
+export { AgentsView } from './AgentsView';
+export { AgentView } from './AgentView';

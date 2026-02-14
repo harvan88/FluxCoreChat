@@ -204,6 +204,7 @@ export interface AIStatusResponse {
   entitled: boolean;
   enabled: boolean;
   mode: 'suggest' | 'auto' | 'off' | null;
+  activeRuntimeId?: string; // @fluxcore/fluxi or @fluxcore/asistentes
   allowedProviders: AIProvider[];
   provider: AIProvider | null;
   model: string | null;

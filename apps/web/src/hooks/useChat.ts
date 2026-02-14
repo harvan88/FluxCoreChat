@@ -17,7 +17,7 @@ interface UseChatOptions {
 
 interface SendMessageParams {
   content: { text?: string; type?: string };
-  generatedBy?: 'human' | 'ai';
+  generatedBy?: 'human' | 'ai' | 'system';
   replyToId?: string;
 }
 

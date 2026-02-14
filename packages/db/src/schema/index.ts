@@ -67,3 +67,18 @@ export * from './template-assets';
 export * from './plan-assets';
 export * from './templates';
 export * from './fluxcore-template-settings';
+
+// Fase 2: AI Persistence (traces, signals, suggestions)
+export * from './ai-traces';
+export * from './ai-signals';
+export * from './ai-suggestions';
+
+// Fase 3: Agent Runtime Engine (multi-agente)
+export * from './fluxcore-agents';
+
+// WOS-100: Work Execution System (WES)
+export * from './wes';
+
+// Dimensión 1: Configuración de Runtime (Soberanía de Cuenta)
+export * from './account-runtime-config';
+

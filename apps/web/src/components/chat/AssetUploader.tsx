@@ -26,7 +26,6 @@ interface AssetUploaderProps {
     maxSizeBytes?: number;
     allowedMimeTypes?: string[];
     className?: string;
-    compact?: boolean;
 }
 
 type FileType = 'image' | 'video' | 'audio' | 'document';
@@ -78,7 +77,6 @@ export function AssetUploader({
     maxSizeBytes = 100 * 1024 * 1024,
     allowedMimeTypes,
     className,
-    compact = false,
 }: AssetUploaderProps) {
     const [isDragging, setIsDragging] = useState(false);
     const [queue, setQueue] = useState<QueuedFile[]>([]);

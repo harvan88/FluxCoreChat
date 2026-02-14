@@ -310,13 +310,13 @@ class CreditsService {
       // This ensures credits are always checked even for models without a specific policy row.
       const policy: CreditsPolicyView = policyRow
         ? {
-            featureKey: policyRow.featureKey,
-            engine: policyRow.engine,
-            model: policyRow.model,
-            costCredits: policyRow.costCredits,
-            tokenBudget: policyRow.tokenBudget,
-            durationHours: policyRow.durationHours,
-          }
+          featureKey: policyRow.featureKey,
+          engine: policyRow.engine,
+          model: policyRow.model,
+          costCredits: policyRow.costCredits,
+          tokenBudget: policyRow.tokenBudget,
+          durationHours: policyRow.durationHours,
+        }
         : DEFAULT_POLICY;
 
       await tx.insert(creditsWallets).values({ accountId: params.accountId }).onConflictDoNothing();

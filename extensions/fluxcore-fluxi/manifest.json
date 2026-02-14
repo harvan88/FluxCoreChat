@@ -1,0 +1,32 @@
+{
+    "id": "@fluxcore/fluxi",
+    "name": "Fluxi",
+    "version": "1.0.0",
+    "description": "Sistema de Ejecución de Trabajos (WES) determinista para procesos de negocio",
+    "author": "FluxCore",
+    "preinstalled": true,
+    "permissions": [
+        "read:context.public",
+        "read:context.private",
+        "read:context.relationship",
+        "read:messages",
+        "send:messages",
+        "modify:automation",
+        "tools:register"
+    ],
+    "hooks": [
+        "onMessage",
+        "onInstall"
+    ],
+    "ui": {
+        "sidebar": {
+            "icon": "zap",
+            "title": "Fluxi"
+        },
+        "panel": {
+            "title": "Fluxi Dashboard",
+            "component": "FluxiPanel"
+        }
+    },
+    "entrypoint": "./src/index.ts"
+}

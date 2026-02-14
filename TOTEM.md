@@ -8,6 +8,8 @@
 | Fecha | Modificación |
 |-------|--------------|
 | 2024-12-09 | **Mobile-First:** Los DynamicContainer son mobile-first, diseñados para verse perfectamente desde dispositivo móvil. |
+| 2026-02-12 | **Template Core:** Integración del sistema de plantillas (Templates) en el núcleo y herramientas para la IA. |
+| 2026-02-12 | **Asset Management System:** Integración del sistema unificado de assets (imágenes, documentos, execution plans) como componente central del núcleo. |
 
 ---
 
@@ -28,6 +30,8 @@
 │   │   • Multi-canal (WhatsApp, Telegram, Web)             │     │
 │   │   • Identidades múltiples por persona                 │     │
 │   │   • Contextos públicos, privados y relacionales       │     │
+│   │   • Gestión de Plantillas (Templates)                 │     │
+│   │   • Sistema de Assets y Almacenamiento                │     │
 │   │                                                        │     │
 │   └───────────────────────────────────────────────────────┘     │
 │                            ▲                                     │
@@ -404,8 +408,89 @@ CREATE TABLE message_enrichments (
   created_at TIMESTAMP DEFAULT now()
 );
 
+CREATE INDEX idx_messages_created ON messages(created_at DESC);
+
 -- ═══════════════════════════════════════════════════════════════
--- CAPA 3: COLABORACIÓN (LAZY - solo cuando se necesita)
+-- CAPA 3: PLANTILLAS (CORE)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  category VARCHAR(100),
+  variables JSONB DEFAULT '[]'::jsonb, -- Array de metadatos de variables
+  tags JSONB DEFAULT '[]'::jsonb,
+  is_active BOOLEAN DEFAULT true,
+  usage_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE template_assets (
+  template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+  asset_id UUID NOT NULL, -- FK a tabla assets
+  slot VARCHAR(50) DEFAULT 'default',
+  linked_at TIMESTAMP DEFAULT now(),
+  PRIMARY KEY (template_id, asset_id, slot)
+);
+
+-- ═══════════════════════════════════════════════════════════════
+-- CAPA 4: ASSETS (CORE)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE assets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID REFERENCES accounts(id),
+  workspace_id UUID,
+  name VARCHAR(255) NOT NULL,
+  original_name VARCHAR(255),
+  mime_type VARCHAR(100),
+  size_bytes BIGINT,
+  storage_key TEXT NOT NULL,
+  checksum_sha256 CHAR(64),
+  scope VARCHAR(50) DEFAULT 'message_attachment',
+  status VARCHAR(20) DEFAULT 'ready',
+  version INTEGER DEFAULT 1,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE asset_policies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID REFERENCES accounts(id),
+  name VARCHAR(100) NOT NULL,
+  scope VARCHAR(50) NOT NULL,
+  allowed_contexts JSONB, -- Array de "action:channel"
+  default_ttl_seconds INTEGER DEFAULT 3600,
+  is_active BOOLEAN DEFAULT true
+);
+
+-- Relaciones
+CREATE TABLE message_assets (
+  message_id UUID REFERENCES messages(id),
+  asset_id UUID REFERENCES assets(id),
+  PRIMARY KEY (message_id, asset_id)
+);
+
+CREATE TABLE template_assets (
+  template_id UUID REFERENCES templates(id),
+  asset_id UUID REFERENCES assets(id),
+  PRIMARY KEY (template_id, asset_id)
+);
+
+CREATE TABLE plan_assets (
+  plan_id UUID NOT NULL, -- Referencia lógica a execution_plan
+  asset_id UUID REFERENCES assets(id),
+  step_id VARCHAR(100),
+  dependency_type VARCHAR(20) DEFAULT 'required', -- required, optional, output
+  is_ready BOOLEAN DEFAULT false,
+  PRIMARY KEY (plan_id, asset_id)
+);
+
+-- ═══════════════════════════════════════════════════════════════
+-- CAPA 5: COLABORACIÓN (LAZY - solo cuando se necesita)
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE TABLE workspaces (
@@ -427,7 +512,7 @@ CREATE TABLE workspace_members (
 );
 
 -- ═══════════════════════════════════════════════════════════════
--- CAPA 4: EXTENSIONES
+-- CAPA 6: EXTENSIONES
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE TABLE extension_installations (
@@ -441,13 +526,16 @@ CREATE TABLE extension_installations (
   UNIQUE(account_id, extension_id)
 );
 
--- Ejemplo: Configuración de @fluxcore/core-ai (extensión IA por defecto)
--- INSERT INTO extension_installations (account_id, extension_id, config)
--- VALUES ('uuid', '@fluxcore/core-ai', '{
---   "enabled": true,
---   "mode": "suggest",
---   "response_delay": 30
--- }');
+-- ═══════════════════════════════════════════════════════════════
+-- CAPA 7: ENRIQUECIMIENTO FLUXCORE (Opcional/IA)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE fluxcore_template_settings (
+  template_id UUID PRIMARY KEY REFERENCES templates(id) ON DELETE CASCADE,
+  authorize_for_ai BOOLEAN DEFAULT false,
+  ai_usage_instructions TEXT,
+  updated_at TIMESTAMP DEFAULT now()
+);
 
 CREATE TABLE extension_contexts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -483,6 +571,7 @@ CREATE INDEX idx_relationships_b ON relationships(account_b_id);
 CREATE INDEX idx_conversations_relationship ON conversations(relationship_id);
 CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX idx_messages_created ON messages(created_at DESC);
+CREATE INDEX idx_templates_account ON templates(account_id);
 ```
 
 ### Componentes Core
@@ -533,6 +622,47 @@ class MessageCore {
   // NOTA: La lógica de IA se ejecuta en la extensión @fluxcore/core-ai
   // El núcleo NO tiene conocimiento de IA, solo persiste y delega
 }
+
+#### TemplateService (Gestión de Plantillas)
+
+```typescript
+// apps/api/src/services/template.service.ts
+
+/**
+ * TemplateService - Gestiona plantillas del núcleo
+ * 
+ * Responsabilidades:
+ * 1. CRUD de plantillas por cuenta
+ * 2. Gestión de assets adjuntos
+ * 3. Ejecución (envío) de plantillas con reemplazo de variables
+ */
+class TemplateService {
+  async executeTemplate(params: ExecuteTemplateParams): Promise<Message> {
+    // 1. Obtener template + assets
+    // 2. Reemplazar {{variables}} en el contenido
+    // 3. Enviar mensaje vía MessageCore
+    // 4. Vincular assets al mensaje enviado
+  }
+}
+
+#### AssetRegistryService (Sistema de Assets)
+
+```typescript
+// apps/api/src/services/asset-registry.service.ts
+
+/**
+ * AssetRegistryService - Punto único para gestión de archivos
+ * 
+ * Responsabilidades:
+ * 1. Gestionar el ciclo de vida de los assets (pending -> ready -> archived)
+ * 2. Aplicar deduplicación controlada (intra-account) basada en hashes
+ * 3. Gestionar políticas de acceso (TTL, contextos) para URLs firmadas
+ * 4. Orquestar la vinculación con mensajes, plantillas y planes de ejecución
+ * 
+ * Integración con IA:
+ * - El sistema trata a la IA como un actor ("actorType: assistant")
+ * - Garantiza que la IA solo consuma assets permitidos por su política
+ */
 ```
 
 #### Extensión @fluxcore/core-ai (IA por Defecto)
@@ -613,6 +743,17 @@ INSTRUCCIONES:
 - Si no sabes algo, sé honesto
 - Mantén un tono ${account.profile.tone || 'profesional y amigable'}
     `.trim();
+  }
+
+  /**
+   * Integración con Assets
+   * core-ai utiliza el AssetRegistry para:
+   * 1. Solicitar URLs firmadas para previsualización de archivos.
+   * 2. Declarar dependencias de archivos en Execution Plans (plan_assets).
+   * 3. Adjuntar archivos generados a mensajes salientes.
+   */
+  async handleAssets(assetIds: string[]): Promise<void> {
+    // Implementación vía AssetPolicyService
   }
 }
 ```

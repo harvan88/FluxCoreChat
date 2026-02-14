@@ -9,7 +9,7 @@ import { api } from '../services/api';
 
 import type { ActivityType, Account, Conversation } from '../types';
 
-type ToastType = 'info' | 'success' | 'error';
+type ToastType = 'info' | 'success' | 'error' | 'warning';
 
 interface ToastItem {
   id: string;

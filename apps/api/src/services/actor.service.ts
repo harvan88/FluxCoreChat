@@ -100,7 +100,7 @@ export class ActorService {
    * Obtener actor builtin de FluxCore
    */
   async getFluxCoreActor() {
-    return this.getActorByExtensionId('@fluxcore/fluxcore');
+    return this.getActorByExtensionId('@fluxcore/asistentes');
   }
 
   /**

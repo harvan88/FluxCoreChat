@@ -203,27 +203,14 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
 
   // Vista de lista - muestra TODOS los stores juntos (sin separación visual)
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-6 py-4 border-b border-subtle flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-primary">Base de conocimiento</h2>
-        <button
-          onClick={() => setShowBackendModal(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-inverse shadow-sm transition-colors hover:bg-accent/90"
-        >
-          <Database size={16} />
-          Nuevo vector store
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-auto p-6">
-        <VectorStoreList
-          stores={vectorStores}
-          loading={loading}
-          onCreate={() => setShowBackendModal(true)}
-          onSelect={handleSelect}
-          onDelete={deleteVectorStore}
-        />
-      </div>
+    <>
+      <VectorStoreList
+        stores={vectorStores}
+        loading={loading}
+        onCreate={() => setShowBackendModal(true)}
+        onSelect={handleSelect}
+        onDelete={deleteVectorStore}
+      />
 
       {/* Backend Selection Modal */}
       {showBackendModal && (
@@ -258,7 +245,7 @@ export function VectorStoresView({ accountId, onOpenTab, onClose, vectorStoreId 
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

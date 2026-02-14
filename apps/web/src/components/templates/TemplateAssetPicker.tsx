@@ -138,7 +138,6 @@ export function TemplateAssetPicker({
                         accountId={accountId}
                         onUploadComplete={handleUploadComplete}
                         onCancel={() => setShowUploader(false)}
-                        compact={false}
                     />
                 </div>
             )}

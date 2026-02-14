@@ -40,10 +40,15 @@ import { ExtensionConfigPanel } from '../extensions/ExtensionConfigPanel';
 import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
 import { UsageView } from '../fluxcore/views/UsageView';
 import { AssistantsView } from '../fluxcore/views/AssistantsView';
+import { AgentsView } from '../fluxcore/views/AgentsView';
+import { AgentView } from '../fluxcore/views/AgentView';
 import { InstructionsView } from '../fluxcore/views/InstructionsView';
 import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
 import { ToolsView } from '../fluxcore/views/ToolsView';
 import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConfigView';
+import { FluxiView } from '../fluxcore/views/FluxiView';
+import { FluxiWorkDetail } from '../fluxcore/views/FluxiWorkDetail';
+import { FluxiProposedWorkDetail } from '../fluxcore/views/FluxiProposedWorkDetail';
 import { TemplateEditor, TemplateManager } from '../templates';
 
 interface DynamicContainerProps {
@@ -234,6 +239,24 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       openOrFocusFluxCoreTab('vector-store', title, 'Database', { vectorStoreId: id });
       return;
     }
+
+    if (data?.type === 'agent') {
+      const id = data?.agentId || data?.agent?.id || tabId;
+      openOrFocusFluxCoreTab('agent', title, 'GitBranch', { agentId: id });
+      return;
+    }
+
+    if (data?.type === 'work') {
+      const id = data?.workId || data?.id || tabId;
+      openOrFocusFluxCoreTab('work', title, 'Zap', { workId: id });
+      return;
+    }
+
+    if (data?.type === 'proposed') {
+      const id = data?.proposedWorkId || data?.id || tabId;
+      openOrFocusFluxCoreTab('proposed-work', title, 'Bot', { proposedWorkId: id });
+      return;
+    }
   }, [selectedAccountId, openOrFocusFluxCoreTab]);
 
   const panelComponent = installation?.manifest?.ui?.panel?.component;
@@ -351,6 +374,17 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
         );
       case 'tools':
         return <ToolsView key={tab.id} accountId={accountId} />;
+      case 'agents':
+        return <AgentsView key={tab.id} accountId={accountId} onOpenTab={onOpenFluxCoreItemTab} />;
+      case 'agent':
+        return (
+          <AgentView
+            key={tab.id}
+            accountId={accountId}
+            agentId={tab.context.agentId}
+            onClose={() => closeTab(containerId, tab.id)}
+          />
+        );
       case 'debug':
         return <FluxCorePromptInspectorPanel accountId={accountId} />;
       case 'billing':
@@ -359,6 +393,12 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
             Facturación (próximamente)
           </div>
         );
+      case 'works':
+        return <FluxiView accountId={accountId} onOpenTab={onOpenFluxCoreItemTab} />;
+      case 'work':
+        return <FluxiWorkDetail accountId={accountId} workId={tab.context.workId as string} />;
+      case 'proposed-work':
+        return <FluxiProposedWorkDetail accountId={accountId} proposedWorkId={tab.context.proposedWorkId as string} />;
       case 'promptInspector':
         return <FluxCorePromptInspectorPanel accountId={accountId} />;
     }
@@ -443,7 +483,7 @@ function TabContent({ tab, containerId }: TabContentProps) {
   if (tab.type === 'extension') {
     const extensionId = typeof tab.context?.extensionId === 'string' ? tab.context.extensionId : '';
     const viewId = typeof tab.context?.view === 'string' ? tab.context.view : 'default';
-    
+
     // Intentar obtener vista de extensión del ViewRegistry
     const ExtensionView = viewRegistry.getExtensionView(extensionId, viewId);
     if (ExtensionView) {
@@ -456,7 +496,7 @@ function TabContent({ tab, containerId }: TabContentProps) {
             const { openTab } = usePanelStore.getState();
             const manifest = extensionHost.getManifest(extensionId);
             const viewConfig = manifest?.views[newViewId];
-            
+
             openTab('extensions', {
               type: 'extension',
               identity: `extension:${extensionId}:${newViewId}:${selectedAccountId}`,
@@ -476,7 +516,7 @@ function TabContent({ tab, containerId }: TabContentProps) {
         />
       );
     }
-    
+
     // Fallback a ExtensionTabContent legacy
     return <ExtensionTabContent tab={tab} containerId={containerId} />;
   }

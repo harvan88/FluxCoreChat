@@ -182,6 +182,13 @@ class ApiService {
     return this.request<AIEligibilityResponse>(`/ai/eligibility?${query.toString()}`);
   }
 
+  async updateAIRuntime(accountId: string, runtimeId: string): Promise<ApiResponse<{ success: true }>> {
+    return this.request<{ success: true }>('/ai/runtime', {
+      method: 'POST',
+      body: JSON.stringify({ accountId, runtimeId }),
+    });
+  }
+
   async updateAccount(id: string, data: Partial<Account>): Promise<ApiResponse<Account>> {
     return this.request<Account>(`/accounts/${id}`, {
       method: 'PATCH',
@@ -272,6 +279,14 @@ class ApiService {
     const query = new URLSearchParams();
     query.set('accountId', params.accountId);
     return this.request<any>(`/ai/traces/${encodeURIComponent(params.traceId)}?${query.toString()}`);
+  }
+
+  async deleteAITrace(params: { accountId: string; traceId: string }): Promise<ApiResponse<{ success: true }>> {
+    const query = new URLSearchParams();
+    query.set('accountId', params.accountId);
+    return this.request<{ success: true }>(`/ai/traces/${encodeURIComponent(params.traceId)}?${query.toString()}`, {
+      method: 'DELETE',
+    });
   }
 
   async downloadAITraces(params: {
@@ -385,6 +400,80 @@ class ApiService {
     query.set('accountId', accountId);
     return this.request<{ cleared: number }>(`/ai/traces?${query.toString()}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ─── Agent Runtime (Fase 3) ─────────────────────────────────────────────
+
+  async getAgents(accountId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/fluxcore/agents?accountId=${encodeURIComponent(accountId)}`);
+  }
+
+  async getAgent(accountId: string, agentId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}?accountId=${encodeURIComponent(accountId)}`);
+  }
+
+  async createAgent(params: {
+    accountId: string;
+    name: string;
+    description?: string;
+    status?: string;
+    flow?: any;
+    scopes?: any;
+    triggerConfig?: any;
+    assistantIds?: Array<{ assistantId: string; role?: string; stepId?: string }>;
+  }): Promise<ApiResponse<any>> {
+    return this.request<any>('/fluxcore/agents', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async updateAgent(accountId: string, agentId: string, params: Record<string, any>): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountId, ...params }),
+    });
+  }
+
+  async deleteAgent(accountId: string, agentId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}?accountId=${encodeURIComponent(accountId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async activateAgent(accountId: string, agentId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    });
+  }
+
+  async deactivateAgent(accountId: string, agentId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}/deactivate`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    });
+  }
+
+  async updateAgentFlow(accountId: string, agentId: string, flow: any): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}/flow`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountId, flow }),
+    });
+  }
+
+  async updateAgentScopes(accountId: string, agentId: string, scopes: any): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}/scopes`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountId, scopes }),
+    });
+  }
+
+  async setAgentAssistants(accountId: string, agentId: string, assistants: Array<{ assistantId: string; role?: string; stepId?: string }>): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}/assistants`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountId, assistants }),
     });
   }
 
@@ -898,6 +987,39 @@ class ApiService {
   async unlinkAssetFromMessage(messageId: string, assetId: string, accountId: string): Promise<ApiResponse<void>> {
     return this.request(`/api/messages/${messageId}/assets/${assetId}?accountId=${accountId}`, {
       method: 'DELETE',
+    });
+  }
+
+  // WES-180: Fluxi Work Execution System
+  async getProposedWorks(accountId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/fluxcore/works/proposed?accountId=${accountId}`);
+  }
+
+  async getActiveWorks(accountId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/fluxcore/works/active?accountId=${accountId}`);
+  }
+
+  async getWorkHistory(accountId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/fluxcore/works/history?accountId=${accountId}`);
+  }
+
+  async getProposedWork(accountId: string, id: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/works/proposed/${id}?accountId=${accountId}`);
+  }
+
+  async getWork(accountId: string, id: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/works/${id}?accountId=${accountId}`);
+  }
+
+  async openWork(accountId: string, workId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/works/${workId}/open?accountId=${accountId}`, {
+      method: 'POST',
+    });
+  }
+
+  async discardWork(accountId: string, workId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/works/${workId}/discard?accountId=${accountId}`, {
+      method: 'POST',
     });
   }
 }

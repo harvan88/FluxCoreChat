@@ -328,7 +328,7 @@ export function FluxCoreComposer(props: {
     );
 
     const handleOpenAssistantsPanel = useCallback(() => {
-        const extensionId = '@fluxcore/fluxcore';
+        const extensionId = '@fluxcore/asistentes';
         openTab('extensions', {
             type: 'extension',
             identity: `extension:${extensionId}:assistants:${props.accountId ?? 'global'}`,

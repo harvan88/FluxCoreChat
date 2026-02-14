@@ -34,6 +34,7 @@ import { uploadRoutes } from './routes/upload.routes';
 import { websiteRoutes } from './routes/website.routes';
 import { fluxcoreRoutes } from './routes/fluxcore.routes';
 import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
+import { fluxcoreAgentRoutes } from './routes/fluxcore-agents.routes';
 import { testRoutes } from './routes/test.routes';
 import { assetsRoutes } from './routes/assets.routes';
 import { assetRelationsRoutes } from './routes/asset-relations.routes';
@@ -42,6 +43,7 @@ import { ragConfigRoutes } from './routes/rag-config.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
+import { wesScheduler } from './services/wes-scheduler.service';
 import { aiOrchestrator } from './services/ai-orchestrator.service';
 import { mediaOrchestrator } from './services/media-orchestrator.service';
 import { accountDeletionWorker } from './workers/account-deletion.worker';
@@ -129,12 +131,16 @@ const normalizeOrigin = (origin: string) => origin.replace(/\/$/, '');
 
 // Cargar extensiones desde el directorio /extensions
 const extensionsDir = path.resolve(__dirname, '../../../extensions');
+console.log('🔍 Scanning extensions dir:', extensionsDir);
 if (fs.existsSync(extensionsDir)) {
   const entries = fs.readdirSync(extensionsDir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
       const extPath = path.join(extensionsDir, entry.name);
-      manifestLoader.loadFromDirectory(extPath);
+      console.log(' - Found potential extension:', entry.name);
+      const m = await manifestLoader.loadFromDirectory(extPath);
+      if (m) console.log('   ✅ Loaded manifest:', m.id);
+      else console.log('   ❌ No valid manifest found');
     }
   }
   console.log(`🧩 Loaded ${manifestLoader.getAllManifests().length} extensions`);
@@ -208,6 +214,7 @@ const elysiaApp = new Elysia()
   .use(websiteRoutes)
   .use(fluxcoreRuntimeRoutes)
   .use(fluxcoreRoutes)
+  .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(assetsRoutes)
   .use(assetRelationsRoutes)
@@ -269,7 +276,7 @@ try {
         // Skip API routes and known paths
         const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations',
           'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites',
-          'uploads', 'ws', 'swagger', 'health', 'app'];
+          'uploads', 'ws', 'swagger', 'health', 'app', 'fluxcore', 'works'];
 
         if (!reservedPaths.includes(alias)) {
           const sitesDir = path.join(process.cwd(), 'public', 'sites', alias);
@@ -379,7 +386,7 @@ try {
         // Skip API routes and known paths
         const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations',
           'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites',
-          'uploads', 'ws', 'swagger', 'health', 'app'];
+          'uploads', 'ws', 'swagger', 'health', 'app', 'fluxcore', 'works'];
 
         if (!reservedPaths.includes(alias)) {
           const sitesDir = path.join(process.cwd(), 'public', 'sites', alias);
@@ -443,6 +450,7 @@ console.log(`📚 Swagger docs at http://localhost:${server.port}/swagger`);
 console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
 
 automationScheduler.init();
+wesScheduler.init();
 aiOrchestrator.init();
 mediaOrchestrator.init();
 
@@ -464,6 +472,7 @@ if (useAccountDeletionQueue) {
 } else {
   accountDeletionWorker.start();
   addCleanupTask(() => accountDeletionWorker.stop());
+  addCleanupTask(() => wesScheduler.stop());
   console.log('🧹 AccountDeletion processing running on interval worker');
 }
 

@@ -12,16 +12,16 @@ import { smartDelayService } from '../services/smart-delay.service';
 
 interface WSMessage {
   type:
-    | 'subscribe'
-    | 'unsubscribe'
-    | 'message'
-    | 'ping'
-    | 'request_suggestion'
-    | 'approve_suggestion'
-    | 'discard_suggestion'
-    | 'user_activity'
-    | 'widget:connect'
-    | 'widget:message';
+  | 'subscribe'
+  | 'unsubscribe'
+  | 'message'
+  | 'ping'
+  | 'request_suggestion'
+  | 'approve_suggestion'
+  | 'discard_suggestion'
+  | 'user_activity'
+  | 'widget:connect'
+  | 'widget:message';
   relationshipId?: string;
   conversationId?: string;
   content?: any;
@@ -40,19 +40,19 @@ interface WSMessage {
 // Store de conexiones activas por relationshipId
 const subscriptions = new Map<string, Set<any>>();
 
- // Conexiones WS activas (para broadcast de eventos del sistema)
- const activeConnections = new Set<any>();
+// Conexiones WS activas (para broadcast de eventos del sistema)
+const activeConnections = new Set<any>();
 
- export function broadcastAll(payload: any): void {
-   const message = JSON.stringify(payload);
-   for (const ws of activeConnections) {
-     try {
-       ws.send(message);
-     } catch {
-       activeConnections.delete(ws);
-     }
-   }
- }
+export function broadcastAll(payload: any): void {
+  const message = JSON.stringify(payload);
+  for (const ws of activeConnections) {
+    try {
+      ws.send(message);
+    } catch {
+      activeConnections.delete(ws);
+    }
+  }
+}
 
 export function handleWSMessage(ws: any, message: string | Buffer): void {
   try {
@@ -66,15 +66,15 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
             subscriptions.set(data.relationshipId, new Set());
           }
           subscriptions.get(data.relationshipId)!.add(ws);
-          
+
           // Registrar en MessageCore también
           messageCore.subscribe(data.relationshipId, (payload) => {
             broadcastToRelationship(data.relationshipId!, payload);
           });
-          
-          ws.send(JSON.stringify({ 
-            type: 'subscribed', 
-            relationshipId: data.relationshipId 
+
+          ws.send(JSON.stringify({
+            type: 'subscribed',
+            relationshipId: data.relationshipId
           }));
         }
         break;
@@ -89,9 +89,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
               messageCore.unsubscribe(data.relationshipId);
             }
           }
-          ws.send(JSON.stringify({ 
-            type: 'unsubscribed', 
-            relationshipId: data.relationshipId 
+          ws.send(JSON.stringify({
+            type: 'unsubscribed',
+            relationshipId: data.relationshipId
           }));
         }
         break;
@@ -106,14 +106,14 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
             generatedBy: 'human',
           }).then((result) => {
             if (result.success) {
-              ws.send(JSON.stringify({ 
-                type: 'message:sent', 
-                messageId: result.messageId 
+              ws.send(JSON.stringify({
+                type: 'message:sent',
+                messageId: result.messageId
               }));
             } else {
-              ws.send(JSON.stringify({ 
-                type: 'error', 
-                message: result.error 
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: result.error
               }));
             }
           });
@@ -121,9 +121,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
         break;
 
       case 'ping':
-        ws.send(JSON.stringify({ 
-          type: 'pong', 
-          timestamp: new Date().toISOString() 
+        ws.send(JSON.stringify({
+          type: 'pong',
+          timestamp: new Date().toISOString()
         }));
         break;
 
@@ -132,9 +132,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
         if (data.conversationId && data.accountId) {
           handleSuggestionRequest(ws, data);
         } else {
-          ws.send(JSON.stringify({ 
-            type: 'error', 
-            message: 'conversationId and accountId required for suggestion' 
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: 'conversationId and accountId required for suggestion'
           }));
         }
         break;
@@ -159,15 +159,15 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
             generatedBy: 'ai',
           }).then((result) => {
             if (result.success) {
-              ws.send(JSON.stringify({ 
-                type: 'suggestion:approved', 
+              ws.send(JSON.stringify({
+                type: 'suggestion:approved',
                 messageId: result.messageId,
                 suggestionId: data.suggestionId,
               }));
             } else {
-              ws.send(JSON.stringify({ 
-                type: 'error', 
-                message: result.error 
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: result.error
               }));
             }
           });
@@ -176,9 +176,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 
       case 'discard_suggestion':
         // Descartar sugerencia (solo notificar)
-        ws.send(JSON.stringify({ 
-          type: 'suggestion:discarded', 
-          suggestionId: data.suggestionId 
+        ws.send(JSON.stringify({
+          type: 'suggestion:discarded',
+          suggestionId: data.suggestionId
         }));
         break;
 
@@ -190,13 +190,13 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
             conversationId: data.conversationId,
             activity: data.activity,
           });
-          
+
           // Nuevo: Broadcast universal de actividad
           messageCore.broadcastActivity(data.conversationId, {
             accountId: data.accountId,
             activity: data.activity
           });
-          
+
           if (result.result === 'cancelled' && result.suggestionId) {
             ws.send(JSON.stringify({
               type: 'suggestion:auto_cancelled',
@@ -216,9 +216,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
         if (data.alias && data.visitorId) {
           handleWidgetConnect(ws, data);
         } else {
-          ws.send(JSON.stringify({ 
-            type: 'error', 
-            message: 'alias and visitorId required for widget connection' 
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: 'alias and visitorId required for widget connection'
           }));
         }
         break;
@@ -228,23 +228,23 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
         if (data.alias && data.visitorId && data.content) {
           handleWidgetMessage(ws, data);
         } else {
-          ws.send(JSON.stringify({ 
-            type: 'error', 
-            message: 'alias, visitorId and content required for widget message' 
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: 'alias, visitorId and content required for widget message'
           }));
         }
         break;
 
       default:
-        ws.send(JSON.stringify({ 
-          type: 'error', 
-          message: 'Unknown message type' 
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: 'Unknown message type'
         }));
     }
   } catch (error: any) {
-    ws.send(JSON.stringify({ 
-      type: 'error', 
-      message: error.message 
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: error.message
     }));
   }
 }
@@ -252,9 +252,9 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 export function handleWSOpen(ws: any): void {
   console.log('WebSocket connection opened');
   activeConnections.add(ws);
-  ws.send(JSON.stringify({ 
-    type: 'connected', 
-    timestamp: new Date().toISOString() 
+  ws.send(JSON.stringify({
+    type: 'connected',
+    timestamp: new Date().toISOString()
   }));
 }
 
@@ -295,7 +295,7 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
 async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> {
   const { conversationId, accountId, relationshipId } = data;
   const traceId = `ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  
+
   try {
     console.log(`[ws-handler][${traceId}] request_suggestion received`, {
       conversationId,
@@ -339,7 +339,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       timingConfig: composition?.assistant?.timingConfig,
       modelConfig: composition?.assistant?.modelConfig,
     });
-    
+
     // Extraer timingConfig del asistente activo (o usar defaults)
     const delaySeconds = composition?.assistant?.timingConfig?.responseDelaySeconds ?? 2;
     const smartDelayEnabled = composition?.assistant?.timingConfig?.smartDelay ?? false;
@@ -388,7 +388,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       return {
         id: aiSuggestion.id,
         conversationId,
-        extensionId: '@fluxcore/fluxcore',
+        extensionId: '@fluxcore/asistentes',
         suggestedText: stripped.text,
         confidence: 0.9,
         reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage?.totalTokens ?? 0} tokens)`,
@@ -441,7 +441,7 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
 
             // 🔧 CRÍTICO: Generar sugerencia DESPUÉS del delay
             const suggestion = await generateSuggestion();
-            
+
             if (suggestion) {
               setTimeout(async () => {
                 await processSuggestion(ws, {
@@ -481,18 +481,18 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
  */
 async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
   const { alias, visitorId } = data;
-  
+
   try {
     // Buscar cuenta por alias
     const { db, accounts } = await import('@fluxcore/db');
     const { eq, or } = await import('drizzle-orm');
-    
+
     const [account] = await db
       .select()
       .from(accounts)
       .where(or(eq(accounts.alias, alias!), eq(accounts.username, alias!)))
       .limit(1);
-    
+
     if (!account) {
       ws.send(JSON.stringify({
         type: 'widget:error',
@@ -511,7 +511,7 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
     }));
 
     console.log(`[Widget] Visitor ${visitorId} connected to ${alias}`);
-    
+
   } catch (error: any) {
     ws.send(JSON.stringify({
       type: 'widget:error',
@@ -535,13 +535,13 @@ async function processSuggestion(ws: any, params: {
       type: 'suggestion:auto_sending',
       suggestionId: params.suggestion.id,
     }));
-    
+
     // Send the message
     const decision = extensionHost.getSuggestionBrandingDecision(params.suggestion.id);
     const finalText = decision.promo
       ? extensionHost.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
       : params.suggestion.suggestedText;
-    
+
     await messageCore.send({
       conversationId: params.conversationId,
       senderAccountId: params.accountId,
@@ -549,7 +549,7 @@ async function processSuggestion(ws: any, params: {
       type: 'outgoing',
       generatedBy: 'ai',
     });
-    
+
     console.log(`[ActivityWatcher] Mensaje enviado exitosamente para ${params.accountId}:${params.conversationId}`);
   } catch (error) {
     console.error('[ActivityWatcher] Error procesando sugerencia:', error);
@@ -561,18 +561,18 @@ async function processSuggestion(ws: any, params: {
  */
 async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
   const { alias, visitorId, content } = data;
-  
+
   try {
     // Buscar cuenta por alias
     const { db, accounts } = await import('@fluxcore/db');
     const { eq, or } = await import('drizzle-orm');
-    
+
     const [account] = await db
       .select()
       .from(accounts)
       .where(or(eq(accounts.alias, alias!), eq(accounts.username, alias!)))
       .limit(1);
-    
+
     if (!account) {
       ws.send(JSON.stringify({
         type: 'widget:error',
@@ -596,7 +596,7 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
     // 2. Persistir mensaje en conversación
     // 3. Notificar al owner de la cuenta
     // 4. Generar respuesta de IA si está configurado
-    
+
   } catch (error: any) {
     ws.send(JSON.stringify({
       type: 'widget:error',

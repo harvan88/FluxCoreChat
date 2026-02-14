@@ -33,7 +33,8 @@ export type BlockReason =
   | 'no_api_key'
   | 'insufficient_credits'
   | 'no_providers'
-  | 'entitlement_denied';
+  | 'entitlement_denied'
+  | 'rate_limited';
 
 export interface BlockDetail {
   reason: BlockReason;
@@ -104,6 +105,7 @@ export interface GenerateResponseSuccess {
     content: string;
     generatedAt: Date;
     model: string;
+    traceId?: string;
     provider?: 'groq' | 'openai';
     baseUrl?: string;
     usage: {
@@ -112,6 +114,13 @@ export interface GenerateResponseSuccess {
       totalTokens: number;
     };
     status: 'pending' | 'approved' | 'rejected' | 'edited';
+    proposedWork?: {
+      workDefinitionId: string;
+      intent: string;
+      candidateSlots: Array<{ path: string; value: any; evidence: string }>;
+      confidence: number;
+      traceId: string;
+    };
   };
 }
 

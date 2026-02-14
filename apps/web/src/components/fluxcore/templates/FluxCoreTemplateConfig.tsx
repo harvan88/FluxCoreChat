@@ -1,6 +1,6 @@
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
 import { Textarea } from '../../ui/Input';
-import { Sparkles, Bot } from 'lucide-react';
+import { Bot } from 'lucide-react';
 
 interface FluxCoreTemplateConfigProps {
     authorizeForAI: boolean;

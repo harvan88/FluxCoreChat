@@ -1,0 +1,13 @@
+{
+  "version": "5",
+  "dialect": "pg",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1771008810186,
+      "tag": "0000_glossy_junta",
+      "breakpoints": true
+    }
+  ]
+}

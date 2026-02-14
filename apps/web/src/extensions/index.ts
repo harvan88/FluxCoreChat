@@ -20,7 +20,7 @@ import { fluxcoreManifest } from './fluxcore/manifest';
  */
 export function registerExtensions(): void {
   console.log('[Extensions] Registering extensions...');
-  
+
   // FluxCore - Extensión de IA
   const fluxcoreResult = extensionHost.registerExtension(fluxcoreManifest);
   if (!fluxcoreResult.success) {
@@ -28,10 +28,10 @@ export function registerExtensions(): void {
   } else {
     console.log('[Extensions] FluxCore registered:', fluxcoreResult.registeredViews);
   }
-  
+
   // Aquí se pueden agregar más extensiones en el futuro
   // extensionHost.registerExtension(otherExtensionManifest);
-  
+
   console.log('[Extensions] Extension registration complete');
 }
 
@@ -39,7 +39,7 @@ export function registerExtensions(): void {
  * Lista de extensiones disponibles para registro dinámico
  */
 export const availableExtensions = {
-  '@fluxcore/fluxcore': fluxcoreManifest,
+  '@fluxcore/asistentes': fluxcoreManifest,
 } as const;
 
 /**
@@ -51,7 +51,7 @@ export function registerExtensionById(extensionId: string): boolean {
     console.error(`[Extensions] Unknown extension: ${extensionId}`);
     return false;
   }
-  
+
   const result = extensionHost.registerExtension(manifest);
   return result.success;
 }
