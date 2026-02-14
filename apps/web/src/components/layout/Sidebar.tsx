@@ -60,24 +60,24 @@ function resolveSidebarTitle(
   // 1. Verificar si es una extensión
   if (activeActivity.startsWith('ext:')) {
     const extensionId = activeActivity.replace('ext:', '');
-    
+
     // Intentar obtener del ExtensionHost primero
     const manifest = extensionHost.getManifest(extensionId);
     if (manifest?.sidebar?.title) {
       return manifest.sidebar.title;
     }
-    
+
     // Fallback a installations (legacy)
     const installation = installations.find(i => i.extensionId === extensionId);
     return installation?.manifest?.ui?.panel?.title || installation?.manifest?.name || 'Extensión';
   }
-  
+
   // 2. Intentar obtener del ViewRegistry
   const registryTitle = viewRegistry.getSidebarTitle(activeActivity as ActivityType);
   if (registryTitle) {
     return registryTitle;
   }
-  
+
   // 3. Fallback a títulos hardcodeados (legacy)
   const fallbackTitles: Record<string, string> = {
     conversations: 'Conversaciones',
@@ -86,7 +86,7 @@ function resolveSidebarTitle(
     settings: 'Configuración',
     monitoring: 'Monitoreo',
   };
-  
+
   return fallbackTitles[activeActivity] || '';
 }
 
@@ -166,7 +166,7 @@ export function Sidebar() {
     // ========================================
     if (activeActivity.startsWith('ext:')) {
       const extensionId = activeActivity.replace('ext:', '');
-      
+
       // Intentar obtener del ViewRegistry (nuevo sistema)
       const ExtensionSidebarView = viewRegistry.getExtensionView(extensionId, 'sidebar');
       if (ExtensionSidebarView) {
@@ -179,7 +179,7 @@ export function Sidebar() {
               const { openTab } = usePanelStore.getState();
               const manifest = extensionHost.getManifest(extensionId);
               const viewConfig = manifest?.views[viewId];
-              
+
               openTab('extensions', {
                 type: 'extension',
                 identity: `extension:${extensionId}:${viewId}:${selectedAccountId}`,
@@ -198,7 +198,7 @@ export function Sidebar() {
           />
         );
       }
-      
+
       // Fallback: Sistema legacy para extensiones no migradas
       const installation = installations.find((i) => i.extensionId === extensionId);
       const panelComponent = installation?.manifest?.ui?.panel?.component;
@@ -218,6 +218,7 @@ export function Sidebar() {
                 instructions: 'Instrucciones del sistema',
                 'knowledge-base': 'Base de conocimiento',
                 tools: 'Herramientas',
+                agents: 'Agentes',
                 debug: 'Depuración',
                 billing: 'Facturación',
               };
@@ -228,6 +229,7 @@ export function Sidebar() {
                 instructions: 'FileText',
                 'knowledge-base': 'Database',
                 tools: 'Wrench',
+                agents: 'GitBranch',
                 debug: 'Bug',
                 billing: 'CreditCard',
               };
@@ -249,6 +251,7 @@ export function Sidebar() {
               });
             }}
             accountName={extensionName}
+            accountId={selectedAccountId}
           />
         );
       }
@@ -274,13 +277,13 @@ export function Sidebar() {
     // ========================================
     // 2. Actividades del núcleo (ChatCore)
     // ========================================
-    
+
     // Intentar obtener del ViewRegistry (nuevo sistema)
     const CoreSidebarView = viewRegistry.getSidebarView(activeActivity as ActivityType);
     if (CoreSidebarView) {
       return <CoreSidebarView accountId={selectedAccountId} />;
     }
-    
+
     // Fallback: Componentes hardcodeados (legacy)
     switch (activeActivity) {
       case 'conversations':

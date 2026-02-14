@@ -9,6 +9,7 @@ import { permissionValidator } from './permission-validator.service';
 import { contextAccess } from './context-access.service';
 import aiService from './ai.service';
 import type { ExtensionManifest } from '@fluxcore/types';
+import type { FluxPolicyContext } from '@fluxcore/db';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 
@@ -22,6 +23,7 @@ type LoadedExtensionRuntime = {
   onConfigChange?: (accountId: string, config: Record<string, unknown>) => Promise<void>;
   // Optional legacy/extended hooks
   onMessage?: (...args: any[]) => Promise<any>;
+  generateResponse?: (...args: any[]) => Promise<any>;
 };
 
 const loadedExtensions: Map<string, LoadedExtensionRuntime> = new Map();
@@ -38,17 +40,21 @@ export interface ProcessMessageParams {
   };
   // COR-007: Modo de automatización
   automationMode?: 'automatic' | 'supervised' | 'disabled';
+  // Canon v7.0: Pre-runtime policy context
+  policyContext?: FluxPolicyContext;
 }
 
 export interface ProcessMessageResult {
   extensionId: string;
   success: boolean;
+  handled?: boolean;
+  stopPropagation?: boolean;
   actions?: any[];
   error?: string;
 }
 
 class ExtensionHostService {
-  private async loadExtensionRuntime(extensionId: string): Promise<LoadedExtensionRuntime | null> {
+  public async loadExtensionRuntime(extensionId: string): Promise<LoadedExtensionRuntime | null> {
     const existing = loadedExtensions.get(extensionId);
     if (existing) return existing;
 
@@ -109,6 +115,20 @@ class ExtensionHostService {
               await ext.onConfigUpdate(accountId, config);
             }
           },
+          onMessage: async (params: any) => {
+            const ext = mod.getFluxCore();
+            if (typeof ext?.onMessage === 'function') {
+              return await ext.onMessage(params);
+            }
+            return null;
+          },
+          generateResponse: async (params: any) => {
+            const ext = mod.getFluxCore();
+            if (typeof ext?.generateResponse === 'function') {
+              return await ext.generateResponse(params);
+            }
+            return null;
+          },
         };
 
         loadedExtensions.set(extensionId, runtime);
@@ -144,73 +164,143 @@ class ExtensionHostService {
     const { accountId, relationshipId, conversationId } = params;
     const results: ProcessMessageResult[] = [];
 
-    // Obtener extensiones instaladas y habilitadas
-    let installations: any[] = [];
     try {
-      installations = await extensionService.getInstalled(accountId);
-    } catch (error: any) {
-      // Table may not exist yet, return empty results
-      console.warn('[ExtensionHost] Could not fetch installations:', error.message);
-      return results;
-    }
-    const enabledInstallations = installations.filter((i) => i.enabled);
-
-    for (const installation of enabledInstallations) {
+      // Obtener extensiones instaladas y habilitadas
+      let installations: any[] = [];
       try {
-        // Verificar si tiene permiso para procesar mensajes
-        const canProcess = permissionValidator.hasAnyPermission(
-          installation.grantedPermissions as string[],
-          ['read:messages', 'send:messages']
-        );
+        installations = await extensionService.getInstalled(accountId);
+      } catch (error: any) {
+        console.warn('[ExtensionHost] Could not fetch installations:', error.message);
+        return results;
+      }
+      const enabledInstallations = installations.filter((i) => i.enabled);
 
-        if (!canProcess.allowed) {
-          continue;
-        }
 
-        // Obtener contexto para la extensión
-        const context = await contextAccess.getContext({
-          extensionId: installation.extensionId,
-          accountId,
-          grantedPermissions: installation.grantedPermissions as string[],
-          relationshipId,
-          conversationId,
-        });
+      // WES-CANON: Sistema de extensiones integradas que corren ANTES que las de la DB
+      let fluxi: any = null;
+      try {
+        // Usar un path más resiliente o un cache
+        const fluxcoreFluxi = await import('../../../../extensions/fluxcore-fluxi/src');
+        fluxi = fluxcoreFluxi.fluxiExtension;
+      } catch (err: any) {
+        // Silently fail if not found
+      }
 
-        // Ejecutar la extensión (si está cargada)
-        const runtime = await this.loadExtensionRuntime(installation.extensionId);
-        const onMessage = runtime?.onMessage;
+      const systemExtensions = fluxi ? [{ id: '@fluxcore/fluxi', runtime: fluxi }] : [];
 
-        // Por ahora, no imponemos un contrato estricto de payload; enviamos un objeto compatible
-        // con la información disponible + contexto calculado.
-        if (typeof onMessage === 'function') {
-          await onMessage({
+      // WES-170: Recuperar contexto de WES
+      const { workResolver } = await import('../core/WorkResolver');
+      const { db, fluxcoreWorkDefinitions } = await import('@fluxcore/db');
+      const { eq } = await import('drizzle-orm');
+
+      const wesContext: any = {
+        availableWorkDefinitions: await db.select().from(fluxcoreWorkDefinitions).where(eq(fluxcoreWorkDefinitions.accountId, accountId)),
+        activeWork: await workResolver.resolve({ accountId, relationshipId, conversationId }).then(res =>
+          res.type === 'RESUME_WORK' ? { id: (res as any).workId, state: 'ACTIVE' } : null
+        )
+      };
+
+      // 1. Ejecutar extensiones de sistema
+      for (const sysExt of systemExtensions) {
+        try {
+          const resultFromExtension = await sysExt.runtime.onMessage({
             accountId,
-            extensionId: installation.extensionId,
+            extensionId: sysExt.id,
             relationshipId,
             conversationId,
             message: params.message,
-            context,
-            config: installation.config,
-            grantedPermissions: installation.grantedPermissions,
             automationMode: params.automationMode,
+            wes: wesContext,
+            policyContext: params.policyContext,
+          });
+
+          if (resultFromExtension) {
+            const res: ProcessMessageResult = {
+              extensionId: sysExt.id,
+              success: true,
+              handled: resultFromExtension.handled || false,
+              stopPropagation: resultFromExtension.stopPropagation || false,
+              actions: resultFromExtension.actions || [],
+            };
+            results.push(res);
+            if (res.stopPropagation) {
+              console.log(`[ExtensionHost] Propagation stopped by SYSTEM extension ${sysExt.id}`);
+              return results;
+            }
+          }
+        } catch (error: any) {
+          console.error(`[ExtensionHost] System extension ${sysExt.id} failed:`, error.message);
+        }
+      }
+
+      // 2. Ejecutar extensiones de usuario
+      for (const installation of enabledInstallations) {
+        try {
+          const canProcess = permissionValidator.hasAnyPermission(
+            installation.grantedPermissions as string[],
+            ['read:messages', 'send:messages']
+          );
+
+          if (!canProcess.allowed) {
+            continue;
+          }
+
+          // Obtener contexto para la extensión
+          const context = await contextAccess.getContext({
+            extensionId: installation.extensionId,
+            accountId,
+            grantedPermissions: installation.grantedPermissions as string[],
+            relationshipId,
+            conversationId,
+          });
+
+          const runtime = await this.loadExtensionRuntime(installation.extensionId);
+          const onMessage = runtime?.onMessage;
+
+          if (typeof onMessage === 'function') {
+            const resultFromExtension = await onMessage({
+              accountId,
+              extensionId: installation.extensionId,
+              relationshipId,
+              conversationId,
+              message: params.message,
+              context,
+              config: installation.config,
+              grantedPermissions: installation.grantedPermissions,
+              automationMode: params.automationMode,
+              wes: wesContext,
+              policyContext: params.policyContext,
+            });
+
+            const extensionResult: ProcessMessageResult = {
+              extensionId: installation.extensionId,
+              success: true,
+              handled: resultFromExtension?.handled || false,
+              stopPropagation: resultFromExtension?.stopPropagation || false,
+              actions: resultFromExtension?.actions || [],
+            };
+
+            results.push(extensionResult);
+
+            if (extensionResult.stopPropagation) {
+              console.log(`[ExtensionHost] Propagation stopped by extension ${installation.extensionId}`);
+              break;
+            }
+          }
+        } catch (error: any) {
+          results.push({
+            extensionId: installation.extensionId,
+            success: false,
+            error: error.message,
           });
         }
-
-        results.push({
-          extensionId: installation.extensionId,
-          success: true,
-          actions: [],
-        });
-      } catch (error: any) {
-        results.push({
-          extensionId: installation.extensionId,
-          success: false,
-          error: error.message,
-        });
       }
-    }
 
-    return results;
+      return results;
+    } catch (err: any) {
+      try { require('fs').appendFileSync('AI_TEST.log', `[${new Date().toISOString()}] ExtensionHost: CRITICAL ERROR: ${err.message}\n`); } catch { }
+      return results;
+    }
   }
 
   async onInstall(accountId: string, extensionId: string): Promise<void> {
@@ -230,21 +320,17 @@ class ExtensionHostService {
   }
 
   async onConfigUpdate(accountId: string, extensionId: string, config: Record<string, unknown>): Promise<void> {
-    // Compatibilidad: algunas extensiones implementan onConfigChange
     await this.bestEffortHook(extensionId, 'onConfigUpdate', accountId, config);
     await this.bestEffortHook(extensionId, 'onConfigChange', accountId, config);
   }
 
-  /**
-   * Instalar extensiones preinstaladas para una nueva cuenta
-   */
   async installPreinstalledExtensions(accountId: string): Promise<void> {
     const preinstalled = manifestLoader.getPreinstalledManifests();
 
     for (const manifest of preinstalled) {
       try {
         const defaultConfig = manifestLoader.getDefaultConfig(manifest.id);
-        
+
         const installation = await extensionService.install({
           accountId,
           extensionId: manifest.id,
@@ -257,7 +343,6 @@ class ExtensionHostService {
         await this.onConfigUpdate(accountId, manifest.id, (installation as any).config || defaultConfig);
         await this.onEnable(accountId, manifest.id);
       } catch (error: any) {
-        // Si ya está instalada, ignorar
         if (!error.message.includes('already installed')) {
           console.error(`Failed to install preinstalled extension ${manifest.id}:`, error);
         }
@@ -265,23 +350,14 @@ class ExtensionHostService {
     }
   }
 
-  /**
-   * Obtener todas las extensiones disponibles
-   */
   getAvailableExtensions(): ExtensionManifest[] {
     return manifestLoader.getAllManifests();
   }
 
-  /**
-   * Obtener manifest de una extensión
-   */
   getExtensionManifest(extensionId: string): ExtensionManifest | null {
     return manifestLoader.getManifest(extensionId);
   }
 
-  /**
-   * Validar configuración de extensión contra su schema
-   */
   validateConfig(extensionId: string, config: Record<string, any>): { valid: boolean; errors: string[] } {
     const manifest = manifestLoader.getManifest(extensionId);
     if (!manifest) {
@@ -296,20 +372,15 @@ class ExtensionHostService {
 
     for (const [key, schema] of Object.entries(manifest.configSchema)) {
       const value = config[key];
-      
-      if (value === undefined) {
-        continue; // Usar default del schema
-      }
+      if (value === undefined) continue;
 
-      // Validar tipo
       const expectedType = schema.type;
       const actualType = Array.isArray(value) ? 'array' : typeof value;
-      
+
       if (actualType !== expectedType) {
         errors.push(`Config "${key}" must be of type ${expectedType}, got ${actualType}`);
       }
 
-      // Validar enum
       if (schema.enum && !schema.enum.includes(value)) {
         errors.push(`Config "${key}" must be one of: ${schema.enum.join(', ')}`);
       }
@@ -342,7 +413,7 @@ class ExtensionHostService {
     conversationId: string,
     recipientAccountId: string,
     lastMessageContent: string,
-    options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date; traceId?: string } = {}
+    options: { mode?: 'suggest' | 'auto'; triggerMessageId?: string; triggerMessageCreatedAt?: Date; traceId?: string; policyContext?: FluxPolicyContext } = {}
   ): Promise<Awaited<ReturnType<typeof aiService.generateResponse>>> {
     return aiService.generateResponse(conversationId, recipientAccountId, lastMessageContent, options);
   }

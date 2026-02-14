@@ -1,0 +1,30 @@
+{
+    "id": "@fluxcore/asistentes-openai",
+    "name": "Asistentes (OpenAI)",
+    "version": "1.0.0",
+    "description": "Runtime de Asistentes delegado a la API de OpenAI Assistants",
+    "author": "FluxCore",
+    "preinstalled": true,
+    "permissions": [
+        "read:context.public",
+        "read:context.private",
+        "read:context.relationship",
+        "read:context.history",
+        "write:context.overlay",
+        "send:messages"
+    ],
+    "hooks": [
+        "onMessage"
+    ],
+    "configSchema": {
+        "assistantId": {
+            "type": "string",
+            "description": "ID del asistente en OpenAI (asst_...)"
+        },
+        "apiKey": {
+            "type": "string",
+            "description": "API Key de OpenAI (si se desea usar una específica)"
+        }
+    },
+    "entrypoint": "./src/index.ts"
+}

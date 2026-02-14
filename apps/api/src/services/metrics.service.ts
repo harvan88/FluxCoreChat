@@ -109,31 +109,47 @@ export class MetricsService {
         });
     }
 
+    private tableExistsChecked = false;
+    private tableExists = true;
+
     /**
      * Flush métricas a la base de datos
      */
     async flushMetrics(): Promise<void> {
         if (this.metricsBuffer.length === 0) return;
 
+        // Limitar tamaño del buffer para evitar fugas de memoria si la DB falla mucho tiempo
+        if (this.metricsBuffer.length > 1000) {
+            console.warn('[MetricsService] Buffer too large, dropping old metrics');
+            this.metricsBuffer = this.metricsBuffer.slice(-500);
+        }
+
         const metrics = [...this.metricsBuffer];
         this.metricsBuffer = [];
 
         try {
-            const values = metrics.map(m => ({
-                metric_name: m.name,
-                metric_type: m.type,
-                value: m.value,
-                dimensions: m.dimensions || {},
-            }));
+            const valueEntries = metrics.map(m =>
+                sql`(${m.name}, ${m.type}, ${m.value}, ${m.dimensions || {}}::jsonb)`
+            );
 
             await db.execute(sql`
-        INSERT INTO fluxcore_system_metrics (metric_name, metric_type, value, dimensions)
-        SELECT * FROM jsonb_to_recordset(${JSON.stringify(values)}::jsonb)
-        AS t(metric_name text, metric_type text, value numeric, dimensions jsonb)
-      `);
-        } catch (error) {
-            console.error('Failed to flush metrics:', error);
-            // Re-add to buffer for retry
+                INSERT INTO fluxcore_system_metrics (metric_name, metric_type, value, dimensions)
+                VALUES ${sql.join(valueEntries, sql`, `)}
+            `);
+            this.tableExists = true;
+        } catch (error: any) {
+            if (error.message?.includes('does not exist')) {
+                this.tableExists = false;
+                if (!this.tableExistsChecked) {
+                    console.error('[MetricsService] Table fluxcore_system_metrics missing. Metrics will be dropped until table exists.');
+                    this.tableExistsChecked = true;
+                }
+                // No re-add to buffer if table is missing to avoid loop noise
+                return;
+            }
+
+            console.error('Failed to flush metrics:', error.message);
+            // Re-add to buffer for retry if it's not a missing table error
             this.metricsBuffer.push(...metrics);
         }
     }

@@ -16,6 +16,118 @@
 
 ---
 
+## 0. ARQUITECTURA BACKEND — SERVICIOS Y FLUJO DE EJECUCIÓN
+
+> **Última actualización:** 2026-02-09 — Fase 1 Limpieza + Fase 2 Foundations completadas.
+
+### 0.1. Flujo de un mensaje (end-to-end)
+
+```
+Usuario envía mensaje
+       │
+       ▼
+  MessageCore.receive()              ← core/message-core.ts
+       │
+       ├─ Persistir mensaje (DB)
+       ├─ WebSocket broadcast
+       ├─ AutomationController.evaluateTrigger()
+       ├─ ExtensionHost.processMessage()   ← hooks de extensiones, NO genera IA
+       └─ CoreEventBus.emit('core:message_received')
+                    │
+                    ▼
+           AIOrchestrator               ← ai-orchestrator.service.ts
+                    │
+                    ├─ Validaciones (success, automatic mode, text)
+                    ├─ Debounce por conversación
+                    └─ extensionHost.generateAIResponse()
+                              │
+                              ▼
+                    AIService.generateResponse()   ← ai.service.ts (orquestador)
+                              │
+                    ┌─────────┤
+                    ▼         │
+          resolveExecutionPlan()     ← ai-execution-plan.service.ts
+                    │                    (single source of truth)
+                    ├─ resolveActiveAssistant()
+                    ├─ Check entitlements + API keys
+                    ├─ Credits gating (OpenAI)
+                    └─ Build providerOrder
+                              │
+                    ┌─────────┤
+                    ▼         │
+             runtime === 'openai'?
+                /           \
+               SÍ            NO
+               │              │
+     executeOpenAIAssistantsPath()    extension.generateSuggestion(event, ctx, accountId, config)
+               │                              │
+               ▼                              ▼
+     runAssistantWithMessages()      FluxCoreExtension (local runtime)
+     (openai-sync.service.ts)        (extensions/fluxcore/src/index.ts)
+               │                              │
+               │                    ┌─────────┤
+               │                    ▼         │
+               │          PromptBuilder.build()
+               │          ToolRegistry.getToolsForAssistant()
+               │          createChatCompletionWithFallback(config)
+               │                    │
+               │                    ├─ Tool loop (max 2 rounds)
+               │                    │   ├─ search_knowledge  (RAG-as-Tool)
+               │                    │   ├─ list_available_templates
+               │                    │   └─ send_template
+               │                    │
+               │                    └─ Build AISuggestion
+               │                              │
+               └──────────────────────────────┤
+                                              ▼
+                                   AIOrchestrator
+                                   messageCore.send() ← respuesta final
+```
+
+### 0.2. Capa de servicios (apps/api/src/services/)
+
+```
+ai.service.ts                       ← Orquestador principal (delega a servicios extraídos)
+├── ai-execution-plan.service.ts    ← ExecutionPlan: single source of truth
+├── ai-context.service.ts           ← buildContext(): contexto conversacional (DB)
+├── ai-branding.service.ts          ← Funciones puras de branding/promo
+├── ai-suggestion-store.ts          ← CRUD suggestions (DB + cache en memoria)
+├── ai-trace.service.ts             ← Traces persistidos en DB (tabla ai_traces)
+├── ai-rate-limiter.service.ts      ← Throttling per-account (sliding window)
+├── ai-circuit-breaker.service.ts   ← Fault tolerance per-provider (open/half-open/closed)
+├── ai-entitlements.service.ts      ← Gestión de permisos por proveedor IA
+├── ai-template.service.ts          ← Interacción IA ↔ templates
+├── credits.service.ts              ← Gestión de créditos OpenAI
+├── fluxcore.service.ts             ← CRUD de asistentes, instrucciones, tools, vector stores
+├── retrieval.service.ts            ← RAG: búsqueda semántica en vector stores
+└── openai-sync.service.ts          ← Sincronización con OpenAI Assistants API
+```
+
+### 0.3. Extensión FluxCore (extensions/fluxcore/src/)
+
+```
+index.ts                         ← FluxCoreExtension (singleton con config-per-request)
+├── prompt-builder.ts            ← Construye system prompt + mensajes
+├── openai-compatible-client.ts  ← Cliente HTTP para Chat Completions API
+└── tools/
+    └── registry.ts              ← ToolRegistry: search_knowledge, list_templates, send_template
+```
+
+**Patrones clave implementados:**
+
+- **RuntimeServices Injection**: La extensión recibe servicios inyectados directamente (`resolveActiveAssistant`, `fetchRagContext`, `listTemplates`, `sendTemplate`) en lugar de hacer HTTP self-calls a localhost. Fallback HTTP si no se inyectan.
+- **Config-per-request**: `generateSuggestion()` acepta `configOverride?: FluxCoreConfig` como parámetro. El singleton no muta estado entre requests concurrentes.
+- **ExecutionPlan**: Toda la resolución de assistant, provider, créditos y elegibilidad ocurre en un solo paso **antes** de tocar la extensión.
+- **RAG-as-Tool**: El LLM decide si buscar en la base de conocimiento vía function calling (`search_knowledge`).
+- **Provider fallback**: `createChatCompletionWithFallback()` con retry, exponential backoff y mapeo de modelos entre Groq/OpenAI.
+- **Traces persistidos en DB**: Cada ejecución genera un registro en `ai_traces` con timing, tokens, attempts, tool usage. Fallback a extensión in-memory si DB falla.
+- **AI Signals**: Señales internas (`|||SIGNALS|||`) parseadas del output del LLM y persistidas en `ai_signals` para analytics/ML. El usuario nunca las ve.
+- **Suggestions persistidas**: Cache en memoria + write-through a `ai_suggestions` en DB. Sobreviven reinicios del servidor.
+- **Rate limiting**: Sliding window per-account (10 req/min, 100 req/hr) con cooldown automático tras burst.
+- **Circuit breaker**: Per-provider (Groq/OpenAI). Si falla 3 veces consecutivas → circuito abierto por 60s → half-open probe → cierre.
+
+---
+
 ## 1. ARQUITECTURA GENERAL DE LA INTERFAZ
 
 ### 1.1. Estructura de Tres Columnas

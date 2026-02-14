@@ -8,7 +8,7 @@ export function AIStatusHeader({ accountId }: { accountId: string }) {
 
     // Feature Flag por extensión
     const isFluxCoreEnabled = installations.some(
-        (i) => i.extensionId === '@fluxcore/fluxcore' && i.enabled
+        (i) => i.extensionId === '@fluxcore/asistentes' && i.enabled
     );
 
     const {

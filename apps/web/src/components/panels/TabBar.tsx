@@ -9,7 +9,7 @@
  */
 
 import { useState, type ReactNode, isValidElement } from 'react';
-import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare } from 'lucide-react';
+import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare, GitBranch } from 'lucide-react';
 import clsx from 'clsx';
 import { usePanelStore, useContainers } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
@@ -203,6 +203,7 @@ function TabItem({
       BarChart3: <BarChart3 size={14} />,
       Bug: <Bug size={14} />,
       CreditCard: <CreditCard size={14} />,
+      GitBranch: <GitBranch size={14} />,
       Settings: <Settings size={14} />,
       MessageSquare: <MessageSquare size={14} />,
     };
@@ -241,7 +242,7 @@ function TabItem({
           : 'text-secondary hover:text-primary hover:bg-hover',
         isDragging && 'opacity-50'
       )}
-      title={`${tab.title}${tab.identity ? `\nIdentity: ${tab.identity}` : ''}\nID: ${tab.id}`}
+      title={tab.title}
     >
       {/* Icon */}
       {displayIcon && (

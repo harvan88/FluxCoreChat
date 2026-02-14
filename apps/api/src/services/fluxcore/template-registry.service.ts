@@ -54,9 +54,9 @@ class TemplateRegistryService {
         }).join('\n');
 
         const deterministicDirective = `
-### DETECCIÓN AUTOMÁTICA LOCAL (CALL_TEMPLATE)
+### DETECCIÓN AUTOMÁTICA (CALL_TEMPLATE)
 
-Cuando el runtime local esté en **modo automático** y detectes con claridad que el mensaje coincide con una plantilla autorizada:
+Cuando el sistema esté en **modo automático** y detectes con claridad que el mensaje coincide con una plantilla autorizada:
 
 1. Responde **exclusivamente** con el texto \`CALL_TEMPLATE:<template_id>\`.
 2. Si necesitas variables, añade inmediatamente después un JSON con los valores. Ejemplo:

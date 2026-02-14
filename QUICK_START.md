@@ -1,6 +1,6 @@
 # FluxCore - Guía de Inicio Rápido
 
-> **Última actualización:** 2026-01-09
+> **Última actualización:** 2026-02-09
 
 ---
 
@@ -30,7 +30,7 @@ bun run dev
 ```powershell
 # 1. Instalar dependencias
 bun install
-
+j
 # 2. Levantar servicios base
 docker-compose up -d postgres redis
 
@@ -87,6 +87,29 @@ Extensión preinstalada por defecto que proporciona:
 - **Sugerencias IA**: Genera respuestas inteligentes basadas en contexto
 - **Modos de operación**: `suggest` (sugiere), `auto` (automático), `off`
 - **Branding**: Mensajes generados incluyen "(gestionado por FluxCore)"
+- **Dual runtime**: Local (Chat Completions API) u OpenAI (Assistants API)
+- **RAG-as-Tool**: El LLM decide cuándo buscar en la base de conocimiento (`search_knowledge`)
+- **Provider fallback**: Groq ↔ OpenAI con retry y mapeo automático de modelos
+
+### Servicios de IA (apps/api/src/services/)
+| Servicio | Responsabilidad |
+|----------|----------------|
+| `ai.service.ts` | Orquestador principal (delega a servicios extraídos) |
+| `ai-execution-plan.service.ts` | ExecutionPlan: single source of truth |
+| `ai-context.service.ts` | Construye contexto conversacional (DB) |
+| `ai-branding.service.ts` | Funciones puras de branding/promo |
+| `ai-suggestion-store.ts` | CRUD suggestions (DB + cache en memoria) |
+| `ai-trace.service.ts` | Traces persistidos en DB + AI Signals |
+| `ai-rate-limiter.service.ts` | Throttling per-account (sliding window) |
+| `ai-circuit-breaker.service.ts` | Fault tolerance per-provider |
+| `ai-template.service.ts` | Interacción IA ↔ templates |
+
+### Tablas de IA (Fase 2)
+| Tabla | Migración | Propósito |
+|-------|-----------|-----------|
+| `ai_traces` | `035_ai_persistence.sql` | Historial de ejecuciones IA (timing, tokens, attempts, tools) |
+| `ai_signals` | `035_ai_persistence.sql` | Señales internas del LLM (sentiment, action, routing, etc.) |
+| `ai_suggestions` | `035_ai_persistence.sql` | Suggestions persistidas (sobreviven reinicios) |
 
 ---
 
@@ -210,5 +233,8 @@ bun run build
 |-----------|-----------|
 | `TOTEM.md` | Visión y principios (inmutable) |
 | `EXECUTION_PLAN.md` | Plan de hitos |
+| `FLUX CORE.md` | Especificación técnica consolidada (UI + backend) |
+| `docs/FLUXCORE_RUNTIME_ANALYSIS.md` | Análisis arquitectónico del runtime IA |
 | `docs/DESIGN_SYSTEM.md` | Sistema de diseño canónico |
 | `docs/ESTADO_PROYECTO.md` | Estado actual |
+| `6. MIGRATIONS_REASONING_PROTOCOL.md` | Protocolo de migraciones DB |

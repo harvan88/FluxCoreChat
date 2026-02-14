@@ -602,12 +602,12 @@ class AutomationControllerService {
     if (mode === 'automatic') {
       actions.push({
         type: 'generate_response',
-        extensionId: config?.extensionId || '@fluxcore/fluxcore',
+        extensionId: config?.extensionId || '@fluxcore/asistentes',
       });
     } else if (mode === 'supervised') {
       actions.push({
         type: 'suggest_response',
-        extensionId: config?.extensionId || '@fluxcore/fluxcore',
+        extensionId: config?.extensionId || '@fluxcore/asistentes',
       });
     }
 

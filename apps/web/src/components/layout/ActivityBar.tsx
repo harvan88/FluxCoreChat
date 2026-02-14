@@ -68,8 +68,8 @@ const iconMap: Record<string, React.ReactNode> = {
 };
 
 export function ActivityBar() {
-  const { 
-    activeActivity, 
+  const {
+    activeActivity,
     setActiveActivity,
     activityBarExpanded,
     toggleActivityBar,
@@ -79,7 +79,7 @@ export function ActivityBar() {
   const { logout } = useAuthStore();
   const { activeAccount } = useAccountStore();
   const openTab = usePanelStore((state) => state.openTab);
-  
+
   // VER-002: Usar selectedAccountId de uiStore (sincronizado por AccountSwitcher)
   const selectedAccountId = uiSelectedAccountId || activeAccount?.id || null;
   const { installations } = useExtensions(selectedAccountId);
@@ -122,10 +122,10 @@ export function ActivityBar() {
           setPremiumSession(
             session && typeof session === 'object'
               ? {
-                  engine: session.engine,
-                  tokensUsed: Number(session.tokensUsed) || 0,
-                  tokenBudget: Number(session.tokenBudget) || 0,
-                }
+                engine: session.engine,
+                tokensUsed: Number(session.tokensUsed) || 0,
+                tokenBudget: Number(session.tokenBudget) || 0,
+              }
               : null
           );
         }
@@ -151,7 +151,7 @@ export function ActivityBar() {
     .filter(inst => inst.enabled && inst.manifest?.ui?.sidebar)
     .map(inst => {
       const iconKey = inst.manifest?.ui?.sidebar?.icon || 'puzzle';
-      const isFluxCoreExtension = inst.extensionId === '@fluxcore/fluxcore' || inst.extensionId === 'fluxcore';
+      const isFluxCoreExtension = inst.extensionId === '@fluxcore/asistentes' || inst.extensionId === 'fluxcore';
       const iconNode = isFluxCoreExtension
         ? <FluxCoreIcon size={22} />
         : iconMap[iconKey] || <ExtensionsIcon size={22} />;
@@ -162,7 +162,7 @@ export function ActivityBar() {
         label: inst.manifest?.ui?.sidebar?.title || inst.manifest?.name || 'Extension',
       };
     });
-  
+
   // VER-004: Log extensiones con UI
   console.log('[ActivityBar] extensionActivities:', extensionActivities);
 
@@ -186,7 +186,7 @@ export function ActivityBar() {
   };
 
   return (
-    <div 
+    <div
       className={clsx(
         'bg-surface flex flex-col py-3 border-r border-subtle transition-all duration-300 ease-in-out',
         activityBarExpanded ? 'w-52' : 'w-14'
@@ -204,7 +204,7 @@ export function ActivityBar() {
         <div className={clsx(activityBarExpanded ? 'flex-1 min-w-0' : '')}>
           <AccountSwitcher compact={!activityBarExpanded} />
         </div>
-        
+
         {/* Toggle button */}
         <button
           onClick={toggleActivityBar}
@@ -221,7 +221,7 @@ export function ActivityBar() {
           )}
         </button>
       </div>
-      
+
       {/* Activities */}
       <div className="flex-1 space-y-1 px-2">
         {activities.map((activity) => (

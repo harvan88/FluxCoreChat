@@ -17,19 +17,24 @@ import {
   FileText,
   Database,
   Wrench,
+  GitBranch,
   Bug,
   CreditCard,
   Lock,
+  LayoutDashboard,
 } from 'lucide-react';
 
 import { SidebarNavList } from '../ui';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 import { FluxCoreView } from '@/types/fluxcore/views.types';
+import { RuntimeSwitcher } from './RuntimeSwitcher';
+import { useAIStatus } from '../../hooks/fluxcore/useAIStatus';
 
 interface FluxCoreSidebarProps {
   activeView: FluxCoreView;
   onViewChange: (view: FluxCoreView) => void;
   accountName?: string;
+  accountId?: string | null;
   isLocked?: boolean;
 }
 
@@ -39,6 +44,8 @@ const navItems: SidebarNavItem[] = [
   { id: 'instructions', label: 'Instrucciones del sistema', icon: <FileText size={18} /> },
   { id: 'knowledge-base', label: 'Base de conocimiento', icon: <Database size={18} /> },
   { id: 'tools', label: 'Herramientas', icon: <Wrench size={18} /> },
+  { id: 'agents', label: 'Agentes', icon: <GitBranch size={18} /> },
+  { id: 'works', label: 'Fluxi', icon: <LayoutDashboard size={18} /> },
   { id: 'debug', label: 'Depuración del asistente', icon: <Bug size={18} /> },
   { id: 'billing', label: 'Facturación', icon: <CreditCard size={18} /> },
 ];
@@ -47,8 +54,24 @@ export function FluxCoreSidebar({
   activeView,
   onViewChange,
   accountName = 'FluxCore',
+  accountId,
   isLocked = false,
 }: FluxCoreSidebarProps) {
+  const { status } = useAIStatus({ accountId });
+  const activeRuntime = status?.activeRuntimeId || '@fluxcore/asistentes';
+  const isFluxiActive = activeRuntime === '@fluxcore/fluxi';
+
+  // Filtrar navegación según el motor activo
+  const filteredNavItems = navItems.filter((item) => {
+    if (isFluxiActive) {
+      // Modo Fluxi: Ocultar secciones conversacionales puras
+      return !['assistants', 'instructions', 'agents', 'debug'].includes(item.id);
+    } else {
+      // Modo Asistentes: Ocultar secciones de Fluxi
+      return item.id !== 'works';
+    }
+  });
+
   return (
     <div className="h-full flex flex-col bg-surface border-r border-subtle">
       {/* Header */}
@@ -62,11 +85,14 @@ export function FluxCoreSidebar({
         )}
       </div>
 
+      {/* Runtime Switcher */}
+      {accountId && <RuntimeSwitcher accountId={accountId} />}
+
       {/* Navigation */}
       <SidebarNavList
         as="nav"
         className="flex-1"
-        items={navItems.map((item) => ({
+        items={filteredNavItems.map((item) => ({
           ...item,
           active: activeView === item.id,
           onSelect: () => onViewChange(item.id as FluxCoreView),

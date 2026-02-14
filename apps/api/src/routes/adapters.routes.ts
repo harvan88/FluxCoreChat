@@ -4,8 +4,8 @@
 
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { 
-  getAdapterManager, 
+import {
+  getAdapterManager,
   type NormalizedMessage
 } from '../../../../packages/adapters/src';
 
@@ -58,7 +58,7 @@ export const adaptersRoutes = new Elysia({ prefix: '/adapters' })
 
     if (mode === 'subscribe') {
       const expectedToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'fluxcore_verify';
-      
+
       if (token === expectedToken) {
         console.log('[whatsapp-webhook] Verification successful');
         return challenge;
@@ -68,12 +68,12 @@ export const adaptersRoutes = new Elysia({ prefix: '/adapters' })
     set.status = 403;
     return 'Forbidden';
   })
-  
+
   // POST /adapters/whatsapp/webhook - Recibir mensajes de WhatsApp
   .post('/whatsapp/webhook', async ({ body }) => {
     try {
       const message = await adapterManager.handleWebhook('whatsapp', body);
-      
+
       if (message) {
         console.log(`[whatsapp-webhook] Message received: ${message.id}`);
       }

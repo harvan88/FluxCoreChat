@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import type { AIEligibilityResponse, AIStatusResponse } from '../../types';
 import { subscribeAssistantUpdateEvent } from './events';
@@ -27,7 +27,7 @@ export function useAIStatus({ accountId, conversationId }: UseAIStatusParams): U
     [accountId, conversationId],
   );
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!accountId) return;
 
     setIsLoading(true);
@@ -56,11 +56,13 @@ export function useAIStatus({ accountId, conversationId }: UseAIStatusParams): U
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [accountId, canCheckEligibility, conversationId]);
 
   useEffect(() => {
+    setStatus(null);
+    setEligibility(null);
     void refresh();
-  }, [accountId, conversationId]);
+  }, [accountId, conversationId, refresh]);
 
   useEffect(() => {
     if (!accountId) {

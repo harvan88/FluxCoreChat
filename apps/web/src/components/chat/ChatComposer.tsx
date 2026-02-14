@@ -28,7 +28,7 @@ export function ChatComposer(props: {
 
   // Lógica de inyección: Si FluxCore está instalado y habilitado, toma el control.
   const isFluxCoreEnabled = installations.some(
-    (i) => i.extensionId === '@fluxcore/fluxcore' && i.enabled
+    (i) => i.extensionId === '@fluxcore/asistentes' && i.enabled
   );
 
   if (isFluxCoreEnabled) {

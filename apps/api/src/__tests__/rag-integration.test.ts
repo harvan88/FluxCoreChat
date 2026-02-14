@@ -205,7 +205,7 @@ describe('MetricsService', () => {
 
 describe('PromptBuilder RAG Integration', () => {
     test('should include RAG context in system prompt', async () => {
-        const { PromptBuilder } = await import('../../../extensions/fluxcore/src/prompt-builder');
+        const { PromptBuilder } = await import('../../../extensions/fluxcore-asistentes/src/prompt-builder');
 
         const builder = new PromptBuilder({
             mode: 'suggest',
@@ -233,7 +233,7 @@ describe('PromptBuilder RAG Integration', () => {
     });
 
     test('should work without RAG context', async () => {
-        const { PromptBuilder } = await import('../../../extensions/fluxcore/src/prompt-builder');
+        const { PromptBuilder } = await import('../../../extensions/fluxcore-asistentes/src/prompt-builder');
 
         const builder = new PromptBuilder({
             mode: 'suggest',

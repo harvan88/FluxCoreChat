@@ -13,10 +13,10 @@ const builtInExtensions: Map<string, ExtensionManifest> = new Map();
 // Ruta base (root folder) de extensiones cargadas desde disco
 const extensionRoots: Map<string, string> = new Map();
 
-// Manifest de @fluxcore/fluxcore (preinstalada)
-const fluxcoreManifest: ExtensionManifest = {
-  id: '@fluxcore/fluxcore',
-  name: 'FluxCore',
+// Manifest de @fluxcore/asistentes (preinstalada)
+const asistentesManifest: ExtensionManifest = {
+  id: '@fluxcore/asistentes',
+  name: 'Asistentes',
   version: '1.0.0',
   description: 'Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto',
   author: 'FluxCore',
@@ -38,14 +38,14 @@ const fluxcoreManifest: ExtensionManifest = {
       enum: ['groq', 'openai'],
       description: 'Proveedor de IA a utilizar (controlado por entitlements)',
     },
-    mode: { 
-      type: 'string', 
+    mode: {
+      type: 'string',
       default: 'suggest',
       enum: ['suggest', 'auto', 'off'],
       description: 'Modo de operación: suggest (sugiere), auto (envía automático), off (desactivado)'
     },
-    responseDelay: { 
-      type: 'number', 
+    responseDelay: {
+      type: 'number',
       default: 30,
       description: 'Segundos de espera antes de responder automáticamente'
     },
@@ -68,9 +68,8 @@ const fluxcoreManifest: ExtensionManifest = {
   },
 };
 
-// Registrar extensiones built-in (FluxCore es preinstalada)
-// Nota: Karen (@fluxcore/website-builder) se carga desde extensions/Karen/manifest.json
-builtInExtensions.set(fluxcoreManifest.id, fluxcoreManifest);
+// Registrar extensiones built-in
+builtInExtensions.set(asistentesManifest.id, asistentesManifest);
 
 class ManifestLoaderService {
   private manifests: Map<string, ExtensionManifest> = new Map(builtInExtensions);
@@ -155,11 +154,11 @@ class ManifestLoaderService {
    */
   async loadFromDirectory(extensionPath: string): Promise<ExtensionManifest | null> {
     const manifestPath = path.join(extensionPath, 'manifest.json');
-    
+
     try {
       const content = fs.readFileSync(manifestPath, 'utf-8');
       const manifest = JSON.parse(content) as ExtensionManifest;
-      
+
       const validation = this.validateManifest(manifest);
       if (!validation.valid) {
         console.error(`Invalid manifest at ${manifestPath}:`, validation.errors);

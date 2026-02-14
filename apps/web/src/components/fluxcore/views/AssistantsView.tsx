@@ -35,7 +35,6 @@ export function AssistantsView({
     updateLocalAssistant,
     deleteAssistant,
     activateAssistant,
-    getActiveConfig,
     getAssistantFromDB,
     refresh,
     setError
@@ -130,7 +129,7 @@ export function AssistantsView({
     const performSave = async () => {
       setIsLocalSaving(true);
       const payload = buildAssistantPayload(assistant);
-      const result = await updateAssistant(assistant.id, payload as any);
+      await updateAssistant(assistant.id, payload as any);
       setIsLocalSaving(false);
     };
 

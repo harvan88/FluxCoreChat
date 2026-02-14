@@ -23,3 +23,4 @@ export { useInstructions } from './useInstructions';
 export { useVectorStores } from './useVectorStores';
 export { useTools } from './useTools';
 export { useAIStatus } from './useAIStatus';
+export { useWorks } from './useWorks';

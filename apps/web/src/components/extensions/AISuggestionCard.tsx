@@ -7,11 +7,11 @@
 
 import { useState } from 'react';
 import clsx from 'clsx';
-import { 
-  Check, 
-  X, 
-  Edit3, 
-  Sparkles, 
+import {
+  Check,
+  X,
+  Edit3,
+  Sparkles,
   RefreshCw,
   Copy,
   ChevronDown,
@@ -139,7 +139,7 @@ export function AISuggestionCard({
           )}
         </div>
         <span className="text-xs text-muted">
-          {suggestion.extensionId === '@fluxcore/fluxcore' ? 'FluxCore' : suggestion.extensionId}
+          {suggestion.extensionId === '@fluxcore/asistentes' ? 'FluxCore' : suggestion.extensionId}
         </span>
       </div>
 
@@ -166,7 +166,7 @@ export function AISuggestionCard({
             {showReasoning ? 'Ocultar razonamiento' : 'Ver razonamiento'}
           </button>
         )}
-        
+
         {showReasoning && suggestion.reasoning && (
           <div className="mt-2 p-3 bg-elevated rounded-lg text-xs text-muted italic">
             {suggestion.reasoning}

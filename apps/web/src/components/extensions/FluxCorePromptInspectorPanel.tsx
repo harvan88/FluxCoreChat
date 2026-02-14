@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Copy, RefreshCw, Trash2, Download, AlertTriangle, Clock } from 'lucide-react';
+import { Copy, RefreshCw, Download, AlertTriangle, Clock } from 'lucide-react';
 import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
+import { DoubleConfirmationDeleteButton } from '../ui';
 
 type TraceSummary = {
   id: string;
@@ -94,6 +95,8 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
   const [detail, setDetail] = useState<TraceDetail | null>(null);
   const [isCopyingAll, setIsCopyingAll] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isClearingTraces, setIsClearingTraces] = useState(false);
+  const [deletingTraceId, setDeletingTraceId] = useState<string | null>(null);
 
   const effectiveConversationFilter = useMemo(() => {
     const trimmed = conversationFilter.trim();
@@ -177,10 +180,6 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
           .map((x: any) => x?.name || '—')
           .join(', ') || (assistantMeta.vectorStoreIds?.join(', ') || '—');
 
-        const toolNames = (assistantMeta.tools || [])
-          .map((x: any) => x?.name || '—')
-          .join(', ') || '—';
-
         const usageFinal = d.final?.usage
           ? `${d.final.usage.prompt_tokens} + ${d.final.usage.completion_tokens} = ${d.final.usage.total_tokens}`
           : '—';
@@ -189,7 +188,7 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
         const contextText = JSON.stringify(d.context || {}, null, 2);
 
         const toolsUsedSection = Array.isArray(d.toolsUsed) && d.toolsUsed.length > 0
-          ? `Herramientas ejecutadas\n\n${d.toolsUsed.map((tool: any, idx: number) => {
+          ? `Herramientas ejecutadas\n\n${d.toolsUsed.map((tool: any, _idx: number) => {
             const status = tool?.status || 'not_invoked';
             return `${tool?.name || 'Tool'}\n${status}\nconnectionId: ${tool?.connectionId || '—'}\n${status === 'not_invoked' ? 'Pendiente de ejecución' : ''}`;
           }).join('\n\n')}`
@@ -279,6 +278,8 @@ ${attemptsSection}
     setDetail(null);
     setTraces([]);
     setError(null);
+    setDeletingTraceId(null);
+    setIsClearingTraces(false);
 
     if (effectiveAccountId) {
       loadTraces();
@@ -330,12 +331,9 @@ ${attemptsSection}
   };
 
   const handleClear = async () => {
-    if (!effectiveAccountId) return;
+    if (!effectiveAccountId || isClearingTraces) return;
 
-    const confirmed = window.confirm('¿Limpiar trazas de Prompt Inspector para esta cuenta?');
-    if (!confirmed) return;
-
-    setIsLoading(true);
+    setIsClearingTraces(true);
     setError(null);
 
     try {
@@ -348,8 +346,35 @@ ${attemptsSection}
       setSelectedTraceId(null);
       setDetail(null);
       await loadTraces();
+    } catch (e: any) {
+      setError(e?.message || 'Error al limpiar trazas');
     } finally {
-      setIsLoading(false);
+      setIsClearingTraces(false);
+    }
+  };
+
+  const handleDeleteTrace = async (traceId: string) => {
+    if (!effectiveAccountId || deletingTraceId) return;
+
+    setDeletingTraceId(traceId);
+    setError(null);
+
+    try {
+      const res = await api.deleteAITrace({ accountId: effectiveAccountId, traceId });
+      if (!res.success) {
+        setError(res.error || 'Error al eliminar traza');
+        return;
+      }
+
+      setTraces((prev) => prev.filter((t) => t.id !== traceId));
+      if (selectedTraceId === traceId) {
+        setSelectedTraceId(null);
+        setDetail(null);
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Error al eliminar traza');
+    } finally {
+      setDeletingTraceId(null);
     }
   };
 
@@ -403,13 +428,15 @@ ${attemptsSection}
           >
             <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
           </button>
-          <button
-            onClick={handleClear}
-            className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-            title="Limpiar"
-          >
-            <Trash2 size={16} />
-          </button>
+          <DoubleConfirmationDeleteButton
+            onConfirm={handleClear}
+            className={clsx(
+              'ml-1',
+              (isLoading || isClearingTraces) && 'opacity-50 pointer-events-none'
+            )}
+            size={16}
+            disabled={isLoading || isClearingTraces}
+          />
         </div>
       </div>
 
@@ -458,7 +485,18 @@ ${attemptsSection}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-primary truncate">{new Date(t.createdAt).toLocaleString()}</div>
-                      <div className="text-[11px] text-muted">{tokenLabel}</div>
+                      <div className="flex items-center gap-1">
+                        <div className="text-[11px] text-muted">{tokenLabel}</div>
+                        <DoubleConfirmationDeleteButton
+                          onConfirm={() => handleDeleteTrace(t.id)}
+                          size={14}
+                          disabled={deletingTraceId === t.id || isLoading || isClearingTraces}
+                          className={clsx(
+                            'shrink-0',
+                            deletingTraceId === t.id && 'opacity-50 pointer-events-none'
+                          )}
+                        />
+                      </div>
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <div className="text-[11px] text-secondary truncate">conv {shortId(t.conversationId)}</div>
@@ -578,16 +616,28 @@ ${attemptsSection}
                   </div>
                 )}
 
-                <Section
-                  title="System Prompt"
-                  onCopy={() => copyToClipboard(detail.builtPrompt.systemPrompt)}
-                  content={detail.builtPrompt.systemPrompt}
-                />
+                {detail.builtPrompt ? (
+                  <Section
+                    title="System Prompt"
+                    onCopy={() => copyToClipboard(detail.builtPrompt?.systemPrompt || '')}
+                    content={detail.builtPrompt?.systemPrompt || '— (sin system prompt registrado)'}
+                  />
+                ) : (
+                  <Section
+                    title="System Prompt"
+                    onCopy={() => copyToClipboard('')}
+                    content="— (sin system prompt registrado)"
+                  />
+                )}
 
                 <JsonSection
                   title="Messages (with current)"
-                  onCopy={() => copyToClipboard(JSON.stringify(detail.builtPrompt.messagesWithCurrent, null, 2))}
-                  value={detail.builtPrompt.messagesWithCurrent}
+                  onCopy={() =>
+                    copyToClipboard(
+                      JSON.stringify(detail.builtPrompt?.messagesWithCurrent ?? [], null, 2)
+                    )
+                  }
+                  value={detail.builtPrompt?.messagesWithCurrent ?? []}
                 />
 
                 <JsonSection

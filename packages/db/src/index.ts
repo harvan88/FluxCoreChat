@@ -6,3 +6,6 @@ export * from './schema';
 
 // Export utilities
 export * from './utils';
+
+// Export shared types
+export * from './types/policy-context';

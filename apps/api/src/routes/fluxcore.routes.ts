@@ -12,6 +12,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { fluxcoreService } from '../services/fluxcore.service';
 import { getOpenAIAssistant } from '../services/openai-sync.service';
+import { fluxiRoutes } from './fluxcore/works.routes'; // WES-180
 
 // ============================================================================
 // ASSISTANTS ROUTES
@@ -1428,4 +1429,5 @@ export const fluxcoreRoutes = new Elysia({ prefix: '/fluxcore' })
   .use(assistantsRoutes)
   .use(instructionsRoutes)
   .use(vectorStoresRoutes)
-  .use(toolsRoutes);
+  .use(toolsRoutes)
+  .use(fluxiRoutes); // WES-180

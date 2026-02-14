@@ -33,7 +33,7 @@ export function ConversationsList() {
 
   // Check extensions
   const { installations } = useExtensions(selectedAccountId);
-  const isFluxCoreEnabled = installations.some(i => i.extensionId === '@fluxcore/fluxcore' && i.enabled);
+  const isFluxCoreEnabled = installations.some(i => i.extensionId === '@fluxcore/asistentes' && i.enabled);
 
   const listRef = useRef<HTMLDivElement>(null);
   const lastLoadedAccountIdRef = useRef<string | null>(null);

@@ -11,6 +11,7 @@ import {
     fluxcoreAssistantVectorStores,
     fluxcoreAssistantTools,
     fluxcoreInstructionVersions,
+    accountRuntimeConfig,
     type FluxcoreAssistant,
     type FluxcoreVectorStore,
     type FluxcoreToolDefinition,
@@ -190,6 +191,22 @@ export async function getAssistantComposition(assistantId: string): Promise<Assi
  * Determina qué asistente debe responder para una cuenta
  */
 export async function resolveActiveAssistant(accountId: string): Promise<AssistantComposition | null> {
+    // Dimensión 1: Respetar Master Switch (Soberanía de Runtime)
+    const [runtimeConfig] = await db
+        .select()
+        .from(accountRuntimeConfig)
+        .where(eq(accountRuntimeConfig.accountId, accountId))
+        .limit(1);
+
+    const config = (runtimeConfig?.config || {}) as any;
+    const preferredId = config.preferredAssistantId;
+
+    if (preferredId) {
+        const composition = await getAssistantComposition(preferredId);
+        if (composition) return composition;
+    }
+
+    // Fallback: buscar el activo de siempre
     const activeAssistant = await assistantsService.ensureActiveAssistant(accountId);
     return getAssistantComposition(activeAssistant.id);
 }

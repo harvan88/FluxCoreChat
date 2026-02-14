@@ -19,6 +19,7 @@ import { adaptersRoutes } from './routes/adapters.routes';
 import { workspacesRoutes } from './routes/workspaces.routes';
 import { automationRoutes } from './routes/automation.routes';
 import { templatesRoutes } from './routes/templates.routes';
+import { fluxiRoutes } from './routes/fluxcore/works.routes'; // WES-180
 import { messageCore } from './core/message-core';
 import { conversationService } from './services/conversation.service';
 
@@ -28,7 +29,7 @@ const app = new Elysia()
   .onError(({ error, request }) => {
     const url = new URL(request.url);
     const severity = isOperationalError(error) ? 'warning' : 'error';
-    
+
     errorTracker.capture(error, severity, {
       method: request.method,
       path: url.pathname,
@@ -87,10 +88,17 @@ const app = new Elysia()
   .use(workspacesRoutes)
   .use(automationRoutes)
   .use(templatesRoutes)
+  .use(fluxiRoutes) // WES-180
   .listen(PORT);
 
 async function initializeMessageCore() {
   try {
+    const { wesScheduler } = await import('./services/wes-scheduler.service');
+    await wesScheduler.init();
+
+    const { aiOrchestrator } = await import('./services/ai-orchestrator.service');
+    aiOrchestrator.init();
+
     const conversations = await conversationService.getAllConversations();
     conversations.forEach(conv => {
       messageCore.registerConversation(conv.id, conv.relationshipId);

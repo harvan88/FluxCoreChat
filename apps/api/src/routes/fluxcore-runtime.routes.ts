@@ -1,14 +1,47 @@
 import { Elysia, t } from 'elysia';
 import { db } from '@fluxcore/db';
 import { sql } from 'drizzle-orm';
+import crypto from 'node:crypto'; // Import crypto
 import { fluxcoreService } from '../services/fluxcore.service';
 import { retrievalService } from '../services/retrieval.service';
 import { ragConfigService } from '../services/rag-config.service';
 import { aiTemplateService } from '../services/ai-template.service';
-import { PromptBuilder } from '../../../../extensions/fluxcore/src/prompt-builder';
-import { buildExtraInstructions } from '../../../../extensions/fluxcore/src/prompt-utils';
+import { PromptBuilder } from '../../../../extensions/fluxcore-asistentes/src/prompt-builder';
+import { buildExtraInstructions } from '../../../../extensions/fluxcore-asistentes/src/prompt-utils';
 
 export const fluxcoreRuntimeRoutes = new Elysia({ prefix: '/fluxcore/runtime' })
+  .get('/test-trigger', async ({ query, set }) => {
+    console.log('--- TEST TRIGGER ---');
+    const accountId = query.accountId || '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+    const conversationId = query.conversationId || '28a6f187-db8c-4bdb-8405-4db79f0144bf';
+    const senderAccountId = query.senderAccountId || '5c59a05b-4b94-4f78-ab14-9a5fdabe2d31';
+
+    // Simular recepción de mensaje
+    const envelope = {
+      id: crypto.randomUUID(),
+      conversationId,
+      type: 'incoming', // Fixed type
+      content: { text: query.text || 'Hola mundo de prueba fluxcore' },
+      senderAccountId,
+      targetAccountId: accountId,
+      timestamp: new Date()
+    };
+
+    // Injectar en coreEventBus (esto lo hace MessageCore normalmente)
+    const { coreEventBus } = await import('../core/events');
+    coreEventBus.emit('core:message_received', {
+      envelope,
+      result: { success: true, messageId: envelope.id }
+    });
+
+    return { success: true, message: 'Triggered', envelope };
+  }, {
+    query: t.Object({
+      accountId: t.Optional(t.String()),
+      text: t.Optional(t.String()),
+      conversationId: t.Optional(t.String())
+    })
+  })
   .get('/active-assistant', async ({ query, set }) => {
     const accountId = query.accountId;
     if (!accountId) {

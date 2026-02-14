@@ -86,17 +86,17 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
 
       const payload = plan.canExecute
         ? {
-            canExecute: true as const,
-            provider: plan.provider,
-            model: plan.model,
-            runtime: plan.runtime,
-            mode: plan.mode,
-            requiresCredits: plan.provider === 'openai',
-          }
+          canExecute: true as const,
+          provider: plan.provider,
+          model: plan.model,
+          runtime: plan.runtime,
+          mode: plan.mode,
+          requiresCredits: plan.provider === 'openai',
+        }
         : {
-            canExecute: false as const,
-            block: plan.block,
-          };
+          canExecute: false as const,
+          block: plan.block,
+        };
 
       return { success: true, data: payload };
     } catch (error: any) {
@@ -269,6 +269,47 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     }),
   })
 
+  // DELETE /ai/traces/:traceId - Delete a single trace
+  .delete('/traces/:traceId', async ({ user, params, query, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const accountId = (query as any)?.accountId as string | undefined;
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
+      const deleted = await aiService.deleteTrace({ accountId, traceId: params.traceId });
+      if (!deleted) {
+        set.status = 404;
+        return { success: false, message: 'Trace not found' };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
+  }, {
+    params: t.Object({
+      traceId: t.String(),
+    }),
+    query: t.Object({
+      accountId: t.String(),
+    }),
+  })
+
   // DELETE /ai/traces - Clear traces for account (requires account ownership)
   .delete('/traces', async ({ user, query, set }) => {
     if (!user) {
@@ -314,9 +355,9 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
 
       if (!conversationId || !accountId || !message) {
         set.status = 400;
-        return { 
-          success: false, 
-          message: 'conversationId, accountId and message are required' 
+        return {
+          success: false,
+          message: 'conversationId, accountId and message are required'
         };
       }
 
@@ -514,6 +555,43 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     }),
     body: t.Object({
       content: t.String(),
+    }),
+  })
+
+  // POST /ai/runtime - Cambiar el motor de ejecución (WES vs FluxCore)
+  .post('/runtime', async ({ user, body, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const { accountId, runtimeId } = body as any;
+
+      if (!accountId || !runtimeId) {
+        set.status = 400;
+        return { success: false, message: 'accountId and runtimeId are required' };
+      }
+
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
+      const { runtimeConfigService } = await import('../services/runtime-config.service');
+      await runtimeConfigService.setRuntime(accountId, runtimeId);
+
+      return { success: true, message: `Runtime changed to ${runtimeId}` };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
+  }, {
+    body: t.Object({
+      accountId: t.String(),
+      runtimeId: t.String(),
     }),
   });
 
