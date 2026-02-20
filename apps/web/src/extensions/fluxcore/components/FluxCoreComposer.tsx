@@ -22,8 +22,8 @@ import { AudioRecorderPanel } from '../../../components/chat/AudioRecorderPanel'
 import { CameraCaptureModal } from '../../../components/chat/CameraCaptureModal';
 import { EmojiPanel } from '../../../components/chat/EmojiPanel';
 import { TemplateQuickPicker } from '../../../components/chat/TemplateQuickPicker';
-import { useAutomation, type AutomationMode } from '../../../hooks/useAutomation';
-import { useAIStatus } from '../../../hooks/fluxcore';
+import { useAssistantMode, type AssistantMode, useAIStatus } from '../../../hooks/fluxcore';
+import { SuggestResponsePanel } from './SuggestResponsePanel';
 import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from '../../../components/chat/composerUploadTypes';
 import type { Template } from '../../../components/templates/types';
 import { usePanelStore } from '../../../store/panelStore';
@@ -62,8 +62,7 @@ export function FluxCoreComposer(props: {
     const openTab = usePanelStore((state) => state.openTab);
     const setActiveActivity = useUIStore((state) => state.setActiveActivity);
 
-    // Hook de automatización (Propiedad de FluxCore)
-    const { currentMode, isLoading: isAutomationLoading, loadMode, setRule } = useAutomation(props.accountId ?? null, props.relationshipId);
+    const { mode: currentMode, isLoading: isAutomationLoading, setMode: setModeOnAssistant } = useAssistantMode(props.accountId ?? null);
     const {
         status: aiStatus,
         eligibility: aiEligibility,
@@ -76,8 +75,8 @@ export function FluxCoreComposer(props: {
     const openGalleryRef = useRef<(() => void) | null>(null);
     const openDocumentRef = useRef<(() => void) | null>(null);
 
-    const effectiveAIMode: AutomationMode = props.accountId ? currentMode : 'disabled';
-    const isAutomaticMode = effectiveAIMode === 'automatic';
+    const effectiveAIMode: AssistantMode = props.accountId ? (currentMode === 'off' ? 'off' : currentMode) : 'off';
+    const isAutomaticMode = effectiveAIMode === 'auto';
     const hasQueuedMedia = queuedMedia.length > 0;
     const hasText = props.value.trim().length > 0;
     const aiBlockInfo = useMemo(() => {
@@ -224,24 +223,23 @@ export function FluxCoreComposer(props: {
         }
     };
 
-    const setAIMode = async (mode: AutomationMode) => {
+    const setAIMode = async (mode: AssistantMode) => {
         if (!props.accountId) return;
-        await setRule(mode, { relationshipId: props.relationshipId });
-        await loadMode(props.relationshipId);
+        await setModeOnAssistant(mode);
         setIsAIModeOpen(false);
     };
 
     const AIIcon =
-        effectiveAIMode === 'automatic'
+        effectiveAIMode === 'auto'
             ? Bot
-            : effectiveAIMode === 'supervised'
+            : effectiveAIMode === 'suggest'
                 ? BotMessageSquare
                 : BotOff;
 
     const aiColorClassName =
-        effectiveAIMode === 'automatic'
+        effectiveAIMode === 'auto'
             ? 'text-success'
-            : effectiveAIMode === 'supervised'
+            : effectiveAIMode === 'suggest'
                 ? 'text-warning'
                 : 'text-muted';
 
@@ -308,15 +306,15 @@ export function FluxCoreComposer(props: {
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
                 {/* Botones de modo */}
-                <button type="button" onClick={() => setAIMode('supervised')} disabled className="rounded-2xl p-4 border flex flex-col items-center justify-center gap-3 bg-elevated border-subtle text-secondary cursor-not-allowed">
+                <button type="button" onClick={() => setAIMode('suggest')} disabled={!props.accountId || isAutomationLoading} className={clsx('rounded-2xl p-4 border flex flex-col items-center justify-center gap-3', effectiveAIMode === 'suggest' ? 'bg-elevated border-strong text-primary' : 'bg-elevated border-subtle hover:bg-hover')}>
                     <BotMessageSquare className="w-6 h-6 text-warning" />
                     <span className="text-xs">Supervisado</span>
                 </button>
-                <button type="button" onClick={() => setAIMode('automatic')} disabled={!props.accountId || isAutomationLoading} className={clsx('rounded-2xl p-4 border flex flex-col items-center justify-center gap-3', effectiveAIMode === 'automatic' ? 'bg-elevated border-strong text-primary' : 'bg-elevated border-subtle hover:bg-hover')}>
+                <button type="button" onClick={() => setAIMode('auto')} disabled={!props.accountId || isAutomationLoading} className={clsx('rounded-2xl p-4 border flex flex-col items-center justify-center gap-3', effectiveAIMode === 'auto' ? 'bg-elevated border-strong text-primary' : 'bg-elevated border-subtle hover:bg-hover')}>
                     <Bot className="w-6 h-6 text-success" />
                     <span className="text-xs">Automático</span>
                 </button>
-                <button type="button" onClick={() => setAIMode('disabled')} disabled={!props.accountId || isAutomationLoading} className={clsx('rounded-2xl p-4 border flex flex-col items-center justify-center gap-3', effectiveAIMode === 'disabled' ? 'bg-elevated border-strong text-primary' : 'bg-elevated border-subtle hover:bg-hover')}>
+                <button type="button" onClick={() => setAIMode('off')} disabled={!props.accountId || isAutomationLoading} className={clsx('rounded-2xl p-4 border flex flex-col items-center justify-center gap-3', effectiveAIMode === 'off' ? 'bg-elevated border-strong text-primary' : 'bg-elevated border-subtle hover:bg-hover')}>
                     <BotOff className="w-6 h-6 text-muted" />
                     <span className="text-xs">Desactivado</span>
                 </button>
@@ -351,11 +349,16 @@ export function FluxCoreComposer(props: {
 
     const renderAutomaticMode = () => (
         <div className="flex items-center gap-3">
-            <button onClick={() => setAIMode('disabled')} disabled={!props.accountId || props.disabled} className="px-5 h-12 rounded-full border bg-surface border-default text-primary hover:bg-hover">Desactivar</button>
-            <div className="flex-1 min-w-0 bg-surface border border-default rounded-full px-4 h-12 flex items-center justify-center">
-                <div className="text-sm text-primary text-center truncate">Fluxcore responderá automáticamente</div>
+            <button onClick={() => setAIMode('off')} disabled={!props.accountId || props.disabled} className="px-5 h-12 rounded-full border bg-surface border-default text-primary hover:bg-hover font-medium text-sm">
+                Desactivar
+            </button>
+            <div className="flex-1 min-w-0 bg-surface border border-default rounded-full px-4 h-12 flex items-center justify-center cursor-pointer hover:bg-hover transition-colors" onClick={() => { if (canOpenAIModeSelector) setIsAIModeOpen(true); }}>
+                <div className="text-sm font-medium text-success text-center truncate flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                    Fluxcore responderá automáticamente
+                </div>
             </div>
-            <button onClick={() => { if (canOpenAIModeSelector) setIsAIModeOpen(true); }} disabled={!canOpenAIModeSelector} className={clsx('w-12 h-12 rounded-full flex items-center justify-center border bg-surface border-default transition-colors', !canOpenAIModeSelector ? 'opacity-50 cursor-not-allowed' : 'hover:bg-hover')}>
+            <button onClick={() => { if (canOpenAIModeSelector) setIsAIModeOpen(true); }} disabled={!canOpenAIModeSelector} className={clsx('w-12 h-12 rounded-full flex items-center justify-center border transition-colors', !canOpenAIModeSelector ? 'bg-surface border-default opacity-50 cursor-not-allowed' : 'bg-success/10 border-success/30 hover:bg-success/20')}>
                 <AIIcon size={20} className={aiColorClassName} />
             </button>
         </div>
@@ -473,6 +476,14 @@ export function FluxCoreComposer(props: {
                         );
                     })}
                 </div>
+            )}
+
+            {effectiveAIMode === 'suggest' && props.accountId && props.conversationId && (
+                <SuggestResponsePanel
+                    accountId={props.accountId}
+                    conversationId={props.conversationId}
+                    onSent={() => { /* parent refreshes via WebSocket */ }}
+                />
             )}
 
             {aiBlockInfo && (

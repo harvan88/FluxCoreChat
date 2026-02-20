@@ -50,34 +50,37 @@ export interface WebsiteSiteConfig {
  */
 export const websiteConfigs = pgTable('website_configs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  
+
   // Relación con cuenta (usa accounts.alias para URL)
   accountId: uuid('account_id')
     .notNull()
     .references(() => accounts.id, { onDelete: 'cascade' })
     .unique(),
-  
+
   // Estado del sitio
   status: varchar('status', { length: 20 }).notNull().default('draft'),
-  
+
   // Configuración del sitio (site.config.yaml parseado)
   config: jsonb('config').notNull().default({}).$type<WebsiteSiteConfig>(),
-  
+
   // Array de páginas MDX
   pages: jsonb('pages').notNull().default([]).$type<WebsitePage[]>(),
-  
+
   // Metadatos de build
   lastBuildAt: timestamp('last_build_at'),
   buildHash: varchar('build_hash', { length: 64 }),
   publishedAt: timestamp('published_at'),
-  
+
   // Dominio personalizado (opcional, para futuro)
   customDomain: varchar('custom_domain', { length: 255 }),
   customDomainVerified: boolean('custom_domain_verified').default(false),
-  
+
   // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+
+  // PC-823/840: Authorization for automated use (PolicyContext)
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
 });
 
 /**

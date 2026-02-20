@@ -3,14 +3,23 @@
  */
 
 import { useState } from 'react';
-import { User, Bell, Shield, Palette, ChevronRight, Building2, Bot } from 'lucide-react';
+import { User, Bell, Shield, Palette, ChevronRight, Building2, Bot, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { ThemeSettings } from '../common';
 import { ProfileSection } from './ProfileSection';
 import { AutomationSection } from './AutomationSection';
 import { AccountsSection } from '../accounts';
+import { KernelSessionsSection } from './KernelSessionsSection';
 
-type SettingsSection = 'menu' | 'profile' | 'accounts' | 'notifications' | 'privacy' | 'appearance' | 'automation';
+type SettingsSection =
+  | 'menu'
+  | 'profile'
+  | 'accounts'
+  | 'notifications'
+  | 'privacy'
+  | 'appearance'
+  | 'automation'
+  | 'kernel';
 
 interface SettingItem {
   id: SettingsSection;
@@ -26,6 +35,7 @@ const settingItems: SettingItem[] = [
   { id: 'notifications', icon: <Bell size={20} />, label: 'Notificaciones', description: 'Configura las alertas' },
   { id: 'privacy', icon: <Shield size={20} />, label: 'Privacidad', description: 'Controla quién puede verte' },
   { id: 'appearance', icon: <Palette size={20} />, label: 'Apariencia', description: 'Personaliza la interfaz' },
+  { id: 'kernel', icon: <ShieldCheck size={20} />, label: 'Kernel', description: 'Sesiones activas e identidad soberana' },
 ];
 
 export function SettingsPanel() {
@@ -42,6 +52,8 @@ export function SettingsPanel() {
         return <AccountsSection onBack={() => setActiveSection('menu')} />;
       case 'automation':
         return <AutomationSection onBack={() => setActiveSection('menu')} />;
+      case 'kernel':
+        return <KernelSessionsSection onBack={() => setActiveSection('menu')} />;
       case 'notifications':
         return <ComingSoonSection title="Notificaciones" onBack={() => setActiveSection('menu')} />;
       case 'privacy':

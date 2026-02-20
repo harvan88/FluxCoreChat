@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, integer, text, index } from 'drizzle-orm/pg-core';
 import { relationships } from './relationships';
 
 export const conversations = pgTable('conversations', {
@@ -15,9 +15,16 @@ export const conversations = pgTable('conversations', {
   unreadCountA: integer('unread_count_a').default(0).notNull(),
   unreadCountB: integer('unread_count_b').default(0).notNull(),
 
+  // Widget identity support
+  visitorToken: text('visitor_token'),
+  identityLinkedAt: timestamp('identity_linked_at', { withTimezone: true }),
+  linkedAccountId: text('linked_account_id'),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  visitorTokenIdx: index('idx_conversations_visitor_token').on(table.visitorToken),
+}));
 
 export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;

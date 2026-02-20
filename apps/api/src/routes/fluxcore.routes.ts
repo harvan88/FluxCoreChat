@@ -55,6 +55,48 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
     }
   )
 
+  // GET /fluxcore/assistants/active-mode?accountId=xxx  — MUST be before /:id
+  .get(
+    '/active-mode',
+    async ({ user, query, set }) => {
+      if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
+      if (!query.accountId) { set.status = 400; return { success: false, message: 'accountId is required' }; }
+      try {
+        const result = await fluxcoreService.getActiveMode(query.accountId);
+        return { success: true, data: result };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      query: t.Object({ accountId: t.String() }),
+      detail: { tags: ['FluxCore'], summary: 'Get mode of active assistant' },
+    }
+  )
+
+  // PATCH /fluxcore/assistants/active-mode
+  .patch(
+    '/active-mode',
+    async ({ user, body, set }) => {
+      if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
+      const { accountId, mode } = body as any;
+      if (!accountId || !mode) { set.status = 400; return { success: false, message: 'accountId and mode are required' }; }
+      if (!['auto', 'suggest', 'off'].includes(mode)) { set.status = 400; return { success: false, message: 'mode must be auto, suggest, or off' }; }
+      try {
+        const result = await fluxcoreService.setActiveMode(accountId, mode);
+        return { success: true, data: result };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      body: t.Object({ accountId: t.String(), mode: t.String() }),
+      detail: { tags: ['FluxCore'], summary: 'Set mode of active assistant (auto|suggest|off)' },
+    }
+  )
+
   // GET /fluxcore/assistants/:id
   .get(
     '/:id',
@@ -146,6 +188,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
         name: t.String(),
         description: t.Optional(t.String()),
         runtime: t.Optional(t.Union([t.Literal('local'), t.Literal('openai')])),
+        externalId: t.Optional(t.String()),
         status: t.Optional(t.String()),
         instructionId: t.Optional(t.String()),
         instructionIds: t.Optional(t.Array(t.String())),
@@ -157,11 +200,16 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
           model: t.String(),
           temperature: t.Number(),
           topP: t.Number(),
+          maxTokens: t.Optional(t.Number()),
           responseFormat: t.Union([t.Literal('text'), t.Literal('json')]),
         })),
         timingConfig: t.Optional(t.Object({
           responseDelaySeconds: t.Number(),
           smartDelay: t.Boolean(),
+          mode: t.Optional(t.Union([t.Literal('auto'), t.Literal('suggest'), t.Literal('off')])),
+          tone: t.Optional(t.Union([t.Literal('formal'), t.Literal('casual'), t.Literal('neutral')])),
+          useEmojis: t.Optional(t.Boolean()),
+          language: t.Optional(t.String()),
         })),
       }),
       detail: {
@@ -217,6 +265,7 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
         description: t.Optional(t.String()),
         instructions: t.Optional(t.String()), // System instructions para OpenAI (256K chars max)
         runtime: t.Optional(t.Union([t.Literal('local'), t.Literal('openai')])),
+        externalId: t.Optional(t.String()),
         status: t.Optional(t.String()),
         instructionId: t.Optional(t.String()),
         instructionIds: t.Optional(t.Array(t.String())),
@@ -228,11 +277,16 @@ const assistantsRoutes = new Elysia({ prefix: '/assistants' })
           model: t.String(),
           temperature: t.Number(),
           topP: t.Number(),
+          maxTokens: t.Optional(t.Number()),
           responseFormat: t.Union([t.Literal('text'), t.Literal('json')]),
         })),
         timingConfig: t.Optional(t.Object({
           responseDelaySeconds: t.Number(),
           smartDelay: t.Boolean(),
+          mode: t.Optional(t.Union([t.Literal('auto'), t.Literal('suggest'), t.Literal('off')])),
+          tone: t.Optional(t.Union([t.Literal('formal'), t.Literal('casual'), t.Literal('neutral')])),
+          useEmojis: t.Optional(t.Boolean()),
+          language: t.Optional(t.String()),
         })),
       }),
       detail: {
@@ -1422,6 +1476,125 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
   );
 
 // ============================================================================
+// TRACES ROUTES (debugging)
+// ============================================================================
+
+const tracesRoutes = new Elysia({ prefix: '/traces' })
+  .use(authMiddleware)
+
+  // GET /fluxcore/traces?accountId=xxx&limit=50
+  .get(
+    '/',
+    async ({ user, query, set }) => {
+      if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
+      if (!query.accountId) { set.status = 400; return { success: false, message: 'accountId is required' }; }
+      try {
+        const { db, aiTraces } = await import('@fluxcore/db');
+        const { eq, desc } = await import('drizzle-orm');
+        const limit = Math.min(Number(query.limit ?? 50), 200);
+        const rows = await db
+          .select()
+          .from(aiTraces)
+          .where(eq(aiTraces.accountId, query.accountId))
+          .orderBy(desc(aiTraces.createdAt))
+          .limit(limit);
+        return { success: true, data: rows };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      query: t.Object({ accountId: t.String(), limit: t.Optional(t.String()) }),
+      detail: { tags: ['FluxCore'], summary: 'Get AI execution traces' },
+    }
+  );
+
+// ============================================================================
+// SUGGESTIONS ROUTES (suggest-mode review)
+// ============================================================================
+
+const suggestionsRoutes = new Elysia({ prefix: '/suggestions' })
+  .use(authMiddleware)
+
+  // GET /fluxcore/suggestions?accountId=xxx&status=pending
+  .get(
+    '/',
+    async ({ user, query, set }) => {
+      if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
+      if (!query.accountId) { set.status = 400; return { success: false, message: 'accountId is required' }; }
+      try {
+        const { db, aiSuggestions } = await import('@fluxcore/db');
+        const { eq, desc, and } = await import('drizzle-orm');
+        const conditions = [eq(aiSuggestions.accountId, query.accountId)];
+        if (query.status) conditions.push(eq(aiSuggestions.status, query.status));
+        const rows = await db
+          .select()
+          .from(aiSuggestions)
+          .where(and(...conditions))
+          .orderBy(desc(aiSuggestions.createdAt))
+          .limit(100);
+        return { success: true, data: rows };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      query: t.Object({ accountId: t.String(), status: t.Optional(t.String()) }),
+      detail: { tags: ['FluxCore'], summary: 'Get AI suggestions for operator review' },
+    }
+  )
+
+  // PATCH /fluxcore/suggestions/:id — approve, reject, or edit
+  .patch(
+    '/:id',
+    async ({ user, params, body, set }) => {
+      if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
+      try {
+        const { db, aiSuggestions, messages, conversations } = await import('@fluxcore/db');
+        const { eq } = await import('drizzle-orm');
+        const { status, editedContent } = body as any;
+        if (!['approved', 'rejected', 'edited'].includes(status)) {
+          set.status = 400;
+          return { success: false, message: 'status must be approved, rejected, or edited' };
+        }
+        const [suggestion] = await db.select().from(aiSuggestions).where(eq(aiSuggestions.id, params.id)).limit(1);
+        if (!suggestion) { set.status = 404; return { success: false, message: 'Suggestion not found' }; }
+
+        const finalContent = editedContent ?? suggestion.content;
+
+        if (status === 'approved' || status === 'edited') {
+          const [conv] = await db.select().from(conversations).where(eq(conversations.id, suggestion.conversationId)).limit(1);
+          if (conv) {
+            await db.insert(messages).values({
+              conversationId: suggestion.conversationId,
+              senderAccountId: suggestion.accountId,
+              content: { text: finalContent },
+              generatedBy: 'ai',
+              status: 'sent',
+            } as any);
+          }
+        }
+
+        await db.update(aiSuggestions)
+          .set({ status, content: finalContent, respondedAt: new Date() } as any)
+          .where(eq(aiSuggestions.id, params.id));
+
+        return { success: true, message: `Suggestion ${status}` };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ status: t.String(), editedContent: t.Optional(t.String()) }),
+      detail: { tags: ['FluxCore'], summary: 'Approve, reject or edit a suggestion' },
+    }
+  );
+
+// ============================================================================
 // MAIN EXPORT
 // ============================================================================
 
@@ -1430,4 +1603,6 @@ export const fluxcoreRoutes = new Elysia({ prefix: '/fluxcore' })
   .use(instructionsRoutes)
   .use(vectorStoresRoutes)
   .use(toolsRoutes)
+  .use(tracesRoutes)
+  .use(suggestionsRoutes)
   .use(fluxiRoutes); // WES-180

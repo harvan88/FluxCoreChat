@@ -1,5 +1,6 @@
 import { pgTable, uuid, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
+import { fluxcoreActors } from './fluxcore-identity';
 
 export const relationships = pgTable('relationships', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -9,7 +10,10 @@ export const relationships = pgTable('relationships', {
   accountBId: uuid('account_b_id')
     .notNull()
     .references(() => accounts.id, { onDelete: 'cascade' }),
-  
+
+  // ALIGNMENT: Link to Ontological Actor
+  actorId: uuid('actor_id').references(() => fluxcoreActors.id),
+
   // Perspectivas bilaterales (sin contexto)
   perspectiveA: jsonb('perspective_a')
     .default({ saved_name: null, tags: [], status: 'active' })
@@ -17,12 +21,12 @@ export const relationships = pgTable('relationships', {
   perspectiveB: jsonb('perspective_b')
     .default({ saved_name: null, tags: [], status: 'active' })
     .notNull(),
-  
+
   // Contexto UNIFICADO con autoría
   context: jsonb('context')
     .default({ entries: [], total_chars: 0 })
     .notNull(),
-  
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   lastInteraction: timestamp('last_interaction'),
 });
@@ -35,6 +39,7 @@ export interface ContextEntry {
   author_account_id: string;
   content: string;
   type: 'note' | 'preference' | 'rule';
+  allow_automated_use: boolean;
   created_at: string;
 }
 

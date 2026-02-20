@@ -2,13 +2,13 @@
  * Appointments Service - Lógica de negocio para turnos
  */
 
-import type { 
-  Appointment, 
-  AppointmentService, 
+import type {
+  Appointment,
+  AppointmentService,
   AppointmentStaff,
   TimeSlot,
   WeekSchedule,
-  AppointmentStatus 
+  AppointmentStatus
 } from './schema';
 
 // Simulated database (en producción sería Drizzle + PostgreSQL)
@@ -36,7 +36,7 @@ export class AppointmentsService {
     this.accountId = accountId;
     if (config?.slotDuration) this.slotDuration = config.slotDuration;
     if (config?.businessHours) this.schedule = config.businessHours;
-    
+
     // Initialize storage for this account
     if (!servicesDb.has(accountId)) servicesDb.set(accountId, []);
     if (!staffDb.has(accountId)) staffDb.set(accountId, []);
@@ -45,7 +45,7 @@ export class AppointmentsService {
 
   // ============ SERVICES ============
 
-  async createService(data: { name: string; description?: string; duration?: number; price?: number }): Promise<AppointmentService> {
+  async createService(data: { name: string; description?: string; duration?: number; price?: number; allowAutomatedUse?: boolean }): Promise<AppointmentService> {
     const service: AppointmentService = {
       id: crypto.randomUUID(),
       accountId: this.accountId,
@@ -55,11 +55,12 @@ export class AppointmentsService {
       price: data.price || null,
       currency: 'ARS',
       active: true,
+      allowAutomatedUse: data.allowAutomatedUse ?? false,
       metadata: {},
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
     servicesDb.get(this.accountId)!.push(service);
     return service;
   }
@@ -74,14 +75,14 @@ export class AppointmentsService {
 
   async getServiceByName(name: string): Promise<AppointmentService | null> {
     const services = servicesDb.get(this.accountId) || [];
-    return services.find(s => 
+    return services.find(s =>
       s.active && s.name.toLowerCase().includes(name.toLowerCase())
     ) || null;
   }
 
   // ============ STAFF ============
 
-  async createStaff(data: { name: string; email?: string; services?: string[] }): Promise<AppointmentStaff> {
+  async createStaff(data: { name: string; email?: string; services?: string[]; allowAutomatedUse?: boolean }): Promise<AppointmentStaff> {
     const staff: AppointmentStaff = {
       id: crypto.randomUUID(),
       accountId: this.accountId,
@@ -92,11 +93,12 @@ export class AppointmentsService {
       services: data.services || [],
       schedule: {},
       active: true,
+      allowAutomatedUse: data.allowAutomatedUse ?? false,
       metadata: {},
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
     staffDb.get(this.accountId)!.push(staff);
     return staff;
   }
@@ -111,7 +113,7 @@ export class AppointmentsService {
 
   async getStaffForService(serviceId: string): Promise<AppointmentStaff[]> {
     const staff = staffDb.get(this.accountId) || [];
-    return staff.filter(s => 
+    return staff.filter(s =>
       s.active && (s.services as string[]).includes(serviceId)
     );
   }
@@ -150,7 +152,7 @@ export class AppointmentsService {
 
     // Generate available slots
     const slots = this.generateTimeSlots(daySchedule, service?.duration || 30);
-    
+
     // Filter out booked slots
     const appointments = await this.getAppointmentsByDate(date);
     const availableSlots = slots.filter(slot => {
@@ -288,7 +290,7 @@ export class AppointmentsService {
   }
 
   async updateAppointmentStatus(
-    appointmentId: string, 
+    appointmentId: string,
     status: AppointmentStatus,
     reason?: string
   ): Promise<{ success: boolean; appointment?: Appointment; error?: string }> {
@@ -316,7 +318,7 @@ export class AppointmentsService {
   }
 
   async cancelAppointment(
-    appointmentId: string, 
+    appointmentId: string,
     reason?: string
   ): Promise<{ success: boolean; appointment?: Appointment; error?: string }> {
     return this.updateAppointmentStatus(appointmentId, 'cancelled', reason);

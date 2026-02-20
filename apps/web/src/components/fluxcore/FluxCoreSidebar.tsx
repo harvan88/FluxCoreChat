@@ -22,6 +22,8 @@ import {
   CreditCard,
   Lock,
   LayoutDashboard,
+  Shield,
+  Activity,
 } from 'lucide-react';
 
 import { SidebarNavList } from '../ui';
@@ -47,6 +49,8 @@ const navItems: SidebarNavItem[] = [
   { id: 'agents', label: 'Agentes', icon: <GitBranch size={18} /> },
   { id: 'works', label: 'Fluxi', icon: <LayoutDashboard size={18} /> },
   { id: 'debug', label: 'Depuración del asistente', icon: <Bug size={18} /> },
+  { id: 'policies', label: 'Políticas (Context)', icon: <Shield size={18} /> },
+  { id: 'traces', label: 'Trazas del runtime', icon: <Activity size={18} /> },
   { id: 'billing', label: 'Facturación', icon: <CreditCard size={18} /> },
 ];
 

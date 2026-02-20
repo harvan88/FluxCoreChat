@@ -7,6 +7,7 @@ import { extensionService } from './extension.service';
 import { manifestLoader } from './manifest-loader.service';
 import { permissionValidator } from './permission-validator.service';
 import { contextAccess } from './context-access.service';
+import { runtimeConfigService } from './runtime-config.service';
 import aiService from './ai.service';
 import type { ExtensionManifest } from '@fluxcore/types';
 import type { FluxPolicyContext } from '@fluxcore/db';
@@ -164,7 +165,11 @@ class ExtensionHostService {
     const { accountId, relationshipId, conversationId } = params;
     const results: ProcessMessageResult[] = [];
 
+    const { activeRuntimeId } = await runtimeConfigService.getRuntime(accountId);
+    console.log(`[Diag][ExtensionHost] message=${params.message.id} runtime=${activeRuntimeId} decision=respond stage=extension_host account=${accountId}`);
     try {
+      // Canon v7.0: Resolve Active Runtime for Sovereignty Checks
+
       // Obtener extensiones instaladas y habilitadas
       let installations: any[] = [];
       try {
@@ -175,43 +180,66 @@ class ExtensionHostService {
       }
       const enabledInstallations = installations.filter((i) => i.enabled);
 
-
-      // WES-CANON: Sistema de extensiones integradas que corren ANTES que las de la DB
+      // WES-CANON: Integrated system extensions that run BEFORE DB ones.
       let fluxi: any = null;
       try {
-        // Usar un path más resiliente o un cache
-        const fluxcoreFluxi = await import('../../../../extensions/fluxcore-fluxi/src');
-        fluxi = fluxcoreFluxi.fluxiExtension;
+        const fluxiId = '@fluxcore/fluxi';
+        const root = manifestLoader.getExtensionRoot(fluxiId);
+        if (root) {
+          const manifest = manifestLoader.getManifest(fluxiId);
+          const entrypoint = manifest?.entrypoint || 'src/index.ts';
+          const absEntrypoint = path.resolve(root, entrypoint);
+          const moduleUrl = pathToFileURL(absEntrypoint).href;
+          const mod = await import(moduleUrl);
+          fluxi = mod.fluxiExtension || (typeof mod.getFluxCore === 'function' ? mod.getFluxCore() : null);
+
+          // Perform Dependency Injection (replaces brittle internal imports in extension)
+          if (fluxi && typeof fluxi.setServices === 'function') {
+            const { db, ...schema } = await import('@fluxcore/db');
+            const operators = await import('drizzle-orm');
+            const { workEngineService } = await import('./work-engine.service');
+            const { messageCore } = await import('../core/message-core');
+            const { aiService } = await import('./ai.service');
+            const { workDefinitionService } = await import('./work-definition.service');
+            const { logTrace } = await import('../utils/file-logger');
+            const { metricsService } = await import('./metrics.service');
+            const { aiCircuitBreaker } = await import('./ai-circuit-breaker.service');
+
+            fluxi.setServices({
+              db,
+              schema,
+              operators,
+              workEngineService,
+              messageCore,
+              interpreterServices: {
+                aiService,
+                workDefinitionService,
+                logTrace,
+                metricsService,
+                aiCircuitBreaker
+              }
+            });
+          }
+        }
       } catch (err: any) {
-        // Silently fail if not found
+        console.warn('[ExtensionHost] Failed to load/inject Fluxi:', err.message);
       }
 
       const systemExtensions = fluxi ? [{ id: '@fluxcore/fluxi', runtime: fluxi }] : [];
 
-      // WES-170: Recuperar contexto de WES
-      const { workResolver } = await import('../core/WorkResolver');
-      const { db, fluxcoreWorkDefinitions } = await import('@fluxcore/db');
-      const { eq } = await import('drizzle-orm');
-
-      const wesContext: any = {
-        availableWorkDefinitions: await db.select().from(fluxcoreWorkDefinitions).where(eq(fluxcoreWorkDefinitions.accountId, accountId)),
-        activeWork: await workResolver.resolve({ accountId, relationshipId, conversationId }).then(res =>
-          res.type === 'RESUME_WORK' ? { id: (res as any).workId, state: 'ACTIVE' } : null
-        )
-      };
-
-      // 1. Ejecutar extensiones de sistema
+      // 1. Execute system extensions
       for (const sysExt of systemExtensions) {
         try {
+          console.log(`[Diag][ExtensionHost] message=${params.message.id} runtime=${sysExt.id} decision=respond stage=extension_invoke scope=system`);
           const resultFromExtension = await sysExt.runtime.onMessage({
             accountId,
             extensionId: sysExt.id,
             relationshipId,
             conversationId,
             message: params.message,
-            automationMode: params.automationMode,
-            wes: wesContext,
             policyContext: params.policyContext,
+            automationMode: params.automationMode,
+            activeRuntimeId,
           });
 
           if (resultFromExtension) {
@@ -225,6 +253,7 @@ class ExtensionHostService {
             results.push(res);
             if (res.stopPropagation) {
               console.log(`[ExtensionHost] Propagation stopped by SYSTEM extension ${sysExt.id}`);
+              console.log(`[Diag][ExtensionHost] message=${params.message.id} runtime=${sysExt.id} decision=stop stage=extension_invoke scope=system`);
               return results;
             }
           }
@@ -258,6 +287,7 @@ class ExtensionHostService {
           const onMessage = runtime?.onMessage;
 
           if (typeof onMessage === 'function') {
+            console.log(`[Diag][ExtensionHost] message=${params.message.id} runtime=${installation.extensionId} decision=respond stage=extension_invoke scope=user`);
             const resultFromExtension = await onMessage({
               accountId,
               extensionId: installation.extensionId,
@@ -268,8 +298,8 @@ class ExtensionHostService {
               config: installation.config,
               grantedPermissions: installation.grantedPermissions,
               automationMode: params.automationMode,
-              wes: wesContext,
               policyContext: params.policyContext,
+              activeRuntimeId,
             });
 
             const extensionResult: ProcessMessageResult = {
@@ -284,6 +314,7 @@ class ExtensionHostService {
 
             if (extensionResult.stopPropagation) {
               console.log(`[ExtensionHost] Propagation stopped by extension ${installation.extensionId}`);
+              console.log(`[Diag][ExtensionHost] message=${params.message.id} runtime=${installation.extensionId} decision=stop stage=extension_invoke scope=user`);
               break;
             }
           }

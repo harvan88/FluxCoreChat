@@ -83,6 +83,8 @@ export function AssistantsView({
     name: assistant.name,
     description: assistant.description ?? undefined,
     status: assistant.status,
+    runtime: assistant.runtime,
+    externalId: assistant.externalId ?? undefined,
     instructionIds: assistant.instructionIds?.slice(0, 1) ?? undefined,
     vectorStoreIds: assistant.vectorStoreIds ?? undefined,
     toolIds: assistant.toolIds ?? undefined,
@@ -158,23 +160,25 @@ export function AssistantsView({
 
   const handleCreate = useCallback(async (runtime: 'local' | 'openai', customInitialData?: any) => {
     setShowRuntimeModal(false);
+    const isOpenAI = runtime === 'openai';
+    const defaultTimingConfig = {
+      mode: 'auto' as const,
+      responseDelaySeconds: 2,
+      smartDelay: false,
+      tone: 'neutral' as const,
+      language: 'es',
+      useEmojis: false,
+    };
     const payload = {
       accountId,
-      name: runtime === 'openai' ? 'Nuevo asistente OpenAI' : 'Nuevo asistente',
+      name: isOpenAI ? 'Nuevo asistente OpenAI' : 'Nuevo asistente',
       runtime,
       status: 'draft' as any,
-      modelConfig: {
-        provider: 'openai' as any,
-        model: 'gpt-4o',
-        temperature: 0.7,
-        topP: 1.0,
-        responseFormat: 'text'
-      },
-      timingConfig: {
-        responseDelaySeconds: 2,
-        smartDelay: true
-      },
-      ...customInitialData
+      modelConfig: isOpenAI
+        ? { provider: 'openai' as any, model: 'gpt-4o', temperature: 0.7, topP: 1.0, responseFormat: 'text' }
+        : { provider: 'groq' as any, model: 'llama-3.1-8b-instant', temperature: 0.7, topP: 1.0, responseFormat: 'text' },
+      ...customInitialData,
+      timingConfig: { ...defaultTimingConfig, ...(customInitialData?.timingConfig ?? {}) },
     };
 
     setCreatingAssistant(true);

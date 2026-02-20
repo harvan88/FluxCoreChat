@@ -13,75 +13,63 @@ El resultado visible: el usuario configura OpenAI/gpt-4o en el asistente, envía
 
 ---
 
-## 2. Cadena Actual (Estado Actual)
+## 2. Cadena Actual (Estado Refactorizado)
 
 ```
 Mensaje llega
     │
     ▼
 ┌─────────────────────────────────────────────────────────┐
-│ AIOrchestrator.handleMessageReceived()                  │
-│   - Valida: automation === 'automatic', tiene texto     │
-│   - Obtiene delay (getAIAutoReplyDelayMs)               │
-│   - setTimeout → scheduleAutoReply()                    │
+│ MessageDispatchService.handleMessageReceived()          │
+│   - Escucha evento core:message_received                │
+│   - Resuelve PolicyContext (antes de cualquier runtime) │
+│   - Invoca ExtensionHost.processMessage() (Intercept)   │
+│   - Delega a RuntimeGateway                             │
 └─────────────────────┬───────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────┐
-│ extensionHost.generateAIResponse()                      │
-│   → aiService.generateResponse()                        │
+│ RuntimeGateway.handleMessage()                          │
+│   - Selecciona Adapter (FluxCore / Agent / etc.)        │
+│   - Ejecuta Adapter.handleMessage()                     │
 └─────────────────────┬───────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────┐
-│ aiService.generateResponse()  ← PUNTO PROBLEMÁTICO      │
+│ FluxCoreRuntimeAdapter                                  │
+│   - Gestiona Smart Delay (si aplica)                    │
+│   - Llama a aiService.generateResponse()                │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────┐
+│ aiService.generateResponse()  ← PUNTO CENTRAL           │
 │                                                         │
-│  1. getAccountConfig(accountId)                         │
-│     → Consulta extension_installations + assistant DB   │
-│     → Construye providerOrder: [groq, openai]           │
-│     → Consulta resolveActiveAssistant (¡DUPLICADO!)     │
+│  1. resolveExecutionPlan(accountId, conversationId)     │
+│     → Single Source of Truth                            │
+│     → Valida: Asistente, Provider, Creditos, Scopes     │
 │                                                         │
-│  2. resolveActiveAssistant(accountId)  ← 2da llamada    │
-│     → Lee assistant.modelConfig.provider = "openai"     │
+│  2. Ejecución (Local vs OpenAI)                         │
+│     → Si Local: Llama a extensión @fluxcore/asistentes  │
+│     → Si OpenAI: Llama a extensión @fluxcore/openai     │
 │                                                         │
-│  3. applyCreditsGating()  ← SILENT KILLER               │
-│     → ¿Hay sesión de créditos activa? NO                │
-│     → ¿OpenAI es primary? SÍ                            │
-│     → openConversationSession() → FALLA (sin créditos)  │
-│     → catch: ELIMINA openai del providerOrder            │
-│     → Resultado: providerOrder = [groq] solamente        │
-│                                                         │
-│  4. Re-inyección (PARCHE actual)                        │
-│     → Detecta que openai fue eliminado                  │
-│     → Lo re-agrega desde env vars                       │
-│     → ⚠️ ANULA el propósito del gating                  │
-│                                                         │
-│  5. extension.onConfigChange()                          │
-│     → Pasa config al FluxCore extension                 │
-│                                                         │
-│  6. ¿runtime === 'openai' && externalId? → NO           │
-│     → Fallback a extension.generateSuggestion()         │
-│                                                         │
-│  7. FluxCore extension.generateSuggestion()             │
-│     → getProviderOrder() → usa this.config.providerOrder│
-│     → Verifica preferredProvider vs providerOrder        │
-│     → Si no está → ERROR silencioso                     │
-│     → Si está → llama createChatCompletionWithFallback  │
+│  3. Post-Proceso                                        │
+│     → Branding, Traces, Persistencia                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Problemas Identificados
+## 3. Problemas Identificados (Histórico)
 
-### 3.1 Doble Lógica Duplicada
+### 3.1 Doble Lógica Duplicada (RESUELTO)
 
 Existen **dos métodos** que hacen esencialmente lo mismo:
 
 | Método | Ubicación | Llamado por | ¿Tiene fix provider? |
 |--------|-----------|-------------|---------------------|
 | `processMessage()` | ai.service.ts:232 | Ruta directa (NO SE USA en producción) | ✅ Sí |
-| `generateResponse()` | ai.service.ts:1268 | AIOrchestrator → extensionHost | ✅ Parcheado |
+| `generateResponse()` | ai.service.ts:1268 | MessageDispatch → RuntimeGateway | ✅ Parcheado |
 
 `processMessage()` tiene ~150 líneas de lógica de provider/config que se duplican en `generateResponse()` con ~200 líneas. Ambos:
 - Llaman `getAccountConfig()`
@@ -93,7 +81,7 @@ Existen **dos métodos** que hacen esencialmente lo mismo:
 
 **Riesgo:** Cualquier fix en uno se olvida en el otro (como pasó).
 
-### 3.2 `applyCreditsGating()` — Degradación Silenciosa
+### 3.2 `applyCreditsGating()` — Degradación Silenciosa (RESUELTO via ExecutionPlan)
 
 ```typescript
 // ai.service.ts:545-609
@@ -137,7 +125,7 @@ Esto es una **tercera capa** de validación que no tiene visibilidad del sistema
 
 ### 3.5 Sin feedback al usuario
 
-Cuando la IA no responde, el AIOrchestrator simplemente logea:
+Cuando la IA no responde, el sistema anteriormente simplemente logeaba:
 ```
 [AIOrchestrator] ⚠️ AI generated empty content.
 ```
@@ -145,7 +133,7 @@ Y no pasa nada. El usuario ve silencio en el chat.
 
 ---
 
-## 4. Flujo Propuesto
+## 4. Flujo Propuesto (IMPLEMENTADO)
 
 ### Principio: "Validar antes, fallar con feedback"
 
@@ -154,9 +142,9 @@ Mensaje llega
     │
     ▼
 ┌─────────────────────────────────────────────────────────┐
-│ AIOrchestrator.handleMessageReceived()                  │
+│ MessageDispatchService.handleMessageReceived()          │
 │   - Valida: automation === 'automatic', tiene texto     │
-│   - setTimeout → scheduleAutoReply()                    │
+│   - Delega a RuntimeGateway                             │
 └─────────────────────┬───────────────────────────────────┘
                       │
                       ▼
@@ -197,7 +185,7 @@ Mensaje llega
 
 ## 5. Opciones de Implementación
 
-### Opción A: Refactor Completo (Recomendado)
+### Opción A: Refactor Completo (Recomendado) - SELECCIONADA Y EJECUTADA
 
 **Alcance:** Unificar `processMessage()` y `generateResponse()` en un solo flujo con pre-validación.
 
@@ -209,7 +197,7 @@ Mensaje llega
 | `ai.service.ts` | `generateResponse()` usa el plan pre-validado, elimina lógica duplicada |
 | `ai.service.ts` | `processMessage()` se marca como deprecated o se elimina |
 | `ai.service.ts` | `applyCreditsGating()` retorna `{ allowed, reason }` en vez de degradar silenciosamente |
-| `ai-orchestrator.service.ts` | Si `!canExecute`, emite evento WebSocket + inserta mensaje sistema |
+| `message-dispatch.service.ts` | Reemplaza a AIOrchestrator. Si `!canExecute`, emite evento WebSocket |
 | `extensions/fluxcore/src/index.ts` | Eliminar validación redundante de provider (ya se validó arriba) |
 | Frontend (MessageBubble o similar) | Renderizar mensajes de tipo `system:ai_blocked` con el motivo |
 
@@ -243,41 +231,28 @@ Mensaje llega
 
 ---
 
-## 6. Diagrama de Dependencias Actual
+## 6. Diagrama de Dependencias Actual (Post-Refactor)
 
 ```
-AIOrchestrator
-    └── extensionHost.generateAIResponse()
-            └── aiService.generateResponse()
-                    ├── getAccountConfig()
-                    │       ├── aiEntitlementsService.getEntitlement()
-                    │       ├── db.extensionInstallations (config legacy)
-                    │       ├── fluxcoreService.resolveActiveAssistant() ← 1ra llamada
-                    │       └── resolveProviderSelection()
-                    │               └── getProductKeysForProvider() (env vars)
-                    │
-                    ├── fluxcoreService.resolveActiveAssistant() ← 2da llamada (DUPLICADA)
-                    │
-                    ├── applyCreditsGating()
-                    │       └── creditsService.getActiveConversationSession()
-                    │       └── creditsService.openConversationSession()
-                    │               └── creditsService.getEffectivePolicy()
-                    │               └── creditsWallets (balance check)
-                    │
-                    ├── extension.onConfigChange() → FluxCore extension
-                    │
-                    └── Bifurcación:
-                        ├── runtime=openai → runAssistantWithMessages()
-                        └── runtime=local  → extension.generateSuggestion()
-                                                └── getProviderOrder() ← 3ra validación
-                                                └── fetchActiveAssistant() ← 3ra llamada DB
-                                                └── createChatCompletionWithFallback()
+MessageDispatchService
+    └── RuntimeGateway
+            └── FluxCoreRuntimeAdapter
+                    └── aiService.generateResponse()
+                            ├── resolveExecutionPlan() (Single Source of Truth)
+                            │       ├── aiEntitlementsService.getEntitlement()
+                            │       ├── fluxcoreService.resolveActiveAssistant()
+                            │       ├── creditsService.getActiveConversationSession()
+                            │       └── creditsService.openConversationSession()
+                            │
+                            └── Bifurcación (Plan):
+                                ├── runtime=openai → @fluxcore/asistentes-openai
+                                └── runtime=local  → @fluxcore/asistentes (FluxCoreExtension)
 ```
 
-**Observaciones críticas:**
-- `resolveActiveAssistant()` se llama **3 veces** por mensaje (getAccountConfig, generateResponse, fetchActiveAssistant en la extensión)
-- La validación de provider ocurre en **3 lugares** diferentes con lógica diferente
-- `applyCreditsGating` es el único punto que controla costos, pero su resultado se anula con el parche
+**Observaciones:**
+- `resolveActiveAssistant()` se llama **1 sola vez** por mensaje.
+- La validación de provider ocurre en **1 solo lugar** (`resolveExecutionPlan`).
+- `applyCreditsGating` está integrado en el plan y devuelve razones de bloqueo explícitas.
 
 ---
 
@@ -323,12 +298,12 @@ El sistema de créditos actual funciona así:
 
 | Archivo | Responsabilidad | Líneas clave |
 |---------|----------------|--------------|
-| `apps/api/src/services/ai-orchestrator.service.ts` | Escucha mensajes, programa auto-reply | 79-153 |
-| `apps/api/src/services/ai.service.ts` | Lógica central de IA, gating, config | 232-543 (processMessage), 545-609 (gating), 614-754 (getAccountConfig), 1268-1705 (generateResponse) |
-| `apps/api/src/services/extension-host.service.ts` | Proxy entre orchestrator y ai.service | 341-348 |
+| `apps/api/src/services/message-dispatch.service.ts` | Escucha mensajes, resuelve contexto, delega al gateway | 1-136 |
+| `apps/api/src/services/runtime-gateway.service.ts` | Registro de runtimes y ruteo | 1-275 |
+| `apps/api/src/services/ai.service.ts` | Lógica central de IA, generación de respuesta | 1-1124 |
+| `apps/api/src/services/ai-execution-plan.service.ts` | Resolución de plan de ejecución (Single Source of Truth) | 1-280 |
 | `apps/api/src/services/credits.service.ts` | Wallets, sesiones, policies | 231-402 |
-| `apps/api/src/services/ai-entitlements.service.ts` | Permisos de providers por cuenta | 14-37 |
-| `extensions/fluxcore/src/index.ts` | Extension runtime, generateSuggestion | 436-848 (generateSuggestion), 1124-1160 (getProviderOrder) |
+| `extensions/fluxcore/src/index.ts` | Extension runtime, generateSuggestion | 436-848 |
 
 ---
 

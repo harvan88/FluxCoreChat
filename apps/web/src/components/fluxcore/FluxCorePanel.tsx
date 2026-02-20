@@ -13,6 +13,7 @@ import { VectorStoresView } from './views/VectorStoresView';
 import { ToolsView } from './views/ToolsView';
 import { AgentsView } from './views/AgentsView';
 import { UsageView } from './views/UsageView';
+import { PoliciesView } from './views/PoliciesView';
 import { FluxCorePromptInspectorPanel } from '../extensions/FluxCorePromptInspectorPanel';
 import { FluxCoreView } from '@/types/fluxcore/views.types';
 
@@ -42,6 +43,8 @@ export function FluxCorePanel({ accountId, accountName, onOpenTab }: FluxCorePan
         return <AgentsView accountId={accountId} />;
       case 'debug':
         return <FluxCorePromptInspectorPanel accountId={accountId} />;
+      case 'policies':
+        return <PoliciesView accountId={accountId} />;
       case 'billing':
         return (
           <div className="flex-1 flex items-center justify-center text-muted">

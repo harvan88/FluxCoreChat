@@ -1,108 +1,143 @@
 /**
- * FluxPolicyContext — Shared Pre-Runtime Context
- * 
- * Canon v7.0, Section 3: La Capa de Políticas (Pre-Ejecución)
- * 
- * This is the contract that FluxCore resolves BEFORE invoking any runtime.
- * All runtimes receive this immutable context. None of them resolve it themselves.
- * 
- * Named "Flux" to avoid collision with asset-policies.ts PolicyContext.
- * 
- * Ownership: FluxCore (persisted via ChatCore's Configuration Slots).
- * Source of truth: extension_installations.config for @fluxcore/asistentes + account_runtime_config.
+ * FluxPolicyContext — Canon v8.3
+ *
+ * Business governance context resolved BEFORE any runtime is invoked.
+ * Flat structure — no nested sub-objects.
+ *
+ * Distinction from RuntimeConfig (Canon §4.4):
+ *   PolicyContext  = HOW and WHEN the AI operates (business governance)
+ *   RuntimeConfig  = WHAT the runtime uses to execute (technical implementation)
+ *
+ * The CognitionWorker resolves both before calling RuntimeGateway.
+ * Neither the runtime nor PolicyContext know about each other's internals.
  */
 
-/**
- * Attention preferences — how the AI should communicate.
- * These belong to FluxCore, not ChatCore (ontological test: they wouldn't exist without AI).
- */
-export interface FluxAttentionPreferences {
-    /** Communication tone: "formal", "casual", "friendly" */
-    tone: 'formal' | 'casual' | 'friendly';
+// ---------------------------------------------------------------------------
+// Supporting types
+// ---------------------------------------------------------------------------
 
-    /** Formality level for addressing the user */
-    formality: 'usted' | 'tú' | 'vos';
-
-    /** Whether to use emojis in responses */
-    useEmojis: boolean;
-
-    /** Preferred language for responses */
-    language: string;
+/** A rule, note, or preference about the specific contact/relationship */
+export interface ContactRule {
+    type: 'note' | 'preference' | 'rule';
+    content: string;
 }
 
-/**
- * Automation policies — how the system should behave operationally.
- */
-export interface FluxAutomationPolicies {
-    /** The automation mode for this account+relationship */
-    mode: 'automatic' | 'supervised' | 'disabled';
-
-    /** Delay before auto-responding (seconds) */
-    responseDelaySeconds: number;
+/** Policy for when the business is outside operating hours */
+export interface OffHoursPolicy {
+    action: 'ignore' | 'reply_once' | 'queue';
+    message?: string;
 }
 
-/**
- * Contact context — data about the specific relationship/contact.
- * Notes come from ChatCore (CRM data), rules come from FluxCore (AI behavior).
- */
-export interface FluxContactContext {
-    /** CRM notes about the contact (from ChatCore's relationship.context) */
-    notes: string[];
-
-    /** Contact preferences (from ChatCore's relationship.context) */
-    preferences: string[];
-
-    /** AI behavior rules for this contact (from FluxCore config) */
-    rules: string[];
-}
-
-/**
- * Business identity — who is responding.
- * Read from ChatCore's account profile.
- */
-export interface FluxBusinessIdentity {
-    /** Account display name */
-    displayName: string;
-
-    /** Account bio/description */
+/** Business profile data authorized by the operator for AI use */
+export interface ResolvedBusinessProfile {
+    displayName?: string;
     bio?: string;
-
-    /** Account username */
-    username: string;
+    privateContext?: string;
+    businessHours?: Array<{
+        days: string[];
+        open: string;
+        close: string;
+    }>;
+    location?: string;
+    website?: string;
+    timezone?: string;
+    /** Authorized templates available for this account */
+    templates?: Array<{
+        templateId: string;
+        name: string;
+        instructions?: string;
+        variables: Array<{ name: string; required?: boolean }>;
+        content?: string;
+    }>;
+    /** Authorized appointment services */
+    appointmentServices?: Array<{
+        name: string;
+        description?: string;
+        price?: string;
+    }>;
+    [key: string]: unknown;
 }
 
+/** Active Work state for this conversation (Fluxi) */
+export interface ActiveWorkContext {
+    workId: string;
+    state: string;
+    typeId: string;
+}
+
+/** WorkDefinition — a transactional intent template (Fluxi) */
+export interface WorkDefinition {
+    id: string;
+    typeId: string;
+    version: string;
+    definitionJson: any;
+}
+
+// ---------------------------------------------------------------------------
+// FluxPolicyContext — flat, canonical
+// ---------------------------------------------------------------------------
+
 /**
- * FluxPolicyContext — the complete pre-runtime context.
- * 
- * Resolved once per message by FluxPolicyContextService.
- * Passed to every runtime as immutable input.
+ * FluxPolicyContext — resolved once per turn by FluxPolicyContextService.
+ * Passed to every runtime as part of RuntimeInput.
+ * IMMUTABLE for the lifetime of a single turn invocation.
  */
 export interface FluxPolicyContext {
-    /** Attention preferences (tone, emojis, formality) */
-    attention: FluxAttentionPreferences;
+    // ── Identity (structural — resolved by CognitionWorker) ──────────────────
+    accountId: string;
+    contactId: string;
+    conversationId: string;
+    channel: string;
 
-    /** Automation policies (mode, delay) */
-    automation: FluxAutomationPolicies;
+    // ── Attention — how the AI should communicate ─────────────────────────────
+    tone: 'formal' | 'casual' | 'neutral';
+    useEmojis: boolean;
+    language: string;
 
-    /** Contact-specific context (notes, preferences, rules) */
-    contact: FluxContactContext;
+    // ── Automation — if and how the AI should respond ─────────────────────────
+    mode: 'auto' | 'suggest' | 'off';
+    responseDelayMs: number;
 
-    /** Business identity (who is responding) */
-    business: FluxBusinessIdentity;
+    // ── Turn window ───────────────────────────────────────────────────────────
+    turnWindowMs: number;
+    turnWindowTypingMs: number;
+    turnWindowMaxMs: number;
 
-    /** Which runtime should process this message */
+    // ── Business rules ────────────────────────────────────────────────────────
+    offHoursPolicy: OffHoursPolicy;
+    contactRules: ContactRule[];
+
+    // ── Runtime ───────────────────────────────────────────────────────────────
+    /** ID of the registered RuntimeAdapter to invoke */
     activeRuntimeId: string;
 
-    /** Timestamp when this context was resolved */
-    resolvedAt: Date;
+    /** Template IDs authorized at the policy level */
+    authorizedTemplates: string[];
+
+    // ── Resolved business data (authorized by operator in fluxcore_assistants) ─
+    /** Only contains fields the operator authorized in authorized_data_scopes */
+    resolvedBusinessProfile: ResolvedBusinessProfile;
+
+    // ── Fluxi (optional — only populated when Fluxi runtime is active) ────────
+    activeWork?: ActiveWorkContext;
+    workDefinitions?: WorkDefinition[];
 }
 
-/**
- * Default attention preferences when none are configured.
- */
-export const FLUX_DEFAULT_ATTENTION: FluxAttentionPreferences = {
-    tone: 'friendly',
-    formality: 'tú',
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+export const FLUX_DEFAULT_POLICY: Omit<FluxPolicyContext, 'accountId' | 'contactId' | 'conversationId' | 'channel' | 'resolvedBusinessProfile'> = {
+    tone: 'neutral',
     useEmojis: false,
     language: 'es',
+    mode: 'auto',
+    responseDelayMs: 0,
+    turnWindowMs: 3000,
+    turnWindowTypingMs: 5000,
+    turnWindowMaxMs: 60000,
+    offHoursPolicy: { action: 'ignore' },
+    contactRules: [],
+    activeRuntimeId: 'asistentes-local',
+    authorizedTemplates: [],
 };

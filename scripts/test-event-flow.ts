@@ -1,13 +1,13 @@
 
 import { db, accounts, conversations, messages, relationships } from '@fluxcore/db';
 import { messageCore } from '../apps/api/src/core/message-core';
-import { aiOrchestrator } from '../apps/api/src/services/ai-orchestrator.service';
+import { messageDispatchService } from '../apps/api/src/services/message-dispatch.service';
 import { eq, desc } from 'drizzle-orm';
 
-// El import de aiOrchestrator ya inicializa el listener por efecto secundario en su constructor
+// El import de messageDispatchService ya inicializa el listener por efecto secundario en su constructor
 
 async function main() {
-    console.log('🚀 Iniciando Test de Flujo de Eventos (MessageCore -> Event -> Orchestrator -> AI)');
+    console.log('🚀 Iniciando Test de Flujo de Eventos (MessageCore -> Event -> MessageDispatch -> Runtime -> AI)');
 
     // 1. Obtener datos de prueba
     const [account] = await db.select().from(accounts).limit(1);

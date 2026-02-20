@@ -46,6 +46,14 @@ const FluxCorePromptInspectorPanel = lazy(() =>
   import('../../components/extensions/FluxCorePromptInspectorPanel').then(m => ({ default: m.FluxCorePromptInspectorPanel }))
 );
 
+const PoliciesView = lazy(() =>
+  import('../../components/fluxcore/views/PoliciesView').then(m => ({ default: m.PoliciesView }))
+);
+
+const TracesView = lazy(() =>
+  import('../../components/fluxcore/views/TracesView').then(m => ({ default: m.TracesView }))
+);
+
 // ============================================================================
 // Loading Fallback
 // ============================================================================
@@ -132,6 +140,20 @@ const OpenAIAssistantConfigViewWrapper: ComponentType<ExtensionViewProps> = (pro
 const DebugPanelWrapper: ComponentType<ExtensionViewProps> = (_props) => (
   <Suspense fallback={<LoadingFallback />}>
     <FluxCorePromptInspectorPanel />
+  </Suspense>
+);
+
+// Policies view wrapper
+const PoliciesViewWrapper: ComponentType<ExtensionViewProps> = (props) => (
+  <Suspense fallback={<LoadingFallback />}>
+    <PoliciesView accountId={props.accountId} />
+  </Suspense>
+);
+
+// Traces view wrapper
+const TracesViewWrapper: ComponentType<ExtensionViewProps> = (props) => (
+  <Suspense fallback={<LoadingFallback />}>
+    <TracesView accountId={props.accountId} />
   </Suspense>
 );
 
@@ -226,6 +248,20 @@ export const fluxcoreManifest: ExtensionUIManifest = {
       component: DebugPanelWrapper,
       defaultTitle: 'Depuración',
       defaultIcon: 'Bug',
+    },
+
+    // Políticas (PolicyContext)
+    'policies': {
+      component: PoliciesViewWrapper,
+      defaultTitle: 'Políticas (Context)',
+      defaultIcon: 'Shield',
+    },
+
+    // Trazas del pipeline
+    'traces': {
+      component: TracesViewWrapper,
+      defaultTitle: 'Trazas',
+      defaultIcon: 'Activity',
     },
   },
 

@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "dev:all": "concurrently \"bun run --filter @fluxcore/api kernel:dev\" \"bun run --filter @fluxcore/api api:dev\" \"bun run --filter @fluxcore/web dev\"",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "bun run scripts/run-tests.ts",
@@ -29,10 +30,11 @@
     "@types/node": "^20.10.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
+    "concurrently": "^9.2.1",
     "eslint": "^8.55.0",
     "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-import": "^2.29.0",
     "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.0",
     "prettier": "^3.1.0",
     "turbo": "^1.11.0",
     "typescript": "^5.3.3"

@@ -1,21 +1,21 @@
 
 import clsx from 'clsx';
 import { Bot, BotMessageSquare, BotOff } from 'lucide-react';
-import type { AutomationMode } from '../../hooks/useAutomation';
+import type { AssistantMode } from '../../hooks/fluxcore/useAssistantMode';
 
 // Icons mapping
-const getAIModePresentation = (mode: AutomationMode) => {
-    if (mode === 'automatic') {
+const getAIModePresentation = (mode: AssistantMode) => {
+    if (mode === 'auto') {
         return { Icon: Bot, colorClassName: 'text-success', label: 'Automático' };
     }
-    if (mode === 'supervised') {
+    if (mode === 'suggest') {
         return { Icon: BotMessageSquare, colorClassName: 'text-warning', label: 'Supervisado' };
     }
     return { Icon: BotOff, colorClassName: 'text-muted', label: 'Apagado' };
 };
 
 interface AIStatusIndicatorProps {
-    mode: AutomationMode;
+    mode: AssistantMode;
     isFluxCoreEnabled: boolean;
     isLoading?: boolean;
     onToggle: (e: React.MouseEvent) => void;

@@ -25,10 +25,11 @@ import { WelcomeView } from '../chat/WelcomeView';
 import { ContactDetails } from '../contacts/ContactDetails';
 import { ProfileSection } from '../settings/ProfileSection';
 import { AccountsSection } from '../accounts';
+import { CreditsSection } from '../settings/CreditsSection';
+import { KernelSessionsSection } from '../settings/KernelSessionsSection';
 import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
 import { OpenAIAssistantEditor } from '../editors/OpenAIAssistantEditor';
-import { CreditsSection } from '../settings/CreditsSection';
 import { ComponentPreviewGallery } from '../settings/ComponentPreviewGallery';
 import { MonitoringHub } from '../monitor/MonitoringHub';
 import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
@@ -42,6 +43,8 @@ import { UsageView } from '../fluxcore/views/UsageView';
 import { AssistantsView } from '../fluxcore/views/AssistantsView';
 import { AgentsView } from '../fluxcore/views/AgentsView';
 import { AgentView } from '../fluxcore/views/AgentView';
+import { PoliciesView } from '../fluxcore/views/PoliciesView';
+import { TracesView } from '../fluxcore/views/TracesView';
 import { InstructionsView } from '../fluxcore/views/InstructionsView';
 import { VectorStoresView } from '../fluxcore/views/VectorStoresView';
 import { ToolsView } from '../fluxcore/views/ToolsView';
@@ -387,6 +390,10 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
         );
       case 'debug':
         return <FluxCorePromptInspectorPanel accountId={accountId} />;
+      case 'policies':
+        return <PoliciesView key={tab.id} accountId={accountId} />;
+      case 'traces':
+        return <TracesView key={tab.id} accountId={accountId} />;
       case 'billing':
         return (
           <div className="h-full flex items-center justify-center text-muted">
@@ -402,6 +409,22 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       case 'promptInspector':
         return <FluxCorePromptInspectorPanel accountId={accountId} />;
     }
+  }
+
+  // Only show extension settings panel when explicitly requested
+  if (view === 'config') {
+    return (
+      <ExtensionConfigPanel
+        extensionId={extensionId}
+        extensionName={extensionName || installation.manifest?.name || extensionId}
+        config={(installation.config || {}) as Record<string, unknown>}
+        supportsPromptInspector={isFluxCore}
+        onSave={async (config) => {
+          await updateConfig(extensionId, config as Record<string, unknown>);
+        }}
+        onClose={() => closeTab(containerId, tab.id)}
+      />
+    );
   }
 
   if (view === 'panel') {
@@ -436,17 +459,16 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     );
   }
 
+  // Fallback: unknown view ID — this tab was opened with a view that is not registered
   return (
-    <ExtensionConfigPanel
-      extensionId={extensionId}
-      extensionName={extensionName || installation.manifest?.name || extensionId}
-      config={(installation.config || {}) as Record<string, unknown>}
-      supportsPromptInspector={isFluxCore}
-      onSave={async (config) => {
-        await updateConfig(extensionId, config as Record<string, unknown>);
-      }}
-      onClose={() => closeTab(containerId, tab.id)}
-    />
+    <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-6">
+      <div className="text-4xl">🔲</div>
+      <p className="text-sm font-medium text-primary">Vista no encontrada</p>
+      <p className="text-xs text-muted max-w-xs">
+        El identificador <code className="bg-elevated px-1 rounded font-mono">{view}</code> no corresponde a ninguna vista registrada en la extensión <strong>{extensionName}</strong>.
+      </p>
+      <p className="text-xs text-muted">Cierra esta pestaña e inténtalo desde el menú lateral.</p>
+    </div>
   );
 }
 
@@ -729,6 +751,9 @@ function SettingsTabContent({ section }: SettingsTabContentProps) {
           </div>
         </div>
       );
+
+    case 'kernel':
+      return <KernelSessionsSection onBack={handleBack} />;
 
     default:
       return (

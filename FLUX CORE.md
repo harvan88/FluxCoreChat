@@ -31,21 +31,23 @@ Usuario envía mensaje
        ├─ Persistir mensaje (DB)
        ├─ WebSocket broadcast
        ├─ AutomationController.evaluateTrigger()
-       ├─ ExtensionHost.processMessage()   ← hooks de extensiones, NO genera IA
        └─ CoreEventBus.emit('core:message_received')
                     │
                     ▼
-           AIOrchestrator               ← ai-orchestrator.service.ts
+           MessageDispatchService      ← services/message-dispatch.service.ts
                     │
-                    ├─ Validaciones (success, automatic mode, text)
-                    ├─ Debounce por conversación
-                    └─ extensionHost.generateAIResponse()
+                    ├─ Resuelve PolicyContext
+                    ├─ ExtensionHost.processMessage() (Interceptors)
+                    └─ RuntimeGateway.handleMessage()
                               │
                               ▼
-                    AIService.generateResponse()   ← ai.service.ts (orquestador)
+                    FluxCoreRuntimeAdapter / AgentRuntimeAdapter
                               │
                     ┌─────────┤
                     ▼         │
+          aiService.generateResponse()   ← ai.service.ts
+                    │
+                    ▼
           resolveExecutionPlan()     ← ai-execution-plan.service.ts
                     │                    (single source of truth)
                     ├─ resolveActiveAssistant()
@@ -80,14 +82,17 @@ Usuario envía mensaje
                │                              │
                └──────────────────────────────┤
                                               ▼
-                                   AIOrchestrator
-                                   messageCore.send() ← respuesta final
+                                   MessageDispatchService
+                                   (Executes actions: send_message, etc.)
 ```
 
 ### 0.2. Capa de servicios (apps/api/src/services/)
 
 ```
-ai.service.ts                       ← Orquestador principal (delega a servicios extraídos)
+message-dispatch.service.ts         ← Backend Dispatcher (Event Listener)
+runtime-gateway.service.ts          ← Runtime Registry & Router
+runtimes/                           ← Adapters (FluxCore, Agents, etc.)
+ai.service.ts                       ← Legacy AI Logic / LLM Provider
 ├── ai-execution-plan.service.ts    ← ExecutionPlan: single source of truth
 ├── ai-context.service.ts           ← buildContext(): contexto conversacional (DB)
 ├── ai-branding.service.ts          ← Funciones puras de branding/promo

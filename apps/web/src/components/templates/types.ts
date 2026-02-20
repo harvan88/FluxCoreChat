@@ -18,6 +18,7 @@ export interface Template {
   tags: string[];
   assets?: TemplateAsset[];
   isActive: boolean;
+  allowAutomatedUse: boolean;
   authorizeForAI: boolean;
   aiUsageInstructions: string | null;
   usageCount: number;
@@ -55,6 +56,7 @@ export interface CreateTemplateInput {
   category?: string;
   variables?: TemplateVariable[];
   tags?: string[];
+  allowAutomatedUse?: boolean;
   authorizeForAI?: boolean;
   aiUsageInstructions?: string;
 }
@@ -66,6 +68,7 @@ export interface UpdateTemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   isActive?: boolean;
+  allowAutomatedUse?: boolean;
   authorizeForAI?: boolean;
   aiUsageInstructions?: string;
 }

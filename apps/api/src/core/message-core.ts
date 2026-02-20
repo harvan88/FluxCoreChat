@@ -1,7 +1,6 @@
 import { messageService } from '../services/message.service';
 import { conversationService } from '../services/conversation.service';
 import { relationshipService } from '../services/relationship.service';
-import { logTrace } from '../utils/file-logger';
 
 import { coreEventBus } from './events';
 import type { MessageEnvelope, ReceiveResult } from './types';
@@ -26,7 +25,7 @@ export { MessageEnvelope, ReceiveResult }; // Re-export para compatibilidad (opc
  */
 export class MessageCore {
   private notificationCallbacks: Map<string, (data: any) => void> = new Map();
-  // R-02.3: autoReplyQueue movida a AIOrchestrator
+  // R-02.3: autoReplyQueue movida a MessageDispatchService (via Runtime Gateway)
   private conversations = new Map<string, { relationshipId: string }>();
   private rooms: Map<string, any[]> = new Map();
 
@@ -87,9 +86,7 @@ export class MessageCore {
       };
 
       // R-02.1: Emitir evento para desacoplar lógica (IA, Analytics)
-      const emitMsg = `[FluxCoreTrace] 📤 Emitting core:message_received for message ${message.id}. Target: ${envelope.targetAccountId}`;
-      console.log(emitMsg);
-      logTrace(emitMsg);
+      console.log(`[FluxPipeline] 📩 RECV  conv=${envelope.conversationId.slice(0,7)} sender=${envelope.senderAccountId?.slice(0,7)} type=${envelope.type} by=${envelope.generatedBy||'human'} → target=${envelope.targetAccountId?.slice(0,7) ?? 'UNKNOWN'}`);
       coreEventBus.emit('core:message_received', { envelope, result });
 
       return result;

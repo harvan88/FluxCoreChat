@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Copy, Zap, ChevronDown, X, Plus } from 'lucide-react';
+import { Pencil, Copy, Zap, ChevronDown, X, Plus, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Button, Badge, Checkbox, SliderInput, CollapsibleSection } from '../../ui';
 import { DoubleConfirmationDeleteButton } from '../../ui/DoubleConfirmationDeleteButton';
 import {
@@ -58,6 +58,7 @@ export function AssistantDetail({
         model: false
     });
 
+    const isOpenAIRuntime = assistant.runtime === 'openai';
     const hiddenToolNames = new Set(['Búsqueda en archivos']);
     const visibleTools = (tools || []).filter(tool => !hiddenToolNames.has(tool.name));
 
@@ -69,13 +70,29 @@ export function AssistantDetail({
         navigator.clipboard.writeText(text);
     };
 
+    const handleModelConfigChange = (field: string, value: string) => {
+        const modelUpdates: Record<string, any> = { [field]: value };
+        if (field === 'provider') {
+            const models = PROVIDER_MODELS[value as AIProvider] || [];
+            modelUpdates.model = models[0] ?? '';
+        }
+        onUpdate({ modelConfig: { ...assistant.modelConfig, ...modelUpdates } }, 'immediate');
+    };
+
     return (
         <div className="h-full flex flex-col bg-background overflow-hidden">
             {/* Header original EXACTO con botón Cerrar opcional */}
             <div className="px-6 py-4 border-b border-subtle flex items-center justify-between">
                 <div className="flex-1">
                     <div className="text-xs text-muted mb-1 flex items-center justify-between">
-                        <span>Configuración de asistente</span>
+                        <span className="flex items-center gap-2">
+                            Configuración de asistente
+                            {isOpenAIRuntime && (
+                                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-accent/10 text-accent border border-accent/20">
+                                    OpenAI Runtime
+                                </span>
+                            )}
+                        </span>
                         <div className="flex items-center gap-2">
                             {isSaving && <span className="animate-pulse text-accent">Guardando...</span>}
                             {saveError && <span className="text-red-500">{saveError}</span>}
@@ -121,6 +138,44 @@ export function AssistantDetail({
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto p-6 space-y-6">
+
+                {/* OpenAI Runtime: External Assistant ID — REQUIRED */}
+                {isOpenAIRuntime && (
+                    <div className="space-y-3">
+                        {!assistant.externalId && (
+                            <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
+                                <AlertTriangle size={16} className="text-warning mt-0.5 flex-shrink-0" />
+                                <div className="text-sm">
+                                    <p className="font-medium text-warning">ID de asistente OpenAI requerido</p>
+                                    <p className="text-secondary mt-0.5">Este asistente usa el runtime OpenAI Assistants API. Debes vincular un asistente desde tu cuenta OpenAI.</p>
+                                    <a
+                                        href="https://platform.openai.com/assistants"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 mt-1.5 text-accent hover:underline"
+                                    >
+                                        Ir a OpenAI Assistants <ExternalLink size={12} />
+                                    </a>
+                                </div>
+                            </div>
+                        )}
+                        <div>
+                            <label className="block text-sm text-muted mb-1">
+                                ID de asistente OpenAI <span className="text-warning">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary font-mono text-sm placeholder:text-muted"
+                                placeholder="asst_xxxxxxxxxxxxxxxxxxxx"
+                                value={assistant.externalId ?? ''}
+                                onChange={(e) => onUpdate({ externalId: e.target.value || undefined }, 'debounce')}
+                                onBlur={(e) => onUpdate({ externalId: e.target.value || undefined }, 'immediate')}
+                            />
+                            <p className="text-xs text-muted mt-1">Encuéntralo en platform.openai.com/assistants → ID del asistente (asst_...)</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Lógica de composición exacta (IIFE Pattern from original) */}
                 <CollapsibleSection
                     title="Configuración inicial"
@@ -316,8 +371,8 @@ export function AssistantDetail({
                     </div>
                 </CollapsibleSection>
 
-                {/* Proveedor IA */}
-                <CollapsibleSection
+                {/* Proveedor IA — solo para runtime local */}
+                {!isOpenAIRuntime && <CollapsibleSection
                     title="Proveedor IA"
                     defaultExpanded={true}
                     showToggle={true}
@@ -329,18 +384,12 @@ export function AssistantDetail({
                             <label className="block text-sm text-muted mb-1">Empresa proveedora</label>
                             <div className="relative">
                                 <select
-                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                                    value={assistant.modelConfig.provider}
-                                    disabled={assistant.runtime === 'openai'}
-                                    onChange={(e) => {
-                                        const provider = e.target.value as AIProvider;
-                                        const models = PROVIDER_MODELS[provider] || [];
-                                        onUpdate({ modelConfig: { ...assistant.modelConfig, provider, model: models[0] || assistant.modelConfig.model } }, 'immediate');
-                                    }}
+                                    value={assistant.modelConfig?.provider || 'groq'}
+                                    onChange={(e) => handleModelConfigChange('provider', e.target.value)}
+                                    className="w-full bg-active border border-subtle rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:border-accent text-primary appearance-none"
                                 >
                                     <option value="openai">Open IA</option>
                                     <option value="groq">Groq</option>
-                                    <option value="anthropic">Anthropic</option>
                                 </select>
                                 <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                             </div>
@@ -361,7 +410,7 @@ export function AssistantDetail({
                             </div>
                         </div>
                     </div>
-                </CollapsibleSection>
+                </CollapsibleSection>}
 
                 {/* Timing */}
                 <CollapsibleSection
@@ -396,7 +445,7 @@ export function AssistantDetail({
                     </div>
                 </CollapsibleSection>
 
-                <CollapsibleSection
+                {!isOpenAIRuntime && <CollapsibleSection
                     title="Configuración de modelo"
                     defaultExpanded={false}
                     showToggle={true}
@@ -414,14 +463,88 @@ export function AssistantDetail({
                         </select>
                         <SliderInput label="Temperatura" value={assistant.modelConfig.temperature} onChange={(val) => onUpdate({ modelConfig: { ...assistant.modelConfig, temperature: val } }, 'debounce')} min={0} max={2} step={0.01} />
                         <SliderInput label="Top P" value={assistant.modelConfig.topP} onChange={(val) => onUpdate({ modelConfig: { ...assistant.modelConfig, topP: val } }, 'debounce')} min={0} max={1} step={0.01} />
+                        <SliderInput label="Tokens máximos" value={assistant.modelConfig.maxTokens ?? 1024} onChange={(val) => onUpdate({ modelConfig: { ...assistant.modelConfig, maxTokens: val } }, 'debounce')} min={256} max={8192} step={256} />
+                    </div>
+                </CollapsibleSection>}
+                {/* Automatización y Gobernanza */}
+                <CollapsibleSection
+                    title="Automatización y gobernanza"
+                    defaultExpanded={false}
+                    showToggle={false}
+                >
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm text-muted mb-1">Modo de respuesta</label>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
+                                    value={assistant.timingConfig.mode ?? 'auto'}
+                                    onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, mode: e.target.value as 'auto' | 'suggest' | 'off' } }, 'immediate')}
+                                >
+                                    <option value="auto">Auto — responde automáticamente</option>
+                                    <option value="suggest">Sugerir — solo propone respuestas al operador</option>
+                                    <option value="off">Apagado — sin respuestas automáticas</option>
+                                </select>
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-muted mb-1">Tono</label>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
+                                    value={assistant.timingConfig.tone ?? 'neutral'}
+                                    onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, tone: e.target.value as 'formal' | 'casual' | 'neutral' } }, 'immediate')}
+                                >
+                                    <option value="neutral">Neutral</option>
+                                    <option value="formal">Formal</option>
+                                    <option value="casual">Casual</option>
+                                </select>
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-muted mb-1">Idioma</label>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
+                                    value={assistant.timingConfig.language ?? 'es'}
+                                    onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, language: e.target.value } }, 'immediate')}
+                                >
+                                    <option value="es">Español</option>
+                                    <option value="en">Inglés</option>
+                                    <option value="pt">Portugués</option>
+                                    <option value="fr">Francés</option>
+                                </select>
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                            </div>
+                        </div>
+                        <Checkbox
+                            label="Usar emojis"
+                            description="El asistente puede incluir emojis en sus respuestas"
+                            checked={assistant.timingConfig.useEmojis ?? false}
+                            onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, useEmojis: e.target.checked } }, 'immediate')}
+                        />
                     </div>
                 </CollapsibleSection>
             </div>
 
             {/* Footer original EXACTO */}
             <div className="px-6 py-3 border-t border-subtle bg-surface flex flex-wrap items-center gap-3 justify-start">
-                {assistant.status !== 'active' && (
-                    activateConfirm ? (
+                {assistant.status !== 'active' && (() => {
+                    const canActivate = !isOpenAIRuntime || !!assistant.externalId;
+                    if (!canActivate) {
+                        return (
+                            <button
+                                disabled
+                                title="Ingresa el ID de asistente OpenAI (asst_...) antes de activar"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-success/40 px-3 py-1.5 text-sm font-medium text-inverse/60 cursor-not-allowed"
+                            >
+                                <Zap size={16} /> Activar asistente
+                            </button>
+                        );
+                    }
+                    return activateConfirm ? (
                         <>
                             <span className="text-sm text-muted">¿Confirmar activación?</span>
                             <button
@@ -444,8 +567,8 @@ export function AssistantDetail({
                         >
                             <Zap size={16} className="text-inverse" /> Activar asistente
                         </button>
-                    )
-                )}
+                    );
+                })()}
                 <button
                     onClick={onCopyConfig}
                     className="inline-flex items-center gap-1.5 rounded-md bg-elevated px-3 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-hover"

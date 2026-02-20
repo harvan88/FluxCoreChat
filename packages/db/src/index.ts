@@ -9,3 +9,6 @@ export * from './utils';
 
 // Export shared types
 export * from './types/policy-context';
+export * from './types/runtime-config';
+
+export * from 'drizzle-orm';

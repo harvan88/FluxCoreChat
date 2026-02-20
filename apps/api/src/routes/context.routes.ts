@@ -18,7 +18,7 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
 
     try {
       const context = await relationshipContextService.getContext(params.relationshipId);
-      
+
       if (!context) {
         set.status = 404;
         return { success: false, message: 'Relationship not found' };
@@ -58,13 +58,14 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
         return { success: false, message: 'Relationship not found' };
       }
 
-      const { authorAccountId, content, type } = body as any;
+      const { authorAccountId, content, type, allowAutomatedUse } = body as any;
 
       const result = await relationshipContextService.addEntry({
         relationshipId: params.relationshipId,
         authorAccountId,
         content,
         type,
+        allowAutomatedUse,
       });
 
       if (!result.success) {
@@ -88,6 +89,7 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
       authorAccountId: t.String(),
       content: t.String(),
       type: t.Union([t.Literal('note'), t.Literal('preference'), t.Literal('rule')]),
+      allowAutomatedUse: t.Optional(t.Boolean()),
     }),
   })
 
@@ -106,7 +108,7 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
         return { success: false, message: 'Relationship not found' };
       }
 
-      const { content, type } = body as any;
+      const { content, type, allowAutomatedUse } = body as any;
       const entryIndex = parseInt(params.index);
 
       if (isNaN(entryIndex)) {
@@ -119,6 +121,7 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
         entryIndex,
         content,
         type,
+        allowAutomatedUse,
       });
 
       if (!result.success) {
@@ -142,6 +145,7 @@ export const contextRoutes = new Elysia({ prefix: '/context' })
     body: t.Object({
       content: t.Optional(t.String()),
       type: t.Optional(t.Union([t.Literal('note'), t.Literal('preference'), t.Literal('rule')])),
+      allowAutomatedUse: t.Optional(t.Boolean()),
     }),
   })
 

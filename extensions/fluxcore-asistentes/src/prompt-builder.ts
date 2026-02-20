@@ -162,12 +162,55 @@ export class PromptBuilder {
 
     // Canon v7.0: Aplicar Preferencias de Atención (Policy Layer)
     if (context.policyContext) {
-      const { attention } = context.policyContext;
+      const { attention, presence, commercial } = context.policyContext;
+
       sections.push('\n### Guías de Estilo (Políticas):');
       sections.push(`- Tono de voz: ${attention.tone}`);
       sections.push(`- Tratamiento al usuario: ${attention.formality}`);
       sections.push(`- Uso de emojis: ${attention.useEmojis ? 'Permitido (usar con moderación)' : 'Prohibido (no usar emojis)'}`);
       sections.push(`- Idioma: ${attention.language}`);
+
+      // Canon v7.0: Presence Domain
+      if (presence) {
+        sections.push('\n### Disponibilidad y Presencia:');
+        sections.push(`- Zona Horaria: ${presence.timezone}`);
+        
+        if (presence.businessHours && presence.businessHours.length > 0) {
+          sections.push('- Horarios de Atención:');
+          for (const bh of presence.businessHours) {
+            sections.push(`  - ${bh.days.join(', ')}: ${bh.open} - ${bh.close}`);
+          }
+        }
+
+        if (presence.locations && presence.locations.length > 0) {
+          sections.push('- Ubicaciones:');
+          for (const loc of presence.locations) {
+            sections.push(`  - ${loc.name}: ${loc.address}`);
+          }
+        }
+      }
+
+      // Canon v7.0: Commercial Domain
+      if (commercial) {
+        if ((commercial.catalog && commercial.catalog.length > 0) || (commercial.conditions && commercial.conditions.length > 0)) {
+          sections.push('\n### Información Comercial:');
+          
+          if (commercial.catalog && commercial.catalog.length > 0) {
+            sections.push('- Catálogo de Servicios/Productos:');
+            for (const item of commercial.catalog) {
+              const priceStr = item.price ? `${item.price} ${item.currency || 'USD'}` : '';
+              sections.push(`  - ${item.name}${priceStr ? ` (${priceStr})` : ''}${item.description ? `: ${item.description}` : ''}`);
+            }
+          }
+
+          if (commercial.conditions && commercial.conditions.length > 0) {
+            sections.push('- Condiciones:');
+            for (const cond of commercial.conditions) {
+              sections.push(`  - ${cond}`);
+            }
+          }
+        }
+      }
     }
 
     // RAG-008: Contexto de Base de Conocimiento (Vector Stores)

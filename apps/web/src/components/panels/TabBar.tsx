@@ -9,7 +9,7 @@
  */
 
 import { useState, type ReactNode, isValidElement } from 'react';
-import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare, GitBranch } from 'lucide-react';
+import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare, GitBranch, Shield } from 'lucide-react';
 import clsx from 'clsx';
 import { usePanelStore, useContainers } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
@@ -206,6 +206,7 @@ function TabItem({
       GitBranch: <GitBranch size={14} />,
       Settings: <Settings size={14} />,
       MessageSquare: <MessageSquare size={14} />,
+      Shield: <Shield size={14} />,
     };
 
     return map[icon] ?? icon;

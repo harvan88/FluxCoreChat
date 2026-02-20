@@ -4,10 +4,12 @@
   "description": "FluxCore API - Backend con Elysia",
   "type": "module",
   "scripts": {
-    "dev": "bun --env-file ../../.env --watch src/server.ts",
-    "dev:simple": "bun --env-file ../../.env --watch src/server.ts",
+    "kernel:dev": "bun --env-file ../../.env --watch src/kernel-runtime.ts",
+    "api:dev": "bun --env-file ../../.env --watch src/server.ts",
+    "dev": "bun run api:dev",
     "build": "bun build src/server.ts --outdir dist --target bun",
     "start": "bun run dist/server.js",
+    "kernel:start": "bun --env-file ../../.env src/kernel-runtime.ts",
     "lint": "tsc --noEmit -p tsconfig.lint.json",
     "clean": "rm -rf dist"
   },

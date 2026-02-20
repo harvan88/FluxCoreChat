@@ -10,7 +10,7 @@ export interface NormalizedMessage {
   externalId: string;          // ID del mensaje en el canal externo
   channel: 'whatsapp' | 'telegram' | 'web' | 'instagram';
   direction: 'incoming' | 'outgoing';
-  
+
   // Participantes
   from: {
     id: string;                // ID externo del remitente
@@ -22,10 +22,10 @@ export interface NormalizedMessage {
     name?: string;
     phone?: string;
   };
-  
+
   // Contenido
   content: MessageContent;
-  
+
   // Metadata
   timestamp: Date;
   status: 'sent' | 'delivered' | 'read' | 'failed';
@@ -59,8 +59,24 @@ export interface MessageContent {
 }
 
 /**
- * Mensaje saliente
+ * Evento de cambio de estado (Read/Delivered)
  */
+export interface NormalizedStatusEvent {
+  channel: 'whatsapp' | 'telegram' | 'web' | 'instagram';
+  messageId: string;           // ID externo del mensaje afectado
+  externalId: string;          // ID del evento en sí (si existe)
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  timestamp: Date;
+  recipientId?: string;        // Quién leyó/recibió
+  failureReason?: string;
+  raw: any;                    // Payload original para evidencia
+}
+
+/**
+ * Interface base para listeners
+ */
+export type MessageHandler = (message: NormalizedMessage, channel: string) => Promise<void>;
+export type StatusHandler = (event: NormalizedStatusEvent, channel: string) => Promise<void>;
 export interface OutgoingMessage {
   to: string;                  // Número o ID del destinatario
   content: MessageContent;
@@ -94,18 +110,18 @@ export interface WebhookEvent {
 export interface IChannelAdapter {
   readonly channel: string;
   readonly name: string;
-  
+
   // Lifecycle
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
-  
+
   // Mensajes
   send(message: OutgoingMessage): Promise<SendResult>;
-  
+
   // Webhook
   handleWebhook(payload: any): Promise<NormalizedMessage | null>;
   verifyWebhook(payload: any, signature?: string): boolean;
-  
+
   // Status
   isConnected(): boolean;
   getStatus(): AdapterStatus;

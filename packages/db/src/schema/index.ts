@@ -82,3 +82,10 @@ export * from './wes';
 // Dimensión 1: Configuración de Runtime (Soberanía de Cuenta)
 export * from './account-runtime-config';
 
+// Ontología de Identidad (Projector Space)
+export * from './fluxcore-identity';
+export { fluxcoreSessionProjection } from './fluxcore-session-projection';
+
+// Kernel Journal — RFC-0001 (Sovereign Reality)
+export * from './fluxcore-journal';
+export * from './fluxcore-cognition';

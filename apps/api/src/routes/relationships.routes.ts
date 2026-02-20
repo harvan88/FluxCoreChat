@@ -14,31 +14,31 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
 
       const { accountId } = query;
       const { accountService } = await import('../services/account.service');
-      
+
       // MA-104: Si se provee accountId, filtrar por esa cuenta específica
       if (accountId) {
         // MA-105: Verificar que el accountId pertenece al usuario
         const userAccounts = await accountService.getAccountsByUserId(user.id);
         const userAccountIds = userAccounts.map(a => a.id);
-        
+
         if (!userAccountIds.includes(accountId)) {
           set.status = 403;
           return { success: false, message: 'Account does not belong to user' };
         }
-        
+
         // Get relationships for this specific account
         const rels = await relationshipService.getRelationshipsByAccountId(accountId);
-        
+
         // Enrich with contact name
         const enrichedRelationships = await Promise.all(
           rels.map(async (rel) => {
             const otherAccountId = rel.accountAId === accountId
               ? rel.accountBId
               : rel.accountAId;
-            
+
             const otherAccount = await accountService.getAccountById(otherAccountId);
             const profile = otherAccount?.profile as { avatarUrl?: string } | null;
-            
+
             return {
               ...rel,
               contactName: otherAccount?.displayName || 'Desconocido',
@@ -47,14 +47,14 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
             };
           })
         );
-        
+
         return { success: true, data: enrichedRelationships };
       }
 
       // Fallback: Get all accounts of the user (deprecated behavior)
       const accounts = await accountService.getAccountsByUserId(user.id);
       const userAccountIds = accounts.map(a => a.id);
-      
+
       // Get relationships for all accounts
       const allRelationships = [];
       for (const account of accounts) {
@@ -69,10 +69,10 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
           const otherAccountId = userAccountIds.includes(rel.accountAId)
             ? rel.accountBId
             : rel.accountAId;
-          
+
           const otherAccount = await accountService.getAccountById(otherAccountId);
           const profile = otherAccount?.profile as { avatarUrl?: string } | null;
-          
+
           return {
             ...rel,
             contactName: otherAccount?.displayName || 'Desconocido',
@@ -167,7 +167,8 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
           author_account_id: body.authorAccountId,
           content: body.content,
           type: body.type,
-        });
+          allow_automated_use: body.allowAutomatedUse ?? false,
+        } as any);
         return { success: true, data: updated };
       } catch (error: any) {
         set.status = 400;
@@ -181,6 +182,7 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
         authorAccountId: t.String(),
         content: t.String({ maxLength: 2000 }),
         type: t.Union([t.Literal('note'), t.Literal('preference'), t.Literal('rule')]),
+        allowAutomatedUse: t.Optional(t.Boolean()),
       }),
       detail: { tags: ['Relationships'], summary: 'Add context entry' },
     }

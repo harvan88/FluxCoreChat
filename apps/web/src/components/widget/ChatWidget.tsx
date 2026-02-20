@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getOrCreateVisitorToken } from '../../modules/visitor-token';
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
 
 interface ChatMessage {
@@ -16,6 +17,8 @@ interface ChatMessage {
 
 interface ChatWidgetProps {
   alias: string;
+  tenantId: string;          // accountId del dueño del widget
+  userAccountId?: string;    // accountId del visitante autenticado (para B2)
   position?: 'bottom-right' | 'bottom-left';
   primaryColor?: string;
   greeting?: string;
@@ -25,18 +28,22 @@ const WIDGET_WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
 
 export function ChatWidget({
   alias,
+  tenantId,
+  userAccountId,
   position = 'bottom-right',
   primaryColor = '#3b82f6',
-  greeting = '¡Hola! ¿En qué podemos ayudarte?',
+  greeting = '¡Hola! ¿en qué podemos ayudarte?',
 }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [visitorId, setVisitorId] = useState<string | null>(null);
   const [relationshipId, setRelationshipId] = useState<string | null>(null);
-  
+
+  // Provisional identity — persists across page reloads
+  const visitorToken = getOrCreateVisitorToken();
+
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -45,18 +52,6 @@ export function ChatWidget({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Generate or retrieve visitor ID
-  useEffect(() => {
-    const storedId = localStorage.getItem(`fluxcore_visitor_${alias}`);
-    if (storedId) {
-      setVisitorId(storedId);
-    } else {
-      const newId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem(`fluxcore_visitor_${alias}`, newId);
-      setVisitorId(newId);
-    }
-  }, [alias]);
-
   // Connect to WebSocket
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -64,17 +59,20 @@ export function ChatWidget({
     setIsConnecting(true);
     
     try {
-      const ws = new WebSocket(`${WIDGET_WS_URL}?alias=${alias}&visitor=${visitorId}`);
+      const ws = new WebSocket(`${WIDGET_WS_URL}?alias=${alias}&visitor=${visitorToken}`);
       
       ws.onopen = () => {
         setIsConnecting(false);
         setIsConnected(true);
         
-        // Send initial connection message
+        // Send initial connection message with provisional identity
+        // Include userAccountId if visitor is authenticated (triggers B2)
         ws.send(JSON.stringify({
           type: 'widget:connect',
           alias,
-          visitorId,
+          visitorToken,
+          visitorId: visitorToken, // backwards compat
+          ...(userAccountId ? { accountId: userAccountId } : {}),
         }));
       };
       
@@ -92,7 +90,7 @@ export function ChatWidget({
                 setMessages(prev => [...prev, {
                   id: data.message.id,
                   text: data.message.content?.text || '',
-                  sender: data.message.senderAccountId === visitorId ? 'visitor' : 'business',
+                  sender: data.message.senderAccountId === visitorToken ? 'visitor' : 'business',
                   timestamp: new Date(data.message.createdAt),
                 }]);
               }
@@ -118,14 +116,27 @@ export function ChatWidget({
       setIsConnecting(false);
       console.error('[ChatWidget] Failed to connect:', error);
     }
-  }, [alias, visitorId]);
+  }, [alias, visitorToken, userAccountId]);
 
   // Connect when widget opens
   useEffect(() => {
-    if (isOpen && visitorId && !isConnected && !isConnecting) {
+    if (isOpen && !isConnected && !isConnecting) {
       connect();
     }
-  }, [isOpen, visitorId, isConnected, isConnecting, connect]);
+  }, [isOpen, isConnected, isConnecting, connect]);
+
+  // Re-notify when visitor authenticates mid-session (triggers B2 identity link)
+  useEffect(() => {
+    if (isConnected && userAccountId && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'widget:connect',
+        alias,
+        visitorToken,
+        visitorId: visitorToken,
+        accountId: userAccountId,
+      }));
+    }
+  }, [userAccountId, isConnected, alias, visitorToken]);
 
   // Add greeting message when first opened
   useEffect(() => {
@@ -156,17 +167,19 @@ export function ChatWidget({
       timestamp: new Date(),
     }]);
 
-    // Send via WebSocket
+    // Send via WebSocket — certified by chatcore-webchat-gateway
     wsRef.current.send(JSON.stringify({
       type: 'widget:message',
       alias,
-      visitorId,
+      visitorToken,
+      visitorId: visitorToken, // backwards compat
+      tenantId,
       relationshipId,
       content: { text },
     }));
 
     setInputValue('');
-  }, [inputValue, alias, visitorId, relationshipId]);
+  }, [inputValue, alias, visitorToken, tenantId, relationshipId]);
 
   // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent) => {

@@ -14,6 +14,10 @@ export const fluxcoreTemplateSettings = pgTable('fluxcore_template_settings', {
 
     authorizeForAI: boolean('authorize_for_ai').notNull().default(false),
 
+    aiIncludeName: boolean('ai_include_name').notNull().default(true),
+    aiIncludeContent: boolean('ai_include_content').notNull().default(true),
+    aiIncludeInstructions: boolean('ai_include_instructions').notNull().default(true),
+
     // Instrucciones específicas para que la IA sepa cuándo y cómo usar esta plantilla
     aiUsageInstructions: text('ai_usage_instructions'),
 

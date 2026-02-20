@@ -8,4 +8,6 @@ export type FluxCoreView =
   | 'knowledge-base'
   | 'debug'
   | 'billing'
-  | 'works';
+  | 'works'
+  | 'policies'
+  | 'traces';

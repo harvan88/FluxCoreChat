@@ -22,7 +22,7 @@ import { aiToolService } from './ai-tools.service';
 
 let openaiClient: OpenAI | null = null;
 
-function getOpenAIClient(): OpenAI {
+export function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -48,7 +48,7 @@ export async function getOpenAIAssistant(externalId: string): Promise<any> {
   return assistantsApi.retrieve(externalId);
 }
 
-function getVectorStoresApi(client: OpenAI): any {
+export function getVectorStoresApi(client: OpenAI): any {
   return (client as any).vectorStores ?? (client as any).beta?.vectorStores;
 }
 

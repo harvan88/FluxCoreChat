@@ -22,6 +22,7 @@ export const appointmentServices = pgTable('appointment_services', {
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
 });
 
 // Personal/empleados que pueden atender
@@ -38,6 +39,7 @@ export const appointmentStaff = pgTable('appointment_staff', {
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
 });
 
 // Turnos/citas
@@ -47,24 +49,24 @@ export const appointments = pgTable('appointments', {
   clientAccountId: uuid('client_account_id').notNull(), // Cuenta del cliente
   serviceId: uuid('service_id').notNull().references(() => appointmentServices.id),
   staffId: uuid('staff_id').references(() => appointmentStaff.id),
-  
+
   // Fecha y hora
   date: timestamp('date').notNull(),
   duration: integer('duration').notNull(), // Minutos
-  
+
   // Estado
   status: varchar('status', { length: 20 }).default('pending').notNull(),
   // pending, confirmed, completed, cancelled, no_show
-  
+
   // Notas y metadata
   notes: text('notes'),
   cancellationReason: text('cancellation_reason'),
   metadata: jsonb('metadata').default({}),
-  
+
   // Origen
   createdBy: varchar('created_by', { length: 20 }).default('customer').notNull(),
   // customer, staff, ai, system
-  
+
   // Timestamps
   confirmedAt: timestamp('confirmed_at'),
   completedAt: timestamp('completed_at'),

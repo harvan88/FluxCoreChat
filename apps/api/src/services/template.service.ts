@@ -1,5 +1,6 @@
 import { db, templates, templateAssets, assets, type Template, type TemplateVariable } from '@fluxcore/db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
+import { coreEventBus } from '../core/events';
 
 export interface TemplateInput {
   name: string;
@@ -8,6 +9,7 @@ export interface TemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   isActive?: boolean;
+  allowAutomatedUse?: boolean;
 }
 
 export interface TemplateUpdateInput extends Partial<TemplateInput> { }
@@ -60,8 +62,16 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? true,
+        allowAutomatedUse: payload.allowAutomatedUse ?? false,
       })
       .returning();
+
+    // PC-823: Emit for FluxCore invalidation
+    coreEventBus.emit('template.authorization.changed', {
+      templateId: inserted.id,
+      accountId,
+      allowAutomatedUse: inserted.allowAutomatedUse,
+    });
 
     return { ...inserted, assets: [] };
   }
@@ -77,6 +87,7 @@ export class TemplateService {
       variables: data.variables ?? existing!.variables,
       tags: data.tags ?? existing!.tags,
       isActive: data.isActive ?? existing!.isActive,
+      allowAutomatedUse: data.allowAutomatedUse ?? (existing as any).allowAutomatedUse,
     });
 
     const [updated] = await this.orm
@@ -88,10 +99,18 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? existing!.isActive,
+        allowAutomatedUse: payload.allowAutomatedUse ?? (existing as any).allowAutomatedUse,
         updatedAt: new Date(),
       })
       .where(and(eq(templates.id, templateId), eq(templates.accountId, accountId)))
       .returning();
+
+    // PC-823: Emit for FluxCore invalidation
+    coreEventBus.emit('template.authorization.changed', {
+      templateId,
+      accountId,
+      allowAutomatedUse: updated.allowAutomatedUse,
+    });
 
     return { ...updated, assets: await this.getTemplateAssets(templateId) };
   }
@@ -299,6 +318,7 @@ export function normalizeTemplateInput(input: TemplateInput): Required<Omit<Temp
     variables: input.variables ?? [],
     tags: input.tags ?? [],
     isActive: input.isActive ?? true,
+    allowAutomatedUse: input.allowAutomatedUse ?? false,
   };
 }
 

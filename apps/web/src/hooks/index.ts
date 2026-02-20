@@ -12,3 +12,4 @@ export { useFileUpload } from './useFileUpload';
 export { useProfile, type ProfileData, type UseProfileReturn } from './useProfile';
 export { useScroll } from './useScroll';
 export { useWebSocket } from './useWebSocket';
+export { useKernelSessions } from './useKernelSessions';

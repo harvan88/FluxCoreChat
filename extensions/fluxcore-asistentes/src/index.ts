@@ -442,99 +442,80 @@ export class FluxCoreExtension {
    * Hook: Cuando se recibe un mensaje
    */
   async onMessage(
-    eventOrParams: MessageEvent | any,
-    context?: ContextData,
-    recipientAccountId?: string,
-    wes?: any, // WES-170
-    policyContext?: any // Canon v7.0
-  ): Promise<AISuggestion | null> {
-    // Adapter for ExtensionHost params object
-    if (eventOrParams && !context && (eventOrParams as any).message && (eventOrParams as any).accountId) {
-      const params = eventOrParams as any;
-      context = params.context;
-      recipientAccountId = params.accountId;
-      wes = params.wes;
-      policyContext = params.policyContext;
-      eventOrParams = {
-        messageId: params.message.id,
-        conversationId: params.conversationId,
-        senderAccountId: params.message.senderAccountId,
-        recipientAccountId: params.accountId,
-        content: params.message.content?.text || params.message.content,
-        messageType: params.message.type || 'text',
-        createdAt: new Date(),
-      } as MessageEvent;
+    _params: {
+      accountId: string;
+      extensionId: string;
+      relationshipId: string;
+      conversationId: string;
+      message: { id: string; content: any; type: string; senderAccountId: string };
+      policyContext?: any;
     }
-
-    const event = eventOrParams as MessageEvent;
-    if (!context || !recipientAccountId) return null;
-
-    // Inject WES into context for PromptBuilder
-    if (wes) {
-      context.wes = wes;
-    }
-
-    // Verificar si está habilitado
-    if (!this.config.enabled || this.config.mode === 'off') {
-      return null;
-    }
-
-    // Solo procesar mensajes de texto
-    if (event.messageType !== 'text') {
-      return null;
-    }
-
-    // No procesar mensajes propios
-    if (event.senderAccountId === recipientAccountId) {
-      return null;
-    }
-
-    const conversationId = event.conversationId;
-
-    // Cancelar respuesta pendiente anterior para esta conversación
-    if (responseQueue.has(conversationId)) {
-      clearTimeout(responseQueue.get(conversationId));
-      responseQueue.delete(conversationId);
-    }
-
-    // Programar generación de respuesta
-    if (this.config.mode === 'auto') {
-      // Canon v7.0: Use responseDelay from policyContext if available, otherwise fallback to extension config
-      const delaySeconds = policyContext?.automation?.responseDelaySeconds ?? this.config.responseDelay;
-
-      if (delaySeconds > 0) {
-        // Modo auto con delay
-        const timeout = setTimeout(async () => {
-          const suggestion = await this.generateSuggestion(event, context, recipientAccountId, undefined, wes, policyContext);
-          if (suggestion) {
-            this.onSuggestionCallback?.(suggestion);
-          }
-          responseQueue.delete(conversationId);
-        }, delaySeconds * 1000);
-
-        responseQueue.set(conversationId, timeout);
-        return null;
-      }
-    }
-
-    // Generar inmediatamente si no hay delay o no es auto
-    return this.generateSuggestion(event, context, recipientAccountId, undefined, wes, policyContext);
+  ): Promise<{ handled: boolean; stopPropagation: boolean } | null> {
+    // FluxCore Extension (Conversational) just observes. 
+    // It doesn't trap messages or block propagation in onMessage.
+    // Conversational response is handled via generateResponse hook.
+    return {
+      handled: false,
+      stopPropagation: false,
+    };
   }
 
   /**
    * Genera una sugerencia de respuesta
    */
-  async generateSuggestion(
-    event: MessageEvent,
-    context: ContextData,
-    recipientAccountId: string,
-    configOverride?: FluxCoreConfig,
-    wes?: any, // WES-170
-    policyContext?: any // Canon v7.0
+  async generateResponse(
+    params: {
+      conversationId: string;
+      recipientAccountId: string;
+      lastMessageContent: string;
+      options?: {
+        mode?: 'suggest' | 'auto';
+        responseDelay?: number;
+        triggerMessageId?: string;
+        policyContext?: any;
+        wes?: any;
+        context?: ContextData; // AIService already builds this
+      };
+    }
   ): Promise<AISuggestion | null> {
-    const cfg = configOverride || this.config;
+    const { conversationId, recipientAccountId, lastMessageContent, options } = params;
+    const policyContext = options?.policyContext;
+    
+    // Canon v7.0: Mode and Delay are Runtime decisions (Execution Plan), not Policy Context.
+    const mode = options?.mode || this.config.mode;
+
+    // 1. Authorization Check
+    if (mode === 'off') {
+      console.log('[fluxcore] ⏹️ Execution blocked by config (mode: off)');
+      return null;
+    }
+
+    // 2. Sovereign Delay
+    const delaySeconds = options?.responseDelay ?? this.config.responseDelay ?? 0;
+    if (delaySeconds > 0) {
+      console.log(`[fluxcore] ⏳ Applying sovereign delay: ${delaySeconds}s`);
+      await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+    }
+
+    const event: MessageEvent = {
+      messageId: options?.triggerMessageId || 'unknown',
+      conversationId,
+      senderAccountId: 'external',
+      recipientAccountId,
+      content: lastMessageContent,
+      messageType: 'text',
+      createdAt: new Date(),
+    };
+
+    // Use context from params if provided, otherwise partial build (should be provided by AI service)
+    const context: ContextData = options?.context || {
+      conversation: { id: conversationId, channel: 'unknown' },
+    };
+
+    const cfg = this.config;
 
     // Inject WES into context for PromptBuilder
+    const wes = options?.wes;
     if (wes) {
       context.wes = wes;
     }

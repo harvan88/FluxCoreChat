@@ -17,6 +17,7 @@ export const appointmentServices = pgTable('appointment_services', {
   active: boolean('active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
 });
 
 /**
@@ -34,6 +35,7 @@ export const appointmentStaff = pgTable('appointment_staff', {
   active: boolean('active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
 });
 
 /**

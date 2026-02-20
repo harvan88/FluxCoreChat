@@ -1,10 +1,10 @@
 # ASISTENTES — Especificación de los Runtimes Cognitivos
 
-**Documento subordinado a:** `FLUXCORE_CANON.md` (v7.0)
+**Documento subordinado a:** `FLUXCORE_CANON_FINAL_v8.3.md` (v8.3)
 
-Este documento especifica los dos runtimes cognitivos de FluxCore:
-* **Asistentes Local** (`@fluxcore/asistentes`) — ejecución interna.
-* **Asistentes OpenAI** (`@fluxcore/asistentes-openai`) — ejecución remota vía OpenAI Assistants API.
+Este documento especifica los dos runtimes cognitivos de FluxCore v8.3:
+* **Asistentes Local** (`asistentes-local`) — ejecución interna con control total del prompt y herramientas.
+* **Asistentes OpenAI** (`asistentes-openai`) — ejecución remota vía OpenAI Assistants API.
 
 Ambos son runtimes paralelos e independientes. No son sub-modos de un mismo runtime.
 
@@ -12,182 +12,102 @@ Ambos son runtimes paralelos e independientes. No son sub-modos de un mismo runt
 
 ## 1. Misión Compartida
 
-Ambos runtimes existen para resolver interacciones conversacionales donde el usuario necesita información, orientación o acciones que no requieren la formalidad transaccional de un Work.
+Ambos runtimes existen para resolver interacciones conversacionales donde el usuario necesita información, orientación o acciones que no requieren la formalidad transaccional de un Work (Fluxi).
 
-Cuando un usuario dice "¿Cuáles son los horarios de atención?", eso no es una transacción.
-Es una **consulta** que se resuelve con cognición, contexto y herramientas.
-
----
-
-## 2. El Contrato (Compartido)
-
-Ambos runtimes cumplen el mismo contrato definido por el Canon Maestro (v7.0, sección 4):
-
-**Entrada:** Un mensaje + PolicyContext + contexto conversacional.
-**Salida:** Un resultado (respuesta directa, sugerencia para aprobación humana, o señal de no-acción justificada).
-
-Ninguno delega al runtime Fluxi/WES.
-Si detectan algo que parece transaccional pero no tienen la capacidad de resolverlo, responden con lo que saben.
+Cuando un usuario dice "¿Cuáles son los horarios de atención?", eso no es una transacción. Es una **consulta** que se resuelve con cognición, contexto de negocio y herramientas de búsqueda.
 
 ---
 
-## 3. Runtime: Asistentes Local (`@fluxcore/asistentes`)
+## 2. El Contrato de Runtime (Canon §4.9)
+
+Ambos runtimes implementan la interfaz `RuntimeAdapter` y son invocados por el `CognitionWorker` a través del `RuntimeGateway` una vez que el turno conversacional está cerrado y el contexto resuelto.
+
+**Entrada:** `RuntimeInput` (PolicyContext + RuntimeConfig + ConversationHistory).
+**Salida:** `Promise<ExecutionAction[]>` (Intentos de efecto en el mundo).
+
+### Invariantes de los Runtimes Cognitivos:
+1. **Soberanía de Datos**: No consultan bases de datos directamente. Todo el contexto llega pre-resuelto en el input.
+2. **Mediación de Efectos**: No ejecutan acciones directamente. Devuelven una lista de `ExecutionAction` que el `ActionExecutor` valida y procesa.
+3. **Independencia**: No se invocan entre sí. El orquestador decide cuál usar según la configuración de la cuenta.
+4. **Unidad de Decisión**: Procesan un turno completo (uno o más mensajes del usuario agrupados por ventana temporal).
+
+---
+
+## 3. Runtime: Asistentes Local
 
 ### 3.1 Ubicación
-`extensions/fluxcore-asistentes/src/`
+`apps/api/src/services/fluxcore/runtimes/asistentes-local.runtime.ts`
 
 ### 3.2 Naturaleza
-Pipeline completo de LLM ejecutado dentro de FluxCore. FluxCore controla el prompt, las llamadas al modelo, y el loop de herramientas.
+Pipeline completo de LLM ejecutado internamente. FluxCore controla el prompt system, las llamadas al modelo (via Groq/OpenAI completions), y el loop de herramientas mediadas.
 
-### 3.3 Flujo de Ejecución
-
-```
-mensaje
-  → Fase 1: Resolución del Plan de Ejecución
-  → Fase 2: Construcción del Contexto
-  → Fase 3: Construcción del Prompt (PromptBuilder)
-  → Fase 4: Llamada al LLM (con fallback entre providers)
-  → Fase 5: Tool Loop (máximo 2 rounds)
-  → Fase 6: Resultado (AISuggestion)
-```
-
-### 3.4 Componentes
-
-| Componente | Responsabilidad |
-| :--- | :--- |
-| `FluxCoreExtension` | Clase principal. Orquesta `onMessage` → `generateSuggestion`. |
-| `PromptBuilder` | Construye el system prompt con PolicyContext + instrucciones del asistente. |
-| `ToolRegistry` | Ejecuta herramientas decididas por el LLM. |
-| `OpenAICompatibleClient` | Cliente HTTP para Groq y OpenAI chat completions. |
-
-### 3.5 Construcción del Prompt
-
-El `PromptBuilder` combina dos fuentes:
-
-1. **PolicyContext** (inyectado por FluxCore):
-   * Tono, formalidad, emojis.
-   * Notas del contacto.
-   * Modo de operación.
-
-2. **Datos del Asistente** (específicos de este runtime):
-   * Instrucciones de sistema (entities `instruction` vinculadas al asistente).
-   * Directivas de herramientas (search_knowledge, templates).
-   * Historial de mensajes formateado.
-
-**Regla:** El PolicyContext no se "mezcla" con instrucciones del asistente.
-Son secciones separadas del prompt. El PolicyContext tiene prioridad porque es la voz del negocio.
-
-### 3.6 Fallback entre Providers
-
-El runtime local soporta múltiples providers (Groq, OpenAI). Si el primero falla, intenta con el siguiente. El orden de prioridad lo define el `ExecutionPlan`.
+### 3.3 Flujo de Ejecución (Síncrono para el Worker)
+1. **Recepción**: Recibe `RuntimeInput`.
+2. **Prompt Building**: `PromptBuilder` genera el system message combinando:
+   * **PolicyContext**: Tono, idioma, emojis, y `resolvedBusinessProfile` (datos de la empresa autorizados).
+   * **RuntimeConfig.instructions**: Instrucciones específicas del asistente configuradas por el usuario.
+3. **Tool Offering**: Decide qué herramientas ofrecer (RAG si hay vector stores, Templates si están autorizadas).
+4. **LLM Call**: Llama al provider configurado (Groq es el default).
+5. **Tool Loop**: Máximo 2 rondas de ejecución de herramientas (ej: buscar en conocimiento -> re-generar respuesta).
+6. **Resultado**: Devuelve `send_message` o `send_template`.
 
 ---
 
-## 4. Runtime: Asistentes OpenAI (`@fluxcore/asistentes-openai`)
+## 4. Runtime: Asistentes OpenAI
 
-### 4.1 Ubicación Actual vs Futura
-
-**Actual:** `apps/api/src/services/ai.service.ts` → `executeOpenAIAssistantsPath()` (dentro del Host).
-**Futura:** `extensions/fluxcore-asistentes-openai/src/` (extensión propia, paralela a las demás).
+### 4.1 Ubicación
+`apps/api/src/services/fluxcore/runtimes/asistentes-openai.runtime.ts`
 
 ### 4.2 Naturaleza
-
-El assistant fue creado en la plataforma de OpenAI. FluxCore actúa como puente: envía el historial, inyecta instrucciones y PolicyContext como override, y recibe la respuesta del run completado.
+FluxCore actúa como puente hacia la API de Assistants de OpenAI. El historial se formatea como un thread y la política de negocio se inyecta como un override de instrucciones.
 
 ### 4.3 Flujo de Ejecución
+1. **Thread Sync**: Convierte `conversationHistory` en mensajes de thread de OpenAI.
+2. **Policy Injection**: Genera un bloque de instrucciones de prioridad máxima basado en el `PolicyContext` (voz del negocio).
+3. **Run**: Inicia un run en OpenAI usando el `externalAssistantId` del `RuntimeConfig`.
+4. **Polling**: Espera la finalización del run.
+5. **Resultado**: Extrae el contenido y devuelve la acción `send_message`.
 
-```
-mensaje
-  → Fase 1: Resolución del Plan de Ejecución (externalId presente)
-  → Fase 2: Construcción del historial como thread de OpenAI
-  → Fase 3: Inyección de PolicyContext e instrucciones como override
-  → Fase 4: runAssistantWithMessages() → thread + run
-  → Fase 5: Espera de respuesta (polling del run)
-  → Fase 6: Resultado (AISuggestion)
-```
+---
 
-### 4.4 Componentes
+## 5. Herramientas y Capacidades (Canon §4.13)
 
-| Componente | Responsabilidad |
-| :--- | :--- |
-| `executeOpenAIAssistantsPath()` | Orquesta la llamada al Assistants API. |
-| `openai-sync.service.ts` | Ejecuta la llamada HTTP al Assistants API. |
+### 5.1 Consultas Mediadas (Selective RAG)
+A diferencia de un RAG tradicional que se inyecta "a ciegas" antes del prompt, en FluxCore v8.3 el runtime ofrece la capacidad de búsqueda como una herramienta que **el modelo decide invocar** si considera que su contexto base es insuficiente. Esto optimiza el consumo de tokens y garantiza que la búsqueda sea pertinente a la intención comprendida.
 
-### 4.5 Diferencias con Asistentes Local
+* `search_knowledge`: Servicio de búsqueda semántica en los `vectorStoreIds` autorizados. Requiere ejecución de loop (round 1).
 
-| Aspecto | Local | OpenAI |
+### 5.2 Effect Actions (Efectos en el mundo)
+Intenciones que el runtime declara y el `ActionExecutor` procesa.
+* `send_message`: Respuesta de texto libre.
+* `send_template`: Envío de una plantilla formal registrada en ChatCore.
+* `no_action`: El runtime decidió no responder (ej: mensaje no comprendido o fuera de política).
+
+---
+
+## 6. La Separación de Configuración (Canon §1.3)
+
+Es fundamental distinguir las dos fuentes de verdad que recibe el runtime en su `RuntimeInput`:
+
+| Concepto | Origen | Qué controla |
 | :--- | :--- | :--- |
-| **Quién ejecuta el LLM** | FluxCore (vía API de completions) | OpenAI (vía Assistants API) |
-| **Quién gestiona tools** | `ToolRegistry` de FluxCore | OpenAI (file_search, code_interpreter) |
-| **Quién gestiona vector stores** | FluxCore (RAG propio) | OpenAI (vector stores remotos) |
-| **Control del prompt** | Total (PromptBuilder) | Parcial (override de instructions) |
-| **Requiere créditos** | Solo si usa provider OpenAI | Siempre (OpenAI Assistants) |
+| **PolicyContext** | Negocio / Canal | Tono, Modo (Auto/Suggest), Horarios, Datos Autorizados, Plantillas permitidas. |
+| **RuntimeConfig** | Config. del Asistente | Instrucciones técnicas, Modelo (Llama/GPT), Temperatura, ID del Asistente externo, Vector Stores. |
 
 ---
 
-## 5. Herramientas Disponibles
+## 7. Invariantes Específicas
 
-Las herramientas son mediadas por FluxCore (Canon v7.0, sección 6).
-
-### 5.1 Para Asistentes Local
-
-| Tool | Función |
-| :--- | :--- |
-| `search_knowledge` | Buscar en vector stores (RAG). |
-| `list_available_templates` | Listar plantillas autorizadas. |
-| `send_template` | Enviar una plantilla al canal. |
-
-Inyectadas vía `RuntimeServices` (patrón de Dependency Injection).
-
-### 5.2 Para Asistentes OpenAI
-
-Las tools las gestiona OpenAI directamente (file_search, code_interpreter, function calling).
-FluxCore no media esas herramientas.
+1. **Gate de Modo**: Si `policyContext.mode === 'off'`, el runtime devuelve `no_action` inmediatamente sin llamar al LLM.
+2. **Loop Prevention**: Si el último mensaje en la historia no es de rol `user`, el runtime aborta para evitar ciclos infinitos de IA hablando con IA.
+3. **Finitud**: El loop de herramientas en Asistentes Local está limitado a 2 iteraciones para controlar costos y latencia.
+4. **Idempotencia de Acción**: Las respuestas se vinculan al ID de la conversación. El `ActionExecutor` garantiza que no se envíen duplicados.
 
 ---
 
-## 6. Modos de Operación
+## 8. Qué NO son estos runtimes
 
-Ambos runtimes operan bajo los mismos modos, definidos **fuera del runtime** (PolicyContext):
-
-| Modo | Comportamiento |
-| :--- | :--- |
-| `auto` | Genera y envía automáticamente (con delay). |
-| `suggest` | Genera como sugerencia. El humano aprueba/edita/rechaza. |
-| `off` | No se ejecuta. |
-
----
-
-## 7. Trazabilidad
-
-Ambos runtimes generan trazas que registran:
-* Contexto completo que recibieron (incluido PolicyContext).
-* Prompt construido (system + messages).
-* Intentos de llamada al LLM/API.
-* Tools invocadas y resultados.
-* Resultado final (contenido, tokens, provider).
-
-Las trazas se persisten en memoria y opcionalmente en DB vía `aiTraceService`.
-
----
-
-## 8. Invariantes
-
-1. Ningún runtime cognitivo llama al runtime Fluxi/WES.
-2. Ningún runtime ejecuta herramientas directamente — siempre vía capacidades mediadas por FluxCore.
-3. El sub-tipo de runtime (local vs OpenAI) se determina por la configuración del asistente activo.
-4. Si el plan de ejecución está bloqueado, no se invoca al LLM.
-5. Las instrucciones de sistema son datos del asistente, no políticas. Las políticas las reciben del PolicyContext.
-6. El modo (auto/suggest/off) es una política del PolicyContext, no una decisión del runtime.
-7. Asistentes Local y Asistentes OpenAI nunca se invocan entre sí ni como fallback.
-
----
-
-## 9. Qué NO son estos runtimes
-
-* No son motores transaccionales. No gestionan Works.
-* No son dueños de las herramientas. Las usan vía FluxCore.
-* No son dueños de las instrucciones. Las reciben del asistente configurado.
-* No son dueños de las políticas de atención. Las reciben del PolicyContext.
-* No son capas que "complementan" a Fluxi. Son **alternativas completas**.
-* No deciden si ejecutarse o no. Eso lo decide FluxCore (el orquestador).
+* No son motores transaccionales (no son Fluxi).
+* No son dueños de las herramientas; las consumen vía capacidades mediadas.
+* No son dueños de la política; la ejecutan según les llega en el `PolicyContext`.
+* No deciden si ejecutarse o no; esa decisión es del `CognitionWorker` basándose en la ventana del turno y el modo de automatización.

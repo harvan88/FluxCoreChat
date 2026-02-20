@@ -18,6 +18,8 @@ import type {
   AIStatusResponse,
   AIEligibilityResponse,
   PromptPreviewData,
+  KernelSession,
+  KernelSessionStatus,
 } from '../types';
 import type {
   Template,
@@ -398,12 +400,25 @@ class ApiService {
   async clearAITraces(accountId: string): Promise<ApiResponse<{ cleared: number }>> {
     const query = new URLSearchParams();
     query.set('accountId', accountId);
-    return this.request<{ cleared: number }>(`/ai/traces?${query.toString()}`, {
-      method: 'DELETE',
-    });
+    return this.request<{ cleared: number }>(`/ai/traces/clear?${query.toString()}`);
   }
 
-  // ─── Agent Runtime (Fase 3) ─────────────────────────────────────────────
+  async getKernelSessions(params: {
+    accountId: string;
+    actorId?: string;
+    statuses?: KernelSessionStatus[];
+  }): Promise<ApiResponse<{ sessions: KernelSession[] }>> {
+    const query = new URLSearchParams();
+    query.set('accountId', params.accountId);
+    if (params.actorId) {
+      query.set('actorId', params.actorId);
+    }
+    if (params.statuses && params.statuses.length > 0) {
+      query.set('status', params.statuses.join(','));
+    }
+
+    return this.request<{ sessions: KernelSession[] }>(`/kernel/sessions/active?${query.toString()}`);
+  }
 
   async getAgents(accountId: string): Promise<ApiResponse<any[]>> {
     return this.request<any[]>(`/fluxcore/agents?accountId=${encodeURIComponent(accountId)}`);
@@ -1020,6 +1035,17 @@ class ApiService {
   async discardWork(accountId: string, workId: string): Promise<ApiResponse<any>> {
     return this.request<any>(`/fluxcore/works/${workId}/discard?accountId=${accountId}`, {
       method: 'POST',
+    });
+  }
+
+  async getAssistantMode(accountId: string): Promise<ApiResponse<{ mode: string; assistantId: string | null; assistantName: string | null }>> {
+    return this.request(`/fluxcore/assistants/active-mode?accountId=${accountId}`);
+  }
+
+  async setAssistantMode(accountId: string, mode: 'auto' | 'suggest' | 'off'): Promise<ApiResponse<{ mode: string; assistantId: string | null }>> {
+    return this.request(`/fluxcore/assistants/active-mode`, {
+      method: 'PATCH',
+      body: JSON.stringify({ accountId, mode }),
     });
   }
 }

@@ -6,9 +6,7 @@
  *
  * Replaces the scattered logic previously in:
  *  - aiService.getAccountConfig()
- *  - aiService.applyCreditsGating()
  *  - aiService.generateResponse() (provider resolution)
- *  - aiService.processMessage() (provider resolution)
  */
 
 import { db, extensionInstallations } from '@fluxcore/db';

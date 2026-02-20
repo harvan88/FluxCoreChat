@@ -11,6 +11,7 @@ interface HandlerContext<TBody = any, TQuery = any, TParams = any> {
   set: { status?: number | string };
 }
 
+// List Templates
 export async function listTemplatesHandler(
   ctx: HandlerContext<unknown, { accountId?: string }, unknown>,
   service: TemplateService = templateService
@@ -32,11 +33,17 @@ export async function listTemplatesHandler(
   const ids = templates.map(t => t.id);
   const settingsMap = await fluxCoreTemplateSettingsService.getSettingsMap(ids);
 
-  const enriched = templates.map(t => ({
-    ...t,
-    authorizeForAI: settingsMap.get(t.id)?.authorizeForAI || false,
-    aiUsageInstructions: settingsMap.get(t.id)?.aiUsageInstructions || null
-  }));
+  const enriched = templates.map(t => {
+    const s = settingsMap.get(t.id);
+    return {
+      ...t,
+      authorizeForAI: s?.authorizeForAI || false,
+      aiUsageInstructions: s?.aiUsageInstructions || null,
+      aiIncludeName: s?.aiIncludeName ?? true,
+      aiIncludeContent: s?.aiIncludeContent ?? true,
+      aiIncludeInstructions: s?.aiIncludeInstructions ?? true
+    }
+  });
 
   return { success: true, data: enriched };
 }
@@ -67,7 +74,10 @@ export async function getTemplateHandler(
       data: {
         ...template,
         authorizeForAI: settings.authorizeForAI,
-        aiUsageInstructions: settings.aiUsageInstructions
+        aiUsageInstructions: settings.aiUsageInstructions,
+        aiIncludeName: settings.aiIncludeName,
+        aiIncludeContent: settings.aiIncludeContent,
+        aiIncludeInstructions: settings.aiIncludeInstructions
       }
     };
   } catch (error: any) {
@@ -90,11 +100,16 @@ export async function createTemplateHandler(
     const template = await service.createTemplate(input.accountId, input);
 
     // Guardar configuración de FluxCore
-    if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions) {
+    if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions || input.aiIncludeName !== undefined) {
       await fluxCoreTemplateSettingsService.updateSettings(
         template.id,
         input.authorizeForAI ?? false,
-        input.aiUsageInstructions
+        input.aiUsageInstructions,
+        {
+          aiIncludeName: input.aiIncludeName,
+          aiIncludeContent: input.aiIncludeContent,
+          aiIncludeInstructions: input.aiIncludeInstructions
+        }
       );
     }
 
@@ -103,7 +118,10 @@ export async function createTemplateHandler(
       data: {
         ...template,
         authorizeForAI: input.authorizeForAI ?? false,
-        aiUsageInstructions: input.aiUsageInstructions
+        aiUsageInstructions: input.aiUsageInstructions,
+        aiIncludeName: input.aiIncludeName ?? true,
+        aiIncludeContent: input.aiIncludeContent ?? true,
+        aiIncludeInstructions: input.aiIncludeInstructions ?? true
       }
     };
   } catch (error: any) {
@@ -126,12 +144,17 @@ export async function updateTemplateHandler(
     const template = await service.updateTemplate(input.accountId, ctx.params.templateId, input);
 
     // Actualizar configuración de FluxCore (si viene en el body)
-    if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions !== undefined) {
+    if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions !== undefined || input.aiIncludeName !== undefined || input.aiIncludeContent !== undefined || input.aiIncludeInstructions !== undefined) {
       const current = await fluxCoreTemplateSettingsService.getSettings(template.id);
       await fluxCoreTemplateSettingsService.updateSettings(
         template.id,
         input.authorizeForAI ?? current.authorizeForAI,
-        input.aiUsageInstructions !== undefined ? input.aiUsageInstructions : current.aiUsageInstructions
+        input.aiUsageInstructions !== undefined ? input.aiUsageInstructions : current.aiUsageInstructions,
+        {
+          aiIncludeName: input.aiIncludeName,
+          aiIncludeContent: input.aiIncludeContent,
+          aiIncludeInstructions: input.aiIncludeInstructions
+        }
       );
     }
 
@@ -143,7 +166,10 @@ export async function updateTemplateHandler(
       data: {
         ...template,
         authorizeForAI: finalSettings.authorizeForAI,
-        aiUsageInstructions: finalSettings.aiUsageInstructions
+        aiUsageInstructions: finalSettings.aiUsageInstructions,
+        aiIncludeName: finalSettings.aiIncludeName,
+        aiIncludeContent: finalSettings.aiIncludeContent,
+        aiIncludeInstructions: finalSettings.aiIncludeInstructions
       }
     };
   } catch (error: any) {
@@ -269,7 +295,11 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
       authorizeForAI: t.Optional(t.Boolean()),
+      allowAutomatedUse: t.Optional(t.Boolean()),
       aiUsageInstructions: t.Optional(t.String()),
+      aiIncludeName: t.Optional(t.Boolean()),
+      aiIncludeContent: t.Optional(t.Boolean()),
+      aiIncludeInstructions: t.Optional(t.Boolean()),
     }),
     detail: {
       tags: ['Templates'],
@@ -295,7 +325,11 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
       tags: t.Optional(t.Array(t.String())),
       isActive: t.Optional(t.Boolean()),
       authorizeForAI: t.Optional(t.Boolean()),
+      allowAutomatedUse: t.Optional(t.Boolean()),
       aiUsageInstructions: t.Optional(t.String()),
+      aiIncludeName: t.Optional(t.Boolean()),
+      aiIncludeContent: t.Optional(t.Boolean()),
+      aiIncludeInstructions: t.Optional(t.Boolean()),
     }),
     detail: {
       tags: ['Templates'],

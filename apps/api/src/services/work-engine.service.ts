@@ -145,7 +145,7 @@ export class WorkEngineService {
      */
     async ingestMessage(workId: string, messageText: string, envelope: MessageEnvelope): Promise<boolean> {
         try {
-            const { wesInterpreterService } = await import('../../../../extensions/fluxcore-fluxi/src/interpreter');
+            const { wesInterpreter } = await import('../../../../extensions/fluxcore-fluxi/src/interpreter');
             const { workDefinitionService } = await import('./work-definition.service');
 
             // 1. Fetch Work and Definition
@@ -172,28 +172,28 @@ export class WorkEngineService {
             }
 
             // 2. Solve message using context
-            const extractedSlots = await wesInterpreterService.solveActiveWork(
+            const extractedSlots = await wesInterpreter.solveActiveWork(
                 work.accountId,
                 workId,
                 def,
                 currentStateResult.state,
                 messageText
-            );
+            ) as Array<{ path: string; value: any; evidence: string }> | null;
 
             if (extractedSlots && extractedSlots.length > 0) {
                 logTrace(`[WorkEngine] Extracted ${extractedSlots.length} new slots for Work ${workId}`);
 
-                const delta: Delta = extractedSlots.map(s => ({
+                const delta: Delta = extractedSlots.map(slot => ({
                     op: 'set',
-                    path: s.path,
-                    value: s.value
+                    path: slot.path,
+                    value: slot.value
                 }));
 
                 // 3. Commit Delta
                 await this.commitDelta(workId, delta, 'user', envelope.id || `ingest-${Date.now()}`);
 
                 // 4. Send Acknowledgment
-                const slotsList = extractedSlots.map(s => s.path).join(', ');
+                const slotsList = extractedSlots.map(slot => slot.path).join(', ');
                 await messageCore.send({
                     conversationId: envelope.conversationId,
                     senderAccountId: work.accountId,

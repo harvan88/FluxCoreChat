@@ -1,9 +1,9 @@
 
 import { coreEventBus } from '../apps/api/src/core/events';
-import { aiOrchestrator } from '../apps/api/src/services/ai-orchestrator.service';
+import { messageDispatchService } from '../apps/api/src/services/message-dispatch.service';
 
 console.log('--- START DEBUG ---');
-console.log('Orchestrator imported:', !!aiOrchestrator);
+console.log('MessageDispatchService imported:', !!messageDispatchService);
 
 // Test listener local
 coreEventBus.on('core:message_received', (p) => {

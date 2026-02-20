@@ -3,9 +3,10 @@ import { conversations, relationships, accounts, messages } from '@fluxcore/db';
 import { eq, and, or, inArray } from 'drizzle-orm';
 
 export class ConversationService {
-  async createConversation(relationshipId: string, channel: 'web' | 'whatsapp' | 'telegram') {
+  async createConversation(relationshipId: string, channel: 'web' | 'whatsapp' | 'telegram', tx?: any) {
+    const client = tx || db;
     // Check if conversation already exists for this relationship and channel
-    const existing = await db
+    const existing = await client
       .select()
       .from(conversations)
       .where(
@@ -18,7 +19,7 @@ export class ConversationService {
     }
 
     // Create new conversation
-    const [conversation] = await db
+    const [conversation] = await client
       .insert(conversations)
       .values({
         relationshipId,

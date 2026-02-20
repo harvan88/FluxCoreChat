@@ -23,7 +23,8 @@ type SettingsTabType =
   | 'settings-accounts'
   | 'settings-notifications'
   | 'settings-privacy'
-  | 'settings-appearance';
+  | 'settings-appearance'
+  | 'settings-kernel';
 
 interface SettingsSection {
   id: string;
@@ -68,6 +69,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     tabType: 'settings-appearance',
     icon: <PaletteIcon size={20} />,
     label: 'Apariencia',
+  },
+  {
+    id: 'kernel',
+    tabType: 'settings-kernel',
+    icon: <ShieldIcon size={20} />,
+    label: 'Kernel',
   },
 ];
 

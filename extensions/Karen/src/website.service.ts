@@ -6,6 +6,7 @@
 
 import { db, websiteConfigs, accounts } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
+import { coreEventBus } from '../../../apps/api/src/core/events';
 
 export type WebsiteStatus = 'draft' | 'published' | 'archived';
 
@@ -40,12 +41,14 @@ export interface CreateWebsiteParams {
   accountId: string;
   config?: Partial<WebsiteSiteConfig>;
   pages?: WebsitePage[];
+  allowAutomatedUse?: boolean;
 }
 
 export interface UpdateWebsiteParams {
   config?: WebsiteSiteConfig;
   pages?: WebsitePage[];
   status?: WebsiteStatus;
+  allowAutomatedUse?: boolean;
 }
 
 export interface AddPageParams {
@@ -99,8 +102,15 @@ class WebsiteService {
         config: defaultConfig,
         pages: defaultPages,
         status: 'draft',
+        allowAutomatedUse: params.allowAutomatedUse ?? false,
       })
       .returning();
+
+    // PC-823/840: Emit authorization event
+    coreEventBus.emit('knowledge.authorized', {
+      accountId,
+      allowAutomatedUse: created.allowAutomatedUse,
+    });
 
     return created;
   }
@@ -131,12 +141,21 @@ class WebsiteService {
     if (params.config !== undefined) updates.config = params.config;
     if (params.pages !== undefined) updates.pages = params.pages;
     if (params.status !== undefined) updates.status = params.status;
+    if (params.allowAutomatedUse !== undefined) updates.allowAutomatedUse = params.allowAutomatedUse;
 
     const [updated] = await db
       .update(websiteConfigs)
       .set(updates)
       .where(eq(websiteConfigs.accountId, accountId))
       .returning();
+
+    if (updated) {
+      // PC-823/840: Emit authorization event
+      coreEventBus.emit('knowledge.authorized', {
+        accountId,
+        allowAutomatedUse: updated.allowAutomatedUse,
+      });
+    }
 
     return updated || null;
   }
@@ -148,7 +167,7 @@ class WebsiteService {
     }
 
     const existingPages = (config.pages || []) as WebsitePage[];
-    
+
     if (existingPages.some(p => p.path === page.path)) {
       throw new Error(`Page with path ${page.path} already exists`);
     }
@@ -173,7 +192,7 @@ class WebsiteService {
 
     const pages = (config.pages || []) as WebsitePage[];
     const pageIndex = pages.findIndex(p => p.path === path);
-    
+
     if (pageIndex === -1) {
       throw new Error(`Page with path ${path} not found`);
     }
