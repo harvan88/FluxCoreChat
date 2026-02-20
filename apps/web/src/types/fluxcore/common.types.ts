@@ -90,6 +90,7 @@ export interface ModelConfig {
     model: string;
     temperature: number;
     topP: number;
+    maxTokens?: number;
     responseFormat?: string;
 }
 
@@ -97,6 +98,10 @@ export interface ModelConfig {
 export interface TimingConfig {
     responseDelaySeconds: number;
     smartDelay: boolean;
+    mode?: 'auto' | 'suggest' | 'off';
+    tone?: 'formal' | 'casual' | 'neutral';
+    useEmojis?: boolean;
+    language?: string;
 }
 
 // ============================================================================

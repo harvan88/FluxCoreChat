@@ -7,6 +7,27 @@ export interface CoreEventMap {
     'core:message_received': (payload: { envelope: MessageEnvelope; result: ReceiveResult }) => void;
     // Evento emitido cuando un medio (audio/imagen) ha sido procesado/enriquecido
     'media:enriched': (payload: { messageId: string; accountId: string; type: string; enrichment: any }) => void;
+
+
+    // SOVEREIGN KERNEL INTERRUPTS
+    'kernel:wakeup': () => void;
+
+    // PROJECTOR EVENTS (secondary triggers, not source of truth)
+    'identity:resolved': (payload: { sequenceNumber: number; actorId: string; contextId: string }) => void;
+
+    // COGNITION PIPELINE EVENTS (v8.2)
+    'cognition:turn_processed': (payload: { conversationId: string; accountId: string; runtimeUsed: string; actionCount: number }) => void;
+    'cognition:turn_failed': (payload: { conversationId: string; accountId: string; error: string; attempt: number }) => void;
+
+    // POLICY CONTEXT AUTHORIZATION EVENTS
+    'account.profile.updated': (payload: { accountId: string; allowAutomatedUse: boolean }) => void;
+    'template.authorization.changed': (payload: { templateId: string; accountId: string; allowAutomatedUse: boolean }) => void;
+    'relationship.context.updated': (payload: { relationshipId: string; accountId?: string }) => void;
+    'knowledge.authorized': (payload: { accountId: string; allowAutomatedUse: boolean }) => void;
+    'appointments.authorization.changed': (payload: { accountId: string }) => void;
+
+    // ASSISTANT CONFIGURATION EVENTS (invalidate PolicyContext cache)
+    'assistant.config.updated': (payload: { accountId: string; assistantId: string; change: 'activated' | 'updated' }) => void;
 }
 
 export class CoreEventBus extends EventEmitter {
@@ -15,8 +36,8 @@ export class CoreEventBus extends EventEmitter {
         console.log('🔌 CoreEventBus initialized (Singleton Check)');
     }
 
-    emit<K extends keyof CoreEventMap>(event: K, payload: Parameters<CoreEventMap[K]>[0]): boolean {
-        return super.emit(event, payload);
+    emit<K extends keyof CoreEventMap>(event: K, ...args: Parameters<CoreEventMap[K]>): boolean {
+        return super.emit(event, ...args);
     }
 
     on<K extends keyof CoreEventMap>(event: K, listener: CoreEventMap[K]): this {

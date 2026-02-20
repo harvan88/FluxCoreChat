@@ -30,14 +30,14 @@ export class RelationshipService {
         .from(conversations)
         .where(eq(conversations.relationshipId, existing[0].id))
         .limit(1);
-      
+
       if (existingConv.length === 0) {
         await db.insert(conversations).values({
           relationshipId: existing[0].id,
           channel: 'web',
         });
       }
-      
+
       return existing[0];
     }
 
@@ -133,6 +133,7 @@ export class RelationshipService {
     const context = relationship.context as RelationshipContext;
     const newEntry: ContextEntry = {
       ...entry,
+      allow_automated_use: (entry as any).allow_automated_use ?? false,
       created_at: new Date().toISOString(),
     };
 
@@ -185,9 +186,9 @@ export class RelationshipService {
     const userAccounts = await accountService.getAccountsByUserId(userId);
     const userAccountIds = userAccounts.map(a => a.id);
 
-    const isOwner = userAccountIds.includes(relationship.accountAId) || 
-                    userAccountIds.includes(relationship.accountBId);
-    
+    const isOwner = userAccountIds.includes(relationship.accountAId) ||
+      userAccountIds.includes(relationship.accountBId);
+
     if (!isOwner) {
       throw new Error('Not authorized to delete this relationship');
     }

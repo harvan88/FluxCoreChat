@@ -7,29 +7,34 @@ _Last updated: 2026-02-08_
 ```mermaid
 graph TD
     A[Harold envia mensaje] --> B[MessageCore.receive]
-    B --> C[resolveExecutionPlan]
-    C -->|Blocked| D[ai:execution_blocked (WS)]
-    C -->|Eligible| E[generateResponse]
-    E --> F[extensionHost + provider runtime]
-    F --> G[Suggestion enviada a conversación]
+    B --> C[MessageDispatchService]
+    C --> D[RuntimeGateway]
+    D --> E[FluxCoreRuntimeAdapter]
+    E --> F[aiService.generateResponse]
+    F --> G[resolveExecutionPlan]
+    G -->|Blocked| H[ai:execution_blocked (WS)]
+    G -->|Eligible| I[Ejecución Local / OpenAI]
+    I --> J[Suggestion enviada a conversación]
 ```
 
 1. **MessageCore** recibe el mensaje y actualiza la conversación / relationship.
-2. **AIOrchestrator** programa la evaluación automática y llama a `resolveExecutionPlan(accountId, conversationId)` _una sola vez_.
-3. `resolveExecutionPlan` valida asistente activo, proveedor, scopes y créditos. Devuelve un `EligiblePlan` o un `BlockedPlan` con metadatos.
-4. `generateResponse` consume el plan: si está bloqueado -> emite `ai:execution_blocked` vía WebSocket (sólo para la cuenta interna). Si está habilitado -> ejecuta la estrategia OpenAI / Local y devuelve la sugerencia.
+2. **MessageDispatchService** escucha el evento, resuelve el `PolicyContext` y delega al `RuntimeGateway`.
+3. **RuntimeGateway** selecciona el adaptador adecuado (ej. `@fluxcore/asistentes`) basado en la configuración de la cuenta.
+4. **FluxCoreRuntimeAdapter** gestiona el Smart Delay (si aplica) y llama a `aiService.generateResponse()`.
+5. `resolveExecutionPlan` (dentro de `aiService`) valida asistente activo, proveedor, scopes y créditos.
+6. Si está bloqueado -> emite `ai:execution_blocked`. Si está habilitado -> ejecuta y devuelve la sugerencia.
 
 ## 2. Componentes y responsabilidades
 
 | Capa | Archivo | Responsabilidad principal |
 | --- | --- | --- |
-| **Resolver** | `apps/api/src/services/ai-execution-plan.service.ts` | Única fuente de verdad. Resuelve asistente activo, proveedor, API keys, scopes, créditos (incluye `creditsService`). Devuelve `ExecutionPlan`. |
-| **Entitlements / Scopes** | `apps/api/src/services/ai-entitlements.service.ts` | Define qué proveedores (`groq`, `openai`) están habilitados por cuenta y cuál es el provider por defecto. Usado por el resolver antes de elegir modelo. |
-| **Créditos** | `apps/api/src/services/credits.service.ts` | Lleva wallets, ledger, políticas y sesiones por conversación. Abre una sesión (`openConversationSession`) que descuenta créditos sólo si hay política activa (ahora siempre cae a `DEFAULT_POLICY` si no existe específica). |
-| **AIOrchestrator** | `apps/api/src/services/ai-orchestrator.service.ts` | Orquesta retrasos, llama a `generateAIResponse`, maneja bloqueos y emite eventos WS. |
+| **Dispatch / Routing** | `apps/api/src/services/message-dispatch.service.ts` | Backend puro. Escucha eventos, resuelve PolicyContext y rutea al Gateway. |
+| **Gateway** | `apps/api/src/services/runtime-gateway.service.ts` | Registro de runtimes. Selecciona el adaptador según `accountRuntimeConfig`. |
+| **Resolver** | `apps/api/src/services/ai-execution-plan.service.ts` | Única fuente de verdad. Resuelve asistente activo, proveedor, API keys, scopes, créditos. Devuelve `ExecutionPlan`. |
+| **Entitlements / Scopes** | `apps/api/src/services/ai-entitlements.service.ts` | Define qué proveedores (`groq`, `openai`) están habilitados por cuenta. |
+| **Créditos** | `apps/api/src/services/credits.service.ts` | Lleva wallets, ledger, políticas y sesiones por conversación. |
 | **AI Service** | `apps/api/src/services/ai.service.ts` | Ejecuta el plan (OpenAI Assistants API vs runtime local), aplica tools, logging, etc. |
-| **Frontend** | `apps/web/src/hooks/useWebSocket.ts` + chat components | Consume `ai:execution_blocked` y muestra toast sólo al owner (cuenta interna). Renderiza mensajes y sugiere acciones. |
-| **Eventos FluxCore** | `apps/web/src/hooks/fluxcore/events.ts` + `useAIStatus` | Cada vez que se crea/actualiza/activa un asistente se emite `fluxcore:assistant-update`. Los componentes que usan `useAIStatus` escuchan este evento y refrescan inmediatamente `/ai/status` + `/ai/eligibility`, reflejando los cambios en tiempo real en Composer, Prompt Inspector, etc. |
+| **Frontend** | `apps/web/src/hooks/useWebSocket.ts` + chat components | Consume `ai:execution_blocked` y muestra toast. Renderiza mensajes. |
 
 ## 3. Créditos: almacenamiento y consulta
 

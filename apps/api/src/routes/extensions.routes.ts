@@ -51,10 +51,14 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
       const installations = await extensionService.getInstalled(params.accountId);
       
       // Enriquecer con información del manifest
-      const enriched = installations.map((inst: any) => ({
-        ...inst,
-        manifest: manifestLoader.getManifest(inst.extensionId),
-      }));
+      const enriched = installations.map((inst: any) => {
+        const manifest = manifestLoader.getManifest(inst.extensionId);
+        console.log(`[ExtensionsAPI] Enriching ${inst.extensionId}: found manifest? ${!!manifest}, ui? ${!!manifest?.ui}`);
+        return {
+          ...inst,
+          manifest,
+        };
+      });
 
       return {
         success: true,

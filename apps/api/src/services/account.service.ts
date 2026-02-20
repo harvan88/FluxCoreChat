@@ -3,6 +3,7 @@ import { accounts, actors, users } from '@fluxcore/db';
 import { eq, and, or, ilike } from 'drizzle-orm';
 import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
 import { extensionHost } from './extension-host.service';
+import { coreEventBus } from '../core/events';
 
 // V2-4.2: Instalación de extensiones preinstaladas en nuevas cuentas
 
@@ -14,6 +15,7 @@ export class AccountService {
     accountType: 'personal' | 'business';
     profile?: any;
     privateContext?: string;
+    allowAutomatedUse?: boolean;
   }) {
     // Check if username is taken
     const existing = await db
@@ -47,6 +49,7 @@ export class AccountService {
         accountType: data.accountType,
         profile: data.profile || {},
         privateContext: data.privateContext || null,
+        allowAutomatedUse: data.allowAutomatedUse ?? false,
       })
       .returning();
 
@@ -84,6 +87,7 @@ export class AccountService {
       displayName?: string;
       profile?: any;
       privateContext?: string;
+      allowAutomatedUse?: boolean;
     }
   ) {
     // Verify ownership
@@ -112,7 +116,6 @@ export class AccountService {
       }
     }
 
-    // Update account
     const [updated] = await db
       .update(accounts)
       .set({
@@ -121,6 +124,12 @@ export class AccountService {
       })
       .where(eq(accounts.id, accountId))
       .returning();
+
+    // PC-823: Emit domain event for PolicyContext invalidation
+    coreEventBus.emit('account.profile.updated', {
+      accountId,
+      allowAutomatedUse: updated.allowAutomatedUse,
+    });
 
     return updated;
   }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, jsonb, boolean } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const accounts = pgTable('accounts', {
@@ -15,6 +15,10 @@ export const accounts = pgTable('accounts', {
   alias: varchar('alias', { length: 100 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
+  aiIncludeName: boolean('ai_include_name').default(true).notNull(),
+  aiIncludeBio: boolean('ai_include_bio').default(true).notNull(),
+  aiIncludePrivateContext: boolean('ai_include_private_context').default(true).notNull(),
 });
 
 export type Account = typeof accounts.$inferSelect;

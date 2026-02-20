@@ -34,13 +34,12 @@ const getQueue = () => {
 
 const fetchQueueStats = async () => {
   const q = getQueue();
-  const [waiting, active, completed, failed, delayed, paused] = await Promise.all([
+  const [waiting, active, completed, failed, delayed] = await Promise.all([
     q.getWaitingCount(),
     q.getActiveCount(),
     q.getCompletedCount(),
     q.getFailedCount(),
     q.getDelayedCount(),
-    q.getPausedCount(),
   ]);
 
   return {
@@ -49,7 +48,6 @@ const fetchQueueStats = async () => {
     completed,
     failed,
     delayed,
-    paused,
   };
 };
 
@@ -61,7 +59,6 @@ const recordQueueMetrics = async () => {
     metricsService.gauge('account_deletion.queue.completed', stats.completed);
     metricsService.gauge('account_deletion.queue.failed', stats.failed);
     metricsService.gauge('account_deletion.queue.delayed', stats.delayed);
-    metricsService.gauge('account_deletion.queue.paused', stats.paused);
   } catch (error) {
     console.error('[AccountDeletionQueue] Failed to record queue metrics', error);
   }

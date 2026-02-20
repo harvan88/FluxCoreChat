@@ -1,6 +1,13 @@
 /**
+ * @deprecated H7 — SmartDelayService is legacy code scheduled for removal.
+ * Replaced by the turn-window mechanism in ChatProjector + CognitionWorker (v8.2).
+ * - TURN_WINDOW_MS (3s) replaced INITIAL_DELAY (15s)
+ * - TYPING_EXTENSION_MS (5s) replaced TYPING_DELAY (5s)
+ * Still used by ws-handler.ts (legacy path). Safe to delete once
+ * ws-handler.ts is migrated to emit Kernel facts instead of calling messageCore directly.
+ *
  * Smart Delay Service for AI Auto-Reply
- * 
+ *
  * Implements intelligent debounce mechanism:
  * - Wait 15 seconds before sending to AI
  * - If new message arrives, reset timer

@@ -82,7 +82,7 @@ class AudioEnrichmentService {
                 logTrace(burnMsg);
 
                 // 4. RE-EMITIR AL CORE EVENT BUS
-                // Al re-emitir como core:message_received, el AIOrchestrator
+                // Al re-emitir como core:message_received, el MessageDispatchService
                 // lo detectará como un mensaje de texto "nuevo" y generará la respuesta.
                 coreEventBus.emit('core:message_received', {
                     envelope: {

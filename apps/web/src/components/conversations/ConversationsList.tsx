@@ -10,7 +10,7 @@ import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import { Avatar } from '../ui/Avatar';
 import { useScroll } from '../../hooks/useScroll';
-import { useAutomation, type AutomationMode } from '../../hooks/useAutomation';
+import { useAssistantMode, type AssistantMode } from '../../hooks/fluxcore/useAssistantMode';
 import { useExtensions } from '../../hooks/useExtensions';
 import { AIStatusHeader } from './AIStatusHeader';
 import { AIStatusIndicator } from './AIStatusIndicator';
@@ -24,12 +24,7 @@ export function ConversationsList() {
     selectedAccountId,
   } = useUIStore();
 
-  const {
-    globalRule,
-    relationshipRules,
-    setRule,
-    isLoading: isAutomationLoading,
-  } = useAutomation(selectedAccountId);
+  const { mode: globalAIMode, setMode, isLoading: isAutomationLoading } = useAssistantMode(selectedAccountId);
 
   // Check extensions
   const { installations } = useExtensions(selectedAccountId);
@@ -104,16 +99,11 @@ export function ConversationsList() {
       conv.channel.toLowerCase().includes(search);
   });
 
-  const globalAIMode: AutomationMode = (globalRule?.mode as AutomationMode) || 'disabled';
+  const getEffectiveAIMode = (_relationshipId: string): AssistantMode => globalAIMode;
 
-  const getEffectiveAIMode = (relationshipId: string): AutomationMode => {
-    const relationshipRule = relationshipRules.find((r) => r.relationshipId === relationshipId);
-    return (relationshipRule?.mode as AutomationMode) || globalAIMode;
-  };
-
-  const toggleConversationAIMode = async (relationshipId: string, currentMode: AutomationMode) => {
-    const nextMode: AutomationMode = currentMode === 'automatic' ? 'disabled' : 'automatic';
-    await setRule(nextMode, { relationshipId });
+  const toggleConversationAIMode = async (_relationshipId: string, currentMode: AssistantMode) => {
+    const nextMode: AssistantMode = currentMode === 'auto' ? 'off' : 'auto';
+    await setMode(nextMode);
   };
 
   // getAIModePresentation y toggleConversationAIMode movidos a AIStatusIndicator

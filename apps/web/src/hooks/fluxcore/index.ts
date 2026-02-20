@@ -24,3 +24,5 @@ export { useVectorStores } from './useVectorStores';
 export { useTools } from './useTools';
 export { useAIStatus } from './useAIStatus';
 export { useWorks } from './useWorks';
+export { useAssistantMode } from './useAssistantMode';
+export type { AssistantMode } from './useAssistantMode';

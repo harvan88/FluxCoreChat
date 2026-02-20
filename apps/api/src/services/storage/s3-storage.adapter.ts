@@ -40,10 +40,10 @@ export class S3StorageAdapter implements IStorageAdapter {
 
     constructor(config: S3StorageConfig) {
         this.config = config;
-        console.log(`${DEBUG_PREFIX} Initialized for bucket: ${config.bucket}, region: ${config.region || 'default'}`);
+        console.log(`${DEBUG_PREFIX} Initialized for bucket: ${this.config.bucket}, region: ${this.config.region || 'default'}`);
     }
 
-    async upload(key: string, data: Buffer | ReadableStream, options?: StorageUploadOptions): Promise<void> {
+    async upload(key: string, _data: Buffer | ReadableStream, _options?: StorageUploadOptions): Promise<void> {
         console.log(`${DEBUG_PREFIX} Upload started: ${key}`);
         
         // TODO: Implementar con @aws-sdk/client-s3
@@ -108,12 +108,12 @@ export class S3StorageAdapter implements IStorageAdapter {
         throw new Error('S3 adapter not fully implemented. Install @aws-sdk/s3-request-presigner and implement.');
     }
 
-    async exists(key: string): Promise<boolean> {
+    async exists(_key: string): Promise<boolean> {
         // TODO: Implementar con HeadObjectCommand
         throw new Error('S3 adapter not fully implemented. Install @aws-sdk/client-s3 and implement.');
     }
 
-    async getMetadata(key: string): Promise<{ size: number; contentType: string; lastModified: Date } | null> {
+    async getMetadata(_key: string): Promise<{ size: number; contentType: string; lastModified: Date } | null> {
         // TODO: Implementar con HeadObjectCommand
         throw new Error('S3 adapter not fully implemented. Install @aws-sdk/client-s3 and implement.');
     }

@@ -29,6 +29,7 @@ interface WebsiteConfig {
   };
   pages: WebsitePage[];
   publicUrl?: string;
+  allowAutomatedUse: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +60,7 @@ interface WebsiteBuilderState {
 
   buildWebsite: (accountId: string) => Promise<void>;
   publishWebsite: (accountId: string) => Promise<void>;
+  toggleAutomation: (accountId: string, enabled: boolean) => Promise<void>;
 }
 
 function getToken() {
@@ -263,6 +265,26 @@ export const useWebsiteBuilderStore = create<WebsiteBuilderState>((set, get) => 
       set({ error: err?.message || 'Error al publicar el sitio web' });
     } finally {
       set({ isSaving: false });
+    }
+  },
+
+  toggleAutomation: async (accountId: string, enabled: boolean) => {
+    set({ error: null });
+    try {
+      const response = await fetch(`${API_URL}/websites/${accountId}`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ allowAutomatedUse: enabled }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle automation');
+      }
+
+      const data = await response.json();
+      set({ websiteConfig: data.data });
+    } catch (err: any) {
+      set({ error: err?.message || 'Error al cambiar autorización AI' });
     }
   },
 }));

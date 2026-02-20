@@ -15,11 +15,12 @@ export const testRoutes = new Elysia({ prefix: '/test' })
             console.log('🧪 Injecting Test Message via HTTP...');
 
             try {
+                const msgType = (body as any).type ?? 'incoming';
                 const result = await messageCore.send({
                     conversationId: body.conversationId,
                     senderAccountId: body.senderAccountId,
                     content: { text: body.text },
-                    type: 'incoming', // Simular entrada
+                    type: msgType,
                     generatedBy: 'human',
                 });
 
@@ -40,6 +41,7 @@ export const testRoutes = new Elysia({ prefix: '/test' })
                 conversationId: t.String(),
                 senderAccountId: t.String(),
                 text: t.String(),
+                type: t.Optional(t.Union([t.Literal('incoming'), t.Literal('outgoing'), t.Literal('system')])),
             })
         }
     );

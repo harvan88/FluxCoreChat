@@ -58,9 +58,8 @@ async function ensureUser(seed: SeedUser) {
   let existingUser = null as (typeof users.$inferSelect) | null;
 
   if (seed.id) {
-    existingUser = (
-      await db.select().from(users).where(eq(users.id, seed.id)).limit(1)
-    )[0] as typeof existingUser;
+    const result = await db.select().from(users).where(eq(users.id, seed.id)).limit(1);
+    existingUser = result[0] || null;
     if (existingUser && existingUser.email !== seed.email) {
       console.log(
         `⚠️  Usuario con id=${seed.id} ya existe con email ${existingUser.email}. Se mantendrá ese registro.`
@@ -69,9 +68,8 @@ async function ensureUser(seed: SeedUser) {
   }
 
   if (!existingUser) {
-    existingUser = (
-      await db.select().from(users).where(eq(users.email, seed.email)).limit(1)
-    )[0] as typeof existingUser;
+    const result = await db.select().from(users).where(eq(users.email, seed.email)).limit(1);
+    existingUser = result[0] || null;
   }
 
   if (!existingUser) {

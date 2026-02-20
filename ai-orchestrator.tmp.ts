@@ -1,4 +1,4 @@
-
+﻿
 import { coreEventBus } from '../core/events';
 import { messageCore } from '../core/message-core';
 import { extensionHost } from './extension-host.service';
@@ -10,8 +10,8 @@ import type { FluxPolicyContext } from '@fluxcore/db';
 
 /**
  * AI Orchestrator Service
- * Responsable de coordinar las respuestas automáticas de la IA escuchando eventos del Core.
- * Reemplaza la lógica hardcodeada en MessageCore.
+ * Responsable de coordinar las respuestas autom├íticas de la IA escuchando eventos del Core.
+ * Reemplaza la l├│gica hardcodeada en MessageCore.
  */
 class AIOrchestratorService {
     private autoReplyQueue: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -22,7 +22,7 @@ class AIOrchestratorService {
 
     private setupListeners() {
         coreEventBus.on('core:message_received', (payload) => {
-            // Ejecutar en background para no bloquear el Event Loop síncrono si hubiera
+            // Ejecutar en background para no bloquear el Event Loop s├¡ncrono si hubiera
             this.handleMessageReceived(payload).catch(err =>
                 console.error('[AIOrchestrator] Error handling message:', err)
             );
@@ -35,12 +35,12 @@ class AIOrchestratorService {
         try {
             require('fs').appendFileSync('AI_TEST.log', `[${new Date().toISOString()}] AIOrchestrator received message: ${payload.envelope.id}\n`);
         } catch { }
-        console.log(`[AIOrchestrator] 📨 RECEIVED MESSAGE: ${payload.envelope.id} content: ${JSON.stringify(payload.envelope.content)}`);
+        console.log(`[AIOrchestrator] ­ƒô¿ RECEIVED MESSAGE: ${payload.envelope.id} content: ${JSON.stringify(payload.envelope.content)}`);
         const { envelope, result } = payload;
 
-        // 1. Validaciones básicas: éxito en la persistencia del Core
+        // 1. Validaciones b├ísicas: ├®xito en la persistencia del Core
         if (!result.success || !result.messageId) {
-            logTrace(`⏹️ AIOrchestrator: Ignoring (Message receive/persistence failed).`);
+            logTrace(`ÔÅ╣´©Å AIOrchestrator: Ignoring (Message receive/persistence failed).`);
             return;
         }
 
@@ -50,15 +50,15 @@ class AIOrchestratorService {
         // 2. Validar contenido textual
         const messageText = typeof envelope.content?.text === 'string' ? envelope.content.text : '';
         if (!messageText || messageText.trim().length === 0) {
-            // Si no hay texto, tal vez sea un audio pendiente de enriquecer. NO hacemos nada aquí.
+            // Si no hay texto, tal vez sea un audio pendiente de enriquecer. NO hacemos nada aqu├¡.
             const hasAudio = (envelope.content?.media || []).some((m: any) =>
                 m.type === 'audio' || (m.mimeType && m.mimeType.startsWith('audio/'))
             );
 
             if (hasAudio) {
-                logTrace(`⏳ AIOrchestrator: No text but Audio detected. Waiting for MediaEnrichment event...`);
+                logTrace(`ÔÅ│ AIOrchestrator: No text but Audio detected. Waiting for MediaEnrichment event...`);
             } else {
-                logTrace(`⏹️ AIOrchestrator: Ignoring (Empty text and no audio detected).`);
+                logTrace(`ÔÅ╣´©Å AIOrchestrator: Ignoring (Empty text and no audio detected).`);
             }
             return;
         }
@@ -66,7 +66,7 @@ class AIOrchestratorService {
         // 3. Obtener Account ID Objetivo y Relationship
         const targetAccountId = envelope.targetAccountId;
         if (!targetAccountId) {
-            logTrace(`❌ AIOrchestrator ABORT: Missing targetAccountId.`);
+            logTrace(`ÔØî AIOrchestrator ABORT: Missing targetAccountId.`);
             return;
         }
 
@@ -75,7 +75,7 @@ class AIOrchestratorService {
 
         const conv = await conversationService.getConversationById(envelope.conversationId);
         if (!conv) {
-            logTrace(`❌ AIOrchestrator ABORT: Conversation ${envelope.conversationId} not found.`);
+            logTrace(`ÔØî AIOrchestrator ABORT: Conversation ${envelope.conversationId} not found.`);
             return;
         }
         const relationshipId = conv.relationshipId;
@@ -107,19 +107,19 @@ class AIOrchestratorService {
             policyContext,
         });
 
-        // Si una extensión (como WES) detuvo la propagación, la IA de charla se retira.
+        // Si una extensi├│n (como WES) detuvo la propagaci├│n, la IA de charla se retira.
         const isStopped = extensionResults.some(r => r.stopPropagation);
         if (isStopped) {
-            logTrace(`⏹️ AIOrchestrator: Propagation stopped by extension (System/WES/Domain).`);
+            logTrace(`ÔÅ╣´©Å AIOrchestrator: Propagation stopped by extension (System/WES/Domain).`);
             return;
         }
 
-        // 5. EVALUAR TRIGGER DE AUTOMATIZACIÓN IA
+        // 5. EVALUAR TRIGGER DE AUTOMATIZACI├ôN IA
         const messageTypeForTarget: 'incoming' | 'outgoing' | 'system' =
             envelope.senderAccountId === targetAccountId ? 'outgoing' : 'incoming';
 
         if (envelope.generatedBy === 'ai') {
-            logTrace(`⏹️ AIOrchestrator: Message generated by AI, skipping conversational automation.`);
+            logTrace(`ÔÅ╣´©Å AIOrchestrator: Message generated by AI, skipping conversational automation.`);
             return;
         }
 
@@ -132,16 +132,16 @@ class AIOrchestratorService {
         });
 
         if (!automationResult.shouldProcess) {
-            logTrace(`⏹️ AIOrchestrator: Automation result says NO (Reason: ${automationResult.reason}).`);
+            logTrace(`ÔÅ╣´©Å AIOrchestrator: Automation result says NO (Reason: ${automationResult.reason}).`);
             return;
         }
 
-        logTrace(`📨 AIOrchestrator Proceeding with mode: ${automationResult.mode}`);
+        logTrace(`­ƒô¿ AIOrchestrator Proceeding with mode: ${automationResult.mode}`);
 
         // WOS-100: Canonical Routing Logic (Interpretation)
         // -------------------------------------------------------------
 
-        // 1. Strict Runtime Separation (Soberanía de Runtime - Dimensión 1)
+        // 1. Strict Runtime Separation (Soberan├¡a de Runtime - Dimensi├│n 1)
         const { runtimeConfigService } = await import('./runtime-config.service');
         const runtimeConfig = await runtimeConfigService.getRuntime(targetAccountId);
         const configuredRuntime = runtimeConfig.activeRuntimeId;
@@ -153,17 +153,17 @@ class AIOrchestratorService {
             const interpreterMatch = await this.tryWesInterpretation(envelope, messageText, targetAccountId, automationResult.mode);
             if (interpreterMatch) return;
         } else {
-            logTrace(`[AIOrchestrator] ⏭️ WES Interpretation skipped (Runtime is ${configuredRuntime}).`);
+            logTrace(`[AIOrchestrator] ÔÅ¡´©Å WES Interpretation skipped (Runtime is ${configuredRuntime}).`);
         }
 
         // 4. Si no hubo match de WES, aplicar reglas de Charla (Chat)
         if (automationResult.mode !== 'automatic') {
-            logTrace(`⏹️ AIOrchestrator: Ignoring Chat (Mode is ${automationResult.mode}).`);
+            logTrace(`ÔÅ╣´©Å AIOrchestrator: Ignoring Chat (Mode is ${automationResult.mode}).`);
             return;
         }
 
         // 5. Programar respuesta de Chat
-        logTrace(`✅ AIOrchestrator: Scheduling Auto-Reply for Account ${targetAccountId}`);
+        logTrace(`Ô£à AIOrchestrator: Scheduling Auto-Reply for Account ${targetAccountId}`);
         this.scheduleAutoReply(envelope, messageText, targetAccountId, automationResult.mode, envelope.id, policyContext);
     }
 
@@ -184,7 +184,7 @@ class AIOrchestratorService {
             );
 
             if (proposedAnalysis) {
-                logTrace(`[AIOrchestrator] 🧠 Intent Detected: ${proposedAnalysis.intent} (${proposedAnalysis.confidence})`);
+                logTrace(`[AIOrchestrator] ­ƒºá Intent Detected: ${proposedAnalysis.intent} (${proposedAnalysis.confidence})`);
 
                 // 1. Persistir Propuesta
                 const proposed = await workEngineService.proposeWork({
@@ -198,9 +198,9 @@ class AIOrchestratorService {
                     modelInfo: { model: 'llama-3.1-8b-instant', provider: 'groq' }
                 });
 
-                // 2. Si el modo es automático, ABRIR TRABAJO (Zero-Click)
+                // 2. Si el modo es autom├ítico, ABRIR TRABAJO (Zero-Click)
                 if (automationMode === 'automatic') {
-                    logTrace(`[AIOrchestrator] 📦 Proposal Persisted: ${proposed.id}. Opening work automatically...`);
+                    logTrace(`[AIOrchestrator] ­ƒôª Proposal Persisted: ${proposed.id}. Opening work automatically...`);
                     const openedWork = await workEngineService.openWork(targetAccountId, proposed.id);
 
                     await messageCore.send({
@@ -212,11 +212,11 @@ class AIOrchestratorService {
                         targetAccountId: envelope.senderAccountId,
                     });
 
-                    logTrace(`[AIOrchestrator] ✅ Work Opened via Interpreter: ${openedWork.id}`);
+                    logTrace(`[AIOrchestrator] Ô£à Work Opened via Interpreter: ${openedWork.id}`);
                     return true;
                 }
 
-                logTrace(`[AIOrchestrator] 📦 Proposal Persisted: ${proposed.id}. Handing over to Agent Runtime (Mode: ${automationMode}).`);
+                logTrace(`[AIOrchestrator] ­ƒôª Proposal Persisted: ${proposed.id}. Handing over to Agent Runtime (Mode: ${automationMode}).`);
 
                 // CRITICAL ARCHITECTURE FIX:
                 // In supervised mode, WES proposes but does NOT execute. 
@@ -248,7 +248,7 @@ class AIOrchestratorService {
             this.autoReplyQueue.delete(debounceKey);
         }
 
-        // Configuración de delay
+        // Configuraci├│n de delay
         const aiMode = automationMode === 'automatic' ? 'auto' : 'suggest';
         let delayMs = 2000; // Default
         try {
@@ -257,10 +257,10 @@ class AIOrchestratorService {
             console.warn('[AIOrchestrator] Failed to get delay config, using default:', error);
         }
 
-        // Programar ejecución
+        // Programar ejecuci├│n
         const timeout = setTimeout(async () => {
             try {
-                // ── Try multi-agent flows first (Fase 3) ────────────────
+                // ÔöÇÔöÇ Try multi-agent flows first (Fase 3) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
                 const agentOutput = await this.tryAgentFlows(
                     targetAccountId,
                     envelope.conversationId,
@@ -270,7 +270,7 @@ class AIOrchestratorService {
                 );
 
                 if (agentOutput) {
-                    logTrace(`[AIOrchestrator] 🤖 Agent flow produced output, sending...`);
+                    logTrace(`[AIOrchestrator] ­ƒñû Agent flow produced output, sending...`);
                     await messageCore.send({
                         conversationId: envelope.conversationId,
                         senderAccountId: targetAccountId,
@@ -279,13 +279,13 @@ class AIOrchestratorService {
                         generatedBy: 'ai',
                         targetAccountId: envelope.senderAccountId,
                     });
-                    logTrace(`[AIOrchestrator] ✅ Agent flow response SENT.`);
+                    logTrace(`[AIOrchestrator] Ô£à Agent flow response SENT.`);
                     return;
                 }
 
-                // ── Fall through to single-agent path ───────────────────
+                // ÔöÇÔöÇ Fall through to single-agent path ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
-                logTrace(`[AIOrchestrator] 🤖 Triggering AI Generation for conversation ${envelope.conversationId}`);
+                logTrace(`[AIOrchestrator] ­ƒñû Triggering AI Generation for conversation ${envelope.conversationId}`);
                 const result = await extensionHost.generateAIResponse(
                     envelope.conversationId,
                     targetAccountId,
@@ -299,9 +299,9 @@ class AIOrchestratorService {
                     }
                 );
 
-                // ── Blocked: notify account owner via WebSocket and send fallback message to user if appropriate ──
+                // ÔöÇÔöÇ Blocked: notify account owner via WebSocket and send fallback message to user if appropriate ÔöÇÔöÇ
                 if (!result.ok) {
-                    logTrace(`[AIOrchestrator] 🚫 BLOCKED: ${result.block.reason} — ${result.block.message}`);
+                    logTrace(`[AIOrchestrator] ­ƒÜ½ BLOCKED: ${result.block.reason} ÔÇö ${result.block.message}`);
 
                     // 1. WebSocket for the account owner/UI
                     const payload = {
@@ -332,7 +332,7 @@ class AIOrchestratorService {
                     return;
                 }
 
-                // ── Success with content ────────────────────────────────
+                // ÔöÇÔöÇ Success with content ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
                 const suggestion = result.suggestion;
                 if (suggestion?.content) {
                     const stripped = extensionHost.stripFluxCorePromoMarker(suggestion.content);
@@ -357,7 +357,7 @@ class AIOrchestratorService {
                     if (suggestion.proposedWork) {
                         const { workEngineService } = await import('./work-engine.service');
 
-                        logTrace(`[AIOrchestrator] 📦 Proposing Work: ${suggestion.proposedWork.workDefinitionId}`);
+                        logTrace(`[AIOrchestrator] ­ƒôª Proposing Work: ${suggestion.proposedWork.workDefinitionId}`);
 
                         try {
                             // 1. Persistir la propuesta
@@ -372,24 +372,24 @@ class AIOrchestratorService {
                                 modelInfo: { model: suggestion.model, provider: suggestion.provider }
                             });
 
-                            logTrace(`[AIOrchestrator] 📦 Proposal Persisted: ${proposed.id}. Opening work...`);
+                            logTrace(`[AIOrchestrator] ­ƒôª Proposal Persisted: ${proposed.id}. Opening work...`);
 
                             // 2. Abrir el trabajo formalmente
                             const openedWork = await workEngineService.openWork(targetAccountId, proposed.id);
-                            logTrace(`[AIOrchestrator] ✅ Work Opened: ${openedWork.id}`);
+                            logTrace(`[AIOrchestrator] Ô£à Work Opened: ${openedWork.id}`);
                         } catch (wesErr: any) {
                             console.error('[AIOrchestrator] Failed to process proposed work:', wesErr);
-                            logTrace(`[AIOrchestrator] ❌ Failed to process proposed work: ${wesErr.message}`);
+                            logTrace(`[AIOrchestrator] ÔØî Failed to process proposed work: ${wesErr.message}`);
                         }
                     }
 
-                    logTrace(`[AIOrchestrator] ✅ AI Response SENT.`);
+                    logTrace(`[AIOrchestrator] Ô£à AI Response SENT.`);
                 } else {
-                    logTrace(`[AIOrchestrator] ⚠️ AI generated empty content.`);
+                    logTrace(`[AIOrchestrator] ÔÜá´©Å AI generated empty content.`);
                 }
             } catch (err: any) {
                 console.error('[AIOrchestrator] Error generating/sending reply:', err);
-                logTrace(`❌ ERROR during AI execution: ${err.message}`);
+                logTrace(`ÔØî ERROR during AI execution: ${err.message}`);
             } finally {
                 this.autoReplyQueue.delete(debounceKey);
             }
@@ -421,7 +421,7 @@ class AIOrchestratorService {
                 const flow = agent.flow as any;
                 if (!flow?.steps || flow.steps.length === 0) continue;
 
-                logTrace(`[AIOrchestrator] 🤖 Running agent flow "${agent.name}" (${agent.id})`);
+                logTrace(`[AIOrchestrator] ­ƒñû Running agent flow "${agent.name}" (${agent.id})`);
 
                 const triggerData: TriggerData = {
                     type: 'message_received',
@@ -432,7 +432,7 @@ class AIOrchestratorService {
                     recipientAccountId: targetAccountId,
                 };
 
-                // Build executor dependencies (lazy — actual LLM/RAG/Tool calls wired at execution time)
+                // Build executor dependencies (lazy ÔÇö actual LLM/RAG/Tool calls wired at execution time)
                 const deps: ExecutorDependencies = {
                     accountId: targetAccountId,
                     callLLM: async (params) => {
@@ -524,7 +524,7 @@ class AIOrchestratorService {
             }
         } catch (err: any) {
             console.error('[AIOrchestrator] Agent flow execution error:', err?.message);
-            logTrace(`[AIOrchestrator] ❌ Agent flow error: ${err?.message}`);
+            logTrace(`[AIOrchestrator] ÔØî Agent flow error: ${err?.message}`);
         }
 
         return null;

@@ -35,23 +35,32 @@ import { websiteRoutes } from './routes/website.routes';
 import { fluxcoreRoutes } from './routes/fluxcore.routes';
 import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
 import { fluxcoreAgentRoutes } from './routes/fluxcore-agents.routes';
+import { kernelSessionsRoutes } from './routes/kernel-sessions.routes';
 import { testRoutes } from './routes/test.routes';
 import { assetsRoutes } from './routes/assets.routes';
 import { assetRelationsRoutes } from './routes/asset-relations.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
-import { manifestLoader } from './services/manifest-loader.service';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
-import { aiOrchestrator } from './services/ai-orchestrator.service';
 import { mediaOrchestrator } from './services/media-orchestrator.service';
+import { messageDispatchService } from './services/message-dispatch.service';
 import { accountDeletionWorker } from './workers/account-deletion.worker';
 import { featureFlags } from './config/feature-flags';
 import { startAccountDeletionQueue, stopAccountDeletionQueue } from './workers/account-deletion.queue';
 import { closeRedisConnection } from './queues/redis-connection';
+import { bootstrapKernel } from './bootstrap/kernel.bootstrap';
+import { kernelDispatcher } from './core/kernel-dispatcher';
+import { startProjectors } from './core/kernel/projector-runner';
+import { runtimeGateway } from './services/fluxcore/runtime-gateway.service';
+import { asistentesLocalRuntime } from './services/fluxcore/runtimes/asistentes-local.runtime';
+import { asistentesOpenAIRuntime } from './services/fluxcore/runtimes/asistentes-openai.runtime';
+import { fluxiRuntime } from './services/fluxcore/runtimes/fluxi.runtime';
+import { cognitionWorker } from './workers/cognition-worker';
 import * as path from 'path';
 import * as fs from 'fs';
+import type { Server } from 'bun';
 
 const rootEnvPath = path.resolve(__dirname, '../../../.env');
 
@@ -109,7 +118,9 @@ console.log('🔑 Environment check:');
 console.log('   OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? `exists (${process.env.OPENAI_API_KEY.substring(0, 10)}...)` : 'NOT SET');
 console.log('   GROQ_API_KEY:', process.env.GROQ_API_KEY ? `exists (${process.env.GROQ_API_KEY.substring(0, 10)}...)` : 'NOT SET');
 
-const HOST = process.env.HOST || '::';
+// Force IPv4 if needed for debugging
+const HOST = process.env.HOST || '0.0.0.0';
+console.log(`🔧 Server Configuration: HOST=${HOST}, PORT=${PORT}`);
 
 const dnsOrder = process.env.FLUXCORE_DNS_ORDER;
 if ((process.env.NODE_ENV || 'development') !== 'production' && dnsOrder === 'ipv4first') {
@@ -128,23 +139,6 @@ const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.FRONT
   .map((origin) => origin.replace(/\/$/, ''));
 
 const normalizeOrigin = (origin: string) => origin.replace(/\/$/, '');
-
-// Cargar extensiones desde el directorio /extensions
-const extensionsDir = path.resolve(__dirname, '../../../extensions');
-console.log('🔍 Scanning extensions dir:', extensionsDir);
-if (fs.existsSync(extensionsDir)) {
-  const entries = fs.readdirSync(extensionsDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const extPath = path.join(extensionsDir, entry.name);
-      console.log(' - Found potential extension:', entry.name);
-      const m = await manifestLoader.loadFromDirectory(extPath);
-      if (m) console.log('   ✅ Loaded manifest:', m.id);
-      else console.log('   ❌ No valid manifest found');
-    }
-  }
-  console.log(`🧩 Loaded ${manifestLoader.getAllManifests().length} extensions`);
-}
 
 // Crear app Elysia para HTTP
 const elysiaApp = new Elysia()
@@ -214,6 +208,7 @@ const elysiaApp = new Elysia()
   .use(websiteRoutes)
   .use(fluxcoreRuntimeRoutes)
   .use(fluxcoreRoutes)
+  .use(kernelSessionsRoutes)
   .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(assetsRoutes)
@@ -222,19 +217,34 @@ const elysiaApp = new Elysia()
   .use(ragConfigRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
-let server: ReturnType<typeof Bun.serve>;
+let server: Server;
 try {
   server = Bun.serve({
     hostname: HOST,
     port: PORT,
 
     // Handler para HTTP - delega a Elysia
-    fetch(req, server) {
+    fetch(req: Request, server: Server) {
       // Upgrade a WebSocket si es request de WS
       const url = new URL(req.url);
       if (url.pathname === '/ws') {
-        const upgraded = (server as any).upgrade(req);
-        if (upgraded) return undefined as any;
+        console.log('[WebSocket] Upgrade request received');
+        console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
+        
+        const success = server.upgrade(req, {
+          data: {
+            ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,
+            userAgent: req.headers.get('user-agent'),
+            requestId: req.headers.get('x-request-id')
+          }
+        });
+
+        console.log('[WebSocket] Upgrade result:', success);
+        if (success) {
+          console.log('[WebSocket] Upgrade successful, returning undefined');
+          return; // Must return undefined (or nothing) for successful upgrade
+        }
+        console.error('[WebSocket] Upgrade failed');
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
 
@@ -339,12 +349,19 @@ try {
     port: PORT,
 
     // Handler para HTTP - delega a Elysia
-    fetch(req, server) {
+    fetch(req: Request, server: Server) {
       // Upgrade a WebSocket si es request de WS
       const url = new URL(req.url);
       if (url.pathname === '/ws') {
-        const upgraded = (server as any).upgrade(req);
-        if (upgraded) return undefined as any;
+        console.log('[WebSocket] Upgrade request received (fallback)');
+        console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
+        const success = server.upgrade(req);
+        console.log('[WebSocket] Upgrade result:', success);
+        if (success) {
+          console.log('[WebSocket] Upgrade successful, returning undefined');
+          return; // Must return undefined (or nothing) for successful upgrade
+        }
+        console.error('[WebSocket] Upgrade failed');
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
 
@@ -445,14 +462,61 @@ try {
   });
 }
 
+if (!server) {
+  console.error('❌ Failed to start server: Could not bind to port ' + PORT);
+  process.exit(1);
+}
+
+// Global error handlers to catch startup crashes
+process.on('uncaughtException', (err) => {
+  console.error('🔥 UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 UNHANDLED REJECTION:', reason);
+});
+
 console.log(`🚀 FluxCore API running at http://localhost:${server.port}`);
 console.log(`📚 Swagger docs at http://localhost:${server.port}/swagger`);
 console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
 
-automationScheduler.init();
-wesScheduler.init();
-aiOrchestrator.init();
-mediaOrchestrator.init();
+// Start Kernel Runtime components with error protection
+(async () => {
+  try {
+    console.log('⚙️ Starting Kernel components...');
+    
+    console.log('   - Kernel Dispatcher');
+    await kernelDispatcher.start();
+    
+    console.log('   - Projectors');
+    startProjectors();
+    
+    console.log('   - Kernel Bootstrap');
+    await bootstrapKernel();
+    
+    console.log('   - Services Initialization');
+    automationScheduler.init();
+    wesScheduler.init();
+    mediaOrchestrator.init();
+    messageDispatchService.init();
+
+    console.log('   - FluxCore v8.2 Runtime Registration');
+    runtimeGateway.register(asistentesLocalRuntime);
+    runtimeGateway.register(asistentesOpenAIRuntime);
+    runtimeGateway.register(fluxiRuntime);
+
+    if (featureFlags.fluxNewArchitecture) {
+      console.log('   - CognitionWorker (FLUX_NEW_ARCHITECTURE=true)');
+      cognitionWorker.start();
+    } else {
+      console.log('   - CognitionWorker DISABLED (set FLUX_NEW_ARCHITECTURE=true to enable)');
+    }
+    
+    console.log('✅ Kernel & Services started successfully');
+  } catch (error) {
+    console.error('❌ CRITICAL ERROR during Kernel startup:', error);
+    console.error(error);
+  }
+})();
 
 const cleanupTasks: Array<() => Promise<void> | void> = [];
 
@@ -473,6 +537,9 @@ if (useAccountDeletionQueue) {
   accountDeletionWorker.start();
   addCleanupTask(() => accountDeletionWorker.stop());
   addCleanupTask(() => wesScheduler.stop());
+  if (featureFlags.fluxNewArchitecture) {
+    addCleanupTask(() => cognitionWorker.stop());
+  }
   console.log('🧹 AccountDeletion processing running on interval worker');
 }
 

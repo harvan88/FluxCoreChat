@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Save,
   Loader2,
-  Sparkles,
   Building2,
   Maximize2,
   Copy,
@@ -17,7 +16,8 @@ import {
 } from 'lucide-react';
 import { useProfile } from '../../hooks/useProfile';
 import { usePanelStore } from '../../store/panelStore';
-import { Button, Input, Card } from '../ui';
+import { Button, Input, Card, Textarea } from '../ui';
+import { Switch } from '../ui/Switch';
 import { AvatarUpload } from '../profile/AvatarUpload';
 
 interface ProfileSectionProps {
@@ -32,7 +32,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     error,
     updateProfile,
   } = useProfile();
-  
+
   const { openTab } = usePanelStore();
 
   // Local state for form
@@ -40,6 +40,10 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [privateContext, setPrivateContext] = useState('');
+  const [allowAutomatedUse, setAllowAutomatedUse] = useState(false);
+  const [aiIncludeName, setAiIncludeName] = useState(true);
+  const [aiIncludeBio, setAiIncludeBio] = useState(true);
+  const [aiIncludePrivateContext, setAiIncludePrivateContext] = useState(true);
   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -58,7 +62,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         onSave: (newContent: string) => {
           setPrivateContext(newContent);
         },
-        onClose: () => {},
+        onClose: () => { },
       },
     });
   };
@@ -70,6 +74,10 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       setBio(profile.bio || '');
       setAvatarUrl(profile.avatarUrl || '');
       setPrivateContext(profile.privateContext || '');
+      setAllowAutomatedUse(profile.allowAutomatedUse || false);
+      setAiIncludeName(profile.aiIncludeName ?? true);
+      setAiIncludeBio(profile.aiIncludeBio ?? true);
+      setAiIncludePrivateContext(profile.aiIncludePrivateContext ?? true);
       setIsBusinessEnabled(profile.accountType === 'business');
     }
   }, [profile]);
@@ -81,20 +89,31 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         displayName !== (profile.displayName || '') ||
         bio !== (profile.bio || '') ||
         avatarUrl !== (profile.avatarUrl || '') ||
-        privateContext !== (profile.privateContext || '');
+        privateContext !== (profile.privateContext || '') ||
+        allowAutomatedUse !== (profile.allowAutomatedUse || false) ||
+        aiIncludeName !== (profile.aiIncludeName ?? true) ||
+        aiIncludeBio !== (profile.aiIncludeBio ?? true) ||
+        aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true);
       setHasChanges(changed);
     }
-  }, [displayName, bio, avatarUrl, privateContext, profile]);
+  }, [displayName, bio, avatarUrl, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile]);
 
   // Handle save
   const handleSave = async () => {
+    // Si cualquiera de los permisos granulares está activo, la cuenta está autorizada para uso automatizado
+    const isDelegated = aiIncludeName || aiIncludeBio || aiIncludePrivateContext;
+
     const success = await updateProfile({
       displayName,
       bio,
       avatarUrl,
       privateContext,
+      allowAutomatedUse: isDelegated,
+      aiIncludeName,
+      aiIncludeBio,
+      aiIncludePrivateContext,
     });
-    
+
     if (success) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -149,149 +168,160 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-6">
-        {/* Avatar Section */}
-        <AvatarUpload
-          currentAvatarUrl={avatarUrl}
-          name={displayName}
-          onUpload={(url) => setAvatarUrl(url)}
-        />
-
-        {/* Display Name */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-primary">Nombre visible</label>
-          <Input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Tu nombre"
-            className="w-full"
+          {/* Avatar Section */}
+          <AvatarUpload
+            currentAvatarUrl={avatarUrl}
+            name={displayName}
+            onUpload={(url) => setAvatarUrl(url)}
           />
-        </div>
 
-        {/* Bio / Presentación (FC-801) */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-primary">Presentación</label>
-          <div className="relative">
-            <textarea
+          {/* Display Name */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-primary">Nombre visible</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                <Switch
+                  checked={aiIncludeName}
+                  onCheckedChange={setAiIncludeName}
+                />
+              </div>
+            </div>
+            <Input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Tu nombre"
+            />
+          </div>
+
+          {/* Bio / Presentación (FC-801) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-primary">Presentación</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                <Switch
+                  checked={aiIncludeBio}
+                  onCheckedChange={setAiIncludeBio}
+                />
+              </div>
+            </div>
+            <Textarea
               value={bio}
               onChange={(e) => setBio(e.target.value.slice(0, 150))}
               placeholder="Esta presentación la verán las personas que visiten tu perfil"
-              className="w-full h-24 px-3 py-2 bg-elevated border border-default rounded-lg text-primary placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              rows={3}
               maxLength={150}
+              helperText={`${bio.length}/150`}
             />
-            <div className="absolute bottom-2 right-2 text-xs text-muted">
-              {bio.length}/150
-            </div>
           </div>
-        </div>
 
-        {/* Business Toggle (FC-806) */}
-        <Card variant="bordered" className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Building2 size={20} className="text-secondary" />
-              <div>
-                <div className="text-primary font-medium">Cuenta de negocio</div>
-                <div className="text-sm text-muted">Activa funciones empresariales</div>
+          {/* Business Toggle (FC-806) */}
+          <Card variant="bordered" className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Building2 size={20} className="text-secondary" />
+                <div>
+                  <div className="text-primary font-medium">Cuenta de negocio</div>
+                  <div className="text-sm text-muted">Activa funciones empresariales</div>
+                </div>
+              </div>
+              <Switch
+                checked={isBusinessEnabled}
+                onCheckedChange={setIsBusinessEnabled}
+              />
+            </div>
+            {isBusinessEnabled && (
+              <div className="mt-3 pt-3 border-t border-subtle">
+                <a
+                  href="#accounts"
+                  className="text-sm text-accent hover:underline"
+                >
+                  Ir a configuración de cuentas →
+                </a>
+              </div>
+            )}
+          </Card>
+
+          {/* AI Context Editor (FC-803) - Only visible if authorized */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-primary flex items-center gap-2">
+                Contexto para la IA
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 mr-2">
+                  <button
+                    onClick={handleCopyContext}
+                    className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
+                    title="Copiar"
+                  >
+                    <Copy size={14} />
+                  </button>
+                  <button
+                    onClick={handleDownloadContext}
+                    className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
+                    title="Descargar"
+                  >
+                    <Download size={14} />
+                  </button>
+                  <button
+                    onClick={handleOpenExpandedEditor}
+                    className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
+                    title="Expandir editor"
+                  >
+                    <Maximize2 size={14} />
+                  </button>
+                </div>
+                <div className="h-4 w-px bg-subtle mx-1" />
+                <div className="flex items-center gap-2 ml-1">
+                  <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                  <Switch
+                    checked={aiIncludePrivateContext}
+                    onCheckedChange={setAiIncludePrivateContext}
+                  />
+                </div>
               </div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isBusinessEnabled}
-                onChange={(e) => setIsBusinessEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-elevated peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
-            </label>
-          </div>
-          {isBusinessEnabled && (
-            <div className="mt-3 pt-3 border-t border-subtle">
-              <a
-                href="#accounts"
-                className="text-sm text-accent hover:underline"
-              >
-                Ir a configuración de cuentas →
-              </a>
-            </div>
-          )}
-        </Card>
 
-        {/* AI Context Editor (FC-803) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-primary flex items-center gap-2">
-              <Sparkles size={16} className="text-accent" />
-              Contexto para la IA
-            </label>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleCopyContext}
-                className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
-                title="Copiar"
-              >
-                <Copy size={14} />
-              </button>
-              <button
-                onClick={handleDownloadContext}
-                className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
-                title="Descargar"
-              >
-                <Download size={14} />
-              </button>
-              <button
-                onClick={handleOpenExpandedEditor}
-                className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
-                title="Expandir editor"
-              >
-                <Maximize2 size={14} />
-              </button>
-            </div>
-          </div>
-          
-          <div className="relative">
-            <textarea
+            <Textarea
               value={privateContext}
               onChange={(e) => setPrivateContext(e.target.value.slice(0, 5000))}
-              placeholder="Esta información no la verán las personas que visiten tu perfil. Es contexto que usará la IA para comunicarse mejor contigo. Ej: ¿Cómo te gusta que te hablen?, ¿sobre qué temas?, ¿te gustan los emojis?, ¿prefieres un trato formal?"
-              className="w-full h-40 px-3 py-2 bg-elevated border border-default rounded-lg text-primary placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent font-mono text-sm"
+              placeholder="Esta información no la verán las personas que visiten tu perfil. Es el contexto que usará la IA..."
+              rows={6}
               maxLength={5000}
+              className="font-mono text-sm"
+              helperText={`${privateContext.split('\n').length} líneas • ~${estimateTokens(privateContext)} tokens • ${privateContext.length}/5000`}
             />
           </div>
-          
-          {/* Stats */}
-          <div className="flex items-center justify-between text-xs text-muted">
-            <span>{privateContext.split('\n').length} líneas • ~{estimateTokens(privateContext)} tokens</span>
-            <span>{privateContext.length}/5000</span>
-          </div>
-        </div>
 
-        {/* Save Button */}
-        <div className="pt-4 border-t border-subtle">
-          <Button
-            variant="primary"
-            onClick={handleSave}
-            disabled={!hasChanges || isSaving}
-            className="w-full"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 size={16} className="animate-spin mr-2" />
-                Guardando...
-              </>
-            ) : saveSuccess ? (
-              <>
-                <Check size={16} className="mr-2" />
-                Guardado
-              </>
-            ) : (
-              <>
-                <Save size={16} className="mr-2" />
-                Guardar cambios
-              </>
-            )}
-          </Button>
-        </div>
+          {/* Save Button */}
+          <div className="pt-4 border-t border-subtle">
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className="w-full"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin mr-2" />
+                  Guardando...
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check size={16} className="mr-2" />
+                  Guardado
+                </>
+              ) : (
+                <>
+                  <Save size={16} className="mr-2" />
+                  Guardar cambios
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

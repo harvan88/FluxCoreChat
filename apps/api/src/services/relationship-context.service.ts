@@ -11,6 +11,7 @@ import { db } from '@fluxcore/db';
 import { relationships } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 import type { ContextEntry, RelationshipContext, RelationshipPerspective } from '@fluxcore/db';
+import { coreEventBus } from '../core/events';
 
 const MAX_CONTEXT_CHARS = 2000;
 
@@ -19,6 +20,7 @@ export interface AddContextEntryInput {
   authorAccountId: string;
   content: string;
   type: 'note' | 'preference' | 'rule';
+  allowAutomatedUse?: boolean;
 }
 
 export interface UpdateContextEntryInput {
@@ -26,6 +28,7 @@ export interface UpdateContextEntryInput {
   entryIndex: number;
   content?: string;
   type?: 'note' | 'preference' | 'rule';
+  allowAutomatedUse?: boolean;
 }
 
 export interface UpdatePerspectiveInput {
@@ -48,7 +51,7 @@ class RelationshipContextService {
       .limit(1);
 
     if (!rel) return null;
-    
+
     return (rel.context as RelationshipContext) || { entries: [], total_chars: 0 };
   }
 
@@ -70,14 +73,14 @@ class RelationshipContextService {
     }
 
     const currentContext = (rel.context as RelationshipContext) || { entries: [], total_chars: 0 };
-    
+
     // Calcular nuevo total de caracteres
     const newTotalChars = currentContext.total_chars + content.length;
-    
+
     if (newTotalChars > MAX_CONTEXT_CHARS) {
-      return { 
-        success: false, 
-        error: `Context limit exceeded. Max: ${MAX_CONTEXT_CHARS}, Current: ${currentContext.total_chars}, New entry: ${content.length}` 
+      return {
+        success: false,
+        error: `Context limit exceeded. Max: ${MAX_CONTEXT_CHARS}, Current: ${currentContext.total_chars}, New entry: ${content.length}`
       };
     }
 
@@ -86,6 +89,7 @@ class RelationshipContextService {
       author_account_id: authorAccountId,
       content,
       type,
+      allow_automated_use: input.allowAutomatedUse ?? false,
       created_at: new Date().toISOString(),
     };
 
@@ -99,6 +103,8 @@ class RelationshipContextService {
       .update(relationships)
       .set({ context: updatedContext })
       .where(eq(relationships.id, relationshipId));
+
+    coreEventBus.emit('relationship.context.updated', { relationshipId });
 
     return { success: true, context: updatedContext };
   }
@@ -134,9 +140,9 @@ class RelationshipContextService {
     const newTotalChars = currentContext.total_chars - oldLength + newLength;
 
     if (newTotalChars > MAX_CONTEXT_CHARS) {
-      return { 
-        success: false, 
-        error: `Context limit exceeded. Max: ${MAX_CONTEXT_CHARS}, Would be: ${newTotalChars}` 
+      return {
+        success: false,
+        error: `Context limit exceeded. Max: ${MAX_CONTEXT_CHARS}, Would be: ${newTotalChars}`
       };
     }
 
@@ -145,6 +151,7 @@ class RelationshipContextService {
       ...entry,
       content: newContent,
       type: type !== undefined ? type : entry.type,
+      allow_automated_use: input.allowAutomatedUse !== undefined ? input.allowAutomatedUse : entry.allow_automated_use,
     };
 
     const updatedEntries = [...currentContext.entries];
@@ -159,6 +166,8 @@ class RelationshipContextService {
       .update(relationships)
       .set({ context: updatedContext })
       .where(eq(relationships.id, relationshipId));
+
+    coreEventBus.emit('relationship.context.updated', { relationshipId });
 
     return { success: true, context: updatedContext };
   }
@@ -195,6 +204,8 @@ class RelationshipContextService {
       .update(relationships)
       .set({ context: updatedContext })
       .where(eq(relationships.id, relationshipId));
+
+    coreEventBus.emit('relationship.context.updated', { relationshipId });
 
     return { success: true, context: updatedContext };
   }

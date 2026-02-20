@@ -68,6 +68,10 @@ export interface Account {
   accountType: 'personal' | 'business';
   profile: Record<string, any>;
   privateContext?: string;
+  allowAutomatedUse: boolean;
+  aiIncludeName: boolean;
+  aiIncludeBio: boolean;
+  aiIncludePrivateContext: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,6 +102,7 @@ export interface ContextEntry {
   authorAccountId: string;
   content: string;
   type: 'note' | 'preference' | 'rule';
+  allowAutomatedUse: boolean;
   createdAt: string;
 }
 
@@ -179,6 +184,20 @@ export interface ApiResponse<T> {
   data?: T;
   message?: string;
   error?: string;
+}
+
+export type KernelSessionStatus = 'pending' | 'active' | 'invalidated';
+
+export interface KernelSession {
+  sessionId: string;
+  actorId: string;
+  accountId: string;
+  status: KernelSessionStatus;
+  deviceHash?: string | null;
+  method?: string | null;
+  entryPoint?: string | null;
+  scopes: string[];
+  updatedAt: string;
 }
 
 export type AIProvider = 'groq' | 'openai';

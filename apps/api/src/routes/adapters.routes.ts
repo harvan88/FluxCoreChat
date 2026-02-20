@@ -6,7 +6,8 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import {
   getAdapterManager,
-  type NormalizedMessage
+  type NormalizedMessage,
+  type NormalizedStatusEvent
 } from '../../../../packages/adapters/src';
 
 // Inicializar adapter manager con configuración de entorno
@@ -24,10 +25,19 @@ adapterManager.initialize().catch(() => {
   console.log('[adapters] Initialization skipped (no credentials configured)');
 });
 
+
+import { realityAdapterService } from '../services/fluxcore/reality-adapter.service';
+
 // Handler para mensajes entrantes
 adapterManager.onMessage(async (message: NormalizedMessage, channel: string) => {
-  console.log(`[adapters] Received ${channel} message from ${message.from.phone}: ${message.content.text?.substring(0, 50)}`);
-  // Aquí se integraría con MessageCore para procesar el mensaje
+  console.log(`[adapters] Received ${channel} message from ${message.from.phone}. Certifying...`);
+
+  try {
+    // RFC-0001: Ingest into Sovereign Kernel
+    await realityAdapterService.processExternalObservation(message);
+  } catch (error) {
+    console.error(`[adapters] 💥 Kernel Certification Failed:`, error);
+  }
 });
 
 export const adaptersRoutes = new Elysia({ prefix: '/adapters' })
@@ -72,17 +82,35 @@ export const adaptersRoutes = new Elysia({ prefix: '/adapters' })
   // POST /adapters/whatsapp/webhook - Recibir mensajes de WhatsApp
   .post('/whatsapp/webhook', async ({ body }) => {
     try {
+      // 1. Intentar procesar como mensaje normal
       const message = await adapterManager.handleWebhook('whatsapp', body);
 
       if (message) {
         console.log(`[whatsapp-webhook] Message received: ${message.id}`);
+      } else {
+        // 2. Si no es mensaje, revisar si es un status update (RFC-0001 Delivery Signal)
+        const payload = body as any;
+        const statusUpdate = payload.entry?.[0]?.changes?.[0]?.value?.statuses?.[0]; // WhatsApp suele mandar batches, aquí tomamos el primero por simplicidad MVP
+
+        if (statusUpdate) {
+          const statusEvent: NormalizedStatusEvent = {
+            channel: 'whatsapp',
+            messageId: statusUpdate.id,
+            externalId: statusUpdate.id + '_' + statusUpdate.status, // Composite ID
+            status: statusUpdate.status,
+            timestamp: new Date(parseInt(statusUpdate.timestamp) * 1000),
+            recipientId: statusUpdate.recipient_id,
+            raw: statusUpdate
+          };
+
+          await realityAdapterService.processStatusObservation(statusEvent);
+        }
       }
 
       // WhatsApp espera un 200 OK
       return 'OK';
     } catch (error: any) {
       console.error('[whatsapp-webhook] Error:', error.message);
-      // Aún devolvemos 200 para evitar reintentos
       return 'OK';
     }
   })

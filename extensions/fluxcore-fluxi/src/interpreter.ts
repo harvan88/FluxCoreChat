@@ -1,8 +1,9 @@
-import { aiService } from '../../../apps/api/src/services/ai.service';
-import { WorkDefinition, workDefinitionService } from '../../../apps/api/src/services/work-definition.service';
-import { logTrace } from '../../../apps/api/src/utils/file-logger';
-import { metricsService } from '../../../apps/api/src/services/metrics.service';
-import { aiCircuitBreaker } from '../../../apps/api/src/services/ai-circuit-breaker.service';
+// DI-based services (injected by host)
+let aiService: any;
+let workDefinitionService: any;
+let logTrace: any;
+let metricsService: any;
+let aiCircuitBreaker: any;
 
 export interface ProposedWorkAnalysis {
     workDefinitionId: string;
@@ -19,7 +20,37 @@ export interface ProposedWorkAnalysis {
     reasoning: string;
 }
 
+interface WorkDefinition {
+    id: string;
+    typeId: string;
+    definitionJson: {
+        bindingAttribute: string;
+        slots: Array<{
+            path: string;
+            type: string;
+            required?: boolean;
+            immutableAfterSet?: boolean;
+        }>;
+    };
+}
+
 export class WesInterpreterService {
+    /**
+     * Injects core API services into the interpreter.
+     */
+    setServices(services: {
+        aiService: any;
+        workDefinitionService: any;
+        logTrace: any;
+        metricsService: any;
+        aiCircuitBreaker: any;
+    }) {
+        aiService = services.aiService;
+        workDefinitionService = services.workDefinitionService;
+        logTrace = services.logTrace;
+        metricsService = services.metricsService;
+        aiCircuitBreaker = services.aiCircuitBreaker;
+    }
 
     /**
      * Analiza un mensaje para detectar intenciones transaccionales basadas en WorkDefinitions activas.

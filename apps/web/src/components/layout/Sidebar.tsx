@@ -220,6 +220,7 @@ export function Sidebar() {
                 tools: 'Herramientas',
                 agents: 'Agentes',
                 debug: 'Depuración',
+                policies: 'Políticas (Context)',
                 billing: 'Facturación',
               };
 
@@ -231,6 +232,7 @@ export function Sidebar() {
                 tools: 'Wrench',
                 agents: 'GitBranch',
                 debug: 'Bug',
+                policies: 'Shield',
                 billing: 'CreditCard',
               };
 

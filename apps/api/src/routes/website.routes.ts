@@ -33,7 +33,7 @@ export const websiteRoutes = new Elysia({ prefix: '/websites' })
 
     try {
       const config = await websiteService.getByAccountId(params.accountId);
-      
+
       if (!config) {
         set.status = 404;
         return { success: false, message: 'Website config not found' };
@@ -107,12 +107,13 @@ export const websiteRoutes = new Elysia({ prefix: '/websites' })
     }
 
     try {
-      const { config, pages, status } = body as any;
+      const { config, pages, status, allowAutomatedUse } = body as any;
 
       const updated = await websiteService.update(params.accountId, {
         config,
         pages,
         status,
+        allowAutomatedUse,
       });
 
       if (!updated) {
@@ -136,6 +137,7 @@ export const websiteRoutes = new Elysia({ prefix: '/websites' })
       config: t.Optional(t.Any()),
       pages: t.Optional(t.Array(t.Any())),
       status: t.Optional(t.String()),
+      allowAutomatedUse: t.Optional(t.Boolean()),
     }),
   })
 

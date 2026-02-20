@@ -1,3 +1,5 @@
+# ⛔ DEPRECADO — Superado por FLUXCORE_CANON.md (Ontología) y WES_CANON (Dominio)
+
 # Flux Core — System Architecture Knowledge Base
 
 **Entidad:** Architecture Knowledge Base (AKB)  

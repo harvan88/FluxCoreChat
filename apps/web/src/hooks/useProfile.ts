@@ -13,6 +13,10 @@ export interface ProfileData {
   displayName: string;
   bio: string;
   privateContext: string;
+  allowAutomatedUse: boolean;
+  aiIncludeName: boolean;
+  aiIncludeBio: boolean;
+  aiIncludePrivateContext: boolean;
   accountType: 'personal' | 'business';
   avatarUrl?: string;
   profile: {
@@ -57,37 +61,41 @@ export function useProfile(): UseProfileReturn {
   // Load profile from API
   const loadProfile = useCallback(async () => {
     if (!user || isLoading) return; // Prevent concurrent calls
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const response = await api.getAccounts();
-      
+
       if (response.success && response.data && response.data.length > 0) {
         // BUG FIX: Get the SELECTED account, not always the first one
         let targetAccount = response.data[0]; // fallback to first
-        
+
         if (selectedAccountId) {
           const selected = response.data.find(acc => acc.id === selectedAccountId);
           if (selected) {
             targetAccount = selected;
           }
         }
-        
+
         setAccount(targetAccount);
         setLoadedAccountId(targetAccount.id);
-        
+
         // Map account to profile data
         const profileData: ProfileData = {
           displayName: targetAccount.displayName || '',
           bio: targetAccount.profile?.bio || '',
           privateContext: targetAccount.privateContext || '',
+          allowAutomatedUse: targetAccount.allowAutomatedUse || false,
+          aiIncludeName: targetAccount.aiIncludeName ?? true,
+          aiIncludeBio: targetAccount.aiIncludeBio ?? true,
+          aiIncludePrivateContext: targetAccount.aiIncludePrivateContext ?? true,
           accountType: targetAccount.accountType as 'personal' | 'business',
           avatarUrl: targetAccount.profile?.avatarUrl,
           profile: targetAccount.profile || {},
         };
-        
+
         setProfile(profileData);
       } else {
         setError(response.error || 'No se encontraron cuentas');
@@ -103,21 +111,37 @@ export function useProfile(): UseProfileReturn {
   // Update profile
   const updateProfile = useCallback(async (data: Partial<ProfileData>): Promise<boolean> => {
     if (!account) return false;
-    
+
     setIsSaving(true);
     setError(null);
-    
+
     try {
       const updateData: Partial<Account> = {};
-      
+
       if (data.displayName !== undefined) {
         updateData.displayName = data.displayName;
       }
-      
+
       if (data.privateContext !== undefined) {
         updateData.privateContext = data.privateContext;
       }
-      
+
+      if (data.allowAutomatedUse !== undefined) {
+        updateData.allowAutomatedUse = data.allowAutomatedUse;
+      }
+
+      if (data.aiIncludeName !== undefined) {
+        updateData.aiIncludeName = data.aiIncludeName;
+      }
+
+      if (data.aiIncludeBio !== undefined) {
+        updateData.aiIncludeBio = data.aiIncludeBio;
+      }
+
+      if (data.aiIncludePrivateContext !== undefined) {
+        updateData.aiIncludePrivateContext = data.aiIncludePrivateContext;
+      }
+
       if (data.bio !== undefined || data.profile !== undefined || data.avatarUrl !== undefined) {
         updateData.profile = {
           ...account.profile,
@@ -126,9 +150,9 @@ export function useProfile(): UseProfileReturn {
           ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         };
       }
-      
+
       const response = await api.updateAccount(account.id, updateData);
-      
+
       if (response.success && response.data) {
         setAccount(response.data);
         setProfile(prev => prev ? { ...prev, ...data } : null);
@@ -160,14 +184,14 @@ export function useProfile(): UseProfileReturn {
 
   const convertToBusiness = useCallback(async (): Promise<boolean> => {
     if (!account) return false;
-    
+
     setIsSaving(true);
     setError(null);
-    
+
     try {
       // Usar el endpoint real de conversión a negocio
       const response = await api.convertToBusiness(account.id);
-      
+
       if (response.success && response.data) {
         setAccount(response.data);
         setProfile(prev => prev ? { ...prev, accountType: 'business' } : null);

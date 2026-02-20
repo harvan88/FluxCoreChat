@@ -8,7 +8,7 @@
 import { mkdir, readFile, writeFile, unlink, stat, readdir, copyFile, rename } from 'fs/promises';
 import { existsSync, createReadStream } from 'fs';
 import { join, dirname } from 'path';
-import { createHash, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
 import type { 
     IStorageAdapter, 
     StorageUploadOptions, 

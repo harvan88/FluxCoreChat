@@ -110,6 +110,51 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     }),
   })
 
+  // GET /ai/policy-context - Obtener el contexto de políticas para una cuenta (Canon v7.0)
+  .get('/policy-context', async ({ user, query, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    try {
+      const accountId = (query as any)?.accountId as string | undefined;
+      const relationshipId = (query as any)?.relationshipId as string | undefined;
+
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      const userAccounts = await accountService.getAccountsByUserId(user.id);
+      const allowed = userAccounts.some((a) => a.id === accountId);
+      if (!allowed) {
+        set.status = 403;
+        return { success: false, message: 'Account does not belong to user' };
+      }
+
+      const { fluxPolicyContextService } = await import('../services/flux-policy-context.service');
+      const context = await fluxPolicyContextService.resolve({
+        accountId,
+        relationshipId,
+      });
+
+      return { success: true, data: context };
+    } catch (error: any) {
+      set.status = 500;
+      return { success: false, message: error.message };
+    }
+  }, {
+    query: t.Object({
+      accountId: t.String(),
+      relationshipId: t.Optional(t.String()),
+    }),
+    detail: {
+      tags: ['AI'],
+      summary: 'Get FluxPolicyContext (full unauthorized data block)',
+    },
+  })
+
   // POST /ai/probe - Probar un provider/model sin depender de accountId
   .post('/probe', async ({ user, body, set }) => {
     if (!user) {

@@ -110,7 +110,6 @@ export class MetricsService {
     }
 
     private tableExistsChecked = false;
-    private tableExists = true;
 
     /**
      * Flush métricas a la base de datos
@@ -136,10 +135,8 @@ export class MetricsService {
                 INSERT INTO fluxcore_system_metrics (metric_name, metric_type, value, dimensions)
                 VALUES ${sql.join(valueEntries, sql`, `)}
             `);
-            this.tableExists = true;
         } catch (error: any) {
             if (error.message?.includes('does not exist')) {
-                this.tableExists = false;
                 if (!this.tableExistsChecked) {
                     console.error('[MetricsService] Table fluxcore_system_metrics missing. Metrics will be dropped until table exists.');
                     this.tableExistsChecked = true;

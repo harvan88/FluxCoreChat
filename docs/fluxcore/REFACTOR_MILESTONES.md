@@ -1,9 +1,26 @@
+# ⛔ DEPRECADO — Superado por FLUXCORE_V8_IMPLEMENTATION_PLAN.md
+
 # FluxCore — Plan de Refactorización (Canon v7.0)
 
 **Objetivo:** Alinear el código con la arquitectura de tres runtimes paralelos, PolicyContext compartido, y separación ontológica ChatCore/FluxCore.
 
 **Fecha:** 2026-02-13
 **Estado:** Planificación
+
+---
+
+## Hito 0: Kernel Freeze & Foundation (RFC-0001)
+
+**Estado:** ✅ COMPLETADO (2026-02-14)
+
+### Resumen
+Implementación del Kernel Soberano (Log-Driven). Establece `fluxcore_signals` como fuente de verdad inmutable y separa la observación física de la interpretación de negocio.
+
+### Entregables
+- ✅ Schema Canónico (`fluxcore_signals`, `fluxcore_outbox`, `fluxcore_reality_adapters`)
+- ✅ Kernel Core (`kernel.ts` con validación HMAC y Types físicos)
+- ✅ Reality Adapters (`whatsapp-gateway` implementado y registrado)
+- ✅ Proyectores (`Chat` e `Identity` migrados a lectura por secuencia)
 
 ---
 
@@ -15,7 +32,10 @@
 Las preferencias de atención (tono, emojis, formalidad) actualmente se construyen dentro del `PromptBuilder` de Asistentes, mezclándose con instrucciones del asistente. Fluxi y OpenAI Assistants no tienen acceso a estas políticas.
 
 ### Solución
-Crear un servicio `PolicyContextService` que FluxCore ejecuta **antes** de invocar cualquier runtime.
+Crear un servicio `PolicyContextService` que# ⛔ DEPRECADO — Cubierto por AUDIT_KERNEL_PROJECTORS.md y PROGRESS_LOG.md
+
+# FluxCore Kernel Status
+ **antes** de invocar cualquier runtime.
 
 ### Tareas
 
@@ -69,7 +89,7 @@ Crear un servicio `PolicyContextService` que FluxCore ejecuta **antes** de invoc
 
 ### Archivos afectados
 * `apps/api/src/services/extension-host.service.ts` (inyecta PolicyContext antes de invocar runtimes)
-* `apps/api/src/services/ai-orchestrator.service.ts` (pasa PolicyContext al scheduling)
+* `apps/api/src/services/message-dispatch.service.ts` (pasa PolicyContext al scheduling)
 * `extensions/fluxcore-asistentes/src/prompt-builder.ts` (recibe PolicyContext en vez de resolverlo)
 * `extensions/fluxcore-fluxi/src/index.ts` (recibe PolicyContext)
 * NUEVO: `PolicyContext` type + service

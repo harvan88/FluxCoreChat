@@ -45,6 +45,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
   const [variables, setVariables] = useState<TemplateVariable[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [authorizeForAI, setAuthorizeForAI] = useState(false);
+  const [allowAutomatedUse, setAllowAutomatedUse] = useState(false);
   const [aiUsageInstructions, setAiUsageInstructions] = useState('');
   const [newTag, setNewTag] = useState('');
 
@@ -72,6 +73,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
       setVariables([...originalTemplate.variables]);
       setTags([...originalTemplate.tags]);
       setAuthorizeForAI(originalTemplate.authorizeForAI || false);
+      setAllowAutomatedUse(originalTemplate.allowAutomatedUse || false);
       setAiUsageInstructions(originalTemplate.aiUsageInstructions || '');
       initializedId.current = originalTemplate.id;
     }
@@ -88,7 +90,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
       category !== (originalTemplate.category || '') ||
       JSON.stringify(variables) !== JSON.stringify(originalTemplate.variables) ||
       JSON.stringify(tags) !== JSON.stringify(originalTemplate.tags) ||
-      authorizeForAI !== originalTemplate.authorizeForAI ||
+      authorizeForAI !== (originalTemplate.authorizeForAI || false) ||
+      allowAutomatedUse !== (originalTemplate.allowAutomatedUse || false) ||
       aiUsageInstructions !== (originalTemplate.aiUsageInstructions || '');
 
     if (!hasChanges) {
@@ -107,6 +110,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
           variables,
           tags,
           authorizeForAI,
+          allowAutomatedUse,
           aiUsageInstructions: authorizeForAI ? aiUsageInstructions : undefined,
         };
 
@@ -120,7 +124,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [name, content, category, variables, tags, authorizeForAI, aiUsageInstructions, originalTemplate, accountId, templateId, updateTemplate]);
+  }, [name, content, category, variables, tags, authorizeForAI, allowAutomatedUse, aiUsageInstructions, originalTemplate, accountId, templateId, updateTemplate]);
 
   // Extract variables from content
   const detectedVariables = useMemo(() => {
@@ -128,6 +132,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
     const matches = content.matchAll(regex);
     return [...new Set([...matches].map(m => m[1]))];
   }, [content]);
+
 
   const handleClose = () => {
     onClose();
@@ -432,6 +437,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
             <FluxCoreTemplateConfig
               authorizeForAI={authorizeForAI}
               onAuthorizeChange={setAuthorizeForAI}
+              allowAutomatedUse={allowAutomatedUse}
+              onAllowAutomatedUseChange={setAllowAutomatedUse}
               aiUsageInstructions={aiUsageInstructions}
               onInstructionsChange={setAiUsageInstructions}
             />

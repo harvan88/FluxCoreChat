@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, jsonb, bigint } from 'drizzle-orm/pg-core';
 import { conversations } from './conversations';
 import { accounts } from './accounts';
 import { users } from './users';
@@ -21,6 +21,8 @@ export const messages = pgTable('messages', {
   // COR-003: Actor model para mensajes (migration-008)
   fromActorId: uuid('from_actor_id').references(() => actors.id),
   toActorId: uuid('to_actor_id').references(() => actors.id),
+  // FLUX-001: Kernel alignment
+  signalId: bigint('signal_id', { mode: 'number' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

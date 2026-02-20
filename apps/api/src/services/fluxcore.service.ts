@@ -449,6 +449,8 @@ export const fluxcoreService = {
   updateAssistant: assistantsService.updateAssistant,
   setActiveAssistant: assistantsService.setActiveAssistant,
   deleteAssistant: assistantsService.deleteAssistant,
+  getActiveMode: assistantsService.getActiveMode,
+  setActiveMode: assistantsService.setActiveMode,
 
   // Instructions
   getInstructions,

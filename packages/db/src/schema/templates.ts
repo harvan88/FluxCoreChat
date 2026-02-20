@@ -34,6 +34,7 @@ export const templates = pgTable('templates', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),
 }, (table) => ({
   accountIdx: index('idx_templates_account').on(table.accountId),
   accountNameIdx: index('idx_templates_account_name').on(table.accountId, table.name),

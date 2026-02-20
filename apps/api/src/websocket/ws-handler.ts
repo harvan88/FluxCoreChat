@@ -9,6 +9,8 @@ import { messageCore } from '../core/message-core';
 import { automationController } from '../services/automation-controller.service';
 import { extensionHost } from '../services/extension-host.service';
 import { smartDelayService } from '../services/smart-delay.service';
+import { chatCoreGateway } from '../services/fluxcore/chatcore-gateway.service';
+import { chatCoreWebchatGateway } from '../services/fluxcore/chatcore-webchat-gateway.service';
 
 interface WSMessage {
   type:
@@ -34,7 +36,8 @@ interface WSMessage {
   activity?: 'typing' | 'recording' | 'idle' | 'cancel';
   // Widget specific
   alias?: string;
-  visitorId?: string;
+  visitorId?: string;   // legacy
+  visitorToken?: string; // RFC-0001 provisional identity
 }
 
 // Store de conexiones activas por relationshipId
@@ -98,24 +101,51 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 
       case 'message':
         if (data.conversationId && data.content && data.senderAccountId) {
-          messageCore.send({
-            conversationId: data.conversationId,
-            senderAccountId: data.senderAccountId,
-            content: data.content,
-            type: 'outgoing',
-            generatedBy: 'human',
-          }).then((result) => {
-            if (result.success) {
-              ws.send(JSON.stringify({
-                type: 'message:sent',
-                messageId: result.messageId
-              }));
-            } else {
+          // 🛡️ CHATCORE GATEWAY: Certify Ingress (Reality Adapter)
+          // Validamos que sea un intento de comunicación humana
+          const wsData = ws.data || {};
+          
+          chatCoreGateway.certifyIngress({
+            accountId: data.senderAccountId, // Business Context
+            userId: data.senderAccountId,    // Authenticated Actor
+            payload: data.content,
+            meta: {
+              ip: wsData.ip,
+              userAgent: wsData.userAgent,
+              clientTimestamp: data.createdAt || new Date().toISOString(),
+              conversationId: data.conversationId,
+              requestId: wsData.requestId
+            }
+          }).then((certification) => {
+            if (!certification.accepted) {
+              console.warn(`[WS] 🛑 Gateway rejected ingress: ${certification.reason}`);
               ws.send(JSON.stringify({
                 type: 'error',
-                message: result.error
+                message: `Gateway rejected: ${certification.reason}`
               }));
+              return;
             }
+
+            // Si el Kernel acepta (o ya existe), procedemos
+            messageCore.send({
+              conversationId: data.conversationId!,
+              senderAccountId: data.senderAccountId!,
+              content: data.content!,
+              type: 'outgoing',
+              generatedBy: 'human',
+            }).then((result) => {
+              if (result.success) {
+                ws.send(JSON.stringify({
+                  type: 'message:sent',
+                  messageId: result.messageId
+                }));
+              } else {
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  message: result.error
+                }));
+              }
+            });
           });
         }
         break;
@@ -213,24 +243,24 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 
       case 'widget:connect':
         // Widget público: establecer conexión
-        if (data.alias && data.visitorId) {
+        if (data.alias && (data.visitorToken || data.visitorId)) {
           handleWidgetConnect(ws, data);
         } else {
           ws.send(JSON.stringify({
             type: 'error',
-            message: 'alias and visitorId required for widget connection'
+            message: 'alias and visitorToken required for widget connection'
           }));
         }
         break;
 
       case 'widget:message':
         // Widget público: enviar mensaje
-        if (data.alias && data.visitorId && data.content) {
+        if (data.alias && (data.visitorToken || data.visitorId) && data.content) {
           handleWidgetMessage(ws, data);
         } else {
           ws.send(JSON.stringify({
             type: 'error',
-            message: 'alias, visitorId and content required for widget message'
+            message: 'alias, visitorToken and content required for widget message'
           }));
         }
         break;
@@ -250,12 +280,29 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 }
 
 export function handleWSOpen(ws: any): void {
-  console.log('WebSocket connection opened');
-  activeConnections.add(ws);
-  ws.send(JSON.stringify({
-    type: 'connected',
-    timestamp: new Date().toISOString()
-  }));
+  try {
+    console.log('[ws-handler] WebSocket connection opened');
+    console.log('[ws-handler] Active connections before add:', activeConnections.size);
+    activeConnections.add(ws);
+    console.log('[ws-handler] Active connections after add:', activeConnections.size);
+    
+    ws.send(JSON.stringify({
+      type: 'connected',
+      timestamp: new Date().toISOString()
+    }));
+    console.log('[ws-handler] Sent connected message to client');
+  } catch (error) {
+    console.error('[ws-handler] CRITICAL ERROR in handleWSOpen:', error);
+    // Try to notify client of error if possible
+    try {
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Internal Server Error during connection establishment'
+      }));
+    } catch (e) {
+      // Ignore send error
+    }
+  }
 }
 
 export function handleWSClose(ws: any): void {
@@ -477,13 +524,15 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
 }
 
 /**
- * KAREN WIDGET: Manejar conexión de widget público
+ * WEBCHAT GATEWAY: Manejar conexión de widget público
+ * Si se incluye accountId (visitante autenticado) → certifica B2 (identity link)
  */
 async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
-  const { alias, visitorId } = data;
+  const { alias, visitorToken, visitorId, accountId } = data;
+  const token = visitorToken || visitorId!;
 
   try {
-    // Buscar cuenta por alias
+    // Buscar cuenta (tenantId) por alias
     const { db, accounts } = await import('@fluxcore/db');
     const { eq, or } = await import('drizzle-orm');
 
@@ -501,16 +550,37 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
       return;
     }
 
-    // Por ahora, solo confirmar conexión
-    // En una implementación completa, crearíamos o buscaríamos una relationship
+    const wsData = ws.data || {};
+
+    // B2 — Si el visitante ya está autenticado, certificar el vínculo de identidad
+    if (accountId) {
+      const b2 = await chatCoreWebchatGateway.certifyConnectionEvent({
+        visitorToken: token,
+        realAccountId: accountId,
+        tenantId: account.id,
+        meta: {
+          ip: wsData.ip,
+          userAgent: wsData.userAgent,
+          requestId: wsData.requestId,
+        },
+      });
+
+      if (!b2.accepted) {
+        console.warn(`[Widget] B2 certification failed for visitor ${token}: ${b2.reason}`);
+      } else {
+        console.log(`[Widget] B2 identity link certified: visitor ${token} → account ${accountId} (signal #${b2.signalId})`);
+      }
+    }
+
     ws.send(JSON.stringify({
       type: 'widget:connected',
       accountId: account.id,
       accountName: account.displayName,
-      visitorId,
+      tenantId: account.id,
+      visitorToken: token,
     }));
 
-    console.log(`[Widget] Visitor ${visitorId} connected to ${alias}`);
+    console.log(`[Widget] Visitor ${token} connected to ${alias}${accountId ? ` (authenticated as ${accountId})` : ''}`);
 
   } catch (error: any) {
     ws.send(JSON.stringify({
@@ -557,13 +627,15 @@ async function processSuggestion(ws: any, params: {
 }
 
 /**
- * KAREN WIDGET: Manejar mensaje de widget público
+ * WEBCHAT GATEWAY: Manejar mensaje de widget público
+ * Certifica ingreso vía chatcore-webchat-gateway (RFC-0001 B1)
  */
 async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
-  const { alias, visitorId, content } = data;
+  const { alias, visitorToken, visitorId, content } = data;
+  const token = visitorToken || visitorId!; // backwards compat
 
   try {
-    // Buscar cuenta por alias
+    // Buscar cuenta (tenantId) por alias
     const { db, accounts } = await import('@fluxcore/db');
     const { eq, or } = await import('drizzle-orm');
 
@@ -581,21 +653,36 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
       return;
     }
 
-    // Log del mensaje (en implementación completa, persistiríamos y notificaríamos)
-    console.log(`[Widget] Message from ${visitorId} to ${alias}: ${content?.text}`);
+    const wsData = ws.data || {};
 
-    // Confirmar recepción
+    // Certificar ingreso vía webchat gateway (B1 — provisional identity)
+    const certification = await chatCoreWebchatGateway.certifyIngress({
+      visitorToken: token,
+      tenantId: account.id,
+      payload: content,
+      meta: {
+        ip: wsData.ip,
+        userAgent: wsData.userAgent,
+        clientTimestamp: new Date().toISOString(),
+        conversationId: data.conversationId,
+        requestId: wsData.requestId,
+      },
+    });
+
+    if (!certification.accepted) {
+      ws.send(JSON.stringify({
+        type: 'widget:error',
+        message: `Gateway rejected: ${certification.reason}`,
+      }));
+      return;
+    }
+
     ws.send(JSON.stringify({
       type: 'widget:message_received',
       messageId: `widget_${Date.now()}`,
+      signalId: certification.signalId,
       timestamp: new Date().toISOString(),
     }));
-
-    // TODO: En implementación completa:
-    // 1. Crear o buscar relationship anónima
-    // 2. Persistir mensaje en conversación
-    // 3. Notificar al owner de la cuenta
-    // 4. Generar respuesta de IA si está configurado
 
   } catch (error: any) {
     ws.send(JSON.stringify({

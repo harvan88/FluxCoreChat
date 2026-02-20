@@ -91,25 +91,49 @@ const app = new Elysia()
   .use(fluxiRoutes) // WES-180
   .listen(PORT);
 
-async function initializeMessageCore() {
+async function initializeFluxCore() {
   try {
+    console.log('[Bootstrap] 🚀 Starting FluxCore v8.2 Initialization...');
+
+    // 1. KERNEL (Physical Reality)
+    const { kernelDispatcher } = await import('./core/kernel-dispatcher');
+    kernelDispatcher.start();
+    console.log('[Bootstrap] 1/4 Kernel Dispatcher started');
+
+    // 2. PROJECTORS (Business Meaning)
+    const { startProjectors } = await import('./core/kernel/projector-runner');
+    startProjectors();
+    console.log('[Bootstrap] 2/4 Projectors started');
+
+    // 3. RUNTIME GATEWAY (Registry)
+    const { runtimeGateway } = await import('./services/fluxcore/runtime-gateway.service');
+    const { asistentesLocalRuntime } = await import('./services/fluxcore/runtimes/asistentes-local.runtime');
+
+    runtimeGateway.register(asistentesLocalRuntime);
+    // TODO H5: Register OpenAI Runtime
+    console.log('[Bootstrap] 3/4 Runtime Gateway initialized');
+
+    // 4. COGNITION WORKER (The Heartbeat)
+    const { cognitionWorker } = await import('./workers/cognition-worker');
+    cognitionWorker.start();
+    console.log('[Bootstrap] 4/4 Cognition Worker activated');
+
+    // ─── Legacy/Compatibility Layer ──────────────────────────────────────────
     const { wesScheduler } = await import('./services/wes-scheduler.service');
     await wesScheduler.init();
-
-    const { aiOrchestrator } = await import('./services/ai-orchestrator.service');
-    aiOrchestrator.init();
 
     const conversations = await conversationService.getAllConversations();
     conversations.forEach(conv => {
       messageCore.registerConversation(conv.id, conv.relationshipId);
     });
-    console.log(`[MessageCore] Registered ${conversations.length} conversations`);
+
+    console.log('[Bootstrap] ✨ FluxCore v8.2 fully operational');
   } catch (error) {
-    console.error('[MessageCore] Failed to register conversations:', error);
+    console.error('[Bootstrap] ❌ Critical failure during FluxCore initialization:', error);
   }
 }
 
-initializeMessageCore();
+initializeFluxCore();
 
 logger.info('FluxCore API started', {
   hostname: app.server?.hostname,

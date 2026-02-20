@@ -24,8 +24,6 @@ import { aiTraceService } from './ai-trace.service';
 import { buildContext as _buildContext } from './ai-context.service';
 import { aiRateLimiter } from './ai-rate-limiter.service';
 
-const CALL_TEMPLATE_REGEX = /CALL_TEMPLATE:([a-f0-9-]{36})(?:\s+({.*}))?/i;
-
 type AISuggestion = {
   id: string;
   conversationId: string;
@@ -237,9 +235,6 @@ class AIService {
   setWebSocketEmitter(emitter: (event: string, data: any) => void): void {
     this.wsEmitter = emitter;
   }
-
-  // [REMOVED] processMessage() — dead code, replaced by generateResponse() via ExecutionPlan
-  // [REMOVED] applyCreditsGating() — dead code, replaced by resolveExecutionPlan()
 
   /**
    * Obtener configuración de IA para una cuenta
@@ -455,78 +450,7 @@ class AIService {
     return _buildContext(accountId, conversationId);
   }
 
-  /**
-   * Parse |||SIGNALS||| block from AI response content and shorthand markers.
-   * Returns array of signal objects. Empty array if none found.
-   */
-  private parseSignals(content: string): Array<{ type: string; value: string; confidence?: number; metadata?: any }> {
-    if (!content || typeof content !== 'string') return [];
-    const signals: Array<{ type: string; value: string; confidence?: number; metadata?: any }> = [];
 
-    // Pattern 1: Shorthand CALL_TEMPLATE
-    const templateMatch = content.match(CALL_TEMPLATE_REGEX);
-    if (templateMatch) {
-      const templateId = templateMatch[1];
-      const varsStr = templateMatch[2];
-      let variables = {};
-      if (varsStr) {
-        try { variables = JSON.parse(varsStr); } catch { /* ignore */ }
-      }
-      signals.push({
-        type: 'template_call',
-        value: templateId,
-        confidence: 1.0,
-        metadata: { variables }
-      });
-    }
-
-    // Pattern 2: JSON Signals Block
-    const marker = '|||SIGNALS|||';
-    const firstIdx = content.indexOf(marker);
-    if (firstIdx !== -1) {
-      const secondIdx = content.indexOf(marker, firstIdx + marker.length);
-      if (secondIdx !== -1) {
-        const jsonStr = content.substring(firstIdx + marker.length, secondIdx).trim();
-        try {
-          const parsed = JSON.parse(jsonStr);
-          if (Array.isArray(parsed)) {
-            for (const s of parsed) {
-              if (typeof s.type === 'string' && typeof s.value === 'string') {
-                signals.push(s);
-              }
-            }
-          }
-        } catch { /* ignore */ }
-      }
-    }
-
-    return signals;
-  }
-
-  /**
-   * Strip signal markers from content before showing to user.
-   */
-  private stripSignalBlock(content: string): string {
-    if (!content || typeof content !== 'string') return content || '';
-    let cleaned = content;
-
-    // Remove Shorthand CALL_TEMPLATE
-    cleaned = cleaned.replace(CALL_TEMPLATE_REGEX, '').trim();
-
-    // Remove JSON Signals Block
-    const marker = '|||SIGNALS|||';
-    const firstIdx = cleaned.indexOf(marker);
-    if (firstIdx !== -1) {
-      const secondIdx = cleaned.indexOf(marker, firstIdx + marker.length);
-      if (secondIdx !== -1) {
-        const before = cleaned.substring(0, firstIdx);
-        const after = cleaned.substring(secondIdx + marker.length);
-        cleaned = (before + after);
-      }
-    }
-
-    return cleaned.replace(/\n{3,}/g, '\n\n').trim();
-  }
 
   /**
    * Emitir sugerencia por WebSocket
@@ -836,6 +760,51 @@ class AIService {
     }
   }
 
+  async complete(params: {
+    model: string;
+    systemPrompt: string;
+    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+    temperature?: number;
+    maxTokens?: number;
+    responseFormat?: 'text' | 'json';
+    providerOrder?: any[];
+  }): Promise<{
+    content: string;
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+  }> {
+    // 1. Determine provider from model or params
+    // Simple heuristic: if model starts with 'llama' or 'mixtral' -> Groq; otherwise OpenAI (gpt-*)
+    // TODO: Make this robust.
+    let provider: AIProviderId = 'openai';
+    if (params.model.includes('llama') || params.model.includes('mixtral')) {
+      provider = 'groq';
+    }
+
+    const keys = this.getProductKeysForProvider(provider);
+    if (keys.length === 0) {
+      throw new Error(`No API keys configured for provider ${provider}`);
+    }
+
+    const baseUrl = provider === 'groq' ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1';
+    const client = await this.getProbeClient(baseUrl);
+
+    const result = await client.createChatCompletion({
+      apiKey: keys[0].apiKey,
+      systemPrompt: params.systemPrompt,
+      messages: params.messages,
+      model: params.model,
+      maxTokens: params.maxTokens,
+      temperature: params.temperature,
+      responseFormat: params.responseFormat,
+      timeoutMs: 30000,
+    });
+
+    return {
+      content: result.content,
+      usage: result.usage,
+    };
+  }
+
   /**
    * Genera una respuesta de IA para una conversación.
    *
@@ -954,15 +923,19 @@ class AIService {
     }
 
     // ── 6. Execute: Local runtime (FluxCore extension) ──────────────────
-    if (!suggestion) {
-      console.log(`${tracePrefix} executing local runtime`, {
-        provider: plan.provider,
-        model: plan.model,
-        elapsedMs: Date.now() - start,
-      });
-
-      suggestion = await extension.generateSuggestion(event, context, recipientAccountId, requestConfig, wesContext, options.policyContext);
-    }
+    suggestion = await extension.generateResponse({
+      conversationId,
+      recipientAccountId,
+      lastMessageContent,
+      options: {
+        mode: modeForPrompt,
+        responseDelay: plan.responseDelay,
+        triggerMessageId: options.triggerMessageId,
+        policyContext: options.policyContext,
+        wes: wesContext,
+        context: context,
+      }
+    });
 
     // ── 7. Post-Processing Pipeline ──────────────────────────────────────
     if (suggestion) {
@@ -997,31 +970,7 @@ class AIService {
     suggestion.accountId = recipientAccountId;
     const rawContent = suggestion.content;
 
-    // 1. Parse & Execute Signals
-    const signals = this.parseSignals(rawContent);
-    if (signals.length > 0) {
-      suggestion.content = this.stripSignalBlock(rawContent);
 
-      // Execute critical signals if in auto mode
-      if (modeForPrompt === 'auto') {
-        for (const signal of signals) {
-          if (signal.type === 'template_call') {
-            try {
-              const { aiTemplateService } = await import('./ai-template.service');
-              await aiTemplateService.sendAuthorizedTemplate({
-                templateId: signal.value,
-                accountId: recipientAccountId,
-                conversationId,
-                variables: signal.metadata?.variables,
-              });
-              console.log(`[ai-service] Signal executed: template_call (${signal.value})`);
-            } catch (err: any) {
-              console.error(`[ai-service] Failed to execute template signal:`, err.message);
-            }
-          }
-        }
-      }
-    }
 
     // 2. Branding (Promo/Footer)
     if (suggestion.content) {
@@ -1056,17 +1005,6 @@ class AIService {
         toolsCalled: suggestion.toolUse?.toolsCalled,
         toolDetails: suggestion.toolUse?.toolDetails,
         attempts: suggestion.attempts,
-      })
-      .then((persistedTraceId) => {
-        if (signals.length > 0 && persistedTraceId) {
-          aiTraceService.persistSignals(
-            persistedTraceId,
-            recipientAccountId,
-            conversationId,
-            undefined,
-            signals,
-          );
-        }
       })
       .catch(() => { });
 

@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
-import { eq, and, desc, ne, sql } from 'drizzle-orm';
+import { eq, and, desc, ne, sql, or } from 'drizzle-orm';
 import * as openaiSync from '../openai-sync.service';
+import { coreEventBus } from '../../core/events';
 import {
     db,
     fluxcoreAssistants,
@@ -11,6 +12,7 @@ import {
     fluxcoreAssistantTools,
     fluxcoreInstructionVersions,
     accounts,
+    accountRuntimeConfig,
     type FluxcoreAssistant,
     type NewFluxcoreAssistant,
 } from '@fluxcore/db';
@@ -168,8 +170,12 @@ export async function ensureActiveAssistant(accountId: string): Promise<Fluxcore
                 responseFormat: 'text',
             })}'::jsonb`),
             timingConfig: sql.raw(`'${JSON.stringify({
+                mode: 'auto',
                 responseDelaySeconds: 2,
                 smartDelay: false,
+                tone: 'neutral',
+                language: 'es',
+                useEmojis: false,
             })}'::jsonb`),
             updatedAt: new Date(),
         } as any)
@@ -337,7 +343,7 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
         }
 
         // FLUJO LOCAL
-        const localInsertValues: Record<string, any> = { ...assistantData, externalId };
+        const localInsertValues = { ...assistantData, externalId } as typeof fluxcoreAssistants.$inferInsert;
         if (localInsertValues.modelConfig && typeof localInsertValues.modelConfig === 'object') {
             const escaped = JSON.stringify(localInsertValues.modelConfig).replace(/'/g, "''");
             localInsertValues.modelConfig = sql.raw(`'${escaped}'::jsonb`);
@@ -562,12 +568,14 @@ export async function updateAssistant(
             }
         }
 
+        coreEventBus.emit('assistant.config.updated', { accountId, assistantId: id, change: 'updated' });
         return assistant;
     });
 }
 
 export async function setActiveAssistant(id: string, accountId: string): Promise<FluxcoreAssistant | null> {
     return db.transaction(async (tx) => {
+        // Demote any other active assistant
         await tx
             .update(fluxcoreAssistants)
             .set({ status: 'draft', updatedAt: new Date() })
@@ -586,8 +594,76 @@ export async function setActiveAssistant(id: string, accountId: string): Promise
             ))
             .returning();
 
+        if (assistant) {
+            // Clear preferredAssistantId override so resolveAssistantId() uses status-based resolution.
+            // Without this, a stale hardcoded preferredAssistantId in accountRuntimeConfig would always
+            // win over the newly activated assistant (root cause of the "Daniel's account" bug).
+            const [existing] = await tx
+                .select({ config: accountRuntimeConfig.config })
+                .from(accountRuntimeConfig)
+                .where(eq(accountRuntimeConfig.accountId, accountId))
+                .limit(1);
+
+            if (existing) {
+                const newConfig = { ...(existing.config as any) };
+                delete newConfig.preferredAssistantId;
+                await tx
+                    .update(accountRuntimeConfig)
+                    .set({ config: newConfig, updatedAt: new Date() } as any)
+                    .where(eq(accountRuntimeConfig.accountId, accountId));
+            }
+
+            coreEventBus.emit('assistant.config.updated', { accountId, assistantId: id, change: 'activated' });
+        }
         return assistant || null;
     });
+}
+
+/** Returns the current mode of the active assistant for an account */
+export async function getActiveMode(accountId: string): Promise<{ mode: string; assistantId: string | null; assistantName: string | null }> {
+    const [assistant] = await db
+        .select({ id: fluxcoreAssistants.id, name: fluxcoreAssistants.name, timingConfig: fluxcoreAssistants.timingConfig })
+        .from(fluxcoreAssistants)
+        .where(and(
+            eq(fluxcoreAssistants.accountId, accountId),
+            or(eq(fluxcoreAssistants.status, 'active'), eq(fluxcoreAssistants.status, 'production'))
+        ))
+        .orderBy(desc(fluxcoreAssistants.updatedAt))
+        .limit(1);
+
+    const timingConfig = (assistant?.timingConfig ?? {}) as any;
+    return {
+        mode: timingConfig.mode ?? 'auto',
+        assistantId: assistant?.id ?? null,
+        assistantName: assistant?.name ?? null,
+    };
+}
+
+/** Updates the mode of the active assistant for an account */
+export async function setActiveMode(accountId: string, mode: 'auto' | 'suggest' | 'off'): Promise<{ mode: string; assistantId: string | null }> {
+    const [assistant] = await db
+        .select({ id: fluxcoreAssistants.id, timingConfig: fluxcoreAssistants.timingConfig })
+        .from(fluxcoreAssistants)
+        .where(and(
+            eq(fluxcoreAssistants.accountId, accountId),
+            or(eq(fluxcoreAssistants.status, 'active'), eq(fluxcoreAssistants.status, 'production'))
+        ))
+        .orderBy(desc(fluxcoreAssistants.updatedAt))
+        .limit(1);
+
+    if (!assistant) {
+        return { mode, assistantId: null };
+    }
+
+    const newTimingConfig = { ...((assistant.timingConfig ?? {}) as any), mode };
+    await db
+        .update(fluxcoreAssistants)
+        .set({ timingConfig: newTimingConfig, updatedAt: new Date() })
+        .where(eq(fluxcoreAssistants.id, assistant.id));
+
+    coreEventBus.emit('assistant.config.updated', { accountId, assistantId: assistant.id, change: 'updated' });
+    console.log(`[AssistantMode] ✅ mode=${mode} for account=${accountId.slice(0,7)} assistant=${assistant.id.slice(0,8)}`);
+    return { mode, assistantId: assistant.id };
 }
 
 export async function deleteAssistant(id: string, accountId: string): Promise<boolean> {

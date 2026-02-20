@@ -180,6 +180,10 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
         displayName: t.Optional(t.String({ minLength: 2, maxLength: 255 })),
         profile: t.Optional(t.Any()),
         privateContext: t.Optional(t.String({ maxLength: 5000 })),
+        allowAutomatedUse: t.Optional(t.Boolean()),
+        aiIncludeName: t.Optional(t.Boolean()),
+        aiIncludeBio: t.Optional(t.Boolean()),
+        aiIncludePrivateContext: t.Optional(t.Boolean()),
       }),
       detail: {
         tags: ['Accounts'],

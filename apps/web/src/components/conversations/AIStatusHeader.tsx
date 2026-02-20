@@ -1,25 +1,18 @@
 
 import clsx from 'clsx';
-import { useAutomation, type AutomationMode } from '../../hooks/useAutomation';
+import { useAssistantMode } from '../../hooks/fluxcore/useAssistantMode';
 import { useExtensions } from '../../hooks/useExtensions';
 
 export function AIStatusHeader({ accountId }: { accountId: string }) {
     const { installations } = useExtensions(accountId);
 
-    // Feature Flag por extensión
     const isFluxCoreEnabled = installations.some(
         (i) => i.extensionId === '@fluxcore/asistentes' && i.enabled
     );
 
-    const {
-        globalRule,
-        setRule,
-        isLoading: isAutomationLoading,
-    } = useAutomation(accountId);
+    const { mode, setMode, isLoading } = useAssistantMode(accountId);
 
     if (!isFluxCoreEnabled) return null;
-
-    const globalAIMode: AutomationMode = (globalRule?.mode as AutomationMode) || 'disabled';
 
     return (
         <div className="px-3 pb-3">
@@ -28,11 +21,11 @@ export function AIStatusHeader({ accountId }: { accountId: string }) {
                 <div className="mt-2 grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        onClick={() => void setRule('automatic')}
-                        disabled={isAutomationLoading}
+                        onClick={() => void setMode('auto')}
+                        disabled={isLoading}
                         className={clsx(
                             'rounded-lg px-3 py-2 text-xs border transition-colors',
-                            globalAIMode === 'automatic'
+                            mode === 'auto'
                                 ? 'bg-active border-strong text-primary'
                                 : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
                         )}
@@ -41,25 +34,24 @@ export function AIStatusHeader({ accountId }: { accountId: string }) {
                     </button>
                     <button
                         type="button"
-                        onClick={() => void setRule('supervised')}
-                        disabled
+                        onClick={() => void setMode('suggest')}
+                        disabled={isLoading}
                         className={clsx(
-                            'rounded-lg px-3 py-2 text-xs border transition-colors opacity-50 cursor-not-allowed',
-                            globalAIMode === 'supervised'
+                            'rounded-lg px-3 py-2 text-xs border transition-colors',
+                            mode === 'suggest'
                                 ? 'bg-active border-strong text-primary'
-                                : 'bg-surface border-subtle text-secondary'
+                                : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
                         )}
-                        title="Solo Premium"
                     >
                         Supervisado
                     </button>
                     <button
                         type="button"
-                        onClick={() => void setRule('disabled')}
-                        disabled={isAutomationLoading}
+                        onClick={() => void setMode('off')}
+                        disabled={isLoading}
                         className={clsx(
                             'rounded-lg px-3 py-2 text-xs border transition-colors',
-                            globalAIMode === 'disabled'
+                            mode === 'off'
                                 ? 'bg-active border-strong text-primary'
                                 : 'bg-surface border-subtle text-secondary hover:bg-hover hover:text-primary'
                         )}

@@ -3,11 +3,13 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { messageCore } from '../core/message-core';
 import { extensionHost } from '../services/extension-host.service';
 
+import { chatCoreGateway } from '../services/fluxcore/chatcore-gateway.service';
+
 export const messagesRoutes = new Elysia({ prefix: '/messages' })
   .use(authMiddleware)
   .post(
     '/',
-    async ({ user, body, set }) => {
+    async ({ user, body, set, request }) => {
       const typedBody: any = body as any;
       console.log(`[MessagesRoute] 📥 Incoming POST /messages request from user: ${user?.id}`, {
         hasText: !!typedBody.content?.text,
@@ -20,6 +22,29 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       }
 
       try {
+        // 🛡️ CHATCORE GATEWAY: Certify Ingress (Reality Adapter)
+        // Solo certificamos tráfico humano (no AI/System generado internamente)
+        if (typedBody.generatedBy !== 'ai' && typedBody.generatedBy !== 'system') {
+          const certification = await chatCoreGateway.certifyIngress({
+            accountId: typedBody.senderAccountId, // Business Context
+            userId: user.id,                      // Authenticated Actor
+            payload: typedBody.content,
+            meta: {
+              ip: request.headers.get('x-forwarded-for') || undefined,
+              userAgent: request.headers.get('user-agent') || undefined,
+              clientTimestamp: new Date().toISOString(),
+              conversationId: typedBody.conversationId,
+              requestId: request.headers.get('x-request-id') || undefined,
+            }
+          });
+
+          if (!certification.accepted) {
+            console.warn(`[MessagesRoute] 🛑 Gateway rejected ingress: ${certification.reason}`);
+            set.status = 400; // Rechazado por el Kernel (o error de gateway)
+            return { success: false, message: `Gateway rejected: ${certification.reason}` };
+          }
+        }
+
         // Asegurar que content es un objeto, no un string
         let content: any = typedBody.content;
         if (typeof content === 'string') {
