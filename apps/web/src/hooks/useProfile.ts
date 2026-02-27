@@ -19,6 +19,7 @@ export interface ProfileData {
   aiIncludePrivateContext: boolean;
   accountType: 'personal' | 'business';
   avatarUrl?: string;
+  avatarAssetId?: string;
   profile: {
     bio?: string;
     contact?: {
@@ -46,6 +47,15 @@ export interface UseProfileReturn {
   updatePrivateContext: (context: string) => Promise<boolean>;
   convertToBusiness: () => Promise<boolean>;
 }
+
+const stripAvatarUrl = (profile: Record<string, any> | null | undefined): Record<string, any> => {
+  if (!profile || typeof profile !== 'object') {
+    return {};
+  }
+
+  const { avatarUrl: _ignored, ...rest } = profile as Record<string, any>;
+  return rest;
+};
 
 export function useProfile(): UseProfileReturn {
   const { user } = useAuthStore();
@@ -142,12 +152,18 @@ export function useProfile(): UseProfileReturn {
         updateData.aiIncludePrivateContext = data.aiIncludePrivateContext;
       }
 
-      if (data.bio !== undefined || data.profile !== undefined || data.avatarUrl !== undefined) {
+      if (data.avatarAssetId !== undefined) {
+        updateData.avatarAssetId = data.avatarAssetId;
+      }
+
+      if (data.bio !== undefined || data.profile !== undefined) {
+        const existingProfile = stripAvatarUrl(account.profile as Record<string, any> | null | undefined);
+        const incomingProfile = data.profile ? stripAvatarUrl(data.profile as Record<string, any>) : {};
+
         updateData.profile = {
-          ...account.profile,
-          ...data.profile,
+          ...existingProfile,
+          ...incomingProfile,
           ...(data.bio !== undefined ? { bio: data.bio } : {}),
-          ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         };
       }
 
@@ -155,7 +171,8 @@ export function useProfile(): UseProfileReturn {
 
       if (response.success && response.data) {
         setAccount(response.data);
-        setProfile(prev => prev ? { ...prev, ...data } : null);
+        const { avatarUrl: _ignoredAvatarUrl, ...dataWithoutAvatarUrl } = data;
+        setProfile(prev => (prev ? { ...prev, ...dataWithoutAvatarUrl } : null));
         return true;
       } else {
         setError(response.error || 'Error al guardar');
