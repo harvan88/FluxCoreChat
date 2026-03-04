@@ -14,6 +14,11 @@ import type {
 } from '../types';
 import { WhatsAppClient, type WhatsAppConfig } from './client';
 
+// TODO(assets): Este adapter aún opera con URLs directas del canal.
+// En cuanto exista el flujo oficial de ingestión (descargar media desde Meta → subirlo a AssetGateway),
+// debemos generar assetId para cada media entrante y firmar assets al enviar. Mientras tanto, el core
+// mantiene la verdad de ingesta y entrega de assets.
+
 export interface WhatsAppWebhookPayload {
   object: 'whatsapp_business_account';
   entry: Array<{

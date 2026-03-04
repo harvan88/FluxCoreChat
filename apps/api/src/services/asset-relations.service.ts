@@ -620,3 +620,5 @@ export function getAssetRelationsService(): AssetRelationsService {
     }
     return instance;
 }
+
+export const assetRelationsService = getAssetRelationsService();

@@ -1,13 +1,11 @@
 import OpenAI from 'openai';
-import { db, messageEnrichments } from '@fluxcore/db';
+import { db, assetEnrichments } from '@fluxcore/db';
 import { audioConverterService } from './audio-converter.service';
 import { coreEventBus } from '../core/events';
 import { logTrace } from '../utils/file-logger';
 import { join } from 'path';
 import { assetRegistryService } from './asset-registry.service';
 import { getStorageAdapter } from './storage/storage-adapter.factory';
-
-import { messageService } from './message.service';
 
 export interface AudioEnrichmentResult {
     transcription: string;
@@ -43,6 +41,9 @@ class AudioEnrichmentService {
         mimeType: string;
     }): Promise<AudioEnrichmentResult> {
         const { messageId, accountId, audioUrl, assetId, mimeType } = params;
+        if (!assetId) {
+            throw new Error('[AudioEnrichment] assetId is required to store enrichment results');
+        }
         const startMsg = `[AudioEnrichment] 🎧 Starting enrichment for message ${messageId}`;
         console.log(startMsg);
         logTrace(startMsg, { audioUrl, assetId, mimeType });
@@ -60,67 +61,23 @@ class AudioEnrichmentService {
             console.log(transMsg);
             logTrace(transMsg);
 
-            // 3. ACTUALIZAR MENSAJE ORIGINAL (Burn-in)
-            // Esto permite que el buscador y el contexto de la IA vean el texto nativamente
-            const originalMessage = await messageService.getMessageById(messageId);
-            if (originalMessage) {
-                const currentContent = (originalMessage.content as any) || {};
-                const updatedContent = {
-                    ...currentContent,
-                    text: transcriptionResult.transcription,
-                    __fluxcore: {
-                        ...(currentContent.__fluxcore || {}),
-                        transcribed: true,
-                        transcriptionLanguage: transcriptionResult.language,
-                        processedAt: new Date()
-                    }
-                };
-
-                await messageService.updateMessage(messageId, { content: updatedContent });
-                const burnMsg = `[AudioEnrichment] 🔥 Burn-in complete for message ${messageId}`;
-                console.log(burnMsg);
-                logTrace(burnMsg);
-
-                // 4. RE-EMITIR AL CORE EVENT BUS
-                // Al re-emitir como core:message_received, el MessageDispatchService
-                // lo detectará como un mensaje de texto "nuevo" y generará la respuesta.
-                coreEventBus.emit('core:message_received', {
-                    envelope: {
-                        conversationId: originalMessage.conversationId,
-                        senderAccountId: originalMessage.senderAccountId,
-                        content: updatedContent,
-                        type: originalMessage.type as 'incoming' | 'outgoing' | 'system',
-                        targetAccountId: accountId,
-                        timestamp: originalMessage.createdAt
-                    },
-                    result: {
-                        success: true,
-                        messageId,
-                        automation: {
-                            shouldProcess: true,
-                            mode: 'automatic', // Forzamos automático para que la IA responda a la transcripción
-                            rule: null,
-                            reason: 'Audio transcribed and burned-in to message'
-                        }
-                    }
-                });
-            }
-
-            // 5. Guardar Enriquecimiento en DB (Legacy/Metadata)
-            await this.saveEnrichment(messageId, 'audio_transcription', {
+            // 3. Guardar enriquecimiento a nivel de asset (único por tipo)
+            await this.saveAssetEnrichment(assetId, 'audio_transcription', {
                 text: transcriptionResult.transcription,
                 language: transcriptionResult.language,
                 model: 'whisper-1',
-                processed: true,
-                processedAt: new Date()
+                processedAt: new Date(),
             });
 
-            // 6. Notificar al sistema
+            // 4. Notificar al sistema (para dashboards/logs)
             coreEventBus.emit('media:enriched', {
                 messageId,
                 accountId,
                 type: 'audio',
-                enrichment: transcriptionResult
+                enrichment: {
+                    ...transcriptionResult,
+                    assetId,
+                }
             });
 
             return {
@@ -236,13 +193,20 @@ class AudioEnrichmentService {
         };
     }
 
-    private async saveEnrichment(messageId: string, type: string, payload: any) {
-        await db.insert(messageEnrichments).values({
-            messageId,
-            extensionId: 'core:media-enrichment',
-            type,
-            payload
-        });
+    private async saveAssetEnrichment(assetId: string, type: string, payload: Record<string, unknown>) {
+        await db.insert(assetEnrichments)
+            .values({
+                assetId,
+                type,
+                payload,
+            })
+            .onConflictDoUpdate({
+                target: [assetEnrichments.assetId, assetEnrichments.type],
+                set: {
+                    payload,
+                    createdAt: new Date(),
+                },
+            });
     }
 }
 

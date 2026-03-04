@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { relationshipService } from '../services/relationship.service';
+import { presentAccountWithAvatar } from '../utils/account-avatar.presenter';
 
 export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
   .use(authMiddleware)
@@ -37,13 +38,14 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
               : rel.accountAId;
 
             const otherAccount = await accountService.getAccountById(otherAccountId);
-            const profile = otherAccount?.profile as { avatarUrl?: string } | null;
+            const presentedAccount = await presentAccountWithAvatar(otherAccount, { actorId: user.id });
 
             return {
               ...rel,
               contactName: otherAccount?.displayName || 'Desconocido',
               contactAccountId: otherAccountId,
-              contactAvatar: profile?.avatarUrl,
+              contactAvatar: presentedAccount.profile?.avatarUrl,
+              contactProfile: presentedAccount.profile ?? null,
             };
           })
         );
@@ -71,13 +73,14 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
             : rel.accountAId;
 
           const otherAccount = await accountService.getAccountById(otherAccountId);
-          const profile = otherAccount?.profile as { avatarUrl?: string } | null;
+          const presentedAccount = await presentAccountWithAvatar(otherAccount, { actorId: user.id });
 
           return {
             ...rel,
             contactName: otherAccount?.displayName || 'Desconocido',
             contactAccountId: otherAccountId,
-            contactAvatar: profile?.avatarUrl,
+            contactAvatar: presentedAccount.profile?.avatarUrl,
+            contactProfile: presentedAccount.profile ?? null,
           };
         })
       );
@@ -209,3 +212,5 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
       detail: { tags: ['Relationships'], summary: 'Delete relationship (contact)' },
     }
   );
+
+export default relationshipsRoutes;

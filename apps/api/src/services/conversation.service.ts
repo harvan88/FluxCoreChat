@@ -1,33 +1,80 @@
-import { db } from '@fluxcore/db';
-import { conversations, relationships, accounts, messages } from '@fluxcore/db';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { db, conversations, relationships, accounts } from '@fluxcore/db';
+import { eq, inArray, desc, and, or } from 'drizzle-orm';
+import { presentAccountWithAvatar } from '../utils/account-avatar.presenter';
+import { conversationParticipantService } from './conversation-participant.service';
 
 export class ConversationService {
-  async createConversation(relationshipId: string, channel: 'web' | 'whatsapp' | 'telegram', tx?: any) {
+  /**
+   * Creates or retrieves a conversation based on criteria.
+   * Supports both relationship-based (legacy/internal) and visitor-based (widget) conversations.
+   */
+  async ensureConversation(
+    criteria: {
+      relationshipId?: string;
+      visitorToken?: string;
+      channel: 'web' | 'whatsapp' | 'telegram';
+    },
+    tx?: any
+  ) {
     const client = tx || db;
-    // Check if conversation already exists for this relationship and channel
+    const { relationshipId, visitorToken, channel } = criteria;
+
+    if (relationshipId) {
+      const rel = await client.query.relationships.findFirst({
+        where: eq(relationships.id, relationshipId),
+      });
+      if (rel && rel.accountAId === rel.accountBId) {
+        throw new Error(`[ConversationService] Ontological violation: relationship ${relationshipId} links the same account`);
+      }
+    }
+
+    let whereClause;
+    if (relationshipId) {
+      whereClause = and(eq(conversations.relationshipId, relationshipId), eq(conversations.channel, channel));
+    } else if (visitorToken) {
+      whereClause = and(
+        eq(conversations.visitorToken, visitorToken),
+        eq(conversations.channel, channel)
+      );
+    } else {
+      throw new Error('Invalid conversation criteria: must provide relationshipId OR visitorToken');
+    }
+
+    // Check existing
     const existing = await client
       .select()
       .from(conversations)
-      .where(
-        and(eq(conversations.relationshipId, relationshipId), eq(conversations.channel, channel))
-      )
+      .where(whereClause)
       .limit(1);
 
     if (existing.length > 0) {
-      return existing[0];
+      const conversation = existing[0];
+      // Activar conversation_participants según diseño v1.3
+      await conversationParticipantService.ensureParticipantsForConversation(conversation.id, client);
+      return conversation;
     }
 
-    // Create new conversation
+    // Create new
     const [conversation] = await client
       .insert(conversations)
       .values({
         relationshipId,
+        visitorToken,
         channel,
       })
       .returning();
 
+    // Activar conversation_participants según diseño v1.3
+    await conversationParticipantService.ensureParticipantsForConversation(conversation.id);
+
     return conversation;
+  }
+
+  /**
+   * @deprecated Use ensureConversation instead
+   */
+  async createConversation(relationshipId: string, channel: 'web' | 'whatsapp' | 'telegram', tx?: any) {
+    return this.ensureConversation({ relationshipId, channel }, tx);
   }
 
   async getConversationById(conversationId: string) {
@@ -47,7 +94,7 @@ export class ConversationService {
       .where(eq(conversations.relationshipId, relationshipId));
   }
 
-  async getAllConversations(): Promise<Array<{ id: string; relationshipId: string }>> {
+  async getAllConversations(): Promise<Array<{ id: string; relationshipId: string | null }>> {
     return await db
       .select({ id: conversations.id, relationshipId: conversations.relationshipId })
       .from(conversations);
@@ -73,39 +120,29 @@ export class ConversationService {
     return updated;
   }
 
+  /**
+   * @deprecated - unread counts removed in ChatCore v1.3
+   * Use conversation_participants for read status tracking
+   */
   async incrementUnreadCount(conversationId: string, forAccountA: boolean) {
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    const field = forAccountA ? 'unreadCountA' : 'unreadCountB';
-    const currentCount = forAccountA ? conversation.unreadCountA : conversation.unreadCountB;
-
-    await db
-      .update(conversations)
-      .set({
-        [field]: currentCount + 1,
-      })
-      .where(eq(conversations.id, conversationId));
+    console.warn('[ConversationService] incrementUnreadCount deprecated - conversation participants should be used');
+    // No-op since columns were removed
   }
 
+  /**
+   * @deprecated - unread counts removed in ChatCore v1.3
+   * Use conversation_participants for read status tracking
+   */
   async resetUnreadCount(conversationId: string, forAccountA: boolean) {
-    const field = forAccountA ? 'unreadCountA' : 'unreadCountB';
-
-    await db
-      .update(conversations)
-      .set({
-        [field]: 0,
-      })
-      .where(eq(conversations.id, conversationId));
+    console.warn('[ConversationService] resetUnreadCount deprecated - conversation participants should be used');
+    // No-op since columns were removed
   }
 
   /**
    * MA-101: Get conversations for a SPECIFIC account (not all user accounts)
    * This ensures proper isolation between accounts owned by the same user
    */
-  async getConversationsByAccountId(accountId: string) {
+  async getConversationsByAccountId(accountId: string, ctx: { actorId: string }) {
     // 1. Get relationships where this specific account is involved
     const accountRelationships = await db
       .select()
@@ -127,7 +164,8 @@ export class ConversationService {
     const accountConversations = await db
       .select()
       .from(conversations)
-      .where(inArray(conversations.relationshipId, relationshipIds));
+      .where(inArray(conversations.relationshipId, relationshipIds))
+      .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt)); // 🔥 NUEVO ORDER BY
 
     // 3. Enrich with contact name (the OTHER account in the relationship)
     const enrichedConversations = await Promise.all(
@@ -146,13 +184,16 @@ export class ConversationService {
           .where(eq(accounts.id, otherAccountId))
           .limit(1);
 
-        const profile = otherAccount?.profile as { avatarUrl?: string } | null;
+        const presentedAccount = otherAccount
+          ? await presentAccountWithAvatar(otherAccount, { actorId: ctx.actorId })
+          : null;
 
         return {
           ...conv,
           contactName: otherAccount?.displayName || 'Desconocido',
           contactAccountId: otherAccountId,
-          contactAvatar: profile?.avatarUrl,
+          contactAvatar: presentedAccount?.profile?.avatarUrl,
+          contactProfile: presentedAccount?.profile ?? null,
         };
       })
     );
@@ -165,7 +206,7 @@ export class ConversationService {
    * Returns conversations enriched with contact name
    * @deprecated Use getConversationsByAccountId for proper account isolation
    */
-  async getConversationsByUserId(userId: string) {
+  async getConversationsByUserId(userId: string, ctx: { actorId: string }) {
     // 1. Get all accounts owned by this user
     const userAccounts = await db
       .select()
@@ -218,13 +259,16 @@ export class ConversationService {
           .where(eq(accounts.id, otherAccountId))
           .limit(1);
 
-        const profile = otherAccount?.profile as { avatarUrl?: string } | null;
+        const presentedAccount = otherAccount
+          ? await presentAccountWithAvatar(otherAccount, { actorId: ctx.actorId })
+          : null;
 
         return {
           ...conv,
           contactName: otherAccount?.displayName || 'Desconocido',
           contactAccountId: otherAccountId,
-          contactAvatar: profile?.avatarUrl,
+          contactAvatar: presentedAccount?.profile?.avatarUrl,
+          contactProfile: presentedAccount?.profile ?? null,
         };
       })
     );
@@ -243,6 +287,10 @@ export class ConversationService {
     }
 
     // Get the relationship to verify ownership
+    if (!conversation.relationshipId) {
+      throw new Error('Conversation is not linked to a relationship');
+    }
+
     const [rel] = await db
       .select()
       .from(relationships)

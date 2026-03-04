@@ -114,22 +114,6 @@ export function SettingsMenu() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* User info */}
-
-      <div className="p-4 border-b border-subtle">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-accent rounded-full flex items-center justify-center">
-            <span className="text-inverse font-bold text-lg">
-              {user?.name?.charAt(0) || 'U'}
-            </span>
-          </div>
-          <div>
-            <div className="text-primary font-semibold">{user?.name || 'Usuario'}</div>
-            <div className="text-sm text-secondary">{user?.email || 'email@example.com'}</div>
-          </div>
-        </div>
-      </div>
-
       {/* Menu items */}
       <SidebarNavList
         as="nav"

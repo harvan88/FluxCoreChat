@@ -1,5 +1,6 @@
 import { pgTable, uuid, varchar, timestamp, text, jsonb, boolean } from 'drizzle-orm/pg-core';
 import { users } from './users';
+import { assets } from './assets';
 
 export const accounts = pgTable('accounts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -19,6 +20,8 @@ export const accounts = pgTable('accounts', {
   aiIncludeName: boolean('ai_include_name').default(true).notNull(),
   aiIncludeBio: boolean('ai_include_bio').default(true).notNull(),
   aiIncludePrivateContext: boolean('ai_include_private_context').default(true).notNull(),
+  // Avatar asset reference (replaces profile.avatarUrl)
+  avatarAssetId: uuid('avatar_asset_id').references(() => assets.id, { onDelete: 'set null' }),
 });
 
 export type Account = typeof accounts.$inferSelect;

@@ -312,7 +312,10 @@ class AIOrchestratorService {
                             block: result.block,
                         },
                     };
-                    await messageCore.broadcastToConversation(envelope.conversationId, payload);
+                    // ✅ NO MÁS BROADCAST DUPLICADO
+                    // El broadcast ahora se maneja automáticamente por MessageCore.receive()
+                    console.log(`[AIOrchestrator] ✅ System message persisted - broadcast handled by MessageCore`);
+                    console.log(`📋 MENSAJE DE SISTEMA GUARDADO:`, payload);
 
                     // 2. Persistent message for the user if it's a credit or provider issue
                     if (result.block.reason === 'insufficient_credits' || result.block.reason === 'no_providers') {

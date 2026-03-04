@@ -3,10 +3,14 @@ export type MessageGeneratedBy = 'human' | 'ai';
 
 export interface MessageMedia {
   type: 'image' | 'video' | 'audio' | 'document';
-  url: string;
+  assetId: string;
+  name?: string;
   filename?: string;
   mimeType?: string;
-  size?: number;
+  sizeBytes?: number;
+  waveformData?: any;
+  previewUrl?: string;
+  scope?: string;
 }
 
 export interface MessageLocation {

@@ -28,14 +28,17 @@
 import { db, fluxcoreCognitionQueue } from '@fluxcore/db';
 import { sql, eq } from 'drizzle-orm';
 import { cognitiveDispatcher } from '../services/fluxcore/cognitive-dispatcher.service';
+import { coreEventBus } from '../core/events';
 
-const POLL_INTERVAL_MS = 1000;     // Check queue every second
 const MAX_ATTEMPTS = 3;            // Max retries before giving up
 const BACKOFF_BASE_MS = 2000;      // Base backoff between retries
+const SAFEGUARD_INTERVAL_MS = 30000; // Backup poll interval (30s)
 
 class CognitionWorkerService {
     private running = false;
-    private pollTimer: NodeJS.Timeout | null = null;
+    private isProcessing = false;
+    private safeguardInterval: NodeJS.Timeout | null = null;
+    private wakeupHandler: (() => void) | null = null;
 
     /**
      * Start the worker loop.
@@ -48,65 +51,79 @@ class CognitionWorkerService {
         }
 
         this.running = true;
-        console.log('[CognitionWorker] 🧠 Started — listening for expired turn windows...');
-        this.scheduleNextPoll();
+        console.log('[CognitionWorker] 🧠 Started — event-driven + 30s safeguard poll');
+
+        this.wakeupHandler = () => {
+            this.processReadyTurns().catch((err) => {
+                console.error('[CognitionWorker] Error en wakeup handler:', err);
+            });
+        };
+
+        coreEventBus.on('kernel:cognition:wakeup', this.wakeupHandler);
+
+        this.safeguardInterval = setInterval(() => {
+            this.processReadyTurns().catch(() => {});
+        }, SAFEGUARD_INTERVAL_MS);
     }
 
     /**
      * Gracefully stop the worker.
      */
     stop(): void {
+        if (!this.running) return;
         this.running = false;
-        if (this.pollTimer) {
-            clearTimeout(this.pollTimer);
-            this.pollTimer = null;
+
+        if (this.safeguardInterval) {
+            clearInterval(this.safeguardInterval);
+            this.safeguardInterval = null;
         }
+
+        if (this.wakeupHandler) {
+            coreEventBus.off('kernel:cognition:wakeup', this.wakeupHandler);
+            this.wakeupHandler = null;
+        }
+
         console.log('[CognitionWorker] 🛑 Stopped');
     }
 
     /**
-     * Schedule the next poll cycle.
+     * Process ready turns (idempotent).
      */
-    private scheduleNextPoll(): void {
-        if (!this.running) return;
-
-        this.pollTimer = setTimeout(async () => {
-            try {
-                await this.pollOnce();
-            } catch (error: any) {
-                console.error('[CognitionWorker] ❌ Poll cycle error:', error.message);
-            }
-            this.scheduleNextPoll();
-        }, POLL_INTERVAL_MS);
-    }
-
-    /**
-     * Single poll cycle: find ready turns and process them.
-     */
-    private async pollOnce(): Promise<void> {
-        // Use raw SQL for FOR UPDATE SKIP LOCKED — Drizzle doesn't support this natively
-        const readyEntries = await db.execute(sql`
-            SELECT id, conversation_id, account_id, last_signal_seq, attempts
-            FROM fluxcore_cognition_queue
-            WHERE processed_at IS NULL
-              AND turn_window_expires_at < NOW()
-              AND attempts < ${MAX_ATTEMPTS}
-            ORDER BY turn_window_expires_at ASC
-            LIMIT 5
-            FOR UPDATE SKIP LOCKED
-        `);
-
-        const rows = (readyEntries as any).rows ?? readyEntries;
-
-        if (!rows || rows.length === 0) {
+    private async processReadyTurns(): Promise<void> {
+        if (!this.running || this.isProcessing) {
             return;
         }
 
-        console.log(`[CognitionWorker] 🔔 Found ${rows.length} ready turn(s)`);
+        this.isProcessing = true;
+        // Use raw SQL for FOR UPDATE SKIP LOCKED — Drizzle doesn't support this natively
+        try {
+            const readyEntries = await db.execute(sql`
+                SELECT id, conversation_id, account_id, target_account_id, last_signal_seq, attempts
+                FROM fluxcore_cognition_queue
+                WHERE processed_at IS NULL
+                  AND turn_window_expires_at < NOW()
+                  AND attempts < ${MAX_ATTEMPTS}
+                ORDER BY turn_window_expires_at ASC
+                LIMIT 5
+                FOR UPDATE SKIP LOCKED
+            `);
 
-        // Process each turn sequentially (within this worker instance)
-        for (const row of rows) {
-            await this.processTurn(row);
+            const rows = (readyEntries as any).rows ?? readyEntries;
+
+            if (!rows || rows.length === 0) {
+                return;
+            }
+
+            console.log(`[CognitionWorker] � Found ${rows.length} ready turn(s)`);
+
+            // Process each turn sequentially (within this worker instance)
+            for (const row of rows) {
+                await this.processTurn(row);
+            }
+        } catch (error: any) {
+            console.error('[CognitionWorker] ❌ Turn processing error:', error.message);
+        } finally {
+            this.isProcessing = false;
         }
     }
 
@@ -117,6 +134,7 @@ class CognitionWorkerService {
         id: number | string;
         conversation_id: string;
         account_id: string;
+        target_account_id?: string | null;
         last_signal_seq: number | null;
         attempts: number;
     }): Promise<void> {
@@ -131,10 +149,13 @@ class CognitionWorkerService {
                 .where(eq(fluxcoreCognitionQueue.id, entryId));
 
             // 2. Delegate to CognitiveDispatcher
+            // account_id = quien RESPONDE (Patricia)
+            // target_account_id = a quien responder (Harold) — solo para routing posterior
             const result = await cognitiveDispatcher.dispatch({
                 turnId: entryId,
                 conversationId: entry.conversation_id,
                 accountId: entry.account_id,
+                targetAccountId: entry.target_account_id,
                 lastSignalSeq: entry.last_signal_seq,
             });
 

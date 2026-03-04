@@ -153,7 +153,42 @@ export class AssetPolicyService {
 
         const expiresAt = new Date(Date.now() + evaluation.ttlSeconds * 1000);
 
-        console.log(`${DEBUG_PREFIX} URL signed: assetId=${assetId}, ttl=${evaluation.ttlSeconds}s, context=${context.action}:${context.channel}`);
+        console.log(`${DEBUG_PREFIX} URL signed: assetId=${assetId}, ttl=${evaluation.ttlSeconds}s, context=${context.action}:${context.channel || 'unknown'}`);
+        
+        // 🔑 INTEGRACIÓN CON WORLDEFINER: Validar e inferir channel completo
+        if (!context.channel) {
+            console.warn(`${DEBUG_PREFIX} ⚠️ Unknown channel in context - attempting to infer from WorldDefiner`);
+            
+            // 🔑 USAR WORLDEFINER PARA INFERIR CHANNEL
+            try {
+                const { ChatCoreWorldDefiner } = await import('../core/chatcore-world-definer');
+                
+                // Construir contexto para WorldDefiner desde el contexto del asset
+                const worldContext = ChatCoreWorldDefiner.defineWorld({
+                    headers: {},
+                    meta: {
+                        // Intentar extraer información del contexto del asset
+                        accountId: (context as any).accountId,
+                        action: context.action
+                    },
+                    userAgent: undefined,
+                    origin: 'asset-policy-context',
+                    requestId: `asset-${assetId}`,
+                    accountId: (context as any).accountId,
+                    userId: (context as any).userId
+                });
+                
+                console.log(`${DEBUG_PREFIX} 🌍 Inferred channel from WorldDefiner: ${worldContext.channel}`);
+                // Actualizar el contexto con el channel inferido
+                (context as any).channel = worldContext.channel;
+                
+            } catch (error) {
+                console.warn(`${DEBUG_PREFIX} ⚠️ Could not infer channel with WorldDefiner:`, error);
+                (context as any).channel = 'unknown';
+            }
+        }
+        
+        console.log(`${DEBUG_PREFIX} ✅ Final channel: ${(context as any).channel}`);
 
         return {
             url,

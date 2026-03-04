@@ -127,14 +127,14 @@ export async function resolveExecutionPlan(
     return blocked(accountId, conversationId, 'ai_disabled', 'La extensión de IA está deshabilitada para esta cuenta.', undefined, composition);
   }
 
-  const mode = (cfg.mode as 'suggest' | 'auto' | 'off') || 'suggest';
+  const tc = (composition.assistant.timingConfig as Record<string, any>) || {};
+  const mode = (tc.mode as 'suggest' | 'auto' | 'off') || 'auto';
   if (mode === 'off') {
     return blocked(accountId, conversationId, 'mode_off', 'El modo de IA está desactivado.', undefined, composition);
   }
 
   // 3. Extract assistant model config
   const mc = (composition.assistant.modelConfig as Record<string, any>) || {};
-  const tc = (composition.assistant.timingConfig as Record<string, any>) || {};
 
   const assistantProvider: AIProviderId | null =
     mc.provider === 'groq' || mc.provider === 'openai' ? (mc.provider as AIProviderId) : null;

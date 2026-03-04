@@ -26,17 +26,55 @@ adapterManager.initialize().catch(() => {
 });
 
 
-import { realityAdapterService } from '../services/fluxcore/reality-adapter.service';
+import { messageCore } from '../core/message-core';
 
 // Handler para mensajes entrantes
 adapterManager.onMessage(async (message: NormalizedMessage, channel: string) => {
-  console.log(`[adapters] Received ${channel} message from ${message.from.phone}. Certifying...`);
+  console.log(`[adapters] Received ${channel} message from ${message.from.phone}. Processing via ChatCore...`);
+
+  // 🔑 VALIDACIÓN DE CANAL CON WORLD DEFINER
+  if (!channel) {
+    console.warn(`[adapters] ⚠️ No channel provided - attempting to infer from message metadata`);
+    
+    // 🔑 USAR WORLDEFINER PARA INFERIR CANAL
+    try {
+      const { ChatCoreWorldDefiner } = await import('../core/chatcore-world-definer');
+      
+      // Construir contexto para WorldDefiner desde el mensaje
+      const worldContext = ChatCoreWorldDefiner.defineWorld({
+        headers: message.meta?.headers || {},
+        meta: {
+          ...message.meta,
+          externalId: message.externalId,
+          driverId: message.from?.id
+        },
+        userAgent: message.meta?.userAgent,
+        origin: 'adapter-message',
+        requestId: message.meta?.requestId,
+        accountId: undefined, // Los mensajes de adaptadores pueden no tener accountId aún
+        userId: message.from?.id
+      });
+      
+      channel = worldContext.channel;
+      console.log(`[adapters] 🌍 Inferred channel from WorldDefiner: ${channel}`);
+      
+    } catch (error) {
+      console.warn(`[adapters] ⚠️ Could not infer channel with WorldDefiner:`, error);
+      channel = 'unknown';
+    }
+  }
+  
+  if (channel === 'unknown') {
+    console.warn(`[adapters] ⚠️ Unknown channel '${channel}' - message will be processed with default policies`);
+  } else {
+    console.log(`[adapters] ✅ Channel resolved: ${channel}`);
+  }
 
   try {
-    // RFC-0001: Ingest into Sovereign Kernel
-    await realityAdapterService.processExternalObservation(message);
+    // RFC-0001: Ingest through ChatCore (new correct flow)
+    await messageCore.receiveFromAdapter(message, channel);
   } catch (error) {
-    console.error(`[adapters] 💥 Kernel Certification Failed:`, error);
+    console.error(`[adapters] 💥 ChatCore Processing Failed:`, error);
   }
 });
 
@@ -93,17 +131,9 @@ export const adaptersRoutes = new Elysia({ prefix: '/adapters' })
         const statusUpdate = payload.entry?.[0]?.changes?.[0]?.value?.statuses?.[0]; // WhatsApp suele mandar batches, aquí tomamos el primero por simplicidad MVP
 
         if (statusUpdate) {
-          const statusEvent: NormalizedStatusEvent = {
-            channel: 'whatsapp',
-            messageId: statusUpdate.id,
-            externalId: statusUpdate.id + '_' + statusUpdate.status, // Composite ID
-            status: statusUpdate.status,
-            timestamp: new Date(parseInt(statusUpdate.timestamp) * 1000),
-            recipientId: statusUpdate.recipient_id,
-            raw: statusUpdate
-          };
-
-          await realityAdapterService.processStatusObservation(statusEvent);
+          console.log(`[whatsapp-webhook] Status update received (temporarily disabled): ${statusUpdate.status}`);
+          // TODO: Migrar status updates al nuevo flujo ChatCore → Kernel
+          // await realityAdapterService.processStatusObservation(statusEvent);
         }
       }
 

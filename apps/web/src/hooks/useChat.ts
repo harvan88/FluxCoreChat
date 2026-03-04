@@ -27,25 +27,39 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadedRef = useRef(false);
+  const pendingSignaturesRef = useRef<Map<string, string>>(new Map());
 
   const getAuthToken = () => localStorage.getItem('fluxcore_token');
 
-  // Cargar mensajes desde API
-  const loadMessages = useCallback(async () => {
-    if (!conversationId) return;
+  const buildSignature = useCallback((payload: {
+    senderAccountId: string;
+    content?: { text?: string } | null;
+    replyToId?: string | null;
+    generatedBy?: Message['generatedBy'];
+  }) => {
+    const text = (payload.content?.text ?? '').trim(); // 🔥 CORRECCIÓN: Usar texto normalizado
+    const replyTo = payload.replyToId ?? '';
+    const generatedBy = payload.generatedBy ?? 'human';
+    return `${payload.senderAccountId}:${text}:${replyTo}:${generatedBy}`;
+  }, []);
 
-    const token = getAuthToken();
-    if (!token) {
-      // Sin token, no intentar cargar
-      setMessages([]);
-      return;
-    }
+  // Cargar mensajes
+  const loadMessages = useCallback(async () => {
+    if (!conversationId || !accountId) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/conversations/${conversationId}/messages`, {
+      const token = getAuthToken();
+      if (!token) {
+        setError('Sesión expirada. Por favor, inicia sesión de nuevo.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Cargar últimos 50 mensajes
+      const response = await fetch(`${API_URL}/conversations/${conversationId}/messages?limit=50`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -77,7 +91,9 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         id: msg.id,
         conversationId: msg.conversationId,
         senderAccountId: msg.senderAccountId,
-        content: typeof msg.content === 'string' ? { text: msg.content } : msg.content,
+        content: typeof msg.content === 'string' ? 
+          (msg.content.startsWith('{') ? JSON.parse(msg.content) : { text: msg.content }) : 
+          msg.content,
         type: msg.senderAccountId === accountId ? 'outgoing' : 'incoming',
         generatedBy: msg.generatedBy || 'human',
         status: msg.status || 'synced',
@@ -109,21 +125,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
     setIsSending(true);
     setError(null);
 
-    // Crear mensaje local optimista
-    const tempId = `temp-${Date.now()}`;
-    const optimisticMessage: Message = {
-      id: tempId,
-      conversationId,
-      senderAccountId: accountId,
-      content: params.content,
-      type: 'outgoing',
-      generatedBy: params.generatedBy || 'human',
-      status: 'pending_backend',
-      replyToId: params.replyToId,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Verificar token ANTES de añadir mensaje optimista
+    // Verificar token antes de enviar
     const token = getAuthToken();
     if (!token) {
       // En producción, no permitir envío sin token
@@ -134,26 +136,31 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
       }
     }
 
-    // Añadir mensaje optimista
-    setMessages(prev => [...prev, optimisticMessage]);
-
     try {
+      const tempId = `temp-${Date.now()}`;
+      const optimisticMessage: Message = {
+        id: tempId,
+        conversationId,
+        senderAccountId: accountId,
+        content: params.content,
+        type: 'outgoing',
+        generatedBy: params.generatedBy || 'human',
+        status: 'pending_backend',
+        replyToId: params.replyToId,
+        createdAt: new Date().toISOString(),
+      };
+
+      setMessages(prev => [...prev, optimisticMessage]);
+      const signature = buildSignature(optimisticMessage);
+      pendingSignaturesRef.current.set(signature, tempId);
+
       // Modo demo sin token: simular envío local
       if (!token && import.meta.env.DEV) {
-        // Simular delay de red
+        // Simular delay de red (solo entorno dev sin token)
         await new Promise(resolve => setTimeout(resolve, 300));
-        
-        const savedMessage: Message = {
-          ...optimisticMessage,
-          id: `msg-${Date.now()}`,
-          status: 'synced',
-        };
-        
-        setMessages(prev => prev.map(m => 
-          m.id === tempId ? savedMessage : m
-        ));
-        
-        return savedMessage;
+        pendingSignaturesRef.current.delete(signature);
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: `msg-${Date.now()}`, status: 'synced' } : m));
+        return optimisticMessage;
       }
 
       const response = await fetch(`${API_URL}/messages`, {
@@ -164,59 +171,27 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         },
         body: JSON.stringify({
           conversationId,
+          // � RESTORED: Enviar senderAccountId explícitamente (cuenta seleccionada en UI)
           senderAccountId: accountId,
           content: params.content,
           type: 'outgoing',
           generatedBy: params.generatedBy || 'human',
           replyToId: params.replyToId,
+          // 🆕 Idempotency key para prevenir duplicados
+          requestId: `msg-${Date.now()}-${accountId}`,
         }),
       });
 
       if (!response.ok) {
+        pendingSignaturesRef.current.delete(signature);
+        setMessages(prev => prev.filter(m => m.id !== tempId));
         throw new Error('Failed to send message');
       }
 
-      const data = await response.json();
-      const savedMessage: Message = {
-        id: data.id || data.data?.id,
-        conversationId,
-        senderAccountId: accountId,
-        content: params.content,
-        type: 'outgoing',
-        generatedBy: params.generatedBy || 'human',
-        status: 'synced',
-        replyToId: params.replyToId,
-        createdAt: data.createdAt || new Date().toISOString(),
-      };
-
-      // Reemplazar mensaje temporal con el real
-      setMessages(prev => prev.map(m => 
-        m.id === tempId ? savedMessage : m
-      ));
-
-      return savedMessage;
+      // El backend ya certificó el mensaje y FluxCore lo emitirá por WebSocket.
+      return optimisticMessage;
     } catch (err: any) {
-      // En modo demo, simular éxito local
-      if (import.meta.env.DEV) {
-        const savedMessage: Message = {
-          ...optimisticMessage,
-          id: `msg-${Date.now()}`,
-          status: 'synced',
-        };
-        
-        setMessages(prev => prev.map(m => 
-          m.id === tempId ? savedMessage : m
-        ));
-        
-        return savedMessage;
-      }
-
       setError(err.message);
-      
-      // Marcar mensaje como fallido
-      setMessages(prev => prev.map(m =>
-        m.id === tempId ? { ...m, status: 'failed' as const } : m
-      ));
 
       return null;
     } finally {
@@ -226,15 +201,23 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
 
   // Añadir mensaje recibido (desde WebSocket)
   const addReceivedMessage = useCallback((message: Message) => {
+    const signature = buildSignature(message);
+    const pendingId = pendingSignaturesRef.current.get(signature);
+
     setMessages(prev => {
-      // Evitar duplicados
-      if (prev.some(m => m.id === message.id)) {
-        return prev;
+      const withoutPending = pendingId ? prev.filter(m => m.id !== pendingId) : prev;
+      if (withoutPending.some(m => m.id === message.id)) {
+        return withoutPending;
       }
-      return [...prev, message];
+      return [...withoutPending, message];
     });
+
+    if (pendingId) {
+      pendingSignaturesRef.current.delete(signature);
+    }
+
     onNewMessage?.(message);
-  }, [onNewMessage]);
+  }, [buildSignature, onNewMessage]);
 
   // Actualizar estado de mensaje
   const updateMessageStatus = useCallback((messageId: string, status: Message['status']) => {
@@ -320,6 +303,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
   useEffect(() => {
     loadedRef.current = false;
     setMessages([]);
+    pendingSignaturesRef.current.clear();
   }, [conversationId]);
 
   return {

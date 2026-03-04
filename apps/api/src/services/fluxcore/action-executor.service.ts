@@ -18,9 +18,10 @@
  * Canon Invariant: "If a message goes out, it MUST be in ChatCore's `messages` table."
  */
 
-import { db, messages, conversations, fluxcoreCognitionQueue } from '@fluxcore/db';
+import { db, messages, conversations, relationships, fluxcoreCognitionQueue, fluxcoreActionAudit } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
 import type { ExecutionAction, ProposeWorkAction, OpenWorkAction, AdvanceWorkStateAction, RequestSlotAction, CloseWorkAction } from '../../core/fluxcore-types';
+import type { FluxPolicyContext } from '@fluxcore/db';
 import { coreEventBus } from '../../core/events';
 import { workEngineService } from '../work-engine.service';
 import { messageCore } from '../../core/message-core';
@@ -40,41 +41,72 @@ class ActionExecutorService {
      */
     async execute(
         actions: ExecutionAction[],
-        context: { turnId: number; conversationId: string; accountId: string; authorizedTemplates: string[] }
+        params: {
+            turnId: number;
+            conversationId: string;
+            accountId: string;
+            targetAccountId?: string;
+            runtimeId: string;
+            policyContext?: FluxPolicyContext;
+        }
     ): Promise<ActionExecutionResult[]> {
         const results: ActionExecutionResult[] = [];
+        const { turnId, conversationId, accountId, targetAccountId, runtimeId, policyContext } = params;
 
         for (const action of actions) {
+            let status: 'executed' | 'rejected' | 'failed' = 'executed';
+            let rejectionReason: string | undefined;
+
             try {
                 // 1. Authorization Check (PRINCIPLE: Sovereignty via PolicyContext)
-                if (action.type === 'send_template') {
-                    const isAuth = context.authorizedTemplates.includes(action.templateId);
+                if (action.type === 'send_template' && policyContext) {
+                    const isAuth = policyContext.authorizedTemplates.includes(action.templateId);
                     if (!isAuth) {
-                        throw new Error(`Template ${action.templateId} is not authorized for this account`);
+                        status = 'rejected';
+                        rejectionReason = `Template ${action.templateId} is not authorized for this account`;
+                        throw new Error(rejectionReason);
                     }
                 }
 
-                // TODO: Add tool authorization check once H8 is implemented
-                // if (action.type === 'call_tool') { ... }
+                // H8: Tool authorization check
+                // if (action.type === 'call_tool' && policyContext) { ... }
 
-                const result = await this.executeOne(action, context);
+                const result = await this.executeOne(action, { conversationId, accountId, targetAccountId });
                 results.push(result);
+
+                if (!result.success) {
+                    status = 'failed';
+                    rejectionReason = result.error;
+                }
             } catch (error: any) {
-                console.error(`[ActionExecutor] ❌ Unhandled error executing ${action.type}:`, error.message);
+                console.error(`[ActionExecutor] 🔥 Unhandled error executing ${action.type}:`, error.message);
+                status = status === 'rejected' ? 'rejected' : 'failed';
+                rejectionReason = rejectionReason || error.message;
                 results.push({
                     action,
                     success: false,
                     error: error.message,
                 });
+            } finally {
+                // PASO 4: Registrar auditoría
+                await db.insert(fluxcoreActionAudit).values({
+                    conversationId,
+                    accountId,
+                    runtimeId,
+                    actionType: action.type,
+                    actionPayload: action as any,
+                    status,
+                    rejectionReason,
+                }).catch((e) => console.error('[ActionExecutor] Audit failed:', e.message));
             }
         }
 
         // 2. MARK AS PROCESSED (PRINCIPLE: Mediated Execution closes the loop)
-        await this.closeTurn(context.turnId, context.accountId);
+        await this.closeTurn(turnId, accountId);
 
         const succeeded = results.filter(r => r.success).length;
         const failed = results.filter(r => !r.success).length;
-        console.log(`[ActionExecutor] Batch complete for turn ${context.turnId}: ${succeeded} succeeded, ${failed} failed`);
+        console.log(`[ActionExecutor] Batch complete for turn ${turnId}: ${succeeded} succeeded, ${failed} failed`);
 
         return results;
     }
@@ -99,7 +131,7 @@ class ActionExecutorService {
      */
     private async executeOne(
         action: ExecutionAction,
-        context: { conversationId: string; accountId: string }
+        context: { conversationId: string; accountId: string; targetAccountId?: string }
     ): Promise<ActionExecutionResult> {
         switch (action.type) {
             case 'send_message':
@@ -146,17 +178,36 @@ class ActionExecutorService {
      */
     private async executeSendMessage(
         action: { type: 'send_message'; content: string; conversationId: string },
-        context: { accountId: string }
+        context: { accountId: string; targetAccountId?: string }
     ): Promise<ActionExecutionResult> {
         try {
+            // SEMÁNTICA CORRECTA POST-FIX:
+            // context.accountId = quien RESPONDE (Patricia - tiene la IA activa)
+            // context.targetAccountId = a quien responder (Harold - recibe la respuesta)
+            
             // 1. Persist via ChatCore (Body writes to its own table)
+            console.log(`[ActionExecutor] 🤖 IA GENERANDO RESPUESTA:`);
+            console.log(`📋 CONTEXTO DE RESPUESTA:`);
+            console.log(`  - Account ID (quien responde): ${context.accountId}`);
+            console.log(`  - Target Account (para quien): ${context.targetAccountId}`);
+            console.log(`  - Conversation ID: ${action.conversationId}`);
+            console.log(`  - Content: "${action.content}"`);
+            
             const [msg] = await db.insert(messages).values({
                 conversationId: action.conversationId,
-                senderAccountId: context.accountId,
+                senderAccountId: context.accountId, // ✅ AI envía DESDE quien responde (Patricia)
                 content: { text: action.content },
                 type: 'outgoing',
                 generatedBy: 'ai',
                 status: 'pending',
+                metadata: {
+                    // 🔑 AGREGAR METADATA DE LA VERDAD DEL MUNDO
+                    originalChannel: 'unknown', // 🔴 DEBERÍA SER EL CANAL ORIGINAL
+                    originalMessageId: 'unknown', // 🔴 DEBERÍA SER EL MENSAJE ORIGINAL
+                    responseTimestamp: new Date().toISOString(),
+                    aiModel: 'unknown', // 🔴 DEBERÍA SER EL MODELO DE IA
+                    mode: 'unknown' // 🔴 DEBERÍA SER EL MODO DE IA
+                }
             }).returning();
 
             // 2. Update conversation metadata
@@ -166,33 +217,49 @@ class ActionExecutorService {
                 updatedAt: new Date(),
             }).where(eq(conversations.id, action.conversationId));
 
-            // 3. Emit event for WebSocket distribution (ChatCore responsibility)
+            // 2. Emit event for WebSocket distribution (ChatCore responsibility)
+            console.log(`[ActionExecutor] 📤 EMITIENDO EVENTO A MessageDispatch:`);
+            console.log(`📋 ENVELOPE PARA MessageDispatch:`);
+            console.log(`  - Conversation ID: ${action.conversationId}`);
+            console.log(`  - Sender Account (quien envía): ${context.accountId}`);
+            console.log(`  - Target Account (para quien): ${context.targetAccountId}`);
+            console.log(`  - Content: "${action.content}"`);
+            console.log(`  - Generated By: ai`);
+            
             coreEventBus.emit('core:message_received', {
                 envelope: {
                     conversationId: action.conversationId,
-                    accountId: context.accountId,
+                    senderAccountId: context.accountId,
+                    targetAccountId: context.targetAccountId, // 🔑 Usar targetAccountId para el receptor
                     content: { text: action.content },
                     type: 'outgoing',
                     generatedBy: 'ai',
-                } as any,
-                result: {
-                    messageId: msg.id,
-                    conversationId: action.conversationId,
-                } as any,
-            });
-
-            // 4. Push via WebSocket so the UI receives it in real-time
-            await messageCore.broadcastToConversation(action.conversationId, {
-                type: 'message:new',
-                data: {
-                    ...msg,
-                    conversationId: action.conversationId,
-                    senderAccountId: context.accountId,
-                    content: { text: action.content },
+                    meta: {
+                        // ✅ META para MessageDispatch
+                        targetAccountId: context.targetAccountId, // 🔑 Para quien va el mensaje
+                        // 🔑 AGREGAR MÁS META DE LA VERDAD DEL MUNDO
+                        originalChannel: 'unknown', // 🔴 DEBERÍA SER EL CANAL ORIGINAL
+                        originalMessageId: 'unknown', // 🔴 DEBERÍA SER EL MENSAJE ORIGINAL
+                        responseTimestamp: new Date().toISOString(),
+                        aiModel: 'unknown', // 🔴 DEBERÍA SER EL MODELO DE IA
+                        mode: 'unknown' // 🔴 DEBERÍA SER EL MODO DE IA
+                    }
                 },
+                result: { success: true, messageId: msg.id }
             });
 
-            console.log(`[FluxPipeline] ✅ SENT  conv=${action.conversationId.slice(0,7)} msgId=${msg.id.slice(0,7)} by=ai`);
+            // 3. ✅ NO MÁS BROADCAST DUPLICADO
+            // El broadcast ahora se maneja automáticamente por MessageCore.receive()
+            // Este código era un remanente del refactor anterior
+            console.log(`[ActionExecutor] ✅ Message persisted - broadcast handled by MessageCore`);
+            console.log(`📋 MENSAJE GUARDADO:`);
+            console.log(`  - Message ID: ${msg.id}`);
+            console.log(`  - Conversation ID: ${action.conversationId}`);
+            console.log(`  - Content: "${action.content}"`);
+            console.log(`  - Sender: ${context.accountId}`);
+            console.log(`  - Target: ${context.targetAccountId}`);
+
+            console.log(`[FluxPipeline] ✅ SENT  conv=${action.conversationId.slice(0, 7)} msgId=${msg.id.slice(0, 7)} by=ai`);
 
             return {
                 action,
@@ -397,7 +464,7 @@ class ActionExecutorService {
         try {
             const terminalState = action.resolution === 'completed' ? 'COMPLETED'
                 : action.resolution === 'cancelled' ? 'CANCELLED'
-                : 'FAILED';
+                    : 'FAILED';
 
             const delta = [{ op: 'transition' as const, toState: terminalState }];
             await workEngineService.commitDelta(action.workId, delta, 'system', `close-${Date.now()}`);

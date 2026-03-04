@@ -11,7 +11,24 @@ import { assetPolicyService } from '../services/asset-policy.service';
 import { assetAuditService } from '../services/asset-audit.service';
 import { assetDeletionService } from '../services/asset-deletion.service';
 
+// Kernel context type
+interface KernelContext {
+  accountId?: string;
+  actorId?: string;
+}
+
 const DEBUG_PREFIX = '[AssetsRoutes]';
+
+function normalizeHeaderValue(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function isUuid(value: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(value);
+}
 
 export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
     // ════════════════════════════════════════════════════════════════════════
@@ -22,24 +39,39 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
      * POST /api/assets/upload-session
      * Crear sesión de upload
      */
-    .post('/upload-session', async ({ body, query, set }) => {
+    .post('/upload-session', async ({ body, query, set, kernelContext }: { body: any; query: any; set: any; kernelContext: KernelContext }) => {
         try {
             console.log(`${DEBUG_PREFIX} POST /upload-session`);
-
-            const accountId = query.accountId || body.accountId;
+            const accountId =
+                normalizeHeaderValue(kernelContext.accountId) ??
+                normalizeHeaderValue(query.accountId) ??
+                normalizeHeaderValue(body.accountId);
             if (!accountId) {
                 set.status = 400;
-                return { success: false, error: 'accountId is required' };
+                return { success: false, error: 'accountId is required (header x-account-id or body/query accountId)' };
             }
+
+            const uploadedBy =
+                normalizeHeaderValue(kernelContext.actorId) ??
+                normalizeHeaderValue(body.uploadedBy);
+
+            if (uploadedBy && !isUuid(uploadedBy)) {
+                set.status = 400;
+                return {
+                    success: false,
+                    error: `Invalid uploadedBy: "${uploadedBy}". Expected a valid UUID or null. This usually happens when a client sends "system" instead of the actual user ID.`,
+                };
+            }
+            const totalBytes = body.totalBytes ?? body.sizeBytes;
 
             const session = await assetGatewayService.createUploadSession({
                 accountId,
-                uploadedBy: body.uploadedBy,
+                uploadedBy,
                 maxSizeBytes: body.maxSizeBytes,
                 allowedMimeTypes: body.allowedMimeTypes,
                 fileName: body.fileName,
                 mimeType: body.mimeType,
-                totalBytes: body.totalBytes,
+                totalBytes,
                 ttlMinutes: body.ttlMinutes,
             });
 
@@ -47,7 +79,7 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
             await assetAuditService.logUploadStarted({
                 sessionId: session.id,
                 accountId,
-                actorId: body.uploadedBy,
+                actorId: uploadedBy,
                 fileName: body.fileName,
                 mimeType: body.mimeType,
             });
@@ -74,6 +106,8 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
             fileName: t.Optional(t.String()),
             mimeType: t.Optional(t.String()),
             totalBytes: t.Optional(t.Number()),
+            /** @deprecated mantener compatibilidad con clientes antiguos */
+            sizeBytes: t.Optional(t.Number()),
             ttlMinutes: t.Optional(t.Number()),
         }),
         query: t.Object({
@@ -140,17 +174,31 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
      * POST /api/assets/upload/:sessionId/commit
      * Commit upload and create asset
      */
-    .post('/upload/:sessionId/commit', async ({ params, body, query, set }) => {
+    .post('/upload/:sessionId/commit', async ({ params, body, query, set, kernelContext }: { params: any; body: any; query: any; set: any; kernelContext: KernelContext }) => {
         try {
             console.log(`${DEBUG_PREFIX} POST /upload/${params.sessionId}/commit`);
             console.log(`${DEBUG_PREFIX} Query:`, query);
             console.log(`${DEBUG_PREFIX} Body:`, body);
-
-            const accountId = query.accountId || body?.accountId;
+            const accountId =
+                normalizeHeaderValue(kernelContext.accountId) ??
+                normalizeHeaderValue(query.accountId) ??
+                normalizeHeaderValue(body?.accountId);
             if (!accountId) {
                 console.log(`${DEBUG_PREFIX} ERROR: accountId is required`);
                 set.status = 400;
-                return { success: false, error: 'accountId is required' };
+                return { success: false, error: 'accountId is required (header x-account-id or body/query accountId)' };
+            }
+
+            const uploadedBy =
+                normalizeHeaderValue(kernelContext.actorId) ??
+                normalizeHeaderValue(body?.uploadedBy);
+
+            if (uploadedBy && !isUuid(uploadedBy)) {
+                set.status = 400;
+                return {
+                    success: false,
+                    error: `Invalid uploadedBy: "${uploadedBy}". Expected a valid UUID or null. This usually happens when a client sends "system" instead of the actual user ID.`,
+                };
             }
 
             console.log(`${DEBUG_PREFIX} Creating asset from upload for account: ${accountId}`);
@@ -162,7 +210,7 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
                 name: body?.name,
                 scope: body?.scope as any,
                 dedupPolicy: body?.dedupPolicy as any,
-                uploadedBy: body?.uploadedBy,
+                uploadedBy,
                 metadata: body?.metadata,
             });
 
@@ -181,7 +229,7 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
                     assetId: result.asset.id,
                     sessionId: params.sessionId,
                     accountId,
-                    actorId: body?.uploadedBy,
+                    actorId: uploadedBy,
                     sizeBytes: result.asset.sizeBytes || 0,
                     checksumSHA256: result.asset.checksumSHA256 || '',
                 });

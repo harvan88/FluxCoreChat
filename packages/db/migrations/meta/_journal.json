@@ -64,6 +64,20 @@
       "when": 1770920218473,
       "tag": "0008_organic_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1772211709811,
+      "tag": "0009_colorful_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1772236119004,
+      "tag": "0010_ambiguous_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

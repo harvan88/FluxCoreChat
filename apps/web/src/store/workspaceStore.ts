@@ -21,6 +21,7 @@ interface WorkspaceState {
   // State
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
+  activeWorkspace: Workspace | null; // 🔥 NUEVO: Agregar activeWorkspace
   members: WorkspaceMember[];
   invitations: WorkspaceInvitation[];
   pendingInvitations: WorkspaceInvitation[]; // For current user
@@ -60,6 +61,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   // Initial state
   workspaces: [],
   activeWorkspaceId: null,
+  activeWorkspace: null, // 🔥 NUEVO: Agregar activeWorkspace
   members: [],
   invitations: [],
   pendingInvitations: [],
@@ -82,7 +84,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         // Auto-select first workspace if none selected
         const state = get();
         if (!state.activeWorkspaceId && response.data.length > 0) {
-          set({ activeWorkspaceId: response.data[0].id });
+          const firstWorkspace = response.data[0];
+          set({ activeWorkspaceId: firstWorkspace.id, activeWorkspace: firstWorkspace }); // 🔥 NUEVO: Actualizar activeWorkspace
         }
       } else {
         set({ error: response.error || 'Error al cargar workspaces', isLoading: false });
@@ -95,7 +98,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setActiveWorkspace: (workspaceId: string) => {
     const workspace = get().workspaces.find((w) => w.id === workspaceId);
     if (workspace) {
-      set({ activeWorkspaceId: workspaceId, members: [], invitations: [] });
+      set({ activeWorkspaceId: workspaceId, activeWorkspace: workspace, members: [], invitations: [] }); // 🔥 NUEVO: Actualizar activeWorkspace
       // Load members and invitations for new workspace
       get().loadMembers(workspaceId);
       get().loadInvitations(workspaceId);

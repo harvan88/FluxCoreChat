@@ -321,24 +321,52 @@ export class PromptBuilder {
     // Tomar los últimos N mensajes
     const recentMessages = context.messages
       .slice(-this.MAX_HISTORY_MESSAGES)
-      .filter(m => m.messageType === 'text');
+      .filter(m => m.messageType === 'text' || (Array.isArray(m.assets) && m.assets.length > 0));
 
     return recentMessages.map(msg => {
       const ts = msg.createdAt instanceof Date
         ? msg.createdAt.toISOString()
         : new Date(msg.createdAt as any).toISOString();
 
-      const content = typeof msg.content === 'string' ? msg.content : String(msg.content);
-      const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(content);
+      const baseContent = typeof msg.content === 'string' ? msg.content : String(msg.content);
+      const transcript = this.extractTranscriptFromAssets(msg.assets);
+      const combinedContent = transcript
+        ? `${baseContent}\n\n[Transcripción de audio]\n${transcript}`
+        : baseContent;
+      const alreadyPrefixed = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z\]\s/.test(combinedContent);
 
       return {
         // Desde la perspectiva del usuario que va a responder:
         // - Mensajes del otro usuario son "user" (el que pregunta)
         // - Mensajes propios son "assistant" (las respuestas)
         role: msg.senderAccountId === recipientAccountId ? 'assistant' : 'user' as 'user' | 'assistant',
-        content: alreadyPrefixed ? content : `[${ts}] ${content}`,
+        content: alreadyPrefixed ? combinedContent : `[${ts}] ${combinedContent}`,
       };
     });
+  }
+
+  private extractTranscriptFromAssets(assets?: Array<{ assetId: string; enrichments?: Array<{ type: string; payload: unknown }> }>): string | null {
+    if (!Array.isArray(assets)) return null;
+
+    const transcripts: string[] = [];
+
+    for (const asset of assets) {
+      const enrichments = asset.enrichments ?? [];
+      for (const enrichment of enrichments) {
+        if (enrichment.type === 'audio_transcription') {
+          const payload = enrichment.payload as { text?: string } | undefined;
+          if (payload?.text) {
+            transcripts.push(payload.text);
+          }
+        }
+      }
+    }
+
+    if (transcripts.length === 0) {
+      return null;
+    }
+
+    return transcripts.join('\n---\n');
   }
 
   /**

@@ -1,9 +1,11 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { messageCore } from '../core/message-core';
 import { extensionHost } from '../services/extension-host.service';
+import { db, accounts } from '@fluxcore/db';
+import { eq } from 'drizzle-orm';
 
-import { chatCoreGateway } from '../services/fluxcore/chatcore-gateway.service';
+import { conversationService } from '../services/conversation.service';
+import { relationshipService } from '../services/relationship.service';
 
 export const messagesRoutes = new Elysia({ prefix: '/messages' })
   .use(authMiddleware)
@@ -22,53 +24,110 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       }
 
       try {
-        // 🛡️ CHATCORE GATEWAY: Certify Ingress (Reality Adapter)
-        // Solo certificamos tráfico humano (no AI/System generado internamente)
-        if (typedBody.generatedBy !== 'ai' && typedBody.generatedBy !== 'system') {
-          const certification = await chatCoreGateway.certifyIngress({
-            accountId: typedBody.senderAccountId, // Business Context
-            userId: user.id,                      // Authenticated Actor
-            payload: typedBody.content,
-            meta: {
-              ip: request.headers.get('x-forwarded-for') || undefined,
-              userAgent: request.headers.get('user-agent') || undefined,
-              clientTimestamp: new Date().toISOString(),
-              conversationId: typedBody.conversationId,
-              requestId: request.headers.get('x-request-id') || undefined,
-            }
-          });
-
-          if (!certification.accepted) {
-            console.warn(`[MessagesRoute] 🛑 Gateway rejected ingress: ${certification.reason}`);
-            set.status = 400; // Rechazado por el Kernel (o error de gateway)
-            return { success: false, message: `Gateway rejected: ${certification.reason}` };
+        // ═══════════════════════════════════════════════════════════════
+        // ARQUITECTURA CORRECTA:
+        // ChatCore persiste primero, luego certifica async con outbox
+        // FluxCore es reactivo, no controlador del mundo humano
+        // ═══════════════════════════════════════════════════════════════
+        
+        // 🔑 AGREGAR VERDAD DEL MUNDO AL INPUT ORIGINAL
+        const userAgent = request.headers.get('user-agent');
+        const origin = request.headers.get('origin');
+        const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+        
+        // Construir meta con la verdad del mundo del input HTTP
+        const enrichedBody = {
+          ...typedBody,
+          meta: {
+            ...typedBody.meta,
+            ip: ip,
+            userAgent: userAgent,
+            origin: origin || 'unknown',
+            clientTimestamp: new Date().toISOString(),
+            requestId: `msg-${Date.now()}-${user?.id}`,
+            // 🔑 INFERIR CHANNEL DESDE EL INPUT HTTP
+            channel: userAgent?.includes('Mobile') ? 'mobile' : 
+                   userAgent?.includes('Tablet') ? 'tablet' : 
+                   origin?.includes('localhost') ? 'web' : 'unknown'
+          }
+        };
+        
+        // 🔒 SECURITY: Resolver account desde user autenticado
+        // El JWT contiene user.id, pero necesitamos el account.id correspondiente
+        const userAccounts = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.ownerUserId, user.id));
+        
+        if (userAccounts.length === 0) {
+          set.status = 403;
+          return { success: false, message: 'User has no accounts' };
+        }
+        
+        // 🎯 USAR LA ACCOUNT DEL BODY SI ES VÁLIDA, SINO LA PRIMERA
+        let senderAccountId = userAccounts[0].id; // Fallback a la primera
+        
+        // 🔥 CORRECCIÓN: Si el body incluye senderAccountId, verificar que pertenezca al usuario
+        if (typedBody.senderAccountId) {
+          const requestedAccount = userAccounts.find(acc => acc.id === typedBody.senderAccountId);
+          if (requestedAccount) {
+            senderAccountId = requestedAccount.id; // ✅ Usar la account seleccionada
+            console.log(`[MessagesRoute] ✅ Using selected account: ${senderAccountId}`);
+          } else {
+            console.log(`[MessagesRoute] ⚠️ Requested account ${typedBody.senderAccountId} not found for user, using first account`);
+          }
+        } else {
+          console.log(`[MessagesRoute] ℹ️ No senderAccountId in body, using first account: ${senderAccountId}`);
+        }
+        
+        // 🆕 Idempotency: Verificar si ya existe este requestId
+        const requestId = enrichedBody.requestId || `msg-${Date.now()}-${senderAccountId}`;
+        
+        console.log(`[MessagesRoute] 🔒 AUTHENTICATED USER: ${user.id}`);
+        console.log(`[MessagesRoute] 🔒 RESOLVED ACCOUNT: ${senderAccountId}`);
+        console.log(`[MessagesRoute] 🆕 REQUEST ID: ${requestId}`);
+        console.log(`[MessagesRoute] 🌍 INPUT CON VERDAD DEL MUNDO ENRIQUECIDO:`, {
+          hasMeta: !!enrichedBody.meta,
+          channel: enrichedBody.meta?.channel,
+          origin: enrichedBody.meta?.origin,
+          userAgent: enrichedBody.meta?.userAgent,
+          authenticatedUser: user.id,
+          resolvedAccount: senderAccountId,
+          bodySender: enrichedBody.senderAccountId, // Para debugging de suplantación
+          requestId: requestId
+        });
+        
+        let receiverAccountId = senderAccountId; // Usar sender autenticado como fallback
+        
+        // Resolver RECEPTOR desde la conversación
+        const conversation = await conversationService.getConversationById(enrichedBody.conversationId);
+        if (conversation?.relationshipId) {
+          const relationship = await relationshipService.getRelationshipById(conversation.relationshipId);
+          if (relationship) {
+            // El receptor es la OTRA cuenta en la relación
+            receiverAccountId = relationship.accountAId === senderAccountId
+              ? relationship.accountBId
+              : relationship.accountAId;
           }
         }
-
-        // Asegurar que content es un objeto, no un string
-        let content: any = typedBody.content;
-        if (typeof content === 'string') {
-          try {
-            content = JSON.parse(content);
-          } catch {
-            content = { text: content };
-          }
-        }
-
-        const result = await messageCore.send({
-          conversationId: typedBody.conversationId,
-          senderAccountId: typedBody.senderAccountId,
-          content,
-          type: typedBody.type || 'outgoing',
-          generatedBy: typedBody.generatedBy || 'human',
+        
+        // 1️⃣ CHATCORE PERSISTE PRIMERO (soberanía del mundo conversacional)
+        const { messageCore } = await import('../core/message-core');
+        const result = await messageCore.receive({
+          conversationId: enrichedBody.conversationId,
+          senderAccountId: senderAccountId, // 🔒 Siempre del JWT autenticado
+          content: enrichedBody.content,
+          type: enrichedBody.type || 'incoming',
+          generatedBy: 'human',
+          targetAccountId: receiverAccountId,
+          meta: enrichedBody.meta // 🔑 PASAR LA VERDAD DEL MUNDO COMPLETA
         });
 
-        if (!result.success) {
-          set.status = 400;
-          return { success: false, message: result.error };
-        }
+        // 2️⃣ CERTIFICACIÓN ASÍNCRONA CON OUTBOX (no bloquea respuesta)
+        // ✅ Ya no se necesita aquí porque message-core ya encola con el account_id correcto
 
-        return { success: true, data: { messageId: result.messageId } };
+        // 3️⃣ RETORNAR RESULTADO PERSISTIDO (UI inmediata)
+        return { success: true, data: result };
       } catch (error: any) {
         set.status = 400;
         return { success: false, message: error.message };
@@ -78,7 +137,8 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       isAuthenticated: true,
       body: t.Object({
         conversationId: t.String(),
-        senderAccountId: t.String(),
+        // � RESTORED: senderAccountId debe venir del frontend (cuenta seleccionada)
+        senderAccountId: t.Optional(t.String()),
         content: t.Object({
           text: t.Optional(t.String()),
           media: t.Optional(t.Array(t.Any())),
@@ -88,6 +148,8 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         type: t.Optional(t.Union([t.Literal('incoming'), t.Literal('outgoing'), t.Literal('system')])),
         generatedBy: t.Optional(t.Union([t.Literal('human'), t.Literal('ai')])),
         replyToId: t.Optional(t.String()),
+        // 🆕 Idempotency key para prevenir duplicados
+        requestId: t.Optional(t.String()),
       }),
       detail: { tags: ['Messages'], summary: 'Send message' },
     }
@@ -128,11 +190,26 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       try {
         const { messageService } = await import('../services/message.service');
 
-        // Verificar que el mensaje existe y pertenece al usuario
+        // 🔒 SECURITY: Verificar que el mensaje existe y pertenece al usuario autenticado
         const message = await messageService.getMessageById(params.id);
         if (!message) {
           set.status = 404;
           return { success: false, message: 'Message not found' };
+        }
+
+        // 🔒 SECURITY: Verificar ownership del mensaje
+        // NOTA: message.senderAccountId es un account.id, no user.id
+        // Necesitamos verificar que el user.id autenticado es owner del account
+        const userAccounts = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.ownerUserId, user.id));
+        
+        const userAccountIds = userAccounts.map(acc => acc.id);
+        if (!userAccountIds.includes(message.senderAccountId)) {
+          console.log(`[MessagesRoute] 🔒 UNAUTHORIZED EDIT ATTEMPT: user=${user.id}, messageOwner=${message.senderAccountId}, userAccounts=${userAccountIds.join(',')}, messageId=${params.id}`);
+          set.status = 403;
+          return { success: false, message: 'Unauthorized: You can only edit your own messages' };
         }
 
         const existingContent = message.content as any;
@@ -182,11 +259,26 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
       try {
         const { messageService } = await import('../services/message.service');
 
-        // Verificar que el mensaje existe
+        // 🔒 SECURITY: Verificar que el mensaje existe y pertenece al usuario autenticado
         const message = await messageService.getMessageById(params.id);
         if (!message) {
           set.status = 404;
           return { success: false, message: 'Message not found' };
+        }
+
+        // 🔒 SECURITY: Verificar ownership del mensaje
+        // NOTA: message.senderAccountId es un account.id, no user.id
+        // Necesitamos verificar que el user.id autenticado es owner del account
+        const userAccounts = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.ownerUserId, user.id));
+        
+        const userAccountIds = userAccounts.map(acc => acc.id);
+        if (!userAccountIds.includes(message.senderAccountId)) {
+          console.log(`[MessagesRoute] 🔒 UNAUTHORIZED DELETE ATTEMPT: user=${user.id}, messageOwner=${message.senderAccountId}, userAccounts=${userAccountIds.join(',')}, messageId=${params.id}`);
+          set.status = 403;
+          return { success: false, message: 'Unauthorized: You can only delete your own messages' };
         }
 
         // Eliminar mensaje (soft delete o hard delete)

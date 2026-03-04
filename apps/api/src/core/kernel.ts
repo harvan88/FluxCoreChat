@@ -26,6 +26,7 @@ const PHYSICAL_FACT_TYPES: ReadonlySet<PhysicalFactType> = new Set([
     'MEDIA_CAPTURED',
     'SYSTEM_TIMER_ELAPSED',
     'CONNECTION_EVENT_OBSERVED',
+    'chatcore.message.received',
 ]);
 
 // ─────────────────────────────────────────────
@@ -120,6 +121,15 @@ export class Kernel {
         }
 
         // ── Gate 5: HMAC signature verification ──
+        console.log(`[Kernel] 🔍 CANONICALIZANDO:`);
+        console.log(`📋 Fact: ${candidate.factType}`);
+        console.log(`📋 Source: ${JSON.stringify(candidate.source)}`);
+        console.log(`📋 Object: ${candidate.object ? 'present' : 'none'}`);
+        console.log(`📋 Evidence Keys: ${Object.keys(candidate.evidence)}`);
+        console.log(`📋 Evidence Raw Keys: ${Object.keys(candidate.evidence.raw)}`);
+        console.log(`📋 Evidence Meta Keys: ${Object.keys((candidate.evidence.raw as any).meta || {})}`);
+        console.log(`📋 Adapter: ${candidate.certifiedBy.adapterId} v${candidate.certifiedBy.adapterVersion}`);
+
         const canonicalCandidate = canonicalize({
             factType: candidate.factType,
             source: candidate.source,
@@ -130,14 +140,71 @@ export class Kernel {
             adapterVersion: candidate.certifiedBy.adapterVersion,
         });
 
-        const expectedSignature = crypto
-            .createHmac('sha256', adapterAllowed.signingSecret)
+        console.log(`[Kernel] 📋 CANONICAL GENERADO:`);
+        console.log(`📋 Length: ${canonicalCandidate.length} chars`);
+        console.log(`📋 Preview: ${canonicalCandidate.substring(0, 100)}...`);
+
+        console.log(`[Kernel] 🔍 VERIFICANDO FIRMA:`);
+        console.log(`📋 Adapter: ${candidate.certifiedBy.adapterId}`);
+        console.log(`📋 Secret: ${adapterAllowed.signingSecret ? 'configured' : 'missing'}`);
+        console.log(`📋 Received: ${candidate.certifiedBy.signature.substring(0, 16)}...`);
+        const expectedSignature = crypto.createHmac('sha256', adapterAllowed.signingSecret!)
             .update(canonicalCandidate)
             .digest('hex');
 
+        console.log(`📋 Expected: ${expectedSignature.substring(0, 16)}...`);
+        console.log(`📋 Match: ${expectedSignature === candidate.certifiedBy.signature ? '✅' : '❌'}`);
+
         if (expectedSignature !== candidate.certifiedBy.signature) {
+            console.error(`[Kernel] ❌ SIGNATURE VERIFICATION FAILED:`);
+            console.error(`📋 Expected: ${expectedSignature}`);
+            console.error(`📋 Received: ${candidate.certifiedBy.signature}`);
+            console.error(`📋 Adapter: ${candidate.certifiedBy.adapterId}`);
+            console.error(`📋 Canonical: ${canonicalCandidate}`);
+            
+            // 🔍 DIAGNÓSTICO DETALLADO
+            console.error(`[Kernel] 🔍 DIAGNÓSTICO DETALLADO:`);
+            
+            // Comparar longitud
+            if (expectedSignature.length !== candidate.certifiedBy.signature.length) {
+                console.error(`📋 ❌ Longitud diferente: expected=${expectedSignature.length}, received=${candidate.certifiedBy.signature.length}`);
+            }
+            
+            // Comparar primeros/últimos caracteres
+            const prefixLength = 8;
+            if (expectedSignature.substring(0, prefixLength) !== candidate.certifiedBy.signature.substring(0, prefixLength)) {
+                console.error(`📋 ❌ Prefijo diferente: expected="${expectedSignature.substring(0, prefixLength)}", received="${candidate.certifiedBy.signature.substring(0, prefixLength)}"`);
+            }
+            
+            if (expectedSignature.substring(-prefixLength) !== candidate.certifiedBy.signature.substring(-prefixLength)) {
+                console.error(`📋 ❌ Sufijo diferente: expected="${expectedSignature.substring(-prefixLength)}", received="${candidate.certifiedBy.signature.substring(-prefixLength)}"`);
+            }
+            
+            // Analizar diferencias carácter por carácter
+            let differences = [];
+            const minLength = Math.min(expectedSignature.length, candidate.certifiedBy.signature.length);
+            for (let i = 0; i < minLength; i++) {
+                if (expectedSignature[i] !== candidate.certifiedBy.signature[i]) {
+                    differences.push(`pos${i}: expected="${expectedSignature[i]}", received="${candidate.certifiedBy.signature[i]}"`);
+                    if (differences.length >= 5) break; // Limitar output
+                }
+            }
+            if (differences.length > 0) {
+                console.error(`📋 ❌ Diferencias encontradas: ${differences.join(', ')}`);
+            }
+            
+            // Posibles causas
+            console.error(`[Kernel] 🔍 POSIBLES CAUSAS:`);
+            console.error(`📋 1. Timestamp diferente en claimedOccurredAt`);
+            console.error(`📋 2. Orden diferente de propiedades en canonical`);
+            console.error(`📋 3. Propiedades faltantes o extrañas`);
+            console.error(`📋 4. Diferencia en signing secret`);
+            console.error(`📋 5. Diferencia en canonicalize function`);
+            
             throw new Error('Invalid reality adapter signature');
         }
+
+        console.log(`[Kernel] ✅ SIGNATURE VERIFIED SUCCESSFULLY`);
 
         // ── Atomic Transaction: Journal + Outbox ──
         return db.transaction(async (tx) => {
@@ -193,8 +260,18 @@ export class Kernel {
             if (inserted.length > 0) {
                 console.log(`[Diag][Kernel] message=${candidate.evidence.provenance.externalId || candidate.source.key} runtime=- decision=respond stage=ingest_stored seq=${inserted[0].sequenceNumber}`);
                 // Transactional Outbox — same transaction, guaranteed
+                // Usar estructura correcta: signalId en lugar de sequenceNumber
                 await tx.insert(fluxcoreOutbox)
-                    .values({ sequenceNumber: inserted[0].sequenceNumber })
+                    .values({
+                        signalId: inserted[0].sequenceNumber,
+                        eventType: 'kernel:signal_ingested',
+                        payload: JSON.stringify({ 
+                            sequenceNumber: inserted[0].sequenceNumber,
+                            factType: candidate.factType,
+                            adapterId: candidate.certifiedBy.adapterId
+                        }),
+                        status: 'pending'
+                    })
                     .onConflictDoNothing();
 
                 return inserted[0].sequenceNumber;

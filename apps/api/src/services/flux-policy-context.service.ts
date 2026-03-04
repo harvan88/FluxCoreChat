@@ -13,10 +13,10 @@
  */
 
 import { coreEventBus } from '../core/events';
-import { db } from '@fluxcore/db';
-import { accounts, relationships, extensionInstallations, templates, appointmentServices, fluxcoreTemplateSettings, fluxcoreWorks, fluxcoreAssistants, accountRuntimeConfig } from '@fluxcore/db';
-import { eq, and, desc, or } from 'drizzle-orm';
-import type { FluxPolicyContext } from '@fluxcore/db';
+import { db, relationships, accounts, fluxcoreWorks, fluxcoreWorkDefinitions } from '@fluxcore/db';
+import { sql, eq, and, notInArray } from 'drizzle-orm';
+import type { FluxPolicyContext, RuntimeConfig, OffHoursPolicy } from '@fluxcore/db';
+import { assetPolicyService } from './asset-policy.service';
 
 interface FluxCoreExtensionConfig {
     tone?: 'formal' | 'casual' | 'neutral';
@@ -46,7 +46,11 @@ class FluxPolicyContextService {
         });
         coreEventBus.on('assistant.config.updated', ({ accountId }: any) => {
             this.clearAccountCache(accountId);
-            console.log(`[PolicyContextCache] ♻️  Invalidated for account=${accountId.slice(0,7)} (assistant config changed)`);
+            console.log(`[PolicyContextCache] ♻️  Invalidated for account=${accountId.slice(0, 7)} (assistant config changed)`);
+        });
+        coreEventBus.on('policy.config.updated', ({ accountId }: any) => {
+            this.clearAccountCache(accountId);
+            console.log(`[PolicyContextCache] ♻️  Invalidated for account=${accountId.slice(0, 7)} (policy config changed)`);
         });
     }
 
@@ -57,113 +61,216 @@ class FluxPolicyContextService {
         }
     }
 
+    async resolveContext(
+        accountId: string,
+        contactId: string,
+        channel: string,
+    ): Promise<{ policyContext: FluxPolicyContext; runtimeConfig: RuntimeConfig }> {
+
+        console.log(`[FluxPolicyContext] 🔍 RESOLVIENDO REALIDAD PARA CUENTA:`);
+        console.log(`📋 ACCOUNT ID: ${accountId}`);
+        console.log(`📋 CONTACT ID: ${contactId}`);
+        console.log(`📋 CHANNEL: ${channel}`);
+        
+        // CACHE DISABLED: Always reload from DB
+        this.clearAccountCache(accountId);
+
+        // 1. Política de la cuenta (fuente: fluxcore_account_policies)
+        const policyResult = await db.execute(sql`
+            SELECT account_id, mode, response_delay_ms, turn_window_ms, 
+                   turn_window_typing_ms, turn_window_max_ms, off_hours_policy
+            FROM fluxcore_account_policies
+            WHERE account_id = ${accountId}
+            LIMIT 1
+        `) as any;
+        const policy = policyResult[0] ? {
+            accountId: policyResult[0].account_id,
+            mode: policyResult[0].mode,
+            responseDelayMs: policyResult[0].response_delay_ms,
+            turnWindowMs: policyResult[0].turn_window_ms,
+            turnWindowTypingMs: policyResult[0].turn_window_typing_ms,
+            turnWindowMaxMs: policyResult[0].turn_window_max_ms,
+            offHoursPolicy: policyResult[0].off_hours_policy,
+        } : null;
+        
+        console.log(`[FluxPolicyContext] 📋 POLÍTICA ENCONTRADA:`);
+        console.log(`  - Modo: ${policy?.mode || 'default'}`);
+        console.log(`  - Response Delay: ${policy?.responseDelayMs || 'default'}ms`);
+        
+        let policyData = policy;
+        if (!policyData) {
+            policyData = await this.createDefaultPolicy(accountId);
+        }
+
+        // 2. Asistente activo (fuente: fluxcore_assistants + relaciones)
+        const assistantResult = await db.execute(sql`
+            SELECT id, name, account_id, runtime, status, model_config, 
+                   external_id, authorized_data_scopes
+            FROM fluxcore_assistants
+            WHERE account_id = ${accountId} AND status = 'active'
+            LIMIT 1
+        `) as any;
+        const assistant = assistantResult[0] ? {
+            id: assistantResult[0].id,
+            name: assistantResult[0].name,
+            accountId: assistantResult[0].account_id,
+            runtime: assistantResult[0].runtime,
+            status: assistantResult[0].status,
+            modelConfig: assistantResult[0].model_config,
+            externalId: assistantResult[0].external_id,
+            authorizedDataScopes: assistantResult[0].authorized_data_scopes,
+        } : null;
+
+        // Fetch instructions separately
+        const assistantInstructions = assistant
+            ? await (async () => {
+                const result = await db.execute(sql`
+                    SELECT ai.order, iv.content
+                    FROM fluxcore_assistant_instructions ai
+                    INNER JOIN fluxcore_instructions i ON i.id = ai.instruction_id
+                    INNER JOIN fluxcore_instruction_versions iv ON iv.id = i.current_version_id
+                    WHERE ai.assistant_id = ${assistant.id} AND ai.is_enabled = true
+                    ORDER BY ai.order ASC
+                `) as any;
+                return result.map((r: any) => ({
+                    order: r.order,
+                    content: r.content,
+                }));
+            })()
+            : [];
+
+        // 3. Perfil del negocio â€” SOLO campos en authorized_data_scopes
+        const resolvedBusinessProfile = assistant
+            ? await this.resolveBusinessProfile(accountId, (assistant as any).authorizedDataScopes ?? [])
+            : {};
+
+        // 4. Reglas del contacto (solo notas con allow_automated_use)
+        const contactRules = await this.resolveContactRules(contactId);
+
+        // 5. Plantillas autorizadas
+        const authorizedTemplates = await this.resolveAuthorizedTemplates(accountId);
+
+        // 6. Contexto Fluxi si está activo
+        const fluxiContext = await this.resolveFluxiContext(accountId);
+
+        const policyContext: FluxPolicyContext = {
+            accountId,
+            contactId,
+            conversationId: '', // Added if required by FluxPolicyContext type
+            channel,
+            mode: policyData.mode,
+            responseDelayMs: policyData.responseDelayMs,
+            turnWindowMs: policyData.turnWindowMs,
+            turnWindowTypingMs: policyData.turnWindowTypingMs,
+            turnWindowMaxMs: policyData.turnWindowMaxMs,
+            offHoursPolicy: policyData.offHoursPolicy,
+            contactRules,
+            authorizedTemplates,
+            resolvedBusinessProfile,
+            workDefinitions: [],
+            activeRuntimeId: assistant?.runtime || null,
+        };
+
+        console.log(`[FluxPolicyContext] ✅ REALIDAD DEFINIDA PARA CUENTA ${accountId}:`);
+        console.log(`  - Modo: ${policyContext.mode}`);
+        console.log(`  - Channel: ${policyContext.channel}`);
+        console.log(`  - Active Runtime: ${policyContext.activeRuntimeId}`);
+        console.log(`  - Contact Rules: ${policyContext.contactRules.length} reglas`);
+        console.log(`  - Authorized Templates: ${policyContext.authorizedTemplates.length} templates`);
+
+        const runtimeConfig: RuntimeConfig = assistant
+            ? {
+                runtimeId: this.mapRuntimeId(assistant.runtime),
+                accountId,
+                assistantId: assistant.id,
+                assistantName: assistant.name,
+                instructions: await this.compileInstructions(assistantInstructions),
+                provider: (assistant.modelConfig as any)?.provider,
+                model: (assistant.modelConfig as any)?.model,
+                temperature: (assistant.modelConfig as any)?.temperature,
+                vectorStoreId: (assistant as any).vectorStores?.[0]?.vectorStoreId,
+                externalAssistantId: assistant.externalId ?? undefined,
+                authorizedTools: (assistant as any).tools?.map((t: any) => t.toolId) ?? [],
+            }
+            : { runtimeId: 'asistentes-local', accountId, authorizedTools: [] };
+
+        return { policyContext, runtimeConfig };
+    }
+
     /**
      * Resolve the flat FluxPolicyContext for a turn.
-     * Canon Â§4.3: returns business governance only â€” no LLM config.
+     * Legacy method maintained for compatibility but uses resolveContext internally.
      */
     async resolve(params: {
         accountId: string;
         conversationId: string;
+        contactId?: string;
         relationshipId?: string;
         channel?: string;
     }): Promise<FluxPolicyContext> {
-        const { accountId, conversationId, relationshipId, channel = 'web' } = params;
-        const cacheKey = `${accountId}:${relationshipId || 'global'}:${conversationId}`;
-
-        if (this.cache.has(cacheKey)) {
-            return this.cache.get(cacheKey)!;
-        }
-
-        const [account] = await db
-            .select()
-            .from(accounts)
-            .where(eq(accounts.id, accountId))
-            .limit(1);
-
-        if (!account) {
-            throw new Error(`Account ${accountId} not found during PolicyContext resolution`);
-        }
-
-        const [fluxConfig, contactRules, resolvedBusinessProfile, activeWork] = await Promise.all([
-            this.resolveFluxCoreConfig(accountId),
-            this.resolveContactRules(relationshipId),
-            this.resolveBusinessProfile(account, accountId),
-            conversationId ? this.resolveActiveWork(accountId, conversationId) : Promise.resolve(undefined),
-        ]);
-
-        // activeRuntimeId: read from assistant config, default to asistentes-local
-        const activeRuntimeId = await this.resolveActiveRuntimeId(accountId);
-
-        // Governance fields: prefer assistant timingConfig over extension installation config
-        const assistantTimingConfig = await this.resolveAssistantTimingConfig(accountId);
-
-        // authorizedTemplates: from fluxcore_template_settings
-        const authorizedTemplates = resolvedBusinessProfile.templates
-            ?.map((t: any) => t.templateId) ?? [];
-
-        const context: FluxPolicyContext = {
-            accountId,
-            contactId: relationshipId ?? '',
-            conversationId,
-            channel,
-            tone: assistantTimingConfig.tone ?? fluxConfig.tone ?? 'neutral',
-            useEmojis: assistantTimingConfig.useEmojis ?? fluxConfig.useEmojis ?? false,
-            language: assistantTimingConfig.language ?? fluxConfig.language ?? 'es',
-            mode: assistantTimingConfig.mode ?? fluxConfig.mode ?? 'auto',
-            responseDelayMs: (assistantTimingConfig as any).responseDelaySeconds != null
-                ? (assistantTimingConfig as any).responseDelaySeconds * 1000
-                : (fluxConfig.responseDelay ?? 0),
-            turnWindowMs: 3000,
-            turnWindowTypingMs: 5000,
-            turnWindowMaxMs: 60000,
-            offHoursPolicy: { action: 'ignore' },
-            contactRules,
-            activeRuntimeId,
-            authorizedTemplates,
-            resolvedBusinessProfile,
-            activeWork,
-        };
-
-        this.cache.set(cacheKey, context);
-        return context;
+        // 🔑 MEJORA: Usar channel proporcionado con fallback inteligente
+        const { accountId, conversationId, contactId, relationshipId, channel } = params;
+        const resolvedChannel = channel || await this.inferChannelFromContext(params);
+        const { policyContext } = await this.resolveContext(accountId, contactId || relationshipId || '', resolvedChannel);
+        policyContext.conversationId = conversationId;
+        return policyContext;
     }
 
-    private async resolveAssistantTimingConfig(accountId: string): Promise<{
-        mode?: 'auto' | 'suggest' | 'off';
-        tone?: 'formal' | 'casual' | 'neutral';
-        useEmojis?: boolean;
-        language?: string;
-    }> {
-        try {
-            const [row] = await db
-                .select({ timingConfig: fluxcoreAssistants.timingConfig })
-                .from(fluxcoreAssistants)
-                .where(and(
-                    eq(fluxcoreAssistants.accountId, accountId),
-                    or(eq(fluxcoreAssistants.status, 'active'), eq(fluxcoreAssistants.status, 'production'))
-                ))
-                .orderBy(desc(fluxcoreAssistants.updatedAt))
-                .limit(1);
-            return (row?.timingConfig ?? {}) as any;
-        } catch {
-            return {};
+    /**
+     * 🔑 MÉTODO AUXILIAR: Inferir channel desde WorldDefiner
+     */
+    private async inferChannelFromContext(params: {
+        accountId: string;
+        conversationId?: string;
+        contactId?: string;
+        relationshipId?: string;
+        channel?: string;
+    }): Promise<string> {
+        // Si hay channel explícito, usarlo
+        if (params.channel) return params.channel;
+        
+        // 🔑 INTEGRACIÓN CON WORLDEFINER: Obtener channel desde WorldDefiner
+        if (params.conversationId) {
+            try {
+                const { conversationService } = await import('./conversation.service');
+                const conversation = await conversationService.getConversationById(params.conversationId);
+                
+                // 🔑 USAR WORLDEFINER DIRECTAMENTE
+                const { ChatCoreWorldDefiner } = await import('../core/chatcore-world-definer');
+                
+                // Construir contexto para WorldDefiner
+                const worldContext = ChatCoreWorldDefiner.defineWorld({
+                    headers: {},
+                    meta: {
+                        conversationId: params.conversationId,
+                        channel: conversation?.channel,
+                        // Otros metadatos relevantes
+                    },
+                    userAgent: undefined,
+                    origin: 'fluxcore-policy-context',
+                    requestId: `policy-${params.conversationId}`,
+                    accountId: params.accountId,
+                    userId: params.contactId || params.relationshipId
+                });
+                
+                console.log(`[FluxPolicyContext] 🌍 Using WorldDefiner channel: ${worldContext.channel}`);
+                return worldContext.channel;
+                
+            } catch (error) {
+                console.warn('[FluxPolicyContext] ⚠️ Error using WorldDefiner:', error);
+                // Fallback al channel de la conversación
+                const { conversationService } = await import('./conversation.service');
+                const conversation = await conversationService.getConversationById(params.conversationId);
+                if (conversation?.channel) {
+                    console.log(`[FluxPolicyContext] 🔍 Fallback to conversation channel: ${conversation.channel}`);
+                    return conversation.channel;
+                }
+            }
         }
-    }
-
-    private async resolveFluxCoreConfig(accountId: string): Promise<FluxCoreExtensionConfig> {
-        try {
-            const [installation] = await db
-                .select({ config: extensionInstallations.config })
-                .from(extensionInstallations)
-                .where(and(
-                    eq(extensionInstallations.accountId, accountId),
-                    eq(extensionInstallations.extensionId, '@fluxcore/asistentes'),
-                ))
-                .limit(1);
-            return (installation?.config || {}) as FluxCoreExtensionConfig;
-        } catch {
-            return {};
-        }
+        
+        // Último fallback
+        console.warn('[FluxPolicyContext] ⚠️ Could not infer channel - using unknown');
+        return 'unknown';
     }
 
     private async resolveContactRules(relationshipId?: string): Promise<import('@fluxcore/db').ContactRule[]> {
@@ -196,139 +303,171 @@ class FluxPolicyContextService {
     }
 
     private async resolveBusinessProfile(
-        account: typeof accounts.$inferSelect,
-        accountId: string
-    ): Promise<import('@fluxcore/db').ResolvedBusinessProfile> {
-        const profile: import('@fluxcore/db').ResolvedBusinessProfile = {};
+        accountId: string,
+        authorizedScopes: string[],
+    ): Promise<FluxPolicyContext['resolvedBusinessProfile']> {
+        if (authorizedScopes.length === 0) return {};
 
-        if (!account.allowAutomatedUse) {
-            profile.displayName = account.displayName || account.username;
-            return profile;
-        }
-
-        if (account.aiIncludeName ?? true) {
-            profile.displayName = account.displayName || account.username;
-        }
-        if (account.aiIncludeBio ?? true) {
-            profile.bio = (account.profile as any)?.bio || undefined;
-        }
-        if (account.aiIncludePrivateContext ?? true) {
-            profile.privateContext = account.privateContext || undefined;
-        }
-
-        const accountProfile = account.profile as any;
-        if (accountProfile?.timezone) profile.timezone = accountProfile.timezone;
-        if (accountProfile?.address) profile.location = accountProfile.address;
-
-        try {
-            const [authorizedTemplates, authorizedServices] = await Promise.all([
-                db.select({
-                    templateId: templates.id,
-                    name: templates.name,
-                    content: templates.content,
-                    variables: templates.variables,
-                    settings: fluxcoreTemplateSettings,
-                })
-                    .from(templates)
-                    .innerJoin(fluxcoreTemplateSettings, eq(templates.id, fluxcoreTemplateSettings.templateId))
-                    .where(and(
-                        eq(templates.accountId, accountId),
-                        eq(fluxcoreTemplateSettings.authorizeForAI, true)
-                    )),
-
-                db.select({ name: appointmentServices.name, description: appointmentServices.description, price: appointmentServices.price, currency: appointmentServices.currency })
-                    .from(appointmentServices)
-                    .where(and(
-                        eq(appointmentServices.accountId, accountId),
-                        eq(appointmentServices.allowAutomatedUse, true)
-                    )),
-            ]);
-
-            profile.templates = authorizedTemplates.map(t => ({
-                templateId: t.templateId,
-                name: t.settings.aiIncludeName ? t.name : 'Plantilla',
-                instructions: t.settings.aiIncludeInstructions ? t.settings.aiUsageInstructions || undefined : undefined,
-                variables: Array.isArray(t.variables)
-                    ? (t.variables as any[]).filter((v: any) => typeof v?.name === 'string').map((v: any) => ({ name: v.name, required: v.required }))
-                    : [],
-                content: t.settings.aiIncludeContent ? t.content : undefined,
-            }));
-
-            profile.appointmentServices = authorizedServices.map(s => ({
-                name: s.name,
-                description: s.description || undefined,
-                price: s.price ? `${s.price} ${s.currency}` : undefined,
-            }));
-        } catch {
-            // Non-fatal â€” return profile without templates/services
-        }
-
-        return profile;
-    }
-
-    private async resolveActiveWork(accountId: string, conversationId: string): Promise<import('@fluxcore/db').ActiveWorkContext | undefined> {
-        try {
-            const terminalStates = ['COMPLETED', 'FAILED', 'EXPIRED', 'CANCELLED'];
-            const [work] = await db
-                .select({ id: fluxcoreWorks.id, state: fluxcoreWorks.state, typeId: (fluxcoreWorks as any).typeId })
-                .from(fluxcoreWorks)
-                .where(and(
-                    eq(fluxcoreWorks.accountId, accountId),
-                    eq(fluxcoreWorks.conversationId, conversationId),
-                ))
-                .orderBy(desc(fluxcoreWorks.createdAt))
-                .limit(1);
-
-            if (!work || terminalStates.includes(work.state)) return undefined;
-            return { workId: work.id, state: work.state, typeId: work.typeId || '' };
-        } catch {
-            return undefined;
-        }
-    }
-
-    private async resolveActiveRuntimeId(accountId: string): Promise<string> {
-        try {
-            const [runtimeCfg] = await db
-                .select()
-                .from(accountRuntimeConfig)
-                .where(eq(accountRuntimeConfig.accountId, accountId))
-                .limit(1);
-
-            const preferredId = (runtimeCfg?.config as any)?.preferredAssistantId as string | undefined;
-            const assistantId = preferredId || await this.findProductionAssistantId(accountId);
-            if (!assistantId) return 'asistentes-local';
-
-            const [assistant] = await db
-                .select({ runtime: fluxcoreAssistants.runtime })
-                .from(fluxcoreAssistants)
-                .where(eq(fluxcoreAssistants.id, assistantId))
-                .limit(1);
-
-            return this.mapRuntimeToId(assistant?.runtime);
-        } catch {
-            return 'asistentes-local';
-        }
-    }
-
-    private async findProductionAssistantId(accountId: string): Promise<string | null> {
-        const [a] = await db
-            .select({ id: fluxcoreAssistants.id })
-            .from(fluxcoreAssistants)
-            .where(and(
-                eq(fluxcoreAssistants.accountId, accountId),
-                or(eq(fluxcoreAssistants.status, 'production'), eq(fluxcoreAssistants.status, 'active'))
-            ))
-            .orderBy(desc(fluxcoreAssistants.updatedAt))
+        const [account] = await db
+            .select({
+                id: accounts.id,
+                username: accounts.username,
+                displayName: accounts.displayName,
+                profile: accounts.profile,
+                avatarAssetId: accounts.avatarAssetId,
+            })
+            .from(accounts)
+            .where(eq(accounts.id, accountId))
             .limit(1);
-        return a?.id || null;
+        if (!account) return {};
+
+        const profile: Record<string, unknown> = {};
+        const accountProfile = (account.profile || {}) as any;
+
+        if (authorizedScopes.includes('displayName')) {
+            profile.displayName = account.displayName || account.username;
+        }
+        if (authorizedScopes.includes('bio')) {
+            profile.bio = accountProfile.bio || undefined;
+        }
+        if (authorizedScopes.includes('website')) {
+            profile.website = accountProfile.website || undefined;
+        }
+        if (authorizedScopes.includes('location')) {
+            profile.location = accountProfile.address || accountProfile.location || undefined;
+        }
+        if (authorizedScopes.includes('businessHours')) {
+            profile.businessHours = accountProfile.businessHours || [];
+        }
+
+        if (authorizedScopes.includes('avatar') && account.avatarAssetId) {
+            const signed = await assetPolicyService.signAsset({
+                assetId: account.avatarAssetId,
+                actorId: accountId,
+                actorType: 'system',
+                context: {
+                    action: 'preview',
+                    channel: 'kernel',
+                },
+            });
+
+            if (signed?.url) {
+                profile.avatarUrl = signed.url;
+            }
+        }
+
+        return profile as any;
     }
 
-    private mapRuntimeToId(runtime?: string): string {
-        if (runtime === 'openai') return 'asistentes-openai';
-        if (runtime === 'fluxi') return 'fluxi-runtime';
-        return 'asistentes-local';
+    private async resolveBusinessHours(accountId: string): Promise<any> {
+        // Placeholder or implement based on existing logic if any
+        return [];
     }
 
+    private async createDefaultPolicy(accountId: string) {
+        const result = await db.execute(sql`
+            INSERT INTO fluxcore_account_policies (
+                account_id, mode, response_delay_ms, turn_window_ms,
+                turn_window_typing_ms, turn_window_max_ms, off_hours_policy
+            ) VALUES (
+                ${accountId}, 'off', 3000, 3000, 5000, 60000, '{"action":"ignore"}'::jsonb
+            )
+            ON CONFLICT (account_id) DO UPDATE SET
+                mode = EXCLUDED.mode
+            RETURNING account_id, mode, response_delay_ms, turn_window_ms,
+                      turn_window_typing_ms, turn_window_max_ms, off_hours_policy
+        `) as any;
+        
+        const row = result[0];
+        return {
+            accountId: row.account_id,
+            mode: row.mode,
+            responseDelayMs: row.response_delay_ms,
+            turnWindowMs: row.turn_window_ms,
+            turnWindowTypingMs: row.turn_window_typing_ms,
+            turnWindowMaxMs: row.turn_window_max_ms,
+            offHoursPolicy: row.off_hours_policy,
+        };
+    }
+
+    private async resolveFluxiContext(
+        accountId: string,
+    ): Promise<Pick<FluxPolicyContext, 'activeWork' | 'workDefinitions'>> {
+        const [activeWorkResult, workDefinitionsResult] = await Promise.all([
+            db.execute(sql`
+                SELECT id, account_id, relationship_id, state, 
+                       work_definition_id, work_definition_version
+                FROM fluxcore_works
+                WHERE account_id = ${accountId}
+                  AND state NOT IN ('COMPLETED', 'FAILED', 'EXPIRED')
+                LIMIT 1
+            `) as any,
+            db.execute(sql`
+                SELECT id, type_id, version, definition_json
+                FROM fluxcore_work_definitions
+                WHERE account_id = ${accountId}
+            `) as any,
+        ]);
+
+        const activeWork = activeWorkResult[0] ? {
+            id: activeWorkResult[0].id,
+            accountId: activeWorkResult[0].account_id,
+            relationshipId: activeWorkResult[0].relationship_id,
+            state: activeWorkResult[0].state,
+            workDefinitionId: activeWorkResult[0].work_definition_id,
+            workDefinitionVersion: activeWorkResult[0].work_definition_version,
+        } : null;
+
+        const workDefinitions = workDefinitionsResult.map((row: any) => ({
+            id: row.id,
+            typeId: row.type_id,
+            version: row.version,
+            definitionJson: row.definition_json,
+        }));
+
+        return {
+            activeWork: activeWork ? this.mapActiveWork(activeWork) : undefined,
+            workDefinitions: workDefinitions.map((d: any) => this.mapWorkDefinition(d)),
+        };
+    }
+
+    private mapActiveWork(work: any) {
+        return {
+            workId: work.id,
+            state: work.state,
+            typeId: (work as any).typeId || '',
+        };
+    }
+
+    private mapWorkDefinition(wd: any) {
+        return {
+            id: wd.id,
+            typeId: wd.typeId,
+            version: wd.version,
+            definitionJson: wd.definitionJson,
+        };
+    }
+
+    private mapRuntimeId(runtime: string): string {
+        const map: Record<string, string> = {
+            'local': 'asistentes-local',
+            'openai': 'asistentes-openai',
+            'fluxi': 'fluxi',
+        };
+        return map[runtime] ?? runtime;
+    }
+
+    private async compileInstructions(instructions: Array<{ content: string | null }>): Promise<string> {
+        return instructions
+            .map(i => i.content || '')
+            .filter(c => c.length > 0)
+            .join('\n\n');
+    }
+
+    private async resolveAuthorizedTemplates(accountId: string): Promise<string[]> {
+        // Implementation based on fluxcore_template_settings if needed
+        return [];
+    }
 }
 
 export const fluxPolicyContextService = new FluxPolicyContextService();

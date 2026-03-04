@@ -8,8 +8,7 @@ export { useChatOffline } from './useChatOffline';
 export { useExtensions, type Extension, type ExtensionInstallation } from './useExtensions';
 export { useIsMobile, useMediaQuery } from './useMediaQuery';
 export { useConnectionStatus, useSync, useSyncQueueStats } from './useOfflineFirst';
-export { useFileUpload } from './useFileUpload';
+// Legacy upload hook removed - use assets system instead
 export { useProfile, type ProfileData, type UseProfileReturn } from './useProfile';
 export { useScroll } from './useScroll';
 export { useWebSocket } from './useWebSocket';
-export { useKernelSessions } from './useKernelSessions';

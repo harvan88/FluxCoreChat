@@ -136,19 +136,33 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
   // Avatar/Initials
   const getAvatar = (account: Account | null) => {
     if (!account) return <span className="text-inverse font-bold">?</span>;
-    
+
+    const initials = account.displayName?.charAt(0).toUpperCase() || 
+                    account.username?.charAt(0).toUpperCase() || '?';
+
     if (account.profile?.avatarUrl) {
       return (
         <img 
           src={account.profile.avatarUrl} 
           className="w-full h-full rounded-full object-cover"
           alt={`Avatar de ${account.displayName}`}
+          onError={(e) => {
+            // Fallback a iniciales si la imagen falla
+            console.warn(`[AccountSwitcher] Avatar failed to load for ${account.displayName}:`, account.profile.avatarUrl);
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            const parent = target.parentElement;
+            if (parent && !parent.querySelector('.fallback-initials')) {
+              const fallback = document.createElement('span');
+              fallback.className = 'text-inverse font-bold fallback-initials';
+              fallback.textContent = initials;
+              parent.appendChild(fallback);
+            }
+          }}
         />
       );
     }
     
-    const initials = account.displayName?.charAt(0).toUpperCase() || 
-                    account.username?.charAt(0).toUpperCase() || '?';
     return <span className="text-inverse font-bold">{initials}</span>;
   };
 
@@ -309,6 +323,37 @@ interface AccountItemProps {
 function AccountItem({ account, isActive, onClick }: AccountItemProps) {
   const Icon = account.accountType === 'business' ? Building2 : User;
 
+  // Avatar/Initials helper para AccountItem
+  const getAccountItemAvatar = (account: Account) => {
+    const initials = account.displayName?.charAt(0).toUpperCase() || 
+                    account.username?.charAt(0).toUpperCase() || '?';
+
+    if (account.profile?.avatarUrl) {
+      return (
+        <img 
+          src={account.profile.avatarUrl} 
+          className="w-full h-full rounded-full object-cover"
+          alt={`Avatar de ${account.displayName}`}
+          onError={(e) => {
+            // Fallback a iniciales si la imagen falla
+            console.warn(`[AccountSwitcher] Avatar failed to load for ${account.displayName}:`, account.profile.avatarUrl);
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            const parent = target.parentElement;
+            if (parent && !parent.querySelector('.fallback-initials')) {
+              const fallback = document.createElement('span');
+              fallback.className = 'text-inverse font-bold fallback-initials';
+              fallback.textContent = initials;
+              parent.appendChild(fallback);
+            }
+          }}
+        />
+      );
+    }
+    
+    return <span className="text-inverse font-bold">{initials}</span>;
+  };
+
   return (
     <button
       onClick={onClick}
@@ -317,7 +362,7 @@ function AccountItem({ account, isActive, onClick }: AccountItemProps) {
       }`}
     >
       <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center overflow-hidden">
-        {getAvatar(account)}
+        {getAccountItemAvatar(account)}
       </div>
       <div className="flex-1 text-left min-w-0">
         <div className="text-primary text-sm font-medium truncate">
@@ -333,18 +378,3 @@ function AccountItem({ account, isActive, onClick }: AccountItemProps) {
   );
 }
 
-function getAvatar(account: Account) {
-  if (account.profile?.avatarUrl) {
-    return (
-      <img 
-        src={account.profile.avatarUrl} 
-        className="w-full h-full rounded-full object-cover"
-        alt={`Avatar de ${account.displayName}`}
-      />
-    );
-  }
-  
-  const initials = account.displayName?.charAt(0).toUpperCase() || 
-                  account.username?.charAt(0).toUpperCase() || '?';
-  return <span className="text-inverse font-bold">{initials}</span>;
-}

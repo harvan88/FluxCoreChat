@@ -4,8 +4,8 @@
  */
 
 import { db } from '@fluxcore/db';
-import { messages, conversations, accounts, relationships } from '@fluxcore/db';
-import { eq, desc } from 'drizzle-orm';
+import { messages, conversations, accounts, relationships, messageAssets, assetEnrichments } from '@fluxcore/db';
+import { eq, desc, inArray } from 'drizzle-orm';
 
 type ContextData = any;
 
@@ -58,6 +58,45 @@ export async function buildContext(accountId: string, conversationId: string): P
       .orderBy(desc(messages.createdAt))
       .limit(10);
 
+    const messageIds = recentMessages.map((m) => m.id);
+    const attachmentsByMessage = new Map<string, { assetId: string; enrichments: { type: string; payload: unknown }[] }[]>();
+
+    if (messageIds.length > 0) {
+      const messageAssetRows = await db
+        .select({ messageId: messageAssets.messageId, assetId: messageAssets.assetId })
+        .from(messageAssets)
+        .where(inArray(messageAssets.messageId, messageIds));
+
+      const assetIds = [...new Set(messageAssetRows.map((row) => row.assetId))];
+
+      const enrichmentRows = assetIds.length > 0
+        ? await db
+            .select({
+              assetId: assetEnrichments.assetId,
+              type: assetEnrichments.type,
+              payload: assetEnrichments.payload,
+            })
+            .from(assetEnrichments)
+            .where(inArray(assetEnrichments.assetId, assetIds))
+        : [];
+
+      const enrichmentsByAsset = new Map<string, { type: string; payload: unknown }[]>();
+      enrichmentRows.forEach((row) => {
+        const list = enrichmentsByAsset.get(row.assetId) ?? [];
+        list.push({ type: row.type, payload: row.payload });
+        enrichmentsByAsset.set(row.assetId, list);
+      });
+
+      messageAssetRows.forEach((row) => {
+        const list = attachmentsByMessage.get(row.messageId) ?? [];
+        list.push({
+          assetId: row.assetId,
+          enrichments: enrichmentsByAsset.get(row.assetId) ?? [],
+        });
+        attachmentsByMessage.set(row.messageId, list);
+      });
+    }
+
     return {
       account: account ? {
         id: account.id,
@@ -81,13 +120,25 @@ export async function buildContext(accountId: string, conversationId: string): P
         channel: conversation.channel,
         metadata: (conversation as any).metadata || {},
       } : undefined,
-      messages: recentMessages.reverse().map(m => ({
-        id: m.id,
-        content: (m.content as any)?.text || String(m.content),
-        senderAccountId: m.senderAccountId,
-        createdAt: m.createdAt,
-        messageType: typeof (m.content as any)?.text === 'string' ? 'text' : 'unknown',
-      })),
+      messages: recentMessages.reverse().map(m => {
+        const assets = attachmentsByMessage.get(m.id) ?? [];
+        const textContent = (m.content as any)?.text;
+        const normalizedText = typeof textContent === 'string' && textContent.trim().length > 0 ? textContent : null;
+        const hasTranscript = assets.some((asset) =>
+          (asset.enrichments ?? []).some((enrichment) =>
+            enrichment.type === 'audio_transcription' && typeof (enrichment.payload as any)?.text === 'string' && (enrichment.payload as any).text.trim().length > 0,
+          ),
+        );
+
+        return {
+          id: m.id,
+          content: normalizedText ?? (typeof m.content === 'string' ? m.content : String(m.content ?? '')),
+          senderAccountId: m.senderAccountId,
+          createdAt: m.createdAt,
+          messageType: normalizedText || hasTranscript ? 'text' : 'unknown',
+          assets,
+        };
+      }),
       overlays: {},
     };
   } catch (error: any) {

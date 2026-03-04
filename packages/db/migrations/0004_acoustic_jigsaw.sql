@@ -205,19 +205,26 @@ CREATE TABLE IF NOT EXISTS "fluxcore_files" (
 	CONSTRAINT "fluxcore_files_unique_hash" UNIQUE("account_id","content_hash")
 );
 --> statement-breakpoint
-ALTER TABLE "fluxcore_assistants" ADD COLUMN "runtime" varchar(20) DEFAULT 'local' NOT NULL;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN "file_id" uuid;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN "attributes" jsonb DEFAULT '{}'::jsonb;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN "chunking_strategy" jsonb;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN "usage_bytes" bigint DEFAULT 0;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN "last_error" jsonb;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN "chunk_count" integer DEFAULT 0;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "backend" varchar(20) DEFAULT 'local' NOT NULL;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "metadata" jsonb DEFAULT '{}'::jsonb;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "file_counts" jsonb DEFAULT '{"in_progress":0,"completed":0,"failed":0,"cancelled":0,"total":0}'::jsonb;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "expires_after" jsonb;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "last_active_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "usage_bytes" bigint DEFAULT 0;--> statement-breakpoint
+ALTER TABLE "fluxcore_assistants" ADD COLUMN IF NOT EXISTS "runtime" varchar(20) DEFAULT 'local' NOT NULL;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN IF NOT EXISTS "file_id" uuid;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN IF NOT EXISTS "attributes" jsonb DEFAULT '{}'::jsonb;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN IF NOT EXISTS "chunking_strategy" jsonb;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN IF NOT EXISTS "usage_bytes" bigint DEFAULT 0;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN IF NOT EXISTS "last_error" jsonb;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_store_files" ADD COLUMN IF NOT EXISTS "chunk_count" integer DEFAULT 0;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "backend" varchar(20) DEFAULT 'local' NOT NULL;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "metadata" jsonb DEFAULT '{}'::jsonb;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "file_counts" jsonb DEFAULT '{"in_progress":0,"completed":0,"failed":0,"cancelled":0,"total":0}'::jsonb;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "expires_after" jsonb;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "last_active_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "usage_bytes" bigint DEFAULT 0;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "alias" varchar(100);--> statement-breakpoint
+ALTER TABLE "actors" ADD COLUMN IF NOT EXISTS "actor_type" varchar(20) NOT NULL;--> statement-breakpoint
+ALTER TABLE "actors" ADD COLUMN IF NOT EXISTS "extension_id" varchar(100);--> statement-breakpoint
+ALTER TABLE "actors" ADD COLUMN IF NOT EXISTS "display_name" varchar(100);--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "status" varchar(20) DEFAULT 'synced' NOT NULL;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "from_actor_id" uuid;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "to_actor_id" uuid;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_document_chunks_file_chunk" ON "fluxcore_document_chunks" ("file_id","chunk_index");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_document_chunks_vector_store_drizzle" ON "fluxcore_document_chunks" ("vector_store_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_document_chunks_file_drizzle" ON "fluxcore_document_chunks" ("file_id");--> statement-breakpoint

@@ -7,10 +7,15 @@ export interface CoreEventMap {
     'core:message_received': (payload: { envelope: MessageEnvelope; result: ReceiveResult }) => void;
     // Evento emitido cuando un medio (audio/imagen) ha sido procesado/enriquecido
     'media:enriched': (payload: { messageId: string; accountId: string; type: string; enrichment: any }) => void;
+    // Evento emitido cuando un asset llega a estado ready y está listo para orquestación
+    'asset:ready': (payload: { assetId: string; accountId: string; mimeType?: string | null; sizeBytes?: number | null; checksum?: string | null; metadata?: Record<string, unknown> | null }) => void;
+    // Evento emitido cuando el pipeline de enriquecimiento falla para un asset
+    'asset:enrichment_failed': (payload: { assetId: string; reason: string; metadata?: Record<string, unknown> | null }) => void;
 
 
     // SOVEREIGN KERNEL INTERRUPTS
     'kernel:wakeup': () => void;
+    'kernel:cognition:wakeup': (payload: { conversationId: string; accountId: string }) => void;
 
     // PROJECTOR EVENTS (secondary triggers, not source of truth)
     'identity:resolved': (payload: { sequenceNumber: number; actorId: string; contextId: string }) => void;
@@ -28,6 +33,7 @@ export interface CoreEventMap {
 
     // ASSISTANT CONFIGURATION EVENTS (invalidate PolicyContext cache)
     'assistant.config.updated': (payload: { accountId: string; assistantId: string; change: 'activated' | 'updated' }) => void;
+    'policy.config.updated': (payload: { accountId: string }) => void;
 }
 
 export class CoreEventBus extends EventEmitter {

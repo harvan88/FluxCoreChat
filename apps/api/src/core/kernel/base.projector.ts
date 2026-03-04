@@ -93,18 +93,7 @@ export abstract class BaseProjector {
                             errorMessage: errMsg,
                             errorStack: errStack,
                         })
-                        .onConflictDoUpdate({
-                            target: [
-                                fluxcoreProjectorErrors.projectorName,
-                                fluxcoreProjectorErrors.signalSeq,
-                            ],
-                            set: {
-                                attempts: sql`${fluxcoreProjectorErrors.attempts} + 1`,
-                                lastFailedAt: new Date(),
-                                errorMessage: errMsg,
-                                errorStack: errStack,
-                            },
-                        });
+                        .onConflictDoNothing();
 
                     // Stop processing — the next wakeUp will retry from this signal.
                     return;

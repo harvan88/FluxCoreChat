@@ -12,15 +12,15 @@ import { buildExtraInstructions } from '../../../../extensions/fluxcore-asistent
 export const fluxcoreRuntimeRoutes = new Elysia({ prefix: '/fluxcore/runtime' })
   .get('/test-trigger', async ({ query, set }) => {
     console.log('--- TEST TRIGGER ---');
-    const accountId = query.accountId || '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+    const accountId = query.accountId || 'a9611c11-70f2-46cd-baef-6afcde715f3a';
     const conversationId = query.conversationId || '28a6f187-db8c-4bdb-8405-4db79f0144bf';
-    const senderAccountId = query.senderAccountId || '5c59a05b-4b94-4f78-ab14-9a5fdabe2d31';
+    const senderAccountId = query.senderAccountId || '520954df-cd5b-499a-a435-a5c0be4fb4e8';
 
     // Simular recepción de mensaje
     const envelope = {
       id: crypto.randomUUID(),
       conversationId,
-      type: 'incoming', // Fixed type
+      type: 'incoming' as const, // Fixed type
       content: { text: query.text || 'Hola mundo de prueba fluxcore' },
       senderAccountId,
       targetAccountId: accountId,
@@ -39,7 +39,8 @@ export const fluxcoreRuntimeRoutes = new Elysia({ prefix: '/fluxcore/runtime' })
     query: t.Object({
       accountId: t.Optional(t.String()),
       text: t.Optional(t.String()),
-      conversationId: t.Optional(t.String())
+      conversationId: t.Optional(t.String()),
+      senderAccountId: t.Optional(t.String())
     })
   })
   .get('/active-assistant', async ({ query, set }) => {

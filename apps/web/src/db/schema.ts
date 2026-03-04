@@ -8,7 +8,7 @@
 /**
  * Estado de sincronización de una entidad
  */
-export type SyncState = 
+export type SyncState =
   | 'local_only'      // Solo existe localmente (creado offline)
   | 'pending_backend' // Pendiente de sincronizar con backend
   | 'synced'          // Sincronizado con backend
@@ -27,11 +27,11 @@ export interface MessageContent {
   type?: string;
   media?: Array<{
     type: 'image' | 'video' | 'audio' | 'document';
-    url: string;
-    attachmentId?: string;
+    assetId: string;
+    name?: string;
     filename?: string;
     mimeType?: string;
-    size?: number;
+    sizeBytes?: number;
     waveformData?: any;
   }>;
 }
@@ -45,22 +45,22 @@ export interface LocalMessage {
   senderAccountId: string;
   content: MessageContent;
   type: 'incoming' | 'outgoing' | 'system';
-  
+
   // Sync state
   syncState: SyncState;
   pendingOperation?: PendingOperation;
-  
+
   // Timestamps
   localCreatedAt: Date;
   serverCreatedAt?: Date;
-  
+
   // COR-002: Status (from backend)
   status?: 'local_only' | 'pending_backend' | 'synced' | 'sent' | 'delivered' | 'seen';
-  
+
   // Actor Model (COR-004)
   fromActorId?: string;
   toActorId?: string;
-  
+
   // AI metadata
   generatedBy?: 'human' | 'ai' | 'system';
 }
@@ -73,16 +73,16 @@ export interface LocalConversation {
   relationshipId: string;
   channel: string;
   status: 'active' | 'archived' | 'deleted';
-  
+
   // Sync state
   syncState: SyncState;
   pendingOperation?: PendingOperation;
-  
+
   // Timestamps
   localCreatedAt: Date;
   serverCreatedAt?: Date;
   lastMessageAt?: Date;
-  
+
   // Metadata
   unreadCount?: number;
   metadata?: Record<string, unknown>;
@@ -95,16 +95,16 @@ export interface LocalRelationship {
   id: string;
   accountAId: string;
   accountBId: string;
-  
+
   // Sync state
   syncState: SyncState;
   pendingOperation?: PendingOperation;
-  
+
   // Timestamps
   localCreatedAt: Date;
   serverCreatedAt?: Date;
   lastInteraction?: Date;
-  
+
   // Context (simplified for local storage)
   contextSummary?: string;
 }
@@ -119,12 +119,12 @@ export interface SyncQueueItem {
   operation: PendingOperation;
   status: 'pending' | 'processing' | 'failed' | 'completed';
   payload: unknown;
-  
+
   // Retry logic
   retryCount: number;
   maxRetries: number;
   lastError?: string;
-  
+
   // Timestamps
   createdAt: Date;
   processedAt?: Date;

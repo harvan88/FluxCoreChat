@@ -20,6 +20,8 @@ const buildContentSignature = (message: {
   const media = Array.isArray(normalizedContent.media)
     ? (normalizedContent.media as Array<any>)
     : [];
+  // TODO(assets): Los adapters aún pueden entregar url/attachmentId. Cuando migren, este signature
+  // debe depender solo de assetId.
   const mediaSignature = media.length
     ? media
         .map((m) => `${m.type}:${m.assetId || m.url || m.name || m.filename || ''}`)

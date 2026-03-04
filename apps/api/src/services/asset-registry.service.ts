@@ -5,17 +5,8 @@
  * Gestiona CRUD, estados, versionado y deduplicación controlada.
  */
 
-import { db } from '@fluxcore/db';
-import {
-    assets,
-    type Asset,
-    type NewAsset,
-    type CreateAssetParams,
-    type AssetSearchParams,
-    type AssetStatus,
-    type AssetScope,
-    type DedupPolicy
-} from '@fluxcore/db';
+import { db, assets, type Asset, type NewAsset, type CreateAssetParams, type AssetSearchParams, type AssetStatus, type AssetScope, type DedupPolicy } from '@fluxcore/db';
+import { coreEventBus } from '../core/events';
 import { eq, and, desc, ilike, sql } from 'drizzle-orm';
 import { getStorageAdapter, generateStorageKey } from './storage';
 import { assetGatewayService } from './asset-gateway.service';
@@ -104,6 +95,17 @@ export class AssetRegistryService {
         const session = await assetGatewayService.getSession(sessionId);
         const fileName = name || session?.fileName || 'unnamed';
         const mimeType = session?.mimeType || 'application/octet-stream';
+
+        // Validar uploadedBy como UUID requerido
+        if (uploadedBy) {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            if (!uuidRegex.test(uploadedBy)) {
+                return { 
+                    success: false, 
+                    error: `Invalid uploadedBy: "${uploadedBy}". Expected a valid UUID or null. This usually happens when the frontend sends "system" instead of the actual user ID.` 
+                };
+            }
+        }
 
         // Crear asset
         const [asset] = await db.insert(assets).values({
@@ -215,14 +217,12 @@ export class AssetRegistryService {
             conditions.push(ilike(assets.name, `%${params.search}%`));
         }
 
-        const result = await db.select()
+        return db.select()
             .from(assets)
             .where(and(...conditions))
             .orderBy(desc(assets.createdAt))
-            .limit(params.limit || 50)
-            .offset(params.offset || 0);
-
-        return result;
+            .limit(params.limit ?? 20)
+            .offset(params.offset ?? 0);
     }
 
     /**
@@ -292,11 +292,41 @@ export class AssetRegistryService {
         const asset = await this.getById(assetId);
         const previousStatus = asset?.status;
 
-        await db.update(assets)
+        if (!asset) {
+            throw new Error(`${DEBUG_PREFIX} Asset ${assetId} not found`);
+        }
+
+        if (previousStatus === status) {
+            console.log(`${DEBUG_PREFIX} Asset ${assetId} already in status ${status}`);
+            return;
+        }
+
+        await db
+            .update(assets)
             .set({ status, updatedAt: new Date() })
             .where(eq(assets.id, assetId));
 
-        console.log(`${DEBUG_PREFIX} Asset state changed: ${assetId}, ${previousStatus} -> ${status}`);
+        console.log(`${DEBUG_PREFIX} Asset ${assetId} status changed ${previousStatus} -> ${status}`);
+
+        if (status === 'ready') {
+            let metadata: Record<string, unknown> | null = null;
+            if (asset.metadata) {
+                try {
+                    metadata = JSON.parse(asset.metadata);
+                } catch (error) {
+                    console.error(`${DEBUG_PREFIX} Failed to parse asset metadata for ${assetId}`, error);
+                }
+            }
+
+            coreEventBus.emit('asset:ready', {
+                assetId,
+                accountId: asset.accountId,
+                mimeType: asset.mimeType ?? undefined,
+                sizeBytes: asset.sizeBytes ?? undefined,
+                checksum: asset.checksumSHA256 ?? undefined,
+                metadata,
+            });
+        }
     }
 
     /**
@@ -412,25 +442,6 @@ export class AssetRegistryService {
 
         return versions.sort((a, b) => b.version - a.version);
     }
-
-    /**
-     * Archivar todos los assets de una cuenta (para account deletion)
-     */
-    async archiveAccountAssets(accountId: string): Promise<number> {
-        const result = await db.update(assets)
-            .set({ status: 'archived', updatedAt: new Date() })
-            .where(and(
-                eq(assets.accountId, accountId),
-                eq(assets.status, 'ready')
-            ));
-
-        console.log(`${DEBUG_PREFIX} Account assets archived: ${accountId}`);
-        return 0; // Drizzle no retorna count fácilmente
-    }
-
-    /**
-     * Purgar todos los assets de una cuenta
-     */
     async purgeAccountAssets(accountId: string): Promise<number> {
         const accountAssets = await db.select()
             .from(assets)

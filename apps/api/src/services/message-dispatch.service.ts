@@ -10,6 +10,7 @@ import { extensionHost } from './extension-host.service';
 import { featureFlags } from '../config/feature-flags';
 import { db, fluxcoreCognitionQueue } from '@fluxcore/db';
 import { sql } from 'drizzle-orm';
+import { accountLabelService } from './account-label.service';
 
 /**
  * MessageDispatchService — backend como transporte sin agencia.
@@ -34,14 +35,27 @@ class MessageDispatchService {
     private async handleMessageReceived(payload: { envelope: MessageEnvelope; result: ReceiveResult }) {
         const { envelope, result } = payload;
 
+        console.log(`[MessageDispatch] 🎬 handleMessageReceived called: conv=${envelope.conversationId.slice(0,7)}, success=${result.success}, msgId=${result.messageId?.slice(0,8)}`);
+        
+        // 🔍 LOG DEL INPUT INJECTADO POR FLUXCORE
+        console.log(`[MessageDispatch] 🌍 INPUT INJECTADO POR FLUXCORE:`);
+        console.log(`📋 ENVELOPE COMPLETO:`, JSON.stringify(envelope, null, 2));
+        console.log(`📋 META DEL ENVELOPE:`, JSON.stringify(envelope.meta || {}, null, 2));
+        console.log(`📋 CONTENT DEL ENVELOPE:`, JSON.stringify(envelope.content, null, 2));
+
         if (!result.success || !result.messageId) {
+            console.log(`[MessageDispatch] ⏭️  SKIP: result not successful or no messageId`);
             return; // AI-generated or typing — no re-dispatch
         }
 
         envelope.id = result.messageId;
 
         const targetAccountId = envelope.targetAccountId;
+        const targetLabel = await accountLabelService.getLabel(targetAccountId || '');
+        const safeTargetId = targetAccountId ? targetAccountId.slice(0, 7) : 'NONE';
+        console.log(`[MessageDispatch] 🎯 targetAccount: ${targetLabel} (${safeTargetId})`);
         if (!targetAccountId) {
+            console.log(`[MessageDispatch] ⏭️  SKIP: No targetAccountId`);
             return; // No target (AI emission without target) — skip
         }
 
@@ -52,77 +66,88 @@ class MessageDispatchService {
             return;
         }
 
-        // ── NEW ARCHITECTURE GATE ────────────────────────────────────────────────
-        // When FLUX_NEW_ARCHITECTURE=true, hand off to CognitionWorker via queue.
-        // The message is already persisted in the messages table by messageCore.
-        // CognitionWorker will pick it up after the turn window expires.
-        if (featureFlags.fluxNewArchitecture) {
-            const TURN_WINDOW_MS = 3000;
-            const expiresAt = new Date(Date.now() + TURN_WINDOW_MS);
-            await db.execute(sql`
-                INSERT INTO fluxcore_cognition_queue
-                    (conversation_id, account_id, last_signal_seq, turn_window_expires_at)
-                VALUES
-                    (${envelope.conversationId}, ${targetAccountId}, NULL, ${expiresAt})
-                ON CONFLICT (conversation_id) WHERE processed_at IS NULL
-                DO UPDATE SET
-                    turn_window_expires_at = ${expiresAt},
-                    last_signal_seq        = NULL,
-                    processed_at           = NULL
-            `);
-            console.log(`[FluxPipeline] 🚦 GATE  conv=${envelope.conversationId.slice(0,7)} type=${envelope.type} target=${targetAccountId.slice(0,7)} → ENQUEUE`);
+        // 🛡️ PROTECTION: Skip AI processing for internal/self channels
+        // 🔑 USAR ROUTING DEFINIDO POR CHATCORE WORLD DEFINER
+        // Nota: worldContext vendría de conversation.meta si está disponible
+        const routing = { requiresAi: true, skipProcessing: false }; // Temporal hasta que worldContext esté en conversation
+        
+        if (routing.skipProcessing || conversation.channel === 'internal' || conversation.channel === 'test') {
+            console.log(`[MessageDispatch] ⏭️  SKIP AI: channel=${conversation.channel}, routing.skipProcessing=${routing.skipProcessing} (WorldDefiner decision)`);
             return;
         }
-        // ── END NEW ARCHITECTURE GATE ────────────────────────────────────────────
+
+        // 🛡️ PROTECTION: Skip AI if sender and target are the same (self-conversation)
+        if (envelope.senderAccountId === targetAccountId) {
+            console.log(`[MessageDispatch] ⏭️  SKIP AI: Self-conversation detected (sender=target=${targetAccountId.slice(0,7)})`);
+            return;
+        }
+
+        // ChatProjector is the only component allowed to enqueue cognition turns per Canon v8.3.
+        console.log(`[MessageDispatch] 🔍 NEW_ARCH=${featureFlags.fluxNewArchitecture}, conv=${envelope.conversationId.slice(0,7)}, target=${targetAccountId.slice(0,7)}`);
 
         const policyContext = await fluxPolicyContextService.resolve({
-            accountId: targetAccountId,
+            accountId: targetAccountId, // 🔑 targetAccountId correcto desde resolveTargetAccount
+            conversationId: envelope.conversationId,
             relationshipId: conversation.relationshipId ?? undefined,
+            // 🔑 NO especificar channel - dejar que FluxPolicyContext lo resuelva
         });
+
+        console.log(`[MessageDispatch] 🌍 POLICY CONTEXT RESUELTO POR FLUXCORE:`);
+        console.log(`📋 POLICY CONTEXT COMPLETO:`, JSON.stringify(policyContext, null, 2));
+        console.log(`📋 CHANNEL RESUELTO:`, policyContext.channel);
+        console.log(`📋 SOURCE RESUELTO:`, policyContext.source);
 
         logTrace('[MessageDispatch] PolicyContext resolved.');
 
-        // 1. Extension Host Processing (Interceptors/Middleware)
-        logTrace('[MessageDispatch] Invoking Extension Host...');
-        const extensionResults = await extensionHost.processMessage({
-            accountId: targetAccountId,
-            relationshipId: conversation.relationshipId || '',
-            conversationId: envelope.conversationId,
-            message: {
-                id: envelope.id,
-                content: envelope.content,
-                type: envelope.type,
-                senderAccountId: envelope.senderAccountId,
-            },
-            policyContext,
-            automationMode: result.automation?.mode,
-        });
+        if (!featureFlags.fluxNewArchitecture) {
+            // 1. Extension Host Processing (Interceptors/Middleware)
+            logTrace('[MessageDispatch] Invoking Extension Host (legacy path)...');
+            const extensionResults = await extensionHost.processMessage({
+                accountId: targetAccountId,
+                relationshipId: conversation.relationshipId || '',
+                conversationId: envelope.conversationId,
+                message: {
+                    id: envelope.id,
+                    content: envelope.content,
+                    type: envelope.type,
+                    senderAccountId: envelope.senderAccountId,
+                },
+                policyContext,
+                automationMode: result.automation?.mode,
+            });
 
-        // Execute actions from extensions
-        let stopped = false;
-        for (const res of extensionResults) {
-            if (res.actions && res.actions.length > 0) {
-                logTrace(`[MessageDispatch] Executing actions from extension ${res.extensionId}`);
-                await this.executeActions(res.actions);
+            // Execute actions from extensions
+            let stopped = false;
+            for (const res of extensionResults) {
+                if (res.actions && res.actions.length > 0) {
+                    logTrace(`[MessageDispatch] Executing actions from extension ${res.extensionId}`);
+                    await this.executeActions(res.actions);
+                }
+                if (res.stopPropagation) {
+                    logTrace(`[MessageDispatch] Propagation stopped by extension ${res.extensionId}`);
+                    stopped = true;
+                }
             }
-            if (res.stopPropagation) {
-                logTrace(`[MessageDispatch] Propagation stopped by extension ${res.extensionId}`);
-                stopped = true;
-            }
-        }
 
-        if (stopped) {
+            if (stopped) {
+                return;
+            }
+
+            // 2. Runtime Gateway (Legacy Final Handler)
+            logTrace('[MessageDispatch] Delegating to Runtime Gateway (legacy path).');
+            const executionResult = await runtimeGateway.handleMessage({
+                envelope,
+                policyContext,
+            });
+
+            await this.executeActions(executionResult.actions || []);
+
+            // Legacy path handles everything
             return;
         }
 
-        // 2. Runtime Gateway (Final Handler)
-        logTrace('[MessageDispatch] Delegating to Runtime Gateway.');
-        const executionResult = await runtimeGateway.handleMessage({
-            envelope,
-            policyContext,
-        });
-
-        await this.executeActions(executionResult.actions || []);
+        // NEW_ARCH=true: CognitionWorker handles runtime invocation.
+        logTrace('[MessageDispatch] NEW_ARCH active — runtime handled by CognitionWorker.');
     }
 
     private async executeActions(actions: ExecutionAction[]) {
@@ -147,10 +172,10 @@ class MessageDispatchService {
                 return;
             }
             case 'broadcast_event': {
-                await messageCore.broadcastToConversation(
-                    action.payload.conversationId,
-                    action.payload.event,
-                );
+                // ✅ NO MÁS BROADCAST DUPLICADO
+                // Los eventos de broadcast ahora se manejan automáticamente por MessageCore.receive()
+                console.log(`[MessageDispatch] ✅ Broadcast event handled by MessageCore`);
+                console.log(`📋 EVENT:`, action.payload.event);
                 return;
             }
             case 'propose_work': {

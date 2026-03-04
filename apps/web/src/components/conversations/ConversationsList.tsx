@@ -244,7 +244,7 @@ export function ConversationsList() {
                 {/* Avatar */}
                 <div className="relative">
                   <Avatar
-                    src={(conversation as any).contactAvatar}
+                    src={(conversation as any)?.contactProfile?.avatarUrl || (conversation as any)?.contactAvatar}
                     name={(conversation as any).contactName}
                     size="lg"
                   />

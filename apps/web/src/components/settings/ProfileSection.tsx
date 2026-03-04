@@ -19,6 +19,7 @@ import { usePanelStore } from '../../store/panelStore';
 import { Button, Input, Card, Textarea } from '../ui';
 import { Switch } from '../ui/Switch';
 import { AvatarUpload } from '../profile/AvatarUpload';
+import { IdCopyable } from '../fluxcore/detail/IdCopyable';
 
 interface ProfileSectionProps {
   onBack: () => void;
@@ -27,10 +28,12 @@ interface ProfileSectionProps {
 export function ProfileSection({ onBack }: ProfileSectionProps) {
   const {
     profile,
+    account,
     isLoading,
     isSaving,
     error,
     updateProfile,
+    loadProfile,
   } = useProfile();
 
   const { openTab } = usePanelStore();
@@ -38,7 +41,8 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   // Local state for form
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarAssetId, setAvatarAssetId] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [privateContext, setPrivateContext] = useState('');
   const [allowAutomatedUse, setAllowAutomatedUse] = useState(false);
   const [aiIncludeName, setAiIncludeName] = useState(true);
@@ -72,7 +76,8 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     if (profile) {
       setDisplayName(profile.displayName || '');
       setBio(profile.bio || '');
-      setAvatarUrl(profile.avatarUrl || '');
+      setAvatarAssetId(profile.avatarAssetId || '');
+      setAvatarUrl(profile.avatarUrl);
       setPrivateContext(profile.privateContext || '');
       setAllowAutomatedUse(profile.allowAutomatedUse || false);
       setAiIncludeName(profile.aiIncludeName ?? true);
@@ -88,7 +93,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       const changed =
         displayName !== (profile.displayName || '') ||
         bio !== (profile.bio || '') ||
-        avatarUrl !== (profile.avatarUrl || '') ||
+        avatarAssetId !== (profile.avatarAssetId || '') ||
         privateContext !== (profile.privateContext || '') ||
         allowAutomatedUse !== (profile.allowAutomatedUse || false) ||
         aiIncludeName !== (profile.aiIncludeName ?? true) ||
@@ -96,7 +101,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true);
       setHasChanges(changed);
     }
-  }, [displayName, bio, avatarUrl, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile]);
+  }, [displayName, bio, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile]);
 
   // Handle save
   const handleSave = async () => {
@@ -106,7 +111,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     const success = await updateProfile({
       displayName,
       bio,
-      avatarUrl,
+      avatarAssetId,
       privateContext,
       allowAutomatedUse: isDelegated,
       aiIncludeName,
@@ -170,10 +175,23 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         <div className="p-4 space-y-6">
           {/* Avatar Section */}
           <AvatarUpload
-            currentAvatarUrl={avatarUrl}
+            currentAvatarUrl={avatarUrl ?? profile?.avatarUrl}
             name={displayName}
-            onUpload={(url) => setAvatarUrl(url)}
+            onUpload={({ url, assetId }) => {
+              setAvatarUrl(url);
+              setAvatarAssetId(assetId);
+              console.log('[ProfileSection] Avatar updated:', { url, assetId });
+              loadProfile();
+            }}
           />
+
+          {/* Account ID */}
+          {account && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted uppercase tracking-wider">ID de Cuenta</span>
+              <IdCopyable id={account.id} />
+            </div>
+          )}
 
           {/* Display Name */}
           <div className="space-y-2">

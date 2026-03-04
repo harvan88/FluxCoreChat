@@ -146,7 +146,7 @@ export function AvatarUpload({
     setIsUploading(true);
     setError(null);
 
-    const safeAwait = async <T>(promise: Promise<T>, label: string) => {
+    const safeAwait = async function<T>(promise: Promise<T>, label: string): Promise<T | undefined> {
       try {
         return await promise;
       } catch (err) {
@@ -198,21 +198,21 @@ export function AvatarUpload({
         
         if (updateResponse.success) {
           log('[AvatarUpload] Step 4: Upload completed successfully');
-          const sanitizedProfile = currentActiveAccount.profile
-            ? Object.fromEntries(
-                Object.entries(currentActiveAccount.profile).filter(([key]) => key !== 'avatarUrl')
-              )
-            : undefined;
-
           if (isMountedRef.current) {
             updateAccountState(currentActiveAccount.id, {
               avatarAssetId: response.data.assetId,
-              ...(sanitizedProfile ? { profile: sanitizedProfile } : {}),
+              profile: {
+                ...(currentActiveAccount.profile || {}),
+                avatarUrl: response.data.url,
+              },
             });
 
             updateUiAccount(currentActiveAccount.id, {
               avatarAssetId: response.data.assetId,
-              ...(sanitizedProfile ? { profile: sanitizedProfile } : {}),
+              profile: {
+                ...(currentActiveAccount.profile || {}),
+                avatarUrl: response.data.url,
+              },
             });
           }
 

@@ -60,7 +60,12 @@ export function PoliciesView({ accountId }: PoliciesViewProps) {
             if (data.success && data.data?.length) {
                 const active = data.data.find((a: any) => a.status === 'active' || a.status === 'production') ?? data.data[0];
                 setAssistant(active);
-                setTimingDraft({ ...active.timingConfig });
+                setTimingDraft({ 
+                    ...active.timingConfig,
+                    tone: active.timingConfig?.tone ?? active.modelConfig?.tone ?? 'neutral',
+                    language: active.timingConfig?.language ?? active.modelConfig?.language ?? 'es',
+                    useEmojis: active.timingConfig?.useEmojis ?? active.modelConfig?.useEmojis ?? false,
+                });
             } else {
                 setError('No hay asistentes configurados para esta cuenta.');
             }
@@ -78,14 +83,33 @@ export function PoliciesView({ accountId }: PoliciesViewProps) {
         setSaving(true);
         setError(null);
         try {
+            const updatedModelConfig = {
+                ...assistant.modelConfig,
+                tone: timingDraft.tone,
+                language: timingDraft.language,
+                useEmojis: timingDraft.useEmojis,
+            };
+            const updatedTimingConfig = { ...timingDraft };
+            delete updatedTimingConfig.tone;
+            delete updatedTimingConfig.language;
+            delete updatedTimingConfig.useEmojis;
+
             const res = await fetch(`/api/fluxcore/assistants/${assistant.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ accountId, timingConfig: timingDraft }),
+                body: JSON.stringify({ 
+                    accountId, 
+                    timingConfig: updatedTimingConfig,
+                    modelConfig: updatedModelConfig 
+                }),
             });
             const data = await res.json();
             if (data.success) {
-                setAssistant((prev: any) => ({ ...prev, timingConfig: timingDraft }));
+                setAssistant((prev: any) => ({ 
+                    ...prev, 
+                    timingConfig: updatedTimingConfig,
+                    modelConfig: updatedModelConfig 
+                }));
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);
             } else {

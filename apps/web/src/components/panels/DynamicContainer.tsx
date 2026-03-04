@@ -552,7 +552,9 @@ function TabContent({ tab, containerId }: TabContentProps) {
         <ChatViewErrorBoundary>
           <ChatView
             conversationId={tab.context.chatId}
-            accountId={selectedAccountId || undefined}
+            accountId={selectedAccountId || (() => {
+              throw new Error(`DynamicContainer: selectedAccountId es requerido para ChatView. Valor actual: ${selectedAccountId}. Esto indica un error en la selección de cuenta.`);
+            })()}
           />
         </ChatViewErrorBoundary>
       ) : (

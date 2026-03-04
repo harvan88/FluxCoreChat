@@ -13,6 +13,13 @@ export interface MessageEnvelope {
     timestamp?: Date;
     // Contexto adicional para extensiones
     targetAccountId?: string;  // La cuenta que recibe el mensaje
+    userId?: string; // Usuario autenticado (para outbox)
+    meta?: { // Metadatos para outbox
+        ip?: string;
+        userAgent?: string;
+        clientTimestamp?: string;
+        requestId?: string;
+    };
 }
 
 export interface ReceiveResult {
@@ -60,7 +67,7 @@ export interface Evidence {
         externalId?: string;
         entryPoint?: string;
     };
-    claimedOccurredAt?: Date;
+    claimedOccurredAt?: string; // 🔑 ESTANDARIZADO: ISO string en lugar de Date
 }
 
 /**
@@ -83,7 +90,8 @@ export type PhysicalFactType =
     | 'DELIVERY_SIGNAL_OBSERVED'
     | 'MEDIA_CAPTURED'
     | 'SYSTEM_TIMER_ELAPSED'
-    | 'CONNECTION_EVENT_OBSERVED';
+    | 'CONNECTION_EVENT_OBSERVED'
+    | 'chatcore.message.received';
 
 /**
  * KernelCandidateSignal: the ONLY input the Kernel accepts.
