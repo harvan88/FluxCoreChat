@@ -275,7 +275,15 @@ export function useExtensions(accountId: string | null) {
   useEffect(() => {
     loadAvailable();
     loadInstalled();
-  }, [loadAvailable, loadInstalled]);
+  }, []);  // ✅ Sin dependencias para evitar loop infinito
+
+  // Recargar cuando cambia el accountId
+  useEffect(() => {
+    if (accountId) {
+      loadAvailable();
+      loadInstalled();
+    }
+  }, [accountId]);  // ✅ Solo dependencia de accountId
 
   // Combinar extensiones con estado de instalación
   const extensionsWithStatus = extensions.map(ext => {

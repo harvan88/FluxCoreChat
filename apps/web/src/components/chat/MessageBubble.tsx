@@ -206,7 +206,7 @@ export function MessageBubble({
             {message.content.media.map((m, idx) => {
               const key = m.assetId ?? `${m.type}-${idx}`;
               const fallbackName = m.name || m.filename || `Archivo ${idx + 1}`;
-              const sizeBytes = m.sizeBytes ?? m.size ?? 0;
+              const sizeBytes = m.sizeBytes ?? 0;
 
               const renderAsset = () => {
                 if (!m.assetId || !viewerAccountId) return null;
@@ -238,6 +238,8 @@ export function MessageBubble({
               const assetContent = renderAsset();
               if (assetContent) return assetContent;
 
+              // TODO(assets): Este fallback a url debe eliminarse cuando adapters migren a assetId.
+              // Por ahora, se mantiene compatibilidad con canales externos que aún entregan url.
               if (!m.url) {
                 return (
                   <div key={`${key}-unsupported`} className="text-xs text-muted bg-active rounded-lg p-2 border border-subtle">
@@ -246,6 +248,8 @@ export function MessageBubble({
                 );
               }
 
+              // TODO(assets): Este renderizado directo por url debe eliminarse cuando adapters migren a assetId.
+              // Por ahora, se mantiene compatibilidad con canales externos que aún entregan url.
               const url = resolveMediaUrl(m.url);
 
               switch (m.type) {

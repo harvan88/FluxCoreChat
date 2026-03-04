@@ -11,6 +11,7 @@ export const fluxcoreCognitionQueue = pgTable('fluxcore_cognition_queue', {
 
     conversationId: uuid('conversation_id').notNull(),
     accountId: uuid('account_id').notNull(),
+    targetAccountId: uuid('target_account_id'),
 
     lastSignalSeq: bigint('last_signal_seq', { mode: 'number' }),
 

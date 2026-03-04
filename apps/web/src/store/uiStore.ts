@@ -67,6 +67,7 @@ interface UIStore {
   
   // Data Actions
   setAccounts: (accounts: Account[]) => void;
+  updateAccount: (accountId: string, data: Partial<Account>) => void;
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
   loadConversations: () => Promise<void>;
@@ -148,7 +149,19 @@ export const useUIStore = create<UIStore>()(
       setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
       
       // Selection Actions
-      setSelectedAccount: (id) => set({ selectedAccountId: id }),
+      setSelectedAccount: (id) => {
+  // 🔥 NUEVO: Limpiar conversaciones al cambiar cuenta para evitar mezcla
+  if (get().selectedAccountId !== id) {
+    set({ 
+      selectedAccountId: id,
+      conversations: [], // 🔥 Reset conversations para evitar mezcla entre cuentas
+      selectedConversationId: null,
+      activeConversationId: null,
+    });
+  } else {
+    set({ selectedAccountId: id });
+  }
+},
       
       setSelectedConversation: (id) => set({ selectedConversationId: id }),
 
@@ -156,6 +169,13 @@ export const useUIStore = create<UIStore>()(
       
       // Data Actions
       setAccounts: (accounts) => set({ accounts }),
+
+      updateAccount: (accountId, data) =>
+        set((state) => ({
+          accounts: state.accounts.map((account) =>
+            account.id === accountId ? { ...account, ...data } : account
+          ),
+        })),
       
       setConversations: (conversations) => set({ conversations }),
       

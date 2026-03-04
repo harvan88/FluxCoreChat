@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, PhysicalFactType } from '../../core/types';
+import { messageCore } from '../../core/message-core';
 import type { NormalizedMessage, NormalizedStatusEvent } from '../../../../../packages/adapters/src';
 
 // Constants matching the bootstrapped adapter in DB
@@ -76,13 +77,19 @@ export class RealityAdapterService {
         // 3. Sign the Signal
         signal.certifiedBy.signature = this.signSignal(signal);
 
-        // 4. Ingest into Kernel
+        // 🔑 DELEGAR A CHATCORE: Usar messageCore para procesamiento correcto
         console.log(`[Diag][Adapter->Kernel] message=${message.externalId || message.id || 'unknown'} runtime=- decision=respond fact=${factType} stage=certify`);
-        console.log(`[RealityAdapter] 📡 Certifying ${factType} from ${message.from.id} via ${ADAPTER_ID}...`);
-        const sequence = await kernel.ingestSignal(signal);
-        console.log(`[RealityAdapter] ✅ Certified as Sequence #${sequence}`);
-
-        return sequence;
+        console.log(`[RealityAdapter] 📡 Delegating ${factType} from ${message.from.id} to ChatCore...`);
+        
+        // Delegar a ChatCore para persistencia → outbox → certificación
+        try {
+            await messageCore.receiveFromAdapter(message, message.channel);
+            console.log(`[RealityAdapter] ✅ Message delegated to ChatCore for processing`);
+            return 0; // Placeholder - ChatCore maneja la certificación
+        } catch (error) {
+            console.error(`[RealityAdapter] ❌ Failed to delegate to ChatCore:`, error);
+            throw error;
+        }
     }
 
     /**
@@ -129,8 +136,17 @@ export class RealityAdapterService {
         signal.certifiedBy.signature = this.signSignal(signal);
 
         console.log(`[Diag][Adapter->Kernel] message=${event.messageId} runtime=- decision=respond fact=${factType} stage=status_certify`);
-        console.log(`[RealityAdapter] 📡 Certifying STATUS ${event.status} for msg ${event.messageId}...`);
-        return kernel.ingestSignal(signal);
+        console.log(`[RealityAdapter] 📡 Delegating STATUS ${event.status} for msg ${event.messageId}...`);
+        
+        // 🔑 DELEGAR A CHATCORE: Para eventos de status, usar certificación directa (no hay mensaje)
+        try {
+            const sequence = await kernel.ingestSignal(signal);
+            console.log(`[RealityAdapter] ✅ Status certified as Sequence #${sequence}`);
+            return sequence;
+        } catch (error) {
+            console.error(`[RealityAdapter] ❌ Failed to certify status:`, error);
+            throw error;
+        }
     }
 
     private resolveFactType(message: NormalizedMessage): PhysicalFactType {

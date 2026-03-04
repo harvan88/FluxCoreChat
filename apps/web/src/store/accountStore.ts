@@ -31,6 +31,7 @@ interface AccountState {
   updateAccount: (accountId: string, data: Partial<Account>) => Promise<boolean>;
   convertToBusiness: (accountId: string) => Promise<boolean>;
   clearError: () => void;
+  updateAccountState: (accountId: string, data: Partial<Account>) => void;
 }
 
 export const useAccountStore = create<AccountState>()(
@@ -165,6 +166,30 @@ export const useAccountStore = create<AccountState>()(
           set({ error: err.message || 'Error al convertir cuenta', isLoading: false });
           return false;
         }
+      },
+
+      updateAccountState: (accountId, data) => {
+        set((state) => ({
+          accounts: state.accounts.map((account) => {
+            if (account.id !== accountId) {
+              return account;
+            }
+
+            const { profile: profilePatch, ...rest } = data;
+            const existingProfile =
+              account.profile && typeof account.profile === 'object'
+                ? account.profile
+                : {};
+
+            return {
+              ...account,
+              ...rest,
+              profile: profilePatch
+                ? { ...existingProfile, ...profilePatch }
+                : (account.profile ?? existingProfile),
+            } as Account;
+          }),
+        }));
       },
 
       clearError: () => set({ error: null }),

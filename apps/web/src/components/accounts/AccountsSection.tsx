@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { useAccounts } from '../../store/accountStore';
 import { Button, Input, Card, DoubleConfirmationDeleteButton } from '../ui';
+import { Avatar } from '../ui/Avatar';
 import { AccountDeletionModal } from './AccountDeletionModal';
+import { IdCopyable } from '../fluxcore/detail/IdCopyable';
 import type { Account } from '../../types';
 
 interface AccountsSectionProps {
@@ -127,9 +129,11 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
             {currentAccount && (
               <Card className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center text-inverse font-bold text-lg">
-                    {currentAccount.displayName?.charAt(0).toUpperCase() || '?'}
-                  </div>
+                  <Avatar
+                    src={currentAccount.profile?.avatarUrl}
+                    name={currentAccount.displayName || currentAccount.username}
+                    size="xl"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-primary font-semibold truncate">{currentAccount.displayName}</div>
                     <div className="flex items-center gap-1 text-sm text-secondary">
@@ -144,6 +148,9 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
                           <span>Cuenta personal</span>
                         </>
                       )}
+                    </div>
+                    <div className="mt-1">
+                      <IdCopyable id={currentAccount.id} prefix="" />
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -300,6 +307,8 @@ interface AccountCardProps {
 
 function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps) {
   const Icon = account.accountType === 'business' ? Building2 : User;
+  const avatarUrl = account.profile?.avatarUrl;
+  const displayName = account.displayName || account.username;
 
   return (
     <Card
@@ -316,14 +325,19 @@ function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps
       }}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-elevated flex items-center justify-center text-primary font-bold">
-          {account.displayName?.charAt(0).toUpperCase() || '?'}
-        </div>
+        <Avatar
+          src={avatarUrl}
+          name={displayName}
+          size="lg"
+        />
         <div className="flex-1 min-w-0">
           <div className="text-primary font-medium truncate">{account.displayName}</div>
           <div className="flex items-center gap-1 text-xs text-muted">
             <Icon size={12} />
             <span>@{account.username}</span>
+          </div>
+          <div className="mt-1">
+            <IdCopyable id={account.id} prefix="" />
           </div>
         </div>
         <div className="flex items-center gap-2">

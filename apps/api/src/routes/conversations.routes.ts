@@ -28,12 +28,12 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
             return { success: false, message: 'Account does not belong to user' };
           }
 
-          const conversations = await conversationService.getConversationsByAccountId(accountId);
+          const conversations = await conversationService.getConversationsByAccountId(accountId, { actorId: user.id });
           return { success: true, data: conversations };
         }
 
         // Fallback: devolver todas las conversaciones del usuario (deprecated behavior)
-        const conversations = await conversationService.getConversationsByUserId(user.id);
+        const conversations = await conversationService.getConversationsByUserId(user.id, { actorId: user.id });
         return { success: true, data: conversations };
       } catch (error: any) {
         console.error('[API] Error loading conversations:', error);
@@ -58,10 +58,10 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
       }
 
       try {
-        const conversation = await conversationService.createConversation(
-          body.relationshipId,
-          body.channel
-        );
+        const conversation = await conversationService.ensureConversation({
+          relationshipId: body.relationshipId,
+          channel: body.channel,
+        });
         return { success: true, data: conversation };
       } catch (error: any) {
         set.status = 400;
@@ -107,13 +107,73 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
         return { success: false, message: 'Unauthorized' };
       }
 
+      // 🔥 NUEVA: Validar accountId pertenece al user
+      if (query.accountId) {
+        const userAccounts = await db
+          .select()
+          .from(accounts)
+          .where(eq(accounts.ownerId, user.id));
+        
+        const accountIds = userAccounts.map(a => a.id);
+        if (!accountIds.includes(query.accountId)) {
+          set.status = 403;
+          return { success: false, message: 'AccountId no pertenece al usuario' };
+        }
+      }
+
       try {
         const { messageService } = await import('../services/message.service');
         const limit = parseInt(query.limit || '50');
-        const offset = parseInt(query.offset || '0');
+        
+        // 🆕 Cursor-based pagination: usar cursor en lugar de offset
+        const cursor = query.cursor ? new Date(query.cursor) : undefined;
+        
+        console.log(`[ConversationsRoute] 🆕 CURSOR PAGINATION: limit=${limit}, cursor=${cursor}`);
+        
+        // 🔥 NUEVO: Obtener viewerRole para perspectiva correcta
+        let viewerRole = null;
+        let activeAccountId = null;
 
-        const messages = await messageService.getMessagesByConversationId(params.id, limit, offset);
-        return { success: true, data: messages };
+        // 🔥 CORREGIDO: Usar accountId del JWT, no del query param (seguridad)
+        if (query.accountId) {
+          // Validar que accountId pertenece al user (ya hecho arriba)
+          activeAccountId = query.accountId;
+          
+          const participant = await db
+            .select({ role: conversationParticipants.role })
+            .from(conversationParticipants)
+            .where(
+              and(
+                eq(conversationParticipants.conversationId, params.id),
+                eq(conversationParticipants.accountId, activeAccountId)
+              )
+            )
+            .limit(1);
+          viewerRole = participant[0]?.role || null;
+        }
+
+        const messages = await messageService.getMessagesByConversationId(params.id, limit, cursor);
+
+        // 🔥 NUEVO: Agregar viewerRole a cada mensaje para perspectiva correcta
+        const messagesWithPerspective = messages.map(msg => ({
+          ...msg,
+          type: viewerRole 
+            ? (viewerRole === 'initiator' && msg.senderAccountId === activeAccountId ? 'outgoing' : 'incoming')
+            : (msg.senderAccountId === activeAccountId ? 'outgoing' : 'incoming'), // 🔥 Fallback con activeAccountId del JWT
+          viewerRole // 🔥 Incluir viewerRole para debug
+        }));
+        
+        // 🆕 Devolver el cursor del último mensaje para la siguiente página
+        const nextCursor = messagesWithPerspective.length > 0 ? messagesWithPerspective[messagesWithPerspective.length - 1].createdAt : null;
+        
+        return { 
+          success: true, 
+          data: messagesWithPerspective,
+          meta: {
+            nextCursor: nextCursor,
+            hasMore: messagesWithPerspective.length === limit
+          }
+        };
       } catch (error: any) {
         console.error('[API] Error loading messages:', error);
         set.status = 500;
@@ -125,7 +185,8 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
       params: t.Object({ id: t.String() }),
       query: t.Object({
         limit: t.Optional(t.String()),
-        offset: t.Optional(t.String()),
+        cursor: t.Optional(t.String()),
+        accountId: t.Optional(t.String()), // 🔥 NUEVO: accountId query param
       }),
       detail: { tags: ['Conversations'], summary: 'Get conversation messages' },
     }

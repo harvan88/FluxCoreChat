@@ -11,6 +11,8 @@ import { extensionHost } from '../services/extension-host.service';
 import { smartDelayService } from '../services/smart-delay.service';
 import { chatCoreGateway } from '../services/fluxcore/chatcore-gateway.service';
 import { chatCoreWebchatGateway } from '../services/fluxcore/chatcore-webchat-gateway.service';
+import { db, accounts } from '@fluxcore/db';
+import { eq, inArray } from 'drizzle-orm';
 
 interface WSMessage {
   type:
@@ -41,7 +43,12 @@ interface WSMessage {
 }
 
 // Store de conexiones activas por relationshipId
-const subscriptions = new Map<string, Set<any>>();
+const relationshipSubscriptions = new Map<string, Set<any>>();
+// Store de conexiones activas por conversationId
+const conversationSubscriptions = new Map<string, Set<any>>();
+
+// Store de conexiones activas por visitorToken
+const visitorSubscriptions = new Map<string, Set<any>>();
 
 // Conexiones WS activas (para broadcast de eventos del sistema)
 const activeConnections = new Set<any>();
@@ -57,21 +64,19 @@ export function broadcastAll(payload: any): void {
   }
 }
 
-export function handleWSMessage(ws: any, message: string | Buffer): void {
+export async function handleWSMessage(ws: any, message: string | Buffer): Promise<void> {
   try {
     const data = JSON.parse(message.toString()) as WSMessage;
 
     switch (data.type) {
       case 'subscribe':
         if (data.relationshipId) {
-          // Agregar a subscripciones
-          if (!subscriptions.has(data.relationshipId)) {
-            subscriptions.set(data.relationshipId, new Set());
+          if (!relationshipSubscriptions.has(data.relationshipId)) {
+            relationshipSubscriptions.set(data.relationshipId, new Set());
           }
-          subscriptions.get(data.relationshipId)!.add(ws);
+          relationshipSubscriptions.get(data.relationshipId)!.add(ws);
 
-          // Registrar en MessageCore también
-          messageCore.subscribe(data.relationshipId, (payload) => {
+          messageCore.subscribeToRelationship(data.relationshipId, (payload) => {
             broadcastToRelationship(data.relationshipId!, payload);
           });
 
@@ -80,16 +85,34 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
             relationshipId: data.relationshipId
           }));
         }
+
+        if (data.conversationId) {
+          if (!conversationSubscriptions.has(data.conversationId)) {
+            conversationSubscriptions.set(data.conversationId, new Set());
+          }
+          conversationSubscriptions.get(data.conversationId)!.add(ws);
+
+          const callback = (payload: any) => {
+            broadcastToConversationClients(data.conversationId!, payload);
+          };
+          messageCore.subscribeToConversation(data.conversationId, callback);
+          (ws.__conversationCallbacks ||= new Map()).set(data.conversationId, callback);
+
+          ws.send(JSON.stringify({
+            type: 'subscribed',
+            conversationId: data.conversationId,
+          }));
+        }
         break;
 
       case 'unsubscribe':
         if (data.relationshipId) {
-          const subs = subscriptions.get(data.relationshipId);
+          const subs = relationshipSubscriptions.get(data.relationshipId);
           if (subs) {
             subs.delete(ws);
             if (subs.size === 0) {
-              subscriptions.delete(data.relationshipId);
-              messageCore.unsubscribe(data.relationshipId);
+              relationshipSubscriptions.delete(data.relationshipId);
+              messageCore.unsubscribeFromRelationship(data.relationshipId);
             }
           }
           ws.send(JSON.stringify({
@@ -97,7 +120,28 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
             relationshipId: data.relationshipId
           }));
         }
+
+        if (data.conversationId) {
+          const subs = conversationSubscriptions.get(data.conversationId);
+          if (subs) {
+            subs.delete(ws);
+            if (subs.size === 0) {
+              conversationSubscriptions.delete(data.conversationId);
+            }
+          }
+          const callback = ws.__conversationCallbacks?.get(data.conversationId);
+          if (callback) {
+            messageCore.unsubscribeFromConversation(data.conversationId, callback);
+            ws.__conversationCallbacks.delete(data.conversationId);
+          }
+          ws.send(JSON.stringify({
+            type: 'unsubscribed',
+            conversationId: data.conversationId,
+          }));
+        }
         break;
+// ... (rest of the file)
+
 
       case 'message':
         if (data.conversationId && data.content && data.senderAccountId) {
@@ -105,9 +149,81 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
           // Validamos que sea un intento de comunicación humana
           const wsData = ws.data || {};
           
+          // 🔥 NUEVO: Validar account activo del user
+          const { accountActivationService } = await import('../services/account-activation.service');
+          const userValidation = await accountActivationService.validateSenderAccount(
+            wsData.userId, // User autenticado del WebSocket
+            data.senderAccountId
+          );
+          
+          if (!userValidation.isValid) {
+            console.log(`[ws-handler] 🔒 ACCOUNT VALIDATION FAILED: ${userValidation.reason}`);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: userValidation.reason,
+              code: 'ACCOUNT_NOT_AUTHORIZED'
+            }));
+            return;
+          }
+          
+          console.log(`[ws-handler] ✅ Account validation passed: ${data.senderAccountId.slice(0, 7)} for user ${wsData.userId?.slice(0, 7)}`);
+          
+          // 🔥 NUEVA: Validar que sea participante de la conversación
+          const { conversationParticipantService } = await import('../services/conversation-participant.service');
+          const participants = await conversationParticipantService.getActiveParticipants(data.conversationId);
+          
+          console.log(`[WebSocket] 👥 Validando participantes para ${data.conversationId}:`);
+          console.log(`  - Participants: ${participants.map(p => `${p.accountId?.slice(0, 8)} (${p.role})`).join(', ')}`);
+          console.log(`  - Sender: ${data.senderAccountId.slice(0, 8)}`);
+          
+          const isParticipant = participants.some(p => 
+            p.accountId === data.senderAccountId || 
+            (p.visitorToken && data.visitorToken === p.visitorToken)
+          );
+          
+          // 🔥 NUEVO: Permitir si es una cuenta del mismo user (mismo owner)
+          let isSameUserAccount = false;
+          if (!isParticipant) {
+            const senderAccountInfo = await db
+              .select({ ownerUserId: accounts.ownerUserId })
+              .from(accounts)
+              .where(eq(accounts.id, data.senderAccountId))
+              .limit(1);
+            
+            const participantOwners = await db
+              .select({ ownerUserId: accounts.ownerUserId, accountId: accounts.id })
+              .from(accounts)
+              .where(inArray(accounts.id, participants.map(p => p.accountId).filter(Boolean)));
+            
+            const senderOwnerId = senderAccountInfo[0]?.ownerUserId;
+            isSameUserAccount = participantOwners.some(p => p.ownerUserId === senderOwnerId);
+            
+            console.log(`  - Sender owner: ${senderOwnerId?.slice(0, 8)}`);
+            console.log(`  - Participant owners: ${participantOwners.map(p => p.ownerUserId?.slice(0, 8)).join(', ')}`);
+            console.log(`  - Is same user account: ${isSameUserAccount}`);
+          }
+          
+          if (!isParticipant && !isSameUserAccount) {
+            console.log(`[WebSocket] 🔒 ACCESO DENEGADO: ${data.senderAccountId} no es participante ni cuenta del mismo user`);
+            ws.send(JSON.stringify({ 
+              type: 'error', 
+              code: 'NOT_PARTICIPANT',
+              message: 'No eres participante de esta conversación' 
+            }));
+            return;
+          }
+          
+          // 🔥 CORRECCIÓN: El userId debe ser el owner del account, no el accountId
+          const senderAccount = await db.select({ ownerUserId: accounts.ownerUserId })
+            .from(accounts)
+            .where(eq(accounts.id, data.senderAccountId))
+            .limit(1);
+          
+          const userId = senderAccount[0]?.ownerUserId || data.senderAccountId; // Fallback
+          
           chatCoreGateway.certifyIngress({
             accountId: data.senderAccountId, // Business Context
-            userId: data.senderAccountId,    // Authenticated Actor
+            userId: userId,                    // Authenticated Actor (owner del account)
             payload: data.content,
             meta: {
               ip: wsData.ip,
@@ -282,6 +398,8 @@ export function handleWSMessage(ws: any, message: string | Buffer): void {
 export function handleWSOpen(ws: any): void {
   try {
     console.log('[ws-handler] WebSocket connection opened');
+    console.log('[ws-handler] 📋 ws.data:', ws.data);
+    console.log('[ws-handler] 🎯 ws.data.accountId:', ws.data?.accountId);
     console.log('[ws-handler] Active connections before add:', activeConnections.size);
     activeConnections.add(ws);
     console.log('[ws-handler] Active connections after add:', activeConnections.size);
@@ -309,26 +427,141 @@ export function handleWSClose(ws: any): void {
   console.log('WebSocket connection closed');
   activeConnections.delete(ws);
   // Limpiar subscripciones de este ws
-  for (const [relationshipId, subs] of subscriptions.entries()) {
+  for (const [relationshipId, subs] of relationshipSubscriptions.entries()) {
     if (subs.has(ws)) {
       subs.delete(ws);
       if (subs.size === 0) {
-        subscriptions.delete(relationshipId);
-        messageCore.unsubscribe(relationshipId);
+        relationshipSubscriptions.delete(relationshipId);
+        messageCore.unsubscribeFromRelationship(relationshipId);
+      }
+    }
+  }
+
+  for (const [conversationId, subs] of conversationSubscriptions.entries()) {
+    if (subs.has(ws)) {
+      subs.delete(ws);
+      if (subs.size === 0) {
+        conversationSubscriptions.delete(conversationId);
+      }
+    }
+  }
+
+  if (ws.__conversationCallbacks) {
+    for (const [conversationId, callback] of ws.__conversationCallbacks.entries()) {
+      messageCore.unsubscribeFromConversation(conversationId, callback);
+    }
+    ws.__conversationCallbacks.clear();
+  }
+
+  // Clean up visitor subscriptions
+  for (const [token, subs] of visitorSubscriptions.entries()) {
+    if (subs.has(ws)) {
+      subs.delete(ws);
+      if (subs.size === 0) {
+        visitorSubscriptions.delete(token);
       }
     }
   }
 }
 
 export function broadcastToRelationship(relationshipId: string, payload: any): void {
-  const subs = subscriptions.get(relationshipId);
+  const subs = relationshipSubscriptions.get(relationshipId);
+  if (subs) {
+    const message = JSON.stringify(payload);
+    console.log(`[WebSocket] 🔍 Broadcasting to ${subs.size} subscribers in relationship ${relationshipId}`);
+    console.log(`[WebSocket] 📋 Payload:`, {
+      senderAccountId: payload.data?.senderAccountId,
+      targetAccountId: payload.data?.targetAccountId,
+      generatedBy: payload.data?.generatedBy,
+      messageId: payload.data?.id
+    });
+    
+    for (const ws of subs) {
+      try {
+        // 🔥 CRÍTICO: Solo enviar si el WebSocket está autorizado para recibir este mensaje
+        const wsAccountId = ws.data?.accountId;
+        const messageSenderId = payload.data?.senderAccountId;
+        const messageTargetId = payload.data?.targetAccountId;
+        
+        console.log(`[WebSocket] 🔍 Checking WS: accountId=${wsAccountId}, sender=${messageSenderId}, target=${messageTargetId}`);
+        
+        // Si no hay accountId en el WebSocket, enviar por defecto (compatibilidad)
+        if (!wsAccountId) {
+          console.log(`[WebSocket] 🔄 No accountId in ws.data, sending to all (compatibility)`);
+          ws.send(message);
+          continue;
+        }
+        
+        // Enviar solo si:
+        // 1. Es el remitente del mensaje, O
+        // 2. Es el destinatario del mensaje, O
+        // 3. Es un mensaje de IA (broadcast a todos)
+        const isAIMessage = payload.data?.generatedBy === 'ai';
+        const isSender = wsAccountId === messageSenderId;
+        const isRecipient = wsAccountId === messageTargetId;
+        
+        console.log(`[WebSocket] 🎯 Decision: isAI=${isAIMessage}, isSender=${isSender}, isRecipient=${isRecipient}`);
+        
+        if (isAIMessage || isSender || isRecipient) {
+          console.log(`[WebSocket] ✅ Sending to ${wsAccountId}: sender=${messageSenderId}, target=${messageTargetId}, isAI=${isAIMessage}`);
+          ws.send(message);
+        } else {
+          console.log(`[WebSocket] 🚫 Filtering message for ${wsAccountId}: not authorized to see this message`);
+        }
+      } catch (e) {
+        // Connection might be closed
+        subs.delete(ws);
+      }
+    }
+  }
+}
+
+export function broadcastToConversationClients(conversationId: string, payload: any): void {
+  const subs = conversationSubscriptions.get(conversationId);
+  if (!subs) return;
+  const message = JSON.stringify(payload);
+  for (const ws of subs) {
+    try {
+      // 🔥 CRÍTICO: Solo enviar si el WebSocket está autorizado para recibir este mensaje
+      const wsAccountId = ws.data?.accountId;
+      const messageSenderId = payload.data?.senderAccountId;
+      const messageTargetId = payload.data?.targetAccountId;
+      
+      // Si no hay accountId en el WebSocket, enviar por defecto (compatibilidad)
+      if (!wsAccountId) {
+        console.log(`[WebSocket] 🔄 No accountId in ws.data, sending conversation to all (compatibility)`);
+        ws.send(message);
+        continue;
+      }
+      
+      // Enviar solo si:
+      // 1. Es el remitente del mensaje, O
+      // 2. Es el destinatario del mensaje, O
+      // 3. Es un mensaje de IA (broadcast a todos)
+      const isAIMessage = payload.data?.generatedBy === 'ai';
+      const isSender = wsAccountId === messageSenderId;
+      const isRecipient = wsAccountId === messageTargetId;
+      
+      if (isAIMessage || isSender || isRecipient) {
+        console.log(`[WebSocket] 🎯 Sending to conversation ${wsAccountId}: sender=${messageSenderId}, target=${messageTargetId}, isAI=${isAIMessage}`);
+        ws.send(message);
+      } else {
+        console.log(`[WebSocket] 🚫 Filtering conversation message for ${wsAccountId}: not authorized`);
+      }
+    } catch (error) {
+      subs.delete(ws);
+    }
+  }
+}
+
+export function broadcastToVisitor(visitorToken: string, payload: any): void {
+  const subs = visitorSubscriptions.get(visitorToken);
   if (subs) {
     const message = JSON.stringify(payload);
     for (const ws of subs) {
       try {
         ws.send(message);
       } catch (e) {
-        // Connection might be closed
         subs.delete(ws);
       }
     }
@@ -530,6 +763,12 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
 async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
   const { alias, visitorToken, visitorId, accountId } = data;
   const token = visitorToken || visitorId!;
+
+  // Subscribe socket to visitor token updates
+  if (!visitorSubscriptions.has(token)) {
+    visitorSubscriptions.set(token, new Set());
+  }
+  visitorSubscriptions.get(token)!.add(ws);
 
   try {
     // Buscar cuenta (tenantId) por alias

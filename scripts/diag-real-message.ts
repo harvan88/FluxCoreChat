@@ -6,7 +6,7 @@
 const API_URL = 'http://localhost:3000';
 const HAROLD_EMAIL = 'harvan@hotmail.es';
 const HAROLD_PASS = process.env.HAROLD_PASSWORD || 'test123'; // ajustar si es diferente
-const CONV_ID = 'de439383-6f6d-429f-85a1-762a2afd661f';
+const CONV_ID = '1d568459-d4b3-47e2-8571-af7c0bd43fd3';
 const HAROLD_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
 
 console.log('═══════════════════════════════════════════════════════════');

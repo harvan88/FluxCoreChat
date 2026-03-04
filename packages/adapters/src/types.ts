@@ -35,6 +35,8 @@ export interface NormalizedMessage {
 export interface MessageContent {
   type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'template';
   text?: string;
+  // TODO(assets): Cuando exista la capa de ingestión de medios externos, este campo
+  // debe ser assetId y la URL debe obtenerse vía firma del sistema de assets.
   media?: {
     url: string;
     mimeType?: string;

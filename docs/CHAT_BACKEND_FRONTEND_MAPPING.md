@@ -274,15 +274,21 @@ POST /automation/evaluate
 | `AttachmentPanel` - Ubicación | ❌ No existe | ❌ | Falta endpoint para compartir ubicación |
 | `AttachmentPanel` - Quick Reply | ⚠️ Parcial | ⚠️ | Messages soporta `buttons` pero no hay CRUD |
 | `AttachmentPanel` - Contacto | ❌ No existe | ❌ | Falta endpoint para compartir contacto |
-| Avatar upload | `POST /upload/avatar` | ✅ | Solo para avatares |
+| Avatar upload | `POST /api/accounts/:id/avatar/upload-session` → `PUT /api/assets/upload/:sessionId` → `POST /api/accounts/:id/avatar/upload/:sessionId/commit` | ✅ | AssetGateway + AssetRegistry (scope `profile_avatar`) |
 
 **Estado actual de uploads:**
 ```
-POST /upload/avatar
-  - body: FormData { file: File }
-  - returns: { url, filename }
-  - Solo soporta imágenes
-  - Almacena en /uploads/avatars/
+POST /api/accounts/:id/avatar/upload-session
+  - body: JSON (fileName, mimeType, sizeBytes)
+  - devuelve sessionId, TTL
+
+PUT /api/assets/upload/:sessionId
+  - body: FormData { file }
+  - sube binario a AssetGateway con límites configurados
+
+POST /api/accounts/:id/avatar/upload/:sessionId/commit
+  - body: { uploadedBy? }
+  - AssetRegistry crea asset (scope `profile_avatar`), actualiza `accounts.avatarAssetId`, dispara auditoría y entrega metadata
 ```
 
 **GAPS CRÍTICOS:**

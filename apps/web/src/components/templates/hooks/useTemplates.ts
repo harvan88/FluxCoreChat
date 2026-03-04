@@ -78,6 +78,7 @@ const MOCK_TEMPLATES: Template[] = [
     usageCount: 150,
     createdAt: '2025-01-15T10:00:00Z',
     updatedAt: '2025-01-20T15:30:00Z',
+    allowAutomatedUse: false,
   },
   {
     id: '2',
@@ -89,6 +90,7 @@ const MOCK_TEMPLATES: Template[] = [
       { name: 'nombre', type: 'text', label: 'Nombre', required: true },
       { name: 'numero_pedido', type: 'text', label: 'Número de pedido', required: true },
       { name: 'fecha_entrega', type: 'date', label: 'Fecha de entrega', required: true },
+      { name: 'direccion_entrega', type: 'text', label: 'Dirección de entrega', required: true }
     ],
     tags: ['pedido', 'seguimiento'],
     isActive: true,
@@ -97,6 +99,7 @@ const MOCK_TEMPLATES: Template[] = [
     usageCount: 89,
     createdAt: '2025-01-10T08:00:00Z',
     updatedAt: '2025-01-18T12:00:00Z',
+    allowAutomatedUse: false,
   },
   {
     id: '3',
@@ -114,26 +117,28 @@ const MOCK_TEMPLATES: Template[] = [
     usageCount: 200,
     createdAt: '2025-01-05T14:00:00Z',
     updatedAt: '2025-01-05T14:00:00Z',
+    allowAutomatedUse: false,
   },
   {
     id: '4',
     accountId: 'acc-1',
     name: 'Promoción especial',
-    content: '🎉 ¡Hola {{nombre}}! Tenemos una oferta especial para ti: {{descuento}}% de descuento en {{producto}}. Válido hasta {{fecha_limite}}.',
+    content: '¡Hola {{nombre}}! Tenemos una oferta especial para ti: {{descuento}}% de descuento en {{producto}}. Válido hasta {{fecha_limite}}.',
     category: 'promotion',
     variables: [
       { name: 'nombre', type: 'text', label: 'Nombre', required: true },
       { name: 'descuento', type: 'number', label: 'Porcentaje de descuento', required: true },
       { name: 'producto', type: 'text', label: 'Producto', required: true },
-      { name: 'fecha_limite', type: 'date', label: 'Fecha límite', required: true },
+      { name: 'fecha_limite', type: 'date', label: 'Fecha límite', required: true }
     ],
-    tags: ['promoción', 'oferta', 'descuento'],
+    tags: ['promoción', 'descuento'],
     isActive: false,
     authorizeForAI: false,
     aiUsageInstructions: null,
     usageCount: 45,
     createdAt: '2025-01-01T09:00:00Z',
     updatedAt: '2025-01-25T11:00:00Z',
+    allowAutomatedUse: false,
   },
 ];
 
@@ -261,6 +266,7 @@ export function useTemplates(options: UseTemplatesOptions): UseTemplatesReturn {
         usageCount: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        allowAutomatedUse: false,
       };
       
       setTemplates(prev => [newTemplate, ...prev]);

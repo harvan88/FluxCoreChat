@@ -7,6 +7,9 @@ interface ParticipantsActivityBarProps {
 }
 
 export const ParticipantsActivityBar = ({ activities }: ParticipantsActivityBarProps) => {
+  // 🔥 PROTEGER activities para evitar error si es null/undefined
+  if (!activities) return null;
+  
   const activeParticipants = Object.entries(activities)
     .filter(([_, activity]) => activity !== 'idle');
 

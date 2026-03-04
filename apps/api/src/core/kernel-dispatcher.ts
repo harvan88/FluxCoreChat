@@ -1,4 +1,4 @@
-import { db, fluxcoreOutbox, eq, isNull, asc } from '@fluxcore/db';
+import { db, fluxcoreOutbox, eq, asc } from '@fluxcore/db';
 import { coreEventBus } from './events';
 
 /**
@@ -28,7 +28,7 @@ export class KernelDispatcher {
         while (this.isRunning) {
             try {
                 const pending = await db.query.fluxcoreOutbox.findMany({
-                    where: isNull(fluxcoreOutbox.processedAt),
+                    where: eq(fluxcoreOutbox.status, 'pending'),
                     orderBy: [asc(fluxcoreOutbox.id)],
                     limit: 50
                 });
@@ -37,7 +37,7 @@ export class KernelDispatcher {
                     // Mark as processed first (at-least-once delivery)
                     for (const record of pending) {
                         await db.update(fluxcoreOutbox)
-                            .set({ processedAt: new Date() })
+                            .set({ status: 'sent', sentAt: new Date() })
                             .where(eq(fluxcoreOutbox.id, record.id));
                     }
 

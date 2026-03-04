@@ -4,6 +4,7 @@ import { eq, and, or, ilike } from 'drizzle-orm';
 import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
 import { extensionHost } from './extension-host.service';
 import { coreEventBus } from '../core/events';
+import type { Account } from '@fluxcore/db';
 
 // V2-4.2: Instalación de extensiones preinstaladas en nuevas cuentas
 
@@ -62,6 +63,9 @@ export class AccountService {
     });
 
     await extensionHost.installPreinstalledExtensions(account.id);
+
+    // Crear relación con FluxCore y conversación de bienvenida
+    await this.createFluxCoreWelcome(account.id, data.displayName);
 
     return account;
   }
@@ -212,6 +216,30 @@ export class AccountService {
       .returning();
 
     return updated;
+  }
+
+  async updateAccountAvatar(accountId: string, avatarAssetId: string): Promise<Account> {
+    const [updatedAccount] = await db
+      .update(accounts)
+      .set({ 
+        avatarAssetId,
+        updatedAt: new Date(),
+      })
+      .where(eq(accounts.id, accountId))
+      .returning();
+
+    if (!updatedAccount) {
+      throw new Error('Account not found');
+    }
+
+    return updatedAccount;
+  }
+
+  /**
+   * Crear relación con FluxCore y conversación de bienvenida
+   */
+  private async createFluxCoreWelcome(newAccountId: string, userName: string) {
+    await extensionHost.tryCreateWelcomeConversation({ newAccountId, userName });
   }
 }
 

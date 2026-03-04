@@ -20,6 +20,7 @@ import { workspacesRoutes } from './routes/workspaces.routes';
 import { automationRoutes } from './routes/automation.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { fluxiRoutes } from './routes/fluxcore/works.routes'; // WES-180
+import { kernelStatusRoutes } from './routes/kernel-status.routes';
 import { messageCore } from './core/message-core';
 import { conversationService } from './services/conversation.service';
 
@@ -69,6 +70,7 @@ const app = new Elysia()
           { name: 'Appointments', description: 'Appointment scheduling system' },
           { name: 'Adapters', description: 'Channel adapters (WhatsApp, etc.)' },
           { name: 'Workspaces', description: 'Collaborative workspaces' },
+          { name: 'Kernel Status', description: 'Kernel monitoring and status' },
         ],
       },
     })
@@ -89,6 +91,7 @@ const app = new Elysia()
   .use(automationRoutes)
   .use(templatesRoutes)
   .use(fluxiRoutes) // WES-180
+  .use(kernelStatusRoutes)
   .listen(PORT);
 
 async function initializeFluxCore() {

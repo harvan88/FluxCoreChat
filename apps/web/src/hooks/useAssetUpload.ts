@@ -48,6 +48,7 @@ export interface UseAssetUploadOptions {
     onProgress?: (progress: UploadProgress) => void;
     maxSizeBytes?: number;
     allowedMimeTypes?: string[];
+    scope?: string;
 }
 
 export interface UseAssetUploadReturn {
@@ -66,7 +67,7 @@ export interface UseAssetUploadReturn {
 // ════════════════════════════════════════════════════════════════════════════
 
 export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadReturn {
-    const { accountId, onSuccess, onError, onProgress, maxSizeBytes, allowedMimeTypes } = options;
+    const { accountId, onSuccess, onError, onProgress, maxSizeBytes, allowedMimeTypes, scope } = options;
 
     const [status, setStatus] = useState<UploadStatus>('idle');
     const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -213,7 +214,7 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
             if (!accountId) {
                 throw new Error('Account ID is required to commit uploads');
             }
-            const response = await api.commitAssetUpload(sessionId, accountId);
+            const response = await api.commitAssetUpload(sessionId, accountId, { scope });
 
             if (!response.success || !response.data) {
                 throw new Error(response.error || 'Failed to commit upload');
@@ -239,7 +240,7 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
             onError?.(errorMsg);
             return null;
         }
-    }, [accountId, onSuccess, onError]);
+    }, [accountId, onSuccess, onError, scope]);
 
     /**
      * Proceso completo de upload

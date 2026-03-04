@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { accountService } from '../services/account.service';
+import { presentAccountWithAvatar, presentAccountsWithAvatar } from '../utils/account-avatar.presenter';
 import { accountDeletionService } from '../services/account-deletion.service';
 import { requireAccountDeletionAuthFromContext } from '../middleware/account-deletion-auth';
 
@@ -51,10 +52,11 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       }
 
       const accounts = await accountService.getAccountsByUserId(user.id);
+      const accountsWithAvatar = await presentAccountsWithAvatar(accounts, { actorId: user.id });
 
       return {
         success: true,
-        data: accounts,
+        data: accountsWithAvatar,
       };
     },
     {
@@ -121,10 +123,11 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
 
       try {
         const account = await accountService.getAccountById(params.id);
+        const accountWithAvatar = await presentAccountWithAvatar(account, { actorId: user.id });
 
         return {
           success: true,
-          data: account,
+          data: accountWithAvatar,
         };
       } catch (error: any) {
         set.status = 404;
@@ -158,10 +161,11 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
 
       try {
         const account = await accountService.updateAccount(params.id, user.id, body);
+        const accountWithAvatar = await presentAccountWithAvatar(account, { actorId: user.id });
 
         return {
           success: true,
-          data: account,
+          data: accountWithAvatar,
         };
       } catch (error: any) {
         set.status = 400;

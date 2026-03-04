@@ -784,50 +784,199 @@ class ApiService {
   }
 
   // Avatar upload
-  async uploadAvatar(file: File, accountId?: string): Promise<ApiResponse<{ url: string; filename: string }>> {
+  async uploadAvatarAsset(params: {
+    accountId: string;
+    file: File;
+    uploadedBy?: string;
+  }): Promise<ApiResponse<{ assetId: string; url: string }>> {
+    console.log('[API] uploadAvatarAsset called with:', {
+      accountId: params.accountId,
+      fileName: params.file.name,
+      fileSize: params.file.size,
+      fileType: params.file.type,
+      uploadedBy: params.uploadedBy
+    });
+
+    try {
+      // Create upload session
+      console.log('[API] Step 1: Creating upload session...');
+      const sessionResp = await this.request<{ sessionId: string }>(
+        `/api/accounts/${params.accountId}/avatar/upload-session`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            fileName: `avatar_${Date.now()}_${params.file.name}`,
+            mimeType: params.file.type,
+            sizeBytes: params.file.size,
+          }),
+          headers: {
+            // Include kernel context headers for compatibility with Kernel Bootstrap
+            'x-account-id': params.accountId,
+            'x-user-id': this.currentUserId || '',
+          },
+        }
+      );
+
+      console.log('[API] Upload session response:', {
+        success: sessionResp.success,
+        error: sessionResp.error,
+        data: sessionResp.data
+      });
+
+      if (!sessionResp.success || !sessionResp.data) {
+        console.error('[API] Failed to create upload session:', sessionResp.error);
+        return {
+          success: false,
+          error: sessionResp.error || 'No se pudo crear la sesión de upload',
+        };
+      }
+
+      const { sessionId } = sessionResp.data;
+      console.log('[API] Step 2: Uploading file to session:', sessionId);
+      
+      const uploadSuccess = await this.uploadAssetFile(params.accountId, sessionId, params.file);
+      
+      console.log('[API] File upload result:', {
+        success: uploadSuccess.success,
+        error: uploadSuccess.error
+      });
+
+      if (!uploadSuccess.success) {
+        console.error('[API] File upload failed:', uploadSuccess.error);
+        await this.cancelAssetUpload(sessionId, params.accountId).catch(() => undefined);
+        return {
+          success: false,
+          error: uploadSuccess.error || 'Error subiendo archivo',
+        };
+      }
+
+      console.log('[API] Step 3: Committing upload...');
+      const commitResp = await this.request<{ asset: { id: string }; account: Account }>(
+        `/api/accounts/${params.accountId}/avatar/upload/${sessionId}/commit`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ uploadedBy: params.uploadedBy }),
+          headers: {
+            // Include kernel context headers for compatibility with Kernel Bootstrap
+            'x-account-id': params.accountId,
+            'x-user-id': this.currentUserId || '',
+          },
+        }
+      );
+
+      console.log('[API] Commit response:', {
+        success: commitResp.success,
+        error: commitResp.error,
+        data: commitResp.data
+      });
+
+      if (!commitResp.success || !commitResp.data) {
+        console.error('[API] Commit failed:', commitResp.error);
+        return {
+          success: false,
+          error: commitResp.error || 'No se pudo confirmar el asset',
+        };
+      }
+
+      console.log('[API] Step 4: Signing asset URL...');
+      const assetId = commitResp.data.asset.id;
+      const signResp = await this.signAssetUrl(assetId, params.accountId, {
+        actorId: params.uploadedBy || this.currentUserId || '',
+        action: 'preview',
+        channel: 'web',
+      });
+
+      console.log('[API] Sign URL response:', {
+        success: signResp.success,
+        error: signResp.error,
+        hasData: !!signResp.data
+      });
+
+      if (!signResp.success || !signResp.data) {
+        console.error('[API] URL signing failed:', signResp.error);
+        return {
+          success: false,
+          error: signResp.error || 'No se pudo firmar el asset',
+        };
+      }
+
+      console.log('[API] Avatar upload completed successfully:', {
+        assetId,
+        url: signResp.data.url
+      });
+
+      return {
+        success: true,
+        data: {
+          assetId,
+          url: signResp.data.url,
+        },
+      };
+    } catch (error) {
+      console.error('[API] Avatar upload exception:', error);
+      return {
+        success: false,
+        error: 'Error al subir el avatar',
+      };
+    }
+  }
+
+  async updateAccountAvatar(params: {
+    accountId: string;
+    avatarAssetId: string;
+  }): Promise<ApiResponse<void>> {
+    console.log('[API] updateAccountAvatar called with:', {
+      accountId: params.accountId,
+      avatarAssetId: params.avatarAssetId
+    });
+
+    try {
+      const response = await this.request<void>(`/api/accounts/${params.accountId}/avatar`, {
+        method: 'PATCH',
+        body: JSON.stringify({ avatarAssetId: params.avatarAssetId }),
+      });
+
+      console.log('[API] updateAccountAvatar result:', {
+        success: response.success,
+        error: response.error
+      });
+
+      return response;
+    } catch (error) {
+      console.error('[API] updateAccountAvatar exception:', error);
+      return {
+        success: false,
+        error: 'Error al actualizar avatar',
+      };
+    }
+  }
+
+  private async uploadAssetFile(accountId: string, sessionId: string, file: File): Promise<ApiResponse<{ success: true }>> {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     const formData = new FormData();
     formData.append('file', file);
 
-    const query = accountId ? `?accountId=${accountId}` : '';
-
-    const response = await this.request<{ url: string; filename: string }>(`/upload/avatar${query}`, {
-      method: 'POST',
+    const response = await fetch(`${API_URL}/api/assets/upload/${sessionId}?accountId=${accountId}`, {
+      method: 'PUT',
       body: formData,
+      headers: {
+        ...this.getToken()
+          ? {
+              Authorization: `Bearer ${this.getToken()}`,
+            }
+          : undefined,
+        // Include kernel context headers for compatibility with Kernel Bootstrap
+        'x-account-id': accountId,
+        'x-user-id': this.currentUserId || '',
+      },
     });
 
-    return response;
-  }
+    if (!response.ok) {
+      const error = await response.text();
+      return { success: false, error: error || 'Error subiendo archivo' };
+    }
 
-  // Generic file upload (attachments)
-  async uploadFile(params: {
-    file: File;
-    type: 'image' | 'document' | 'audio' | 'video';
-    messageId?: string;
-  }): Promise<ApiResponse<{ attachment: any; url: string }>> {
-    const formData = new FormData();
-    formData.append('file', params.file);
-    formData.append('type', params.type);
-    if (params.messageId) formData.append('messageId', params.messageId);
-
-    return this.request<{ attachment: any; url: string }>('/upload/file', {
-      method: 'POST',
-      body: formData,
-    });
-  }
-
-  // Voice note upload
-  async uploadAudio(params: {
-    file: File;
-    messageId?: string;
-  }): Promise<ApiResponse<{ attachment: any; url: string; waveformData?: any }>> {
-    const formData = new FormData();
-    formData.append('file', params.file);
-    if (params.messageId) formData.append('messageId', params.messageId);
-
-    return this.request<{ attachment: any; url: string; waveformData?: any }>('/upload/audio', {
-      method: 'POST',
-      body: formData,
-    });
+    return { success: true, data: { success: true } };
   }
 
   // Vector store files
@@ -858,19 +1007,34 @@ class ApiService {
     maxSizeBytes: number;
     allowedMimeTypes: string[];
   }>> {
-    return this.request(`/api/assets/upload-session?accountId=${params.accountId}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        fileName: params.fileName,
-        mimeType: params.mimeType,
-        totalBytes: params.totalBytes,
-        maxSizeBytes: params.maxSizeBytes,
-        allowedMimeTypes: params.allowedMimeTypes,
-      }),
-    });
+    return this.request<{ sessionId: string; expiresAt: string; maxSizeBytes: number; allowedMimeTypes: string[] }>(
+      `/api/assets/upload-session?accountId=${params.accountId}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId: params.accountId,
+          fileName: params.fileName,
+          mimeType: params.mimeType,
+          sizeBytes: params.totalBytes,
+          maxSizeBytes: params.maxSizeBytes,
+          allowedMimeTypes: params.allowedMimeTypes,
+        }),
+        headers: {
+          // Include kernel context headers for compatibility with Kernel Bootstrap
+          'x-account-id': params.accountId,
+          'x-user-id': this.currentUserId || '',
+        },
+      }
+    );
   }
 
-  async commitAssetUpload(sessionId: string, accountId: string): Promise<ApiResponse<{
+  async commitAssetUpload(
+    sessionId: string,
+    accountId: string,
+    options?: {
+      scope?: string;
+    }
+  ): Promise<ApiResponse<{
     assetId: string;
     name: string;
     mimeType: string;
@@ -879,7 +1043,16 @@ class ApiService {
   }>> {
     return this.request(`/api/assets/upload/${sessionId}/commit?accountId=${accountId}`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        accountId,
+        scope: options?.scope || 'message_attachment',
+        uploadedBy: this.currentUserId || null, // Use actual user ID instead of "system"
+      }),
+      headers: {
+        // Include kernel context headers for compatibility with Kernel Bootstrap
+        'x-account-id': accountId,
+        'x-user-id': this.currentUserId || '',
+      },
     });
   }
 
@@ -969,6 +1142,89 @@ class ApiService {
       method: 'DELETE',
       body: JSON.stringify({ accountId }),
     });
+  }
+
+  // Kernel Status
+  async getKernelStatusOverview(params?: { accountId?: string }): Promise<ApiResponse<{
+    kernel: {
+      total_signals: number;
+      unique_fact_types: number;
+      last_signal_at: string;
+      signals_last_hour: number;
+      signals_last_24h: number;
+      status: 'active' | 'inactive';
+    };
+    outbox: {
+      total: number;
+      certified: number;
+      pending: number;
+      last_outbox_at: string;
+      outbox_last_hour: number;
+    };
+    sessions: {
+      total: number;
+      active: number;
+      pending: number;
+      invalidated: number;
+      last_activity: string;
+    };
+    recent_signal_types: Array<{
+      fact_type: string;
+      count: number;
+      last_seen: string;
+    }>;
+    projectors: Array<{
+      name: string;
+      last_sequence_number: number;
+      error_count: number;
+      last_error: string | null;
+      is_healthy: boolean;
+    }>;
+    system_metrics: Array<{
+      metric_name: string;
+      metric_value: string;
+      recorded_at: string;
+    }>;
+  }>> {
+    const query = params?.accountId ? `?accountId=${params.accountId}` : '';
+    return this.request(`/kernel/status/overview${query}`);
+  }
+
+  async getKernelSignals(params?: { 
+    limit?: number; 
+    offset?: number; 
+    factType?: string;
+  }): Promise<ApiResponse<{
+    signals: Array<{
+      sequence_number: number;
+      fact_type: string;
+      source_namespace: string;
+      source_key: string;
+      subject_namespace: string;
+      subject_key: string;
+      object_namespace: string;
+      object_key: string;
+      evidence_raw: any;
+      evidence_format: string;
+      certified_by_adapter: string;
+      certified_adapter_version: string;
+      claimed_occurred_at: string;
+      observed_at: string;
+    }>;
+    pagination: {
+      total: number;
+      limit: number;
+      offset: number;
+      has_more: boolean;
+    };
+  }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.factType) queryParams.append('factType', params.factType);
+    
+    const query = queryParams.toString();
+    return this.request(`/kernel/status/signals${query ? `?${query}` : ''}`);
   }
 
   async getAssetVersions(assetId: string, accountId: string): Promise<ApiResponse<Array<{

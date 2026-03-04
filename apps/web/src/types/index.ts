@@ -74,6 +74,8 @@ export interface Account {
   aiIncludePrivateContext: boolean;
   createdAt: string;
   updatedAt: string;
+  // New asset-based avatar field
+  avatarAssetId?: string;
 }
 
 export interface Relationship {
@@ -85,6 +87,12 @@ export interface Relationship {
   context: RelationshipContext;
   createdAt: string;
   lastInteraction?: string;
+  // Enriched fields returned by backend when requesting contacts
+  contactName?: string;
+  contactAccountId?: string;
+  /** @deprecated Use contactProfile.avatarUrl */
+  contactAvatar?: string | null;
+  contactProfile?: Record<string, any> | null;
 }
 
 export interface Perspective {
@@ -117,6 +125,12 @@ export interface Conversation {
   unreadCountB: number;
   createdAt: string;
   updatedAt: string;
+  // Enriched fields resolved server-side for UI
+  contactName?: string;
+  contactAccountId?: string;
+  /** @deprecated Use contactProfile.avatarUrl */
+  contactAvatar?: string | null;
+  contactProfile?: Record<string, any> | null;
 }
 
 export type MessageStatus = 'local_only' | 'pending_backend' | 'synced' | 'sent' | 'delivered' | 'seen' | 'failed';
@@ -143,17 +157,17 @@ export interface MessageContent {
 
 export interface MediaItem {
   type: 'image' | 'video' | 'audio' | 'document';
-  url?: string;
-  attachmentId?: string;
+  assetId: string;
+  name?: string;
   filename?: string;
   mimeType?: string;
-  size?: number;
   sizeBytes?: number;
   waveformData?: any;
-  name?: string;
-  assetId?: string;
+  previewUrl?: string;
   status?: string;
   scope?: string;
+  // TODO(assets): Eliminar url cuando adapters migren completamente a assetId
+  url?: string;
 }
 
 export interface Button {

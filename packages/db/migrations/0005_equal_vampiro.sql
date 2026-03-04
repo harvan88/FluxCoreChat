@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS "templates" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "fluxcore_vector_stores" ADD COLUMN "source" varchar(20) DEFAULT 'primary' NOT NULL;--> statement-breakpoint
+ALTER TABLE "fluxcore_vector_stores" ADD COLUMN IF NOT EXISTS "source" varchar(20) DEFAULT 'primary' NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_assets_account" ON "assets" ("account_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_assets_workspace" ON "assets" ("workspace_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_assets_status" ON "assets" ("status");--> statement-breakpoint

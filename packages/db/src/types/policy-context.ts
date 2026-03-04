@@ -41,6 +41,7 @@ export interface ResolvedBusinessProfile {
     location?: string;
     website?: string;
     timezone?: string;
+    avatarUrl?: string;
     /** Authorized templates available for this account */
     templates?: Array<{
         templateId: string;
@@ -89,11 +90,6 @@ export interface FluxPolicyContext {
     conversationId: string;
     channel: string;
 
-    // ── Attention — how the AI should communicate ─────────────────────────────
-    tone: 'formal' | 'casual' | 'neutral';
-    useEmojis: boolean;
-    language: string;
-
     // ── Automation — if and how the AI should respond ─────────────────────────
     mode: 'auto' | 'suggest' | 'off';
     responseDelayMs: number;
@@ -128,9 +124,6 @@ export interface FluxPolicyContext {
 // ---------------------------------------------------------------------------
 
 export const FLUX_DEFAULT_POLICY: Omit<FluxPolicyContext, 'accountId' | 'contactId' | 'conversationId' | 'channel' | 'resolvedBusinessProfile'> = {
-    tone: 'neutral',
-    useEmojis: false,
-    language: 'es',
     mode: 'auto',
     responseDelayMs: 0,
     turnWindowMs: 3000,

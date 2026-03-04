@@ -1,7 +1,39 @@
 import { BaseProjector } from '../kernel/base.projector';
 import { conversationService } from '../../services/conversation.service';
-import { db, relationships, and, eq, fluxcoreSignals, fluxcoreAddresses, fluxcoreActorAddressLinks, messages, fluxcoreCognitionQueue, conversations } from '@fluxcore/db';
-import { sql } from 'drizzle-orm';
+import {
+    db,
+    relationships,
+    and,
+    eq,
+    fluxcoreSignals,
+    fluxcoreAddresses,
+    fluxcoreActorAddressLinks,
+    messages,
+    fluxcoreCognitionQueue,
+    conversations,
+    fluxcoreActors,
+} from '@fluxcore/db';
+import { sql, isNull } from 'drizzle-orm';
+import { coreEventBus } from '../events';
+
+type TransactionClient = typeof db;
+
+type EvidencePayload = {
+    accountPerspective?: string;
+    accountId?: string;
+    tenantId?: string;
+    visitorToken?: string;
+    meta?: { humanSenderId?: string };
+    content?: { text?: string };
+    text?: string;
+    body?: string;
+    context?: { conversationId?: string };
+};
+
+interface ParsedEvidence {
+    payload: EvidencePayload;
+    raw: Record<string, unknown>;
+}
 
 /**
  * ChatProjector — RFC-0001 §5.9
@@ -18,9 +50,11 @@ export class ChatProjector extends BaseProjector {
     private readonly TURN_WINDOW_MS = 3000;          // Default window after a message
     private readonly TYPING_EXTENSION_MS = 5000;     // Extension when user is typing
 
-    protected async project(signal: typeof fluxcoreSignals.$inferSelect, tx: any): Promise<void> {
-        // Dispatch based on fact type
+    protected async project(signal: typeof fluxcoreSignals.$inferSelect, tx: TransactionClient): Promise<void> {
+        console.log(`[ChatProjector] ▶️ Processing signal #${signal.sequenceNumber} (${signal.factType})`);
         switch (signal.factType) {
+            case 'chatcore.message.received':
+                return this.projectMessage(signal, tx);
             case 'EXTERNAL_INPUT_OBSERVED':
                 return this.projectMessage(signal, tx);
             case 'EXTERNAL_STATE_OBSERVED':
@@ -28,7 +62,7 @@ export class ChatProjector extends BaseProjector {
             case 'CONNECTION_EVENT_OBSERVED':
                 return this.projectConnectionEvent(signal, tx);
             default:
-                // Not our concern — other projectors handle other fact types
+                console.log(`[ChatProjector] ℹ️ Signal #${signal.sequenceNumber} ignored (fact type ${signal.factType}).`);
                 return;
         }
     }
@@ -36,9 +70,9 @@ export class ChatProjector extends BaseProjector {
     /**
      * Handle identity-link events from the webchat widget.
      * Updates the conversation's linked_account_id.
-     * Does NOT create a visible message. Does NOT enqueue cognition.
+     * AND NOW: Materializes the relationship and links the conversation.
      */
-    private async projectConnectionEvent(signal: typeof fluxcoreSignals.$inferSelect, tx: any): Promise<void> {
+    private async projectConnectionEvent(signal: typeof fluxcoreSignals.$inferSelect, tx: TransactionClient): Promise<void> {
         // Only handle webchat identity-link events
         if (signal.subjectNamespace !== 'chatcore/webchat-visitor') {
             return;
@@ -47,32 +81,67 @@ export class ChatProjector extends BaseProjector {
         const visitorToken = signal.subjectKey;
         const realAccountId = signal.objectKey;
 
-        if (!visitorToken || !realAccountId) {
+        // Extract tenantId from evidence to create the relationship
+        const evidence = this.parseEvidence(signal);
+        const tenantId = evidence.payload.tenantId;
+
+        if (!visitorToken || !realAccountId || !tenantId) {
+            console.warn(`[ChatProjector] CONNECTION_EVENT Seq #${signal.sequenceNumber} — missing required data`, { visitorToken, realAccountId, tenantId });
             return;
         }
 
-        const client = tx || db;
+        const client = tx;
 
         // Find the conversation linked to this visitor_token
-        const conversation = await client.query.conversations.findFirst({
-            where: eq(conversations.visitorToken, visitorToken),
-        });
+        const [conversation] = await client.select().from(conversations)
+            .where(eq(conversations.visitorToken, visitorToken))
+            .limit(1);
 
         if (!conversation) {
             console.log(`[ChatProjector] CONNECTION_EVENT Seq #${signal.sequenceNumber} — no conversation found for visitor ${visitorToken}`);
             return;
         }
 
+        // 1. Create/Find Real Relationship (Tenant <-> Real Account)
+        let [rel] = await client.select().from(relationships)
+            .where(and(
+                eq(relationships.accountAId, tenantId),
+                eq(relationships.accountBId, realAccountId)
+            ))
+            .limit(1);
+
+        if (!rel) {
+            // Find actor for the real account to link properly
+            const [actor] = await client.select().from(fluxcoreActors)
+                .where(eq(fluxcoreActors.externalKey, visitorToken))
+                .limit(1);
+            
+            const [newRel] = await client.insert(relationships).values({
+                accountAId: tenantId,
+                accountBId: realAccountId,
+                actorId: actor?.id,
+                perspectiveB: {
+                    saved_name: 'Identified Visitor',
+                    tags: ['visitor-converted'],
+                    status: 'active'
+                }
+            }).returning();
+            rel = newRel;
+            console.log(`[ChatProjector] Created real relationship ${rel.id} for connection event (actor: ${actor?.id})`);
+        }
+
+        // 2. Link Conversation to Relationship
         await client
             .update(conversations)
             .set({
+                relationshipId: rel.id, // Now we have a relationship!
                 linkedAccountId: realAccountId,
                 identityLinkedAt: new Date(),
                 updatedAt: new Date(),
             })
             .where(eq(conversations.id, conversation.id));
 
-        console.log(`[ChatProjector] CONNECTION_EVENT Seq #${signal.sequenceNumber} — conversation ${conversation.id} linked to account ${realAccountId}`);
+        console.log(`[ChatProjector] CONNECTION_EVENT Seq #${signal.sequenceNumber} — conversation ${conversation.id} linked to account ${realAccountId} and relationship ${rel.id}`);
     }
 
     /**
@@ -80,38 +149,26 @@ export class ChatProjector extends BaseProjector {
      * Extends the turn window WITHOUT creating a message.
      */
     private async projectStateChange(signal: typeof fluxcoreSignals.$inferSelect, tx: any): Promise<void> {
-        let evidence = signal.evidenceRaw as any;
-        
-        // ROBUSTNESS: Handle stringified JSON
-        if (typeof evidence === 'string') {
-            try {
-                evidence = JSON.parse(evidence);
-            } catch (e) {
-                console.warn(`[ChatProjector] Failed to parse evidenceRaw for seq ${signal.sequenceNumber}`, e);
-                evidence = {};
-            }
-        }
-
-        const raw = evidence?.raw || evidence;
+        // ... (unchanged)
+        const evidence = this.parseEvidence(signal);
+        const raw = evidence.raw;
 
         // Only extend window for "typing" or "recording" activities
-        const activity = raw?.activity || raw?.status;
+        const activity = (raw.activity as string | undefined) ?? (raw.status as string | undefined);
         if (activity !== 'typing' && activity !== 'recording') {
             return;
         }
 
-        const accountId = evidence?.accountPerspective ?? evidence?.accountId ?? raw?.accountId;
+        const accountId = evidence.payload.accountPerspective ?? evidence.payload.accountId ?? (raw.accountId as string | undefined);
         if (!accountId) return;
 
-        // We need a conversation to extend the window for.
-        // Use the account + subject to find a pending cognition entry.
-        const client = tx || db;
+        const client = tx;
 
         // Find any pending cognition entry for this account
         const pending = await client.query.fluxcoreCognitionQueue.findFirst({
             where: and(
                 eq(fluxcoreCognitionQueue.accountId, accountId),
-                sql`processed_at IS NULL`
+                sql`fluxcore_cognition_queue.processed_at IS NULL`
             )
         });
 
@@ -129,7 +186,7 @@ export class ChatProjector extends BaseProjector {
             })
             .where(and(
                 eq(fluxcoreCognitionQueue.id, pending.id),
-                sql`processed_at IS NULL`
+                sql`fluxcore_cognition_queue.processed_at IS NULL`
             ));
 
         console.log(`[ChatProjector] Typing Seq #${signal.sequenceNumber} — extended turn window by ${this.TYPING_EXTENSION_MS}ms for conversation ${pending.conversationId}`);
@@ -137,119 +194,249 @@ export class ChatProjector extends BaseProjector {
 
     /**
      * Handle incoming messages (text, media, etc).
-     * Creates a message in ChatCore and enqueues cognition.
+     * SOLO correlaciona con mensaje existente, no crea nuevos.
      */
-    private async projectMessage(signal: typeof fluxcoreSignals.$inferSelect, tx: any): Promise<void> {
+    private async projectMessage(signal: typeof fluxcoreSignals.$inferSelect, tx: TransactionClient): Promise<void> {
+        console.log(`[ChatProjector] 🔍 Starting message projection for signal #${signal.sequenceNumber}`);
+        
         // Need a subject to resolve identity
         if (!signal.subjectNamespace || !signal.subjectKey) {
+            console.log(`[ChatProjector] ⚠️ Signal #${signal.sequenceNumber} missing subject, skipping`);
             return;
         }
 
-        const client = tx || db;
+        const client = tx;
 
-        // Resolve ActorId from the IdentityProjector's tables
-        const address = await client.query.fluxcoreAddresses.findFirst({
-            where: and(
-                eq(fluxcoreAddresses.driverId, signal.provenanceDriverId),
-                eq(fluxcoreAddresses.externalId, signal.subjectKey)
-            )
-        });
+        // RETRY LOGIC: IdentityProjector might be slightly behind or parallel
+        let address;
+        let link;
+        let attempts = 0;
+        const maxAttempts = 3;
+
+        console.log(`[ChatProjector] 🔍 Resolving identity for signal #${signal.sequenceNumber} (driver: ${signal.provenanceDriverId}, subject: ${signal.subjectKey})`);
+
+        while (attempts < maxAttempts) {
+            // Resolve ActorId from the IdentityProjector's tables
+            address = await client.query.fluxcoreAddresses.findFirst({
+                where: and(
+                    eq(fluxcoreAddresses.driverId, signal.provenanceDriverId),
+                    eq(fluxcoreAddresses.externalId, signal.subjectKey)
+                )
+            });
+
+            if (address) {
+                link = await client.query.fluxcoreActorAddressLinks.findFirst({
+                    where: eq(fluxcoreActorAddressLinks.addressId, address.id)
+                });
+            }
+
+            if (address && link) break;
+
+            // Wait before retry
+            attempts++;
+            if (attempts < maxAttempts) {
+                console.log(`[ChatProjector] 🔄 Retry ${attempts}/${maxAttempts} for signal #${signal.sequenceNumber}`);
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
 
         if (!address) {
-            throw new Error(`[ChatProjector] Identity not yet resolved for Seq #${signal.sequenceNumber}`);
+            console.error(`[ChatProjector] ❌ Identity (Address) not yet resolved for Seq #${signal.sequenceNumber} after ${maxAttempts} attempts. Driver=${signal.provenanceDriverId} Key=${signal.subjectKey}`);
+            throw new Error(`[ChatProjector] Identity (Address) not yet resolved for Seq #${signal.sequenceNumber} after ${maxAttempts} attempts. Driver=${signal.provenanceDriverId} Key=${signal.subjectKey}`);
         }
-
-        const link = await client.query.fluxcoreActorAddressLinks.findFirst({
-            where: eq(fluxcoreActorAddressLinks.addressId, address.id)
-        });
 
         if (!link) {
-            throw new Error(`[ChatProjector] Actor link not found for Seq #${signal.sequenceNumber}`);
+             console.error(`[ChatProjector] ❌ Identity (Link) not found for Seq #${signal.sequenceNumber} (Address: ${address.id})`);
+             throw new Error(`[ChatProjector] Identity (Link) not found for Seq #${signal.sequenceNumber} (Address: ${address.id})`);
         }
 
+        console.log(`[ChatProjector] ✅ Identity resolved for signal #${signal.sequenceNumber} (address: ${address.id}, link: ${link.id})`);
+
         // Extract business context from evidence
-        const evidence = signal.evidenceRaw as any;
-        const accountId = evidence?.accountPerspective ?? evidence?.accountId;
+        const evidence = this.parseEvidence(signal);
+        // WES-180: WebchatGateway sends tenantId, others send accountId or accountPerspective
+        const accountId = evidence.payload.accountPerspective ?? evidence.payload.accountId ?? evidence.payload.tenantId;
+        const visitorToken = evidence.payload.visitorToken;
 
         if (!accountId) {
-            console.log(`[ChatProjector] Seq #${signal.sequenceNumber} — no account perspective, skipping`);
+            console.log(`[ChatProjector] Seq #${signal.sequenceNumber} — no account perspective (or tenantId), skipping`);
             return;
         }
 
-        // Project communication to business chat
-        await this.projectCommunication(signal, link.actorId, accountId, evidence, tx);
+        // 🔥 NUEVO: Solo correlacionar, no crear mensaje
+        // Buscar mensaje existente por conversation + sender + timestamp
+        const signalTime = signal.claimedOccurredAt || signal.observedAt;
+        const timeWindow = new Date(signalTime.getTime() - 10 * 60 * 1000); // 10 minutos antes (aumentado de 5)
+        
+        console.log(`[ChatProjector] 🔍 Searching for message to correlate with signal #${signal.sequenceNumber}`);
+        console.log(`[ChatProjector] 📊 Search criteria: accountId=${accountId}, timeWindow=${timeWindow.toISOString()}`);
+        
+        // Obtener conversationId desde evidence para evitar cruces entre conversaciones
+        const conversationId = evidence.payload.context?.conversationId;
+        
+        let query = client.select()
+            .from(messages)
+            .where(eq(messages.senderAccountId, accountId))
+            .where(sql`${messages.createdAt} >= ${timeWindow}`)
+            .where(isNull(messages.signalId));
+            
+        // Agregar filtro por conversationId si está disponible
+        if (conversationId) {
+            query = query.where(eq(messages.conversationId, conversationId));
+        }
+        
+        const [existingMessage] = await query.limit(1);
+
+        if (existingMessage) {
+            // Correlacionar con signal
+            await client.update(messages)
+                .set({ signalId: signal.sequenceNumber })
+                .where(eq(messages.id, existingMessage.id));
+                
+            console.log(`[ChatProjector] ✅ Correlated message ${existingMessage.id} with signal #${signal.sequenceNumber}`);
+            
+            // Encolar en cognition_queue para procesamiento de FluxCore
+            await this.enqueueForCognition(existingMessage.conversationId, accountId, signal.sequenceNumber, tx);
+        } else {
+            // No hay mensaje para correlacionar - esto es normal si el mensaje aún no fue persistido
+            console.log(`[ChatProjector] ℹ️ No message found for signal #${signal.sequenceNumber} - will retry on next processing`);
+            console.log(`[ChatProjector] 📊 Signal time: ${signalTime.toISOString()}, Search window: ${timeWindow.toISOString()}`);
+            return;
+        }
     }
 
     private async projectCommunication(
         signal: typeof fluxcoreSignals.$inferSelect,
         actorId: string,
         accountId: string,
-        evidence: any,
-        tx: any
+        evidence: ParsedEvidence,
+        tx: TransactionClient,
+        visitorToken?: string
     ) {
-        const client = tx || db;
+        const client = tx;
 
-        // 1. Resolve Relationship (Commercial Link)
-        let rel = await client.query.relationships.findFirst({
-            where: and(
-                eq(relationships.accountAId, accountId),
-                eq(relationships.actorId, actorId)
-            )
-        });
+        // 1. Usar mundo definido por ChatCoreGateway (autoridad centralizada)
+        const worldContext = signal.evidenceRaw?.meta;
+        const channel = worldContext?.channel || 'unknown';
+        const source = worldContext?.source || 'unknown';
+        const priority = worldContext?.priority || 'normal';
+        const routing = worldContext?.routing || { requiresAi: true, skipProcessing: false };
+        
+        console.log(`[ChatProjector] 🌍 Using world from Gateway: channel=${channel}, source=${source}, priority=${priority} for signal #${signal.sequenceNumber}`);
+        
+        // 2. Aplicar routing definido por Gateway
+        if (routing.skipProcessing) {
+            console.log(`[ChatProjector] ⏭️  SKIP PROCESSING: routing.skipProcessing=true for signal #${signal.sequenceNumber}`);
+            return;
+        }
+        
+        // 3. Validación de contexto
+        if (channel === 'unknown') {
+            console.warn(`[ChatProjector] ⚠️ Unknown channel for signal #${signal.sequenceNumber} - worldContext: ${JSON.stringify(worldContext)}`);
+        }
 
-        if (!rel) {
-            const displayName = evidence?.displayName || 'External Actor';
-            const [newRel] = await client.insert(relationships).values({
-                accountAId: accountId,
-                accountBId: accountId,
-                actorId: actorId as any,
-                perspectiveB: {
-                    saved_name: displayName,
-                    tags: [],
-                    status: 'active'
+        // 2. Resolve Conversation
+        const conversationId = evidence.payload.context?.conversationId;
+        let conversation;
+
+        if (conversationId) {
+            // CONVERSATION EXISTS: Use it (flujo interno continuo)
+            const [existing] = await client.select().from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .limit(1);
+            
+            if (existing) {
+                conversation = existing;
+                
+                // Check if relationship exists for this conversation
+                const [rel] = await client.select().from(relationships)
+                    .where(eq(relationships.id, existing.relationshipId))
+                    .limit(1);
+                
+                if (rel) {
+                    // Relationship exists (Internal chat or previously linked visitor)
+                    conversation = await conversationService.ensureConversation({
+                        relationshipId: rel.id,
+                        channel
+                    }, client);
+                } else {
+                    // No relationship found
+                    if (visitorToken) {
+                        // VISITOR FLOW: Create conversation bound to Owner + VisitorToken
+                        conversation = await conversationService.ensureConversation({
+                            visitorToken,
+                            channel
+                        }, client);
+                    } else {
+                        // INTERNAL FLOW WITHOUT RELATIONSHIP: Skip projection
+                        console.warn(`[ChatProjector] Seq #${signal.sequenceNumber} — No relationship found for internal flow (actor=${actorId}, account=${accountId}). Skipping.`);
+                        return;
+                    }
                 }
-            }).returning();
-            rel = newRel;
+            } else {
+                console.warn(`[ChatProjector] Seq #${signal.sequenceNumber} — conversationId in evidence but not found in DB. Creating new.`);
+                return;
+            }
         }
+    }
 
-        // 2. Resolve Conversation Channel
-        const channel = (signal.provenanceDriverId.split('/').pop() || 'web') as 'web' | 'whatsapp' | 'telegram';
-        const conversation = await conversationService.createConversation(rel.id, channel, tx);
+    /**
+     * Enqueue for cognition processing
+     */
+    private async enqueueForCognition(conversationId: string, accountId: string, signalSequence: bigint, tx: TransactionClient): Promise<void> {
+        const expiresAt = new Date(Date.now() + this.TURN_WINDOW_MS);
+        
+        await tx.execute(sql`
+            INSERT INTO fluxcore_cognition_queue (
+                conversation_id, 
+                account_id, 
+                last_signal_seq, 
+                turn_started_at, 
+                turn_window_expires_at
+            )
+            VALUES
+                (${conversationId}, ${accountId}, ${signalSequence}, NOW(), ${expiresAt})
+            ON CONFLICT (conversation_id) WHERE fluxcore_cognition_queue.processed_at IS NULL
+            DO UPDATE SET
+                last_signal_seq = EXCLUDED.last_signal_seq,
+                turn_window_expires_at = EXCLUDED.turn_window_expires_at,
+                processed_at = NULL
+        `);
 
-        // 3. Extract content and project DIRECTLY to messages table
-        const text = evidence?.content?.text ?? evidence?.text ?? evidence?.body;
-        if (text) {
-            // PHYSICAL IDEMPOTENCY: ON CONFLICT (signal_id) DO NOTHING
-            await client.insert(messages).values({
-                conversationId: conversation.id,
-                senderAccountId: accountId,
-                content: { text },
-                type: 'incoming',
-                generatedBy: 'human',
-                status: 'synced',
-                signalId: signal.sequenceNumber,
-                fromActorId: actorId as any,
-                createdAt: signal.claimedOccurredAt ?? signal.observedAt,
-            }).onConflictDoNothing({ target: [messages.signalId] });
-
-            // 4. COGNITION ENQUEUE (Turn-Window)
-            await client.insert(fluxcoreCognitionQueue).values({
-                conversationId: conversation.id,
-                accountId: accountId,
-                lastSignalSeq: signal.sequenceNumber,
-                turnWindowExpiresAt: new Date(Date.now() + this.TURN_WINDOW_MS),
-            }).onConflictDoUpdate({
-                target: [fluxcoreCognitionQueue.conversationId],
-                set: {
-                    lastSignalSeq: signal.sequenceNumber,
-                    turnWindowExpiresAt: new Date(Date.now() + this.TURN_WINDOW_MS),
-                    processedAt: null, // Re-open if it was being processed
-                },
-                where: sql`processed_at IS NULL`
+        // Wake up cognition worker immediately (event-driven)
+        setImmediate(() => {
+            coreEventBus.emit('kernel:cognition:wakeup', {
+                conversationId,
+                accountId,
             });
+        });
+    }
+
+    private parseEvidence(signal: typeof fluxcoreSignals.$inferSelect): ParsedEvidence {
+        let evidenceRoot: unknown = signal.evidenceRaw;
+
+        if (typeof evidenceRoot === 'string') {
+            try {
+                evidenceRoot = JSON.parse(evidenceRoot);
+            } catch (error) {
+                console.error(`[ChatProjector] ❌ Failed to parse evidenceRaw for seq ${signal.sequenceNumber}`, error);
+                evidenceRoot = {};
+            }
         }
 
-        console.log(`[ChatProjector] Projected Seq #${signal.sequenceNumber} -> conversation ${conversation.id}`);
+        if (evidenceRoot && typeof evidenceRoot === 'object' && 'raw' in evidenceRoot && typeof evidenceRoot.raw === 'object' && evidenceRoot.raw !== null) {
+            return {
+                payload: evidenceRoot as EvidencePayload,
+                raw: evidenceRoot.raw as Record<string, unknown>,
+            };
+        }
+
+        const payload = (evidenceRoot && typeof evidenceRoot === 'object') ? (evidenceRoot as EvidencePayload) : {};
+
+        return {
+            payload,
+            raw: (evidenceRoot && typeof evidenceRoot === 'object') ? (evidenceRoot as Record<string, unknown>) : {},
+        };
     }
 }
 

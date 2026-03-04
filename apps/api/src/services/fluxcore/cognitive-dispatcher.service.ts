@@ -17,14 +17,14 @@
  * Canon Invariant 10: RuntimeInput must be complete before handleMessage is called.
  */
 
-import { db, conversations, messages, aiSuggestions } from '@fluxcore/db';
+import { db, conversations, messages, aiSuggestions, fluxcoreCognitionQueue } from '@fluxcore/db';
 import type { ConversationMessage } from '@fluxcore/db';
 import { eq, desc } from 'drizzle-orm';
 import type { RuntimeInput, ExecutionAction } from '../../core/fluxcore-types';
 import { fluxPolicyContextService } from '../flux-policy-context.service';
-import { runtimeConfigService } from '../flux-runtime-config.service';
 import { runtimeGateway } from './runtime-gateway.service';
 import { actionExecutor } from './action-executor.service';
+import { accountLabelService } from '../account-label.service';
 
 const MAX_HISTORY_MESSAGES = 50;
 
@@ -51,8 +51,18 @@ class CognitiveDispatcherService {
         const startTime = Date.now();
         const { turnId, conversationId, accountId } = params;
 
+        console.log(`[CognitiveDispatcher] 🎯 DISPATCH START: turnId=${turnId}, conv=${conversationId.slice(0, 8)}, account=${accountId.slice(0, 8)}`);
+        
+        // 🔍 LOG DEL INPUT EN COGNITIVE DISPATCHER
+        console.log(`[CognitiveDispatcher] 🌍 INPUT EN COGNITIVE DISPATCHER:`);
+        console.log(`📋 TURN ID:`, turnId);
+        console.log(`📋 CONVERSATION ID:`, conversationId);
+        console.log(`📋 ACCOUNT ID:`, accountId);
+        console.log(`📋 LAST SIGNAL SEQ:`, params.lastSignalSeq);
+
         try {
             // 1. Resolve conversation + relationship
+            console.log(`[CognitiveDispatcher] Step 1: Resolving conversation...`);
             const [conversation] = await db
                 .select()
                 .from(conversations)
@@ -63,18 +73,21 @@ class CognitiveDispatcherService {
                 return this.failResult('Conversation not found', startTime);
             }
 
-            // 2. Resolve PolicyContext (Canon §4.3: business governance)
-            const policyContext = await fluxPolicyContextService.resolve({
+            // 2. Resolve PolicyContext + RuntimeConfig (Unified in v8.3)
+            console.log(`[CognitiveDispatcher] Step 2: Resolving PolicyContext + RuntimeConfig...`);
+            const { policyContext, runtimeConfig } = await fluxPolicyContextService.resolveContext(
                 accountId,
-                conversationId,
-                relationshipId: conversation.relationshipId ?? undefined,
-                channel: (conversation as any).channel ?? 'web',
-            });
+                conversation?.relationshipId || '',
+                (conversation as any)?.channel || 'web'
+            );
+            policyContext.conversationId = conversationId;
+            const accountLabel = await accountLabelService.getLabel(accountId);
+            console.log(`[CognitiveDispatcher] ✓ Context resolved: mode=${policyContext.mode}, runtime=${policyContext.activeRuntimeId}`);
 
             // 3. Automation mode gate (governed by PolicyContext)
-            console.log(`[FluxPipeline] 📋 POLICY mode=${policyContext.mode} runtime=${policyContext.activeRuntimeId} lang=${policyContext.language} account=${accountId.slice(0,7)}`);
+            console.log(`[FluxPipeline] 📋 POLICY mode=${policyContext.mode} runtime=${policyContext.activeRuntimeId} account=${accountLabel} (${accountId.slice(0, 7)})`);
             if (policyContext.mode === 'off') {
-                console.log(`[FluxPipeline] ⛔ OFF   account=${accountId.slice(0,7)} → automation disabled`);
+                console.log(`[FluxPipeline] ⛔ OFF   account=${accountLabel} (${accountId.slice(0, 7)}) → automation disabled`);
                 return {
                     actions: [{ type: 'no_action', reason: 'Automation mode is off' }],
                     runtimeUsed: 'none',
@@ -82,14 +95,7 @@ class CognitiveDispatcherService {
                     success: true,
                 };
             }
-
-            // 4. Resolve RuntimeConfig (Canon §4.4: technical implementation)
-            const runtimeConfig = await runtimeConfigService.resolve({
-                accountId,
-                runtimeId: policyContext.activeRuntimeId,
-                conversationId,
-            });
-            console.log(`[FluxPipeline] 🤖 ASSIST id=${runtimeConfig.assistantId?.slice(0,8) ?? 'DEFAULT'} name="${runtimeConfig.assistantName ?? 'fallback'}" model=${runtimeConfig.provider ?? 'groq'}/${runtimeConfig.model ?? 'llama-3.1-8b-instant'} instr=${runtimeConfig.instructions ? Math.round(runtimeConfig.instructions.length/4)+' tkn' : 'NONE'} rag=${runtimeConfig.vectorStoreIds?.length ?? 0}`);
+            console.log(`[FluxPipeline] 🤖 ASSIST id=${runtimeConfig.assistantId?.slice(0, 8) ?? 'DEFAULT'} name="${runtimeConfig.assistantName ?? 'fallback'}" model=${runtimeConfig.provider ?? 'groq'}/${runtimeConfig.model ?? 'llama-3.1-8b-instant'} instr=${runtimeConfig.instructions ? Math.round(runtimeConfig.instructions.length / 4) + ' tkn' : 'NONE'} rag=${runtimeConfig.vectorStoreIds?.length ?? 0}`);
 
             // 5. Fetch + convert conversation history to semantic ConversationMessage[]
             const rawHistory = await db
@@ -105,14 +111,15 @@ class CognitiveDispatcherService {
                 .map(msg => {
                     const text = (msg.content as any)?.text as string | undefined;
                     if (!text) return null;
+                    // Correct role assignment: only AI-generated messages are 'assistant'
                     const role: 'user' | 'assistant' | 'system' =
-                        msg.generatedBy === 'ai' || msg.senderAccountId === accountId ? 'assistant' : 'user';
+                        msg.generatedBy === 'ai' ? 'assistant' : 'user';
                     return { role, content: text, createdAt: msg.createdAt };
                 })
                 .filter(Boolean) as ConversationMessage[];
 
             const lastMsg = conversationHistory[conversationHistory.length - 1];
-            console.log(`[FluxPipeline] 📜 HISTORY n=${conversationHistory.length} last=${lastMsg?.role ?? 'none'} sender=${lastMsg ? rawHistory[rawHistory.length-1]?.senderAccountId?.slice(0,7) : '-'}`);
+            console.log(`[FluxPipeline] 📜 HISTORY n=${conversationHistory.length} last=${lastMsg?.role ?? 'none'} sender=${lastMsg ? rawHistory[rawHistory.length - 1]?.senderAccountId?.slice(0, 7) : '-'}`);
 
             // 6. Start typing keepalive (before invoking runtime)
             const typingKeepAlive = this.startTypingKeepAlive(conversationId, accountId);
@@ -128,23 +135,36 @@ class CognitiveDispatcherService {
                 const runtimeId = policyContext.activeRuntimeId;
 
                 // 8. Invoke runtime via gateway
+                console.log(`[CognitiveDispatcher] Step 8: Invoking runtime '${runtimeId}'...`);
                 const actions = await runtimeGateway.invoke(runtimeId, input);
+                console.log(`[CognitiveDispatcher] ✓ Runtime returned ${actions.length} actions`);
 
                 typingKeepAlive.stop();
 
                 // 9. Execute actions via ActionExecutor (Canon §4.8: mediated effects)
+                console.log(`[CognitiveDispatcher] Step 9: Executing actions (mode=${policyContext.mode})...`);
                 if (policyContext.mode === 'auto') {
+                    // Resolve targetAccountId from cognition_queue
+                    const [queueEntry] = await db
+                        .select({ targetAccountId: fluxcoreCognitionQueue.targetAccountId })
+                        .from(fluxcoreCognitionQueue)
+                        .where(eq(fluxcoreCognitionQueue.id, turnId))
+                        .limit(1);
+                    
                     await actionExecutor.execute(actions, {
                         turnId,
                         conversationId,
                         accountId,
-                        authorizedTemplates: policyContext.authorizedTemplates,
+                        targetAccountId: queueEntry?.targetAccountId || undefined,
+                        runtimeId,
+                        policyContext,
                     });
+                    console.log(`[CognitiveDispatcher] ✓ Actions executed in AUTO mode`);
                 } else if (policyContext.mode === 'suggest') {
                     const suggestion = actions.find(a => a.type === 'send_message') as any;
                     if (suggestion?.content) {
-                        console.log(`[FluxPipeline] 💬 SUGGEST conv=${conversationId.slice(0,7)} content="${suggestion.content.slice(0,80)}"`);
-                        
+                        console.log(`[FluxPipeline] 💬 SUGGEST conv=${conversationId.slice(0, 7)} content="${suggestion.content.slice(0, 80)}"`);
+
                         // Persist suggestion for operator review
                         await db.insert(aiSuggestions).values({
                             conversationId,
@@ -184,7 +204,7 @@ class CognitiveDispatcherService {
             if (stopped) return;
             actionExecutor.execute(
                 [{ type: 'start_typing', conversationId }],
-                { turnId: 0, conversationId, accountId, authorizedTemplates: [] }
+                { turnId: 0, conversationId, accountId, runtimeId: 'internal' }
             ).catch(err => {
                 console.warn(`[CognitiveDispatcher] Typing pulse error:`, err.message);
             });

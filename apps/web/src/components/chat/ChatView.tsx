@@ -5,20 +5,20 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AlertTriangle, MessageCircle, MoreVertical, Phone, Video, Loader2, X } from 'lucide-react';
-import clsx from 'clsx';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
 import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
-import { useConnectionStatus, useOfflineMessages } from '../../hooks/useOfflineFirst';
 import { useAssetUpload } from '../../hooks/useAssetUpload';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useUIStore } from '../../store/uiStore';
 import { useAutoReplyStore } from '../../store/autoReplyStore';
-import { db } from '../../db';
 import { Avatar } from '../ui/Avatar';
 import { ParticipantsActivityBar } from './ParticipantsActivityBar';
 import { useAuthStore } from '../../store/authStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import { useChat } from '../../hooks/useChat';
+import { Building2 } from 'lucide-react';
 
 const CHAT_SUPPORTED_MIME_TYPES = [
   'image/jpeg',
@@ -42,15 +42,32 @@ const CHAT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
 
 interface ChatViewProps {
   conversationId: string;
-  accountId?: string; // Cuenta actual del usuario
+  accountId: string; // 🔥 REQUERIDO: Sin fallbacks
   relationshipId?: string;
 }
 
 type ActivityType = 'typing' | 'recording' | 'idle';
 
 export function ChatView({ conversationId, accountId, relationshipId }: ChatViewProps) {
+  // 🔥 VALIDACIÓN EXPLÍCITA: Si no hay accountId, gritar
+  if (!accountId) {
+    throw new Error(`ChatView: accountId es requerido. Recibido: ${accountId}. Esto indica un error en la selección de cuenta.`);
+  }
+  
+  // 🔥 CONTEXTO DE REALIDAD: Anclar al workspace actual
+  const { activeWorkspace, workspaces } = useWorkspaceStore();
+  const currentWorkspace = activeWorkspace || workspaces[0];
+  const { accounts } = useUIStore();
+  const currentAccount = accounts.find(acc => acc.id === accountId);
+  
+  if (!currentWorkspace) {
+    console.warn('⚠️ ChatView: No hay workspace activo. Esto puede causar desorientación.');
+  } else {
+    console.log(`🌍 ChatView: Anclado al workspace "${currentWorkspace.name || 'Sin nombre'}" (${currentWorkspace.id})`);
+    console.log(`👤 ChatView: Enviando como account "${accountId}"`);
+  }
+  
   const [message, setMessage] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -62,11 +79,21 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   const conversations = useUIStore((state) => state.conversations);
   const currentConversation = conversations.find(c => c.id === conversationId);
   const contactName = (currentConversation as any)?.contactName || `Chat ${conversationId?.slice(0, 8)}`;
-  const contactAvatar = (currentConversation as any)?.contactAvatar;
+  const contactProfile = (currentConversation as any)?.contactProfile as { avatarUrl?: string } | undefined;
+  const contactAvatar = contactProfile?.avatarUrl || (currentConversation as any)?.contactAvatar;
   const activeRelationshipId = (currentConversation as any)?.relationshipId || relationshipId;
 
-  // V2-1: useOfflineMessages para persistencia local + sync
-  const { messages, isLoading, error, sendMessage: sendMsg, refresh } = useOfflineMessages(conversationId);
+  // V2-1: useChat (WebSocket-driven)
+  const {
+    messages,
+    isLoading,
+    isSending: chatIsSending,
+    error,
+    sendMessage,
+    addReceivedMessage,
+    deleteMessage,
+    refresh,
+  } = useChat({ conversationId, accountId }); // 🔥 Pasar accountId sin fallback
 
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
 
@@ -78,7 +105,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     error: uploadError,
     reset: resetUpload,
   } = useAssetUpload({
-    accountId: accountId ?? undefined,
+    accountId, // 🔥 Pasar accountId sin fallback
     allowedMimeTypes: CHAT_SUPPORTED_MIME_TYPES,
     maxSizeBytes: CHAT_MAX_UPLOAD_BYTES,
   });
@@ -127,9 +154,6 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     };
   }, [performAssetUpload, currentUserId, accountId]);
 
-  // C3: Estado de conexión offline-first (online/offline/syncing)
-  const syncConnectionStatus = useConnectionStatus();
-
   // COR-043/COR-044: AI Suggestions
   const {
     suggestions,
@@ -152,7 +176,6 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
   const [participantActivities, setParticipantActivities] = useState<Record<string, ActivityType>>({});
 
-  // Definir handleActivityState PRIMERO
   const handleActivityState = useCallback((event: {
     accountId: string;
     conversationId: string;
@@ -179,18 +202,14 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   } = useWebSocket({
     onMessage: (msg) => {
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
-        // Solo refresh si el mensaje NO es nuestro (evitar duplicados)
-        const incomingAccountId = msg.data?.senderAccountId;
         const generatedBy = msg.data?.generatedBy;
+        addReceivedMessage(msg.data as Message);
         if (generatedBy === 'ai') {
           const autoStateForConversation = useAutoReplyStore.getState().conversations[conversationId];
           if (autoStateForConversation) {
             removeSuggestion(autoStateForConversation.suggestionId);
             completeAutoReply(conversationId);
           }
-        }
-        if (incomingAccountId !== accountId || generatedBy === 'ai') {
-          refresh();
         }
       }
     },
@@ -285,13 +304,15 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     isAtBottomRef.current = distanceFromBottom <= threshold;
   };
 
+  // TODO(assets): Cuando adapters migren a assetId, eliminar cualquier referencia a url/attachmentId
+  // y asegurar que los compositores y hooks solo operan con assetId y assets firmados.
   const handleSend = async (overrideContent?: { text: string; media?: any[] }) => {
     const content = overrideContent ?? { text: message };
     const hasText = typeof content.text === 'string' && content.text.trim().length > 0;
     const hasMedia = Array.isArray(content.media) && content.media.length > 0;
     if (!hasText && !hasMedia) return;
 
-    if (isSending) return;
+    if (chatIsSending) return;
 
     if (!accountId) {
       console.error('[ChatView] Cannot send: no accountId');
@@ -299,37 +320,34 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     }
 
     try {
-      setIsSending(true);
       setSendError(null);
-      await sendMsg(accountId, {
-        text: content.text || '',
-        ...(hasMedia ? { media: content.media } : {}),
-      } as any);
+      const result = await sendMessage({
+        content: {
+          text: content.text || '',
+          ...(hasMedia ? { media: content.media } : {}),
+        },
+        generatedBy: 'human',
+      });
+
+      if (!result) {
+        setSendError('No se pudo enviar el mensaje');
+        return;
+      }
+
       setMessage('');
       setReplyingTo(null);
       handleUserActivity('cancel');
     } catch (err) {
       console.error('[ChatView] Send error:', err);
       setSendError(err instanceof Error ? err.message : 'Error al enviar mensaje');
-    } finally {
-      setIsSending(false);
     }
   };
 
   const getConnectionLabel = () => {
-    if (syncConnectionStatus === 'offline') return 'Sin conexión';
     if (wsStatus === 'error') return 'Sin conexión';
-    if (wsStatus === 'connecting' || wsStatus === 'disconnected') return 'Conectando...';
-    if (syncConnectionStatus === 'syncing') return 'Sincronizando...';
+    if (wsStatus === 'connecting') return 'Conectando...';
+    if (wsStatus === 'disconnected') return 'Reconectando...';
     return 'En línea';
-  };
-
-  const getConnectionDotClass = () => {
-    if (syncConnectionStatus === 'offline') return 'bg-error';
-    if (wsStatus === 'error') return 'bg-error';
-    if (wsStatus === 'connecting' || wsStatus === 'disconnected') return 'bg-warning';
-    if (syncConnectionStatus === 'syncing') return 'bg-warning';
-    return 'bg-success';
   };
 
   // COR-044: Handlers para sugerencias de IA
@@ -354,8 +372,8 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   // Delete message
   const handleDelete = async (messageId: string) => {
     try {
-      await db.messages.delete(messageId);
-      refresh();
+      await deleteMessage(messageId);
+      await refresh();
     } catch (err) {
       console.error('[ChatView] Delete error:', err);
     }
@@ -384,26 +402,28 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
   return (
     <div className="h-full bg-base flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="h-14 bg-surface border-b border-subtle px-4 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Avatar
-            src={contactAvatar}
-            name={contactName}
-            size="md"
-            status="online"
-          />
-          <div>
-            <div className="text-primary font-medium">
-              {contactName}
-            </div>
-            <div className="text-xs text-muted flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5">
-                <span className={clsx('w-2 h-2 rounded-full', getConnectionDotClass())} />
-                <span>{getConnectionLabel()}</span>
-              </span>
+      {/* Header con contexto de realidad */}
+      <div className="flex-shrink-0 p-4 border-b border-subtle">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar
+              src={contactAvatar}
+              alt={contactName}
+              size="sm"
+            />
+            <div>
+              <h2 className="font-semibold text-primary">{contactName}</h2>
+              {currentWorkspace && (
+                <div className="flex items-center gap-2 text-xs text-secondary">
+                  <Building2 size={12} />
+                  <span>Workspace: {currentWorkspace.name || 'Sin nombre'}</span>
+                  <span>•</span>
+                  <span>Enviando como: {currentAccount?.username || accountId}</span>
+                </div>
+              )}
             </div>
           </div>
+          <ParticipantsActivityBar activities={participantActivities} />
         </div>
         <div className="flex items-center gap-1">
           <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
@@ -440,14 +460,12 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       )}
 
       {/* WebSocket status banner (errores visibles + reintentar) */}
-      {(wsStatus === 'error' || wsStatus === 'disconnected' || wsStatus === 'connecting' || syncConnectionStatus === 'offline') && (
+      {(wsStatus === 'error' || wsStatus === 'disconnected' || wsStatus === 'connecting') && (
         <div className="mx-4 mt-3 p-3 bg-elevated border border-subtle rounded-lg flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-sm text-primary font-medium">{getConnectionLabel()}</div>
             <div className="text-xs text-muted break-words">
-              {syncConnectionStatus === 'offline'
-                ? 'Tu dispositivo está offline. Los mensajes quedarán en cola hasta que vuelva la conexión.'
-                : wsLastError || 'Conexión inestable. Intentando reconectar...'}
+              {wsLastError || 'Conexión inestable. Intentando reconectar...'}
               {wsReconnectAttempts > 0 ? ` (reintento ${wsReconnectAttempts}/5)` : ''}
             </div>
           </div>
@@ -506,36 +524,22 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
             <p className="text-sm text-secondary">Envía el primer mensaje para iniciar la conversación</p>
           </div>
         ) : (
-          <div className="min-h-full flex flex-col justify-end space-y-3">
-            {messages.map((msg) => {
-              // Convert LocalMessage to Message for MessageBubble
-              const messageForBubble: Message = {
-                id: msg.id,
-                conversationId: msg.conversationId,
-                senderAccountId: msg.senderAccountId,
-                content: msg.content,
-                type: msg.type,
-                generatedBy: msg.generatedBy || 'human',
-                status: msg.syncState === 'synced' ? 'synced' : 'pending_backend',
-                createdAt: msg.localCreatedAt.toISOString(),
-              };
-
-              return (
-                <div key={msg.id} id={`msg-${msg.id}`}>
-                  <MessageBubble
-                    message={messageForBubble}
-                    isOwn={msg.senderAccountId === accountId}
-                    onReply={() => setReplyingTo(messageForBubble)}
-                    onEdit={msg.senderAccountId === accountId ? () => {
-                      setMessage(msg.content.text || '');
-                    } : undefined}
-                    onDelete={msg.senderAccountId === accountId ? () => handleDelete(msg.id) : undefined}
-                    onScrollToMessage={scrollToMessage}
-                    viewerAccountId={accountId}
-                  />
-                </div>
-              );
-            })}
+          <div className="min-h-full flex flex-col justify-start space-y-3">
+            {messages.map((msg) => (
+              <div key={msg.id} id={`msg-${msg.id}`}>
+                <MessageBubble
+                  message={msg}
+                  isOwn={msg.senderAccountId === accountId}
+                  onReply={() => setReplyingTo(msg)}
+                  onEdit={msg.senderAccountId === accountId ? () => {
+                    setMessage(msg.content.text || '');
+                  } : undefined}
+                  onDelete={msg.senderAccountId === accountId ? () => handleDelete(msg.id) : undefined}
+                  onScrollToMessage={scrollToMessage}
+                  viewerAccountId={accountId}
+                />
+              </div>
+            ))}
 
             {/* COR-043/COR-044: AI Suggestions */}
             {isGenerating && (
@@ -618,7 +622,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         value={message}
         onChange={setMessage}
         disabled={!accountId}
-        isSending={isSending}
+        isSending={chatIsSending}
         onSend={handleSend}
         accountId={accountId}
         conversationId={conversationId}

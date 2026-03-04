@@ -5,11 +5,12 @@
 import { useState } from 'react';
 import { User, Bell, Shield, Palette, ChevronRight, Building2, Bot, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useAccounts } from '../../store/accountStore';
+import { Avatar } from '../ui/Avatar';
 import { ThemeSettings } from '../common';
 import { ProfileSection } from './ProfileSection';
 import { AutomationSection } from './AutomationSection';
 import { AccountsSection } from '../accounts';
-import { KernelSessionsSection } from './KernelSessionsSection';
 
 type SettingsSection =
   | 'menu'
@@ -35,11 +36,12 @@ const settingItems: SettingItem[] = [
   { id: 'notifications', icon: <Bell size={20} />, label: 'Notificaciones', description: 'Configura las alertas' },
   { id: 'privacy', icon: <Shield size={20} />, label: 'Privacidad', description: 'Controla quién puede verte' },
   { id: 'appearance', icon: <Palette size={20} />, label: 'Apariencia', description: 'Personaliza la interfaz' },
-  { id: 'kernel', icon: <ShieldCheck size={20} />, label: 'Kernel', description: 'Sesiones activas e identidad soberana' },
+  { id: 'kernel', icon: <ShieldCheck size={20} />, label: 'Kernel', description: 'Estado del sistema y métricas en tiempo real' },
 ];
 
 export function SettingsPanel() {
   const { user } = useAuthStore();
+  const { activeAccount } = useAccounts();
   const [activeSection, setActiveSection] = useState<SettingsSection>('menu');
 
   const renderContent = () => {
@@ -53,7 +55,7 @@ export function SettingsPanel() {
       case 'automation':
         return <AutomationSection onBack={() => setActiveSection('menu')} />;
       case 'kernel':
-        return <KernelSessionsSection onBack={() => setActiveSection('menu')} />;
+        return <ComingSoonSection title="Kernel" onBack={() => setActiveSection('menu')} />;
       case 'notifications':
         return <ComingSoonSection title="Notificaciones" onBack={() => setActiveSection('menu')} />;
       case 'privacy':
@@ -85,14 +87,23 @@ export function SettingsPanel() {
       {/* User info */}
       <div className="p-4 border-b border-subtle">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 bg-accent rounded-full flex items-center justify-center">
-            <span className="text-inverse font-bold text-xl">
-              {user?.name?.charAt(0) || 'U'}
-            </span>
-          </div>
+          <Avatar
+            src={activeAccount?.profile?.avatarUrl}
+            name={activeAccount?.displayName || user?.name}
+            size="xl"
+          />
           <div>
-            <div className="text-primary font-semibold">{user?.name || 'Usuario'}</div>
-            <div className="text-sm text-secondary">{user?.email || 'email@example.com'}</div>
+            <div className="text-primary font-semibold">
+              {activeAccount?.displayName || user?.name || 'Sin cuenta'}
+            </div>
+            <div className="text-sm text-secondary">
+              {activeAccount ? `@${activeAccount.username}` : user?.email || 'email@example.com'}
+            </div>
+            {activeAccount && (
+              <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full bg-subtle text-[11px] font-medium text-muted">
+                {activeAccount.accountType === 'business' ? 'Cuenta de negocio' : 'Cuenta personal'}
+              </div>
+            )}
           </div>
         </div>
       </div>

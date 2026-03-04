@@ -78,20 +78,7 @@ export const fluxcoreSignals = pgTable('fluxcore_signals', {
 }));
 
 // ─────────────────────────────────────────────
-// 3. Outbox — Transactional Wake-up
-// ─────────────────────────────────────────────
-
-export const fluxcoreOutbox = pgTable('fluxcore_outbox', {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
-    sequenceNumber: bigint('sequence_number', { mode: 'number' }).notNull().unique(),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    processedAt: timestamp('processed_at', { withTimezone: true }),
-}, (table) => ({
-    unprocessedIdx: index('idx_outbox_unprocessed').on(table.processedAt),
-}));
-
-// ─────────────────────────────────────────────
-// 4. Projector Cursors — Deterministic Progress
+// 3. Projector Cursors — Deterministic Progress
 // ─────────────────────────────────────────────
 
 export const fluxcoreProjectorCursors = pgTable('fluxcore_projector_cursors', {
@@ -138,9 +125,6 @@ export type NewFluxcoreRealityAdapter = typeof fluxcoreRealityAdapters.$inferIns
 
 export type FluxcoreSignal = typeof fluxcoreSignals.$inferSelect;
 export type NewFluxcoreSignal = typeof fluxcoreSignals.$inferInsert;
-
-export type FluxcoreOutboxRecord = typeof fluxcoreOutbox.$inferSelect;
-export type NewFluxcoreOutboxRecord = typeof fluxcoreOutbox.$inferInsert;
 
 export type FluxcoreProjectorCursor = typeof fluxcoreProjectorCursors.$inferSelect;
 export type NewFluxcoreProjectorCursor = typeof fluxcoreProjectorCursors.$inferInsert;

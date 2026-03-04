@@ -11,11 +11,13 @@ import {
     fluxcoreAssistantVectorStores,
     fluxcoreAssistantTools,
     fluxcoreInstructionVersions,
+    fluxcoreAccountPolicies,
     accounts,
     accountRuntimeConfig,
     type FluxcoreAssistant,
     type NewFluxcoreAssistant,
 } from '@fluxcore/db';
+import { accountLabelService } from '../account-label.service';
 
 export type FluxcoreAssistantWithRelations = FluxcoreAssistant & {
     instructionIds: string[];
@@ -631,9 +633,16 @@ export async function getActiveMode(accountId: string): Promise<{ mode: string; 
         .orderBy(desc(fluxcoreAssistants.updatedAt))
         .limit(1);
 
+    const [policy] = await db
+        .select({ mode: fluxcoreAccountPolicies.mode })
+        .from(fluxcoreAccountPolicies)
+        .where(eq(fluxcoreAccountPolicies.accountId, accountId))
+        .limit(1);
+
     const timingConfig = (assistant?.timingConfig ?? {}) as any;
+    const resolvedMode = policy?.mode ?? timingConfig.mode ?? 'auto';
     return {
-        mode: timingConfig.mode ?? 'auto',
+        mode: resolvedMode,
         assistantId: assistant?.id ?? null,
         assistantName: assistant?.name ?? null,
     };
@@ -651,19 +660,30 @@ export async function setActiveMode(accountId: string, mode: 'auto' | 'suggest' 
         .orderBy(desc(fluxcoreAssistants.updatedAt))
         .limit(1);
 
-    if (!assistant) {
-        return { mode, assistantId: null };
+    const timestamp = new Date();
+    if (assistant) {
+        const newTimingConfig = { ...((assistant.timingConfig ?? {}) as any), mode };
+        await db
+            .update(fluxcoreAssistants)
+            .set({ timingConfig: newTimingConfig, updatedAt: timestamp })
+            .where(eq(fluxcoreAssistants.id, assistant.id));
+
+        const accountLabel = await accountLabelService.getLabel(accountId);
+        coreEventBus.emit('assistant.config.updated', { accountId, assistantId: assistant.id, change: 'updated' });
+        console.log(`[AssistantMode] ✅ mode=${mode} for account=${accountLabel} (${accountId.slice(0,7)}) assistant=${assistant.id.slice(0,8)}`);
     }
 
-    const newTimingConfig = { ...((assistant.timingConfig ?? {}) as any), mode };
     await db
-        .update(fluxcoreAssistants)
-        .set({ timingConfig: newTimingConfig, updatedAt: new Date() })
-        .where(eq(fluxcoreAssistants.id, assistant.id));
+        .insert(fluxcoreAccountPolicies)
+        .values({ accountId, mode, updatedAt: timestamp })
+        .onConflictDoUpdate({
+            target: fluxcoreAccountPolicies.accountId,
+            set: { mode, updatedAt: timestamp },
+        });
 
-    coreEventBus.emit('assistant.config.updated', { accountId, assistantId: assistant.id, change: 'updated' });
-    console.log(`[AssistantMode] ✅ mode=${mode} for account=${accountId.slice(0,7)} assistant=${assistant.id.slice(0,8)}`);
-    return { mode, assistantId: assistant.id };
+    coreEventBus.emit('policy.config.updated', { accountId });
+
+    return { mode, assistantId: assistant?.id ?? null };
 }
 
 export async function deleteAssistant(id: string, accountId: string): Promise<boolean> {

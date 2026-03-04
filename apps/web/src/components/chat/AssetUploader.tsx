@@ -25,6 +25,7 @@ interface AssetUploaderProps {
     onCancel?: () => void;
     maxSizeBytes?: number;
     allowedMimeTypes?: string[];
+    scope?: string;
     className?: string;
 }
 
@@ -76,6 +77,7 @@ export function AssetUploader({
     onCancel,
     maxSizeBytes = 100 * 1024 * 1024,
     allowedMimeTypes,
+    scope,
     className,
 }: AssetUploaderProps) {
     const [isDragging, setIsDragging] = useState(false);
@@ -135,6 +137,7 @@ export function AssetUploader({
         accountId,
         maxSizeBytes,
         allowedMimeTypes,
+        scope,
         onProgress: (currentProgress) => {
             const currentId = activeUploadIdRef.current;
             if (!currentId) return;

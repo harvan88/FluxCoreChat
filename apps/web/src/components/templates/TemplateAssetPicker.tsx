@@ -136,6 +136,7 @@ export function TemplateAssetPicker({
                     </div>
                     <AssetUploader
                         accountId={accountId}
+                        scope="template_asset"
                         onUploadComplete={handleUploadComplete}
                         onCancel={() => setShowUploader(false)}
                     />

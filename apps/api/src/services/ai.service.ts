@@ -1059,6 +1059,34 @@ class AIService {
         .limit(1);
 
       if (existingRelationship) {
+        // La relación existe, pero verificar si hay conversación
+        const [existingConversation] = await db
+          .select()
+          .from(conversations)
+          .where(eq(conversations.relationshipId, existingRelationship.id))
+          .limit(1);
+
+        if (existingConversation) {
+          return; // Ya hay conversación, no hacer nada
+        }
+
+        // Crear conversación para la relación existente
+        const [conversation] = await db
+          .insert(conversations)
+          .values({
+            relationshipId: existingRelationship.id,
+            channel: 'web',
+          })
+          .returning();
+
+        await db.insert(messages).values({
+          conversationId: conversation.id,
+          senderAccountId: fluxcoreAccount.id,
+          type: 'incoming',
+          content: {
+            text: `¡Hola ${params.userName}! 👋\n\nSoy FluxCore, tu asistente. Estoy aquí para ayudarte a:\n\n• Configurar tu perfil\n• Añadir contactos\n• Explorar las extensiones\n\n¿En qué puedo ayudarte hoy?`,
+          },
+        });
         return;
       }
 

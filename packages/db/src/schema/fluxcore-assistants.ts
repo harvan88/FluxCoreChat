@@ -32,41 +32,44 @@ export const fluxcoreAssistants = pgTable('fluxcore_assistants', {
   accountId: uuid('account_id')
     .notNull()
     .references(() => accounts.id, { onDelete: 'cascade' }),
-  
+
   // Identificación
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   externalId: varchar('external_id', { length: 255 }), // ID de OpenAI/Anthropic si aplica
-  
+
   // Estado
   status: varchar('status', { length: 20 }).notNull().default('draft'), // 'draft', 'production', 'disabled'
   runtime: varchar('runtime', { length: 20 }).notNull().default('local'), // 'local', 'openai'
-  
+
   // NOTA: Las instrucciones y vector stores ahora están en tablas de relación N:M
   // fluxcore_assistant_instructions y fluxcore_assistant_vector_stores
-  
+
   // Configuración del proveedor IA
-  modelConfig: jsonb('model_config').$type<AssistantModelConfig>().default({
+  modelConfig: jsonb('model_config').$type<AssistantModelConfig & { tone?: string; language?: string; useEmojis?: boolean }>().default({
     provider: 'openai',
     model: 'gpt-4o',
     temperature: 0.7,
     topP: 1.0,
     responseFormat: 'text',
   }).notNull(),
-  
+
   // Configuración de timing
   timingConfig: jsonb('timing_config').$type<AssistantTimingConfig>().default({
     responseDelaySeconds: 2,
     smartDelay: true,
   }).notNull(),
-  
+
   // Metadata
   sizeBytes: integer('size_bytes').default(0),
   tokensUsed: integer('tokens_used').default(0),
   lastModifiedBy: varchar('last_modified_by', { length: 255 }),
-  
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+
+  // Scopes de datos autorizados para el asistente (Canon v8.3 §4.14)
+  authorizedDataScopes: text('authorized_data_scopes').array().notNull().default([]),
 });
 
 export type FluxcoreAssistant = typeof fluxcoreAssistants.$inferSelect;

@@ -232,7 +232,7 @@ export function ContactsList() {
                   </div>
                 ) : (
                   <Avatar
-                    src={(contact as any).contactAvatar}
+                    src={(contact as any)?.contactProfile?.avatarUrl || (contact as any)?.contactAvatar}
                     name={displayName}
                     size="lg"
                   />

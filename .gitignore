@@ -18,6 +18,7 @@ build/
 out/
 
 # Environment variables
+.env
 
 # Logs
 logs/

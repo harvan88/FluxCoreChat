@@ -1,4 +1,5 @@
-import { pgTable, uuid, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, timestamp, jsonb, check } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { accounts } from './accounts';
 import { fluxcoreActors } from './fluxcore-identity';
 
@@ -29,7 +30,9 @@ export const relationships = pgTable('relationships', {
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   lastInteraction: timestamp('last_interaction'),
-});
+}, (table) => ({
+  noSelfRelationship: check('no_self_relationship', sql`${table.accountAId} <> ${table.accountBId}`),
+}));
 
 export type Relationship = typeof relationships.$inferSelect;
 export type NewRelationship = typeof relationships.$inferInsert;

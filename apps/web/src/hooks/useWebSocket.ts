@@ -117,7 +117,35 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     try {
       const connectWebSocket = () => {
         console.log('[WebSocket] Connecting to:', WS_URL);
-        const ws = new WebSocket(WS_URL);
+        
+        // 🔥 CRÍTICO: Obtener token JWT para autenticación WebSocket
+        const token = localStorage.getItem('fluxcore_token');
+        console.log('[WebSocket] 🎯 Token available:', !!token);
+        
+        // 🔥 CRÍTICO: Obtener accountId seleccionada del UI Store (ya viene del hook)
+        console.log('[WebSocket] 🎯 Selected accountId from UI Store:', selectedAccountId);
+        
+        // Construir URL con token y accountId como query parameters
+        let wsUrl = WS_URL;
+        const params = new URLSearchParams();
+        
+        if (token) {
+          params.append('token', token);
+          console.log('[WebSocket] 🔐 Connecting with token authentication');
+        } else {
+          console.log('[WebSocket] ⚠️ No token found, connecting without authentication');
+        }
+        
+        if (selectedAccountId) {
+          params.append('accountId', selectedAccountId);
+          console.log('[WebSocket] 🎯 Connecting with selected account:', selectedAccountId);
+        }
+        
+        if (params.toString()) {
+          wsUrl = `${WS_URL}?${params.toString()}`;
+        }
+        
+        const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
           if (!mountedRef.current) return;
@@ -280,15 +308,21 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
           if (reconnect && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
             reconnectAttemptsRef.current++;
             setReconnectAttempts(reconnectAttemptsRef.current);
-            const delay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1); // Exponential backoff
-            console.log(`[WebSocket] Reconnect attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+            
+            // 🆕 Mejorado: Exponential backoff con jitter para evitar tormenta de reconexiones
+            const baseDelay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1);
+            const jitter = Math.random() * 0.3 * baseDelay; // 30% de jitter
+            const delay = Math.min(baseDelay + jitter, 30000); // Máximo 30 segundos
+            
+            console.log(`[WebSocket] 🔄 Reconnect attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS} in ${Math.round(delay)}ms (base: ${baseDelay}ms, jitter: ${Math.round(jitter)}ms)`);
+            
             reconnectTimeoutRef.current = setTimeout(() => {
               if (mountedRef.current) {
                 connect();
               }
             }, delay);
           } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-            console.warn('[WebSocket] Max reconnect attempts reached. Giving up.');
+            console.warn('[WebSocket] ⚠️ Max reconnect attempts reached. Giving up.');
             setStatus('error');
             setLastError('WebSocket: máximo de reintentos alcanzado');
           }

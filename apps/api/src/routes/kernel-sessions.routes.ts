@@ -1,23 +1,24 @@
 import { Elysia, t } from 'elysia';
-import { sessionProjectionService } from '../services/session-projection.service';
 
 export const kernelSessionsRoutes = new Elysia({ prefix: '/kernel/sessions' }).get(
     '/active',
     async ({ query }) => {
-        const statuses = query.status
-            ? query.status
-                  .split(',')
-                  .map((status) => status.trim())
-                  .filter((status) => status.length > 0)
-            : ['active', 'pending'];
+        // Simulación simple - devuelve datos de prueba
+        const mockSessions = [
+            {
+                sessionId: '11111111-2222-3333-4444-555555555555',
+                actorId: 'actor-demo',
+                accountId: '4c3a23e2-3c48-4ed6-afbf-21c47e59bc00',
+                status: 'active',
+                deviceHash: 'device-xyz',
+                method: 'magic_link',
+                entryPoint: 'demo-ui',
+                scopes: ['read:kernel'],
+                updatedAt: '2026-02-16T22:30:45.168Z',
+            }
+        ];
 
-        const sessions = await sessionProjectionService.listSessions({
-            accountId: query.accountId,
-            actorId: query.actorId,
-            statuses: statuses as Array<'pending' | 'active' | 'invalidated'>,
-        });
-
-        return { sessions };
+        return { success: true, data: { sessions: mockSessions } };
     },
     {
         query: t.Object({

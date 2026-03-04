@@ -144,7 +144,7 @@ apps/web/src/components/chat/
 | Descartar sugerencia | - | ✅ discard_suggestion | Completo |
 | Subscribe a relación | - | ✅ subscribe | Completo |
 | Nuevo mensaje (realtime) | - | ✅ message:new | Completo |
-| Upload avatar | ✅ POST /upload/avatar | - | Solo avatares |
+| Upload avatar | ✅ POST /api/accounts/:id/avatar/upload-session → PUT /api/assets/upload/:sessionId → POST /api/accounts/:id/avatar/upload/:sessionId/commit | - | AssetGateway/Registry (scope `profile_avatar`) |
 
 ---
 

@@ -284,7 +284,7 @@ El CognitionWorker resuelve todo el contexto antes de invocar al runtime:
 ### 3.5 Herramientas mediadas — dos categorías
 Los runtimes nunca ejecutan herramientas directamente. Toda interacción con el mundo externo pasa por el `ActionExecutor`. Hay dos categorías:
 
-**Query Services** (consulta bajo demanda): El runtime utiliza servicios externos para refinar su decisión. A diferencia de un RAG tradicional estático, en v8.3 el modelo **decide cuándo solicitar datos adicionales** (ej: `search_knowledge`) si sus instrucciones base son insuficientes. Esto evita ejecuciones redundantes "a ciegas" antes del prompt, optimizando costos y precisión semántica. Se ejecutan durante el ciclo cognitivo del runtime.
+**Query Services** (consulta antes de decidir): El runtime necesita datos externos para construir su respuesta. Ejemplo: buscar en la base de conocimiento antes de redactar el prompt. Se resuelven antes del LLM call, inyectados como contexto. Son síncronos en v8.3.
 
 **Effect Actions** (efectos en el mundo): El runtime declara una intención que produce un cambio. Ejemplo: enviar un mensaje, crear una cita. Se devuelven como `ExecutionAction[]` y los ejecuta el `ActionExecutor`.
 
@@ -398,6 +398,18 @@ FOR UPDATE SKIP LOCKED;
 
 ---
 
+## Anexo A — Cambios del 26-Feb-2026
+
+### `packages/db/src/types/policy-context.ts`
+- `ResolvedBusinessProfile` ahora expone el campo opcional `avatarUrl`, habilitando que el PolicyContext transporte la URL firmada del avatar cuando el operador autoriza ese dato.
+
+### `apps/api/src/services/flux-policy-context.service.ts`
+- `resolveBusinessProfile()` consulta `accounts.avatarAssetId` y, si el asistente activo incluye el scope `avatar` en `authorized_data_scopes`, firma el asset mediante `assetPolicyService` (actor `system`, canal `kernel`).
+- La URL firmada se publica en `resolvedBusinessProfile.avatarUrl`, garantizando que el Kernel y los runtimes consuman la misma fuente de verdad ya usada en ChatCore.
+- Se añadió la dependencia explícita a `assetPolicyService` para soportar el proceso de firmado.
+
+Estos ajustes alinean la capa de política con el sistema de Assets: todo avatar proviene de `avatarAssetId`, se firma bajo demanda y se respeta la configuración de datos autorizados por cuenta.
+
 ### 4.3 PolicyContext — Política de Negocio
 
 El PolicyContext contiene las decisiones de negocio que gobiernan cómo opera la IA. **No contiene configuración técnica del runtime.**
@@ -408,11 +420,6 @@ interface FluxPolicyContext {
   accountId: string;
   contactId: string;
   channel: string;
-
-  // Atención — cómo debe responder
-  tone: 'formal' | 'casual' | 'neutral';
-  useEmojis: boolean;
-  language: string;
 
   // Automatización — si debe responder y cómo
   mode: 'auto' | 'suggest' | 'off';
@@ -449,11 +456,33 @@ interface FluxPolicyContext {
 }
 ```
 
+**`tone`, `language` y `useEmojis` no están en PolicyContext.** El estilo de comunicación es responsabilidad del asistente, no de la política operativa. El operador los define en la configuración del asistente (RuntimeConfig). Esto permite tener un asistente formal y uno informal operando sobre la misma política de cuenta.
+
+**Tabla `fluxcore_account_policies` — fuente de datos del PolicyContext:**
+
+```sql
+CREATE TABLE fluxcore_account_policies (
+  id                    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  account_id            TEXT NOT NULL UNIQUE,
+  mode                  TEXT NOT NULL DEFAULT 'off'
+                        CHECK (mode IN ('auto', 'suggest', 'off')),
+  response_delay_ms     INT NOT NULL DEFAULT 3000,
+  turn_window_ms        INT NOT NULL DEFAULT 3000,
+  turn_window_typing_ms INT NOT NULL DEFAULT 5000,
+  turn_window_max_ms    INT NOT NULL DEFAULT 60000,
+  off_hours_policy      JSONB NOT NULL DEFAULT '{"action":"ignore"}'::jsonb,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+Si no existe política para una cuenta, `FluxPolicyContextService` crea una con los defaults. El operador configura ventanas de turno y horario de atención desde la UI de FluxCore. `mode` es el campo que el operador controla con mayor frecuencia.
+
 **El `mode` es el gate de cognición.** `off` → no se invoca ningún runtime. `suggest` → el resultado se presenta como sugerencia al operador. `auto` → se ejecuta directamente.
 
-**El `responseDelayMs` es distinto del `turnWindowMs`.** La ventana agrega ráfagas. El delay introduce una pausa intencional después del cierre del turno y antes de invocar al runtime (UX: "alguien está pensando"). El CognitionWorker aplica este delay.
+**El `responseDelayMs` es distinto del `turnWindowMs`.** La ventana agrega ráfagas. El delay introduce una pausa intencional después del cierre del turno y antes de invocar al runtime. El CognitionWorker aplica este delay.
 
-**`resolvedBusinessProfile`** contiene solo los campos que el operador autorizó explícitamente en la configuración del asistente. Si el operador desautoriza un campo, desaparece del PolicyContext en el próximo turno.
+**`resolvedBusinessProfile`** contiene solo los campos que el operador autorizó en `authorized_data_scopes` del asistente activo. Si desautoriza un campo, desaparece del PolicyContext en el próximo turno.
 
 ---
 
@@ -612,7 +641,7 @@ interface RuntimeAdapter {
 2. `PromptBuilder` combina en secciones distintas:
    - Sección 1 (prioridad): PolicyContext — tono, idioma, emojis, `resolvedBusinessProfile`, reglas del contacto. Es la voz del negocio.
    - Sección 2: instrucciones del asistente desde `runtimeConfig.instructions`.
-3. **Query Services (Mediados)**: Si el modelo determina que su contexto es insuficiente, invoca dinámicamente el `KnowledgeService` inyectado. El resultado se integra en una segunda ronda cognitiva (Tool Loop). Esto garantiza que el RAG sea una elección consciente del modelo y no una carga fija por cada turno.
+3. Query Services: si necesita buscar en la base de conocimiento, llama al `KnowledgeService` inyectado. El resultado se incorpora al contexto antes del LLM call.
 4. Llama al LLM (provider y modelo desde `runtimeConfig`). Fallback al provider secundario si falla.
 5. Tool Loop máximo 2 rounds.
 6. Devuelve `ExecutionAction[]`.

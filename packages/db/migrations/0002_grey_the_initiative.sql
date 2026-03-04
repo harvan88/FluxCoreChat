@@ -357,6 +357,7 @@ CREATE TABLE IF NOT EXISTS "fluxcore_assistant_vector_stores" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "actors" ADD COLUMN IF NOT EXISTS "user_id" uuid;--> statement-breakpoint
 ALTER TABLE "actors" ALTER COLUMN "user_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "actors" ALTER COLUMN "account_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "actors" ALTER COLUMN "role" DROP NOT NULL;--> statement-breakpoint
