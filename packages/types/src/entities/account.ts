@@ -17,7 +17,7 @@ export interface AccountProfile {
 export interface Account {
   id: string;
   ownerUserId: string;
-  username: string;
+  alias: string;
   displayName: string;
   accountType: AccountType;
   profile: AccountProfile;
@@ -27,7 +27,7 @@ export interface Account {
 }
 
 export interface CreateAccountInput {
-  username: string;
+  alias: string;
   displayName: string;
   accountType: AccountType;
   profile?: AccountProfile;

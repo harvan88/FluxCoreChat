@@ -10,7 +10,7 @@ export type ActiveAccountResult = {
   activeAccountId?: string;
   userAccounts?: Array<{
     id: string;
-    username: string;
+    alias: string;
     displayName: string;
   }>;
 };
@@ -36,7 +36,7 @@ class AccountActivationService {
       const userAccounts = await db
         .select({
           id: accounts.id,
-          username: accounts.username,
+          alias: accounts.alias,
           displayName: accounts.displayName,
         })
         .from(accounts)
@@ -87,7 +87,7 @@ class AccountActivationService {
    */
   async getActiveAccount(userId: string): Promise<{
     id: string;
-    username: string;
+    alias: string;
     displayName: string;
   } | null> {
     try {
@@ -96,7 +96,7 @@ class AccountActivationService {
       const [activeAccount] = await db
         .select({
           id: accounts.id,
-          username: accounts.username,
+          alias: accounts.alias,
           displayName: accounts.displayName,
         })
         .from(accounts)
@@ -160,7 +160,7 @@ class AccountActivationService {
    */
   async getUserAccounts(userId: string): Promise<Array<{
     id: string;
-    username: string;
+    alias: string;
     displayName: string;
     createdAt: Date;
   }>> {
@@ -168,7 +168,7 @@ class AccountActivationService {
       return await db
         .select({
           id: accounts.id,
-          username: accounts.username,
+          alias: accounts.alias,
           displayName: accounts.displayName,
           createdAt: accounts.createdAt,
         })

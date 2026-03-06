@@ -138,7 +138,7 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
     if (!account) return <span className="text-inverse font-bold">?</span>;
 
     const initials = account.displayName?.charAt(0).toUpperCase() || 
-                    account.username?.charAt(0).toUpperCase() || '?';
+                    account.alias?.charAt(0).toUpperCase() || '?';
 
     if (account.profile?.avatarUrl) {
       return (
@@ -326,7 +326,7 @@ function AccountItem({ account, isActive, onClick }: AccountItemProps) {
   // Avatar/Initials helper para AccountItem
   const getAccountItemAvatar = (account: Account) => {
     const initials = account.displayName?.charAt(0).toUpperCase() || 
-                    account.username?.charAt(0).toUpperCase() || '?';
+                    account.alias?.charAt(0).toUpperCase() || '?';
 
     if (account.profile?.avatarUrl) {
       return (

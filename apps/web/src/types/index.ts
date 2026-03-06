@@ -63,7 +63,7 @@ export interface AccountOrphanReference {
 export interface Account {
   id: string;
   ownerUserId: string;
-  username: string;
+  alias: string;
   displayName: string;
   accountType: 'personal' | 'business';
   profile: Record<string, any>;

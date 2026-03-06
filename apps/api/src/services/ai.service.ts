@@ -77,7 +77,7 @@ class AIService {
   private fluxcoreModulePromise: Promise<any> | null = null;
   private fluxcoreExtensionPromise: Promise<any> | null = null;
   private fluxcoreExtension: any | null = null;
-  private readonly FLUXCORE_USERNAME = 'fluxcore';
+  private readonly FLUXCORE_ALIAS = 'fluxcore';
 
   constructor() {
     // Wire up trace service with extension loader
@@ -1040,7 +1040,7 @@ class AIService {
       const [fluxcoreAccount] = await db
         .select()
         .from(accounts)
-        .where(eq(accounts.username, this.FLUXCORE_USERNAME))
+        .where(eq(accounts.alias, this.FLUXCORE_ALIAS))
         .limit(1);
 
       if (!fluxcoreAccount) {

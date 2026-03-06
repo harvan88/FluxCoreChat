@@ -216,6 +216,67 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
       detail: { tags: ['Conversations'], summary: 'Update conversation' },
     }
   )
+  .post(
+    '/convert-visitor',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const { visitorToken, ownerAccountId, visitorAccountId } = body;
+
+        // Validate visitorAccountId belongs to user
+        const { accountService } = await import('../services/account.service');
+        const userAccounts = await accountService.getAccountsByUserId(user.id);
+        if (!userAccounts.some(a => a.id === visitorAccountId)) {
+          set.status = 403;
+          return { success: false, message: 'Account does not belong to user' };
+        }
+
+        // Ensure relationship exists between visitor and owner
+        const { relationshipService } = await import('../services/relationship.service');
+        const relationship = await relationshipService.createRelationship(
+          visitorAccountId,
+          ownerAccountId
+        );
+
+        // Convert the visitor conversation
+        const converted = await conversationService.convertVisitorConversation({
+          visitorToken,
+          ownerAccountId,
+          visitorAccountId,
+          relationshipId: relationship.id,
+        });
+
+        return {
+          success: true,
+          data: {
+            conversation: converted,
+            relationshipId: relationship.id,
+          },
+        };
+      } catch (error: any) {
+        console.error('[API] Error converting visitor conversation:', error);
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      isAuthenticated: true,
+      body: t.Object({
+        visitorToken: t.String(),
+        ownerAccountId: t.String(),
+        visitorAccountId: t.String(),
+      }),
+      detail: {
+        tags: ['Conversations'],
+        summary: 'Convert anonymous visitor conversation to relationship-based',
+        description: 'Links a visitor conversation to a real relationship when the visitor authenticates.',
+      },
+    }
+  )
   .delete(
     '/:id',
     async ({ user, params, set }) => {

@@ -24,7 +24,7 @@ interface AccountState {
   loadAccounts: () => Promise<void>;
   setActiveAccount: (accountId: string) => void;
   createAccount: (data: {
-    username: string;
+    alias: string;
     displayName: string;
     accountType: 'personal' | 'business';
   }) => Promise<Account | null>;

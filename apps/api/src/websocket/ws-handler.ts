@@ -11,6 +11,7 @@ import { extensionHost } from '../services/extension-host.service';
 import { smartDelayService } from '../services/smart-delay.service';
 import { chatCoreGateway } from '../services/fluxcore/chatcore-gateway.service';
 import { chatCoreWebchatGateway } from '../services/fluxcore/chatcore-webchat-gateway.service';
+import { conversationService } from '../services/conversation.service';
 import { db, accounts } from '@fluxcore/db';
 import { eq, inArray } from 'drizzle-orm';
 
@@ -773,12 +774,12 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
   try {
     // Buscar cuenta (tenantId) por alias
     const { db, accounts } = await import('@fluxcore/db');
-    const { eq, or } = await import('drizzle-orm');
+    const { eq } = await import('drizzle-orm');
 
     const [account] = await db
       .select()
       .from(accounts)
-      .where(or(eq(accounts.alias, alias!), eq(accounts.username, alias!)))
+      .where(eq(accounts.alias, alias!))
       .limit(1);
 
     if (!account) {
@@ -792,7 +793,10 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
     const wsData = ws.data || {};
 
     // B2 — Si el visitante ya está autenticado, certificar el vínculo de identidad
-    if (accountId) {
+    // Guard: accountId must be a valid non-empty UUID
+    const validAccountId = accountId && typeof accountId === 'string' && accountId.length > 0
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(accountId);
+    if (validAccountId) {
       const b2 = await chatCoreWebchatGateway.certifyConnectionEvent({
         visitorToken: token,
         realAccountId: accountId,
@@ -867,7 +871,8 @@ async function processSuggestion(ws: any, params: {
 
 /**
  * WEBCHAT GATEWAY: Manejar mensaje de widget público
- * Certifica ingreso vía chatcore-webchat-gateway (RFC-0001 B1)
+ * Ensures conversation exists, persists visitor message, then certifies signal.
+ * Follows the same pattern as regular messages: conversation + persist + certify.
  */
 async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
   const { alias, visitorToken, visitorId, content } = data;
@@ -876,12 +881,12 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
   try {
     // Buscar cuenta (tenantId) por alias
     const { db, accounts } = await import('@fluxcore/db');
-    const { eq, or } = await import('drizzle-orm');
+    const { eq } = await import('drizzle-orm');
 
     const [account] = await db
       .select()
       .from(accounts)
-      .where(or(eq(accounts.alias, alias!), eq(accounts.username, alias!)))
+      .where(eq(accounts.alias, alias!))
       .limit(1);
 
     if (!account) {
@@ -894,7 +899,44 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
 
     const wsData = ws.data || {};
 
-    // Certificar ingreso vía webchat gateway (B1 — provisional identity)
+    // 1. Ensure conversation exists (creates on first message)
+    // ownerAccountId links this visitor conversation to the tenant (Carlos) so it appears in their chat list
+    const conversation = await conversationService.ensureConversation({
+      visitorToken: token,
+      ownerAccountId: account.id,
+      channel: 'webchat',
+    });
+
+    const conversationId = conversation.id;
+
+    // 2. Persist visitor's message via ChatCore
+    // senderAccountId must be a valid account UUID (FK constraint).
+    // We use account.id with type='incoming' + generatedBy='human' → CognitiveDispatcher maps to role:'user'.
+    // visitorToken is stored in metadata for traceability.
+    const msgResult = await messageCore.send({
+      conversationId,
+      senderAccountId: account.id,
+      targetAccountId: account.id,
+      content: content!,
+      type: 'incoming',
+      generatedBy: 'human',
+      meta: {
+        ip: wsData.ip,
+        userAgent: wsData.userAgent,
+        clientTimestamp: new Date().toISOString(),
+        requestId: wsData.requestId,
+      },
+    });
+
+    if (!msgResult.success) {
+      ws.send(JSON.stringify({
+        type: 'widget:error',
+        message: msgResult.error || 'Failed to persist message',
+      }));
+      return;
+    }
+
+    // 3. Certify ingress via webchat gateway (B1 — provisional identity)
     const certification = await chatCoreWebchatGateway.certifyIngress({
       visitorToken: token,
       tenantId: account.id,
@@ -903,22 +945,20 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
         ip: wsData.ip,
         userAgent: wsData.userAgent,
         clientTimestamp: new Date().toISOString(),
-        conversationId: data.conversationId,
+        conversationId,
         requestId: wsData.requestId,
       },
     });
 
     if (!certification.accepted) {
-      ws.send(JSON.stringify({
-        type: 'widget:error',
-        message: `Gateway rejected: ${certification.reason}`,
-      }));
-      return;
+      console.warn(`[Widget] Gateway rejected ingress for visitor ${token}: ${certification.reason}`);
+      // Message is persisted but signal was not certified — non-fatal
     }
 
     ws.send(JSON.stringify({
       type: 'widget:message_received',
-      messageId: `widget_${Date.now()}`,
+      messageId: msgResult.messageId,
+      conversationId,
       signalId: certification.signalId,
       timestamp: new Date().toISOString(),
     }));

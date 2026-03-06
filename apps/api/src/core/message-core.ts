@@ -138,10 +138,27 @@ export class MessageCore {
           },
         });
 
+        // 5b. Notificar visitor WebSocket (visitorSubscriptions es un Map separado)
+        if (conversation.visitorToken) {
+          const { broadcastToVisitor } = await import('../websocket/ws-handler');
+          broadcastToVisitor(conversation.visitorToken, {
+            type: 'message:new',
+            data: {
+              ...message,
+              conversationId: envelope.conversationId,
+              senderAccountId: envelope.senderAccountId,
+              targetAccountId: envelope.targetAccountId,
+              content: envelope.content,
+            },
+          });
+        }
+
         // 6. DELEGAR TODO A CONSUMIDORES (Desacoplado vía EventBus)
         // El núcleo solo emite el evento. FluxCore (IA) u otras extensiones
         // se "despertarán" escuchando este evento.
-        const relationship = await relationshipService.getRelationshipById(conversation.relationshipId || '');
+        const relationship = conversation.relationshipId
+          ? await relationshipService.getRelationshipById(conversation.relationshipId)
+          : null;
         if (relationship && relationship.accountAId) {
           const targetAccountId = envelope.targetAccountId ||
             (envelope.senderAccountId === relationship.accountAId

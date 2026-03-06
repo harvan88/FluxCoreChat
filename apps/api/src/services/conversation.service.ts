@@ -12,12 +12,13 @@ export class ConversationService {
     criteria: {
       relationshipId?: string;
       visitorToken?: string;
-      channel: 'web' | 'whatsapp' | 'telegram';
+      ownerAccountId?: string;
+      channel: 'web' | 'whatsapp' | 'telegram' | 'webchat' | 'external';
     },
     tx?: any
   ) {
     const client = tx || db;
-    const { relationshipId, visitorToken, channel } = criteria;
+    const { relationshipId, visitorToken, ownerAccountId, channel } = criteria;
 
     if (relationshipId) {
       const rel = await client.query.relationships.findFirst({
@@ -49,18 +50,28 @@ export class ConversationService {
 
     if (existing.length > 0) {
       const conversation = existing[0];
+      // Backfill ownerAccountId if missing (for conversations created before 046)
+      if (ownerAccountId && !conversation.ownerAccountId) {
+        await client
+          .update(conversations)
+          .set({ ownerAccountId })
+          .where(eq(conversations.id, conversation.id));
+      }
       // Activar conversation_participants según diseño v1.3
       await conversationParticipantService.ensureParticipantsForConversation(conversation.id, client);
       return conversation;
     }
 
     // Create new
+    const conversationType = visitorToken && !relationshipId ? 'anonymous_thread' : 'internal';
     const [conversation] = await client
       .insert(conversations)
       .values({
         relationshipId,
         visitorToken,
+        ownerAccountId,
         channel,
+        conversationType,
       })
       .returning();
 
@@ -92,6 +103,66 @@ export class ConversationService {
       .select()
       .from(conversations)
       .where(eq(conversations.relationshipId, relationshipId));
+  }
+
+  /**
+   * Convert a visitor (anonymous) conversation to a relationship-based conversation.
+   * Called when an anonymous visitor authenticates — links their conversation
+   * to a real relationship, preserving all message history.
+   */
+  async convertVisitorConversation(params: {
+    visitorToken: string;
+    ownerAccountId: string;
+    visitorAccountId: string;
+    relationshipId: string;
+  }) {
+    const { visitorToken, ownerAccountId, visitorAccountId, relationshipId } = params;
+
+    // Find the visitor conversation
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.visitorToken, visitorToken),
+          eq(conversations.ownerAccountId, ownerAccountId),
+          eq(conversations.channel, 'webchat')
+        )
+      )
+      .limit(1);
+
+    if (!conversation) {
+      return null;
+    }
+
+    // Check if the relationship already has a conversation (avoid duplicate)
+    const existingRelConv = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.relationshipId, relationshipId))
+      .limit(1);
+
+    if (existingRelConv.length > 0) {
+      // Relationship already has a conversation — visitor conversation stays as archive
+      return existingRelConv[0];
+    }
+
+    // Convert: link to relationship, update type, stamp the link time
+    const [updated] = await db
+      .update(conversations)
+      .set({
+        relationshipId,
+        conversationType: 'internal',
+        identityLinkedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(conversations.id, conversation.id))
+      .returning();
+
+    // Re-ensure participants now that there's a relationship
+    await conversationParticipantService.ensureParticipantsForConversation(updated.id);
+
+    return updated;
   }
 
   async getAllConversations(): Promise<Array<{ id: string; relationshipId: string | null }>> {
@@ -154,26 +225,58 @@ export class ConversationService {
         )
       );
 
-    if (accountRelationships.length === 0) {
-      return [];
-    }
-
     // 2. Get conversations for those relationships
     const relationshipIds = accountRelationships.map((r) => r.id);
 
-    const accountConversations = await db
+    const relationshipConversations = relationshipIds.length > 0
+      ? await db
+          .select()
+          .from(conversations)
+          .where(inArray(conversations.relationshipId, relationshipIds))
+          .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt))
+      : [];
+
+    // 3. Get visitor conversations owned by this account (anonymous threads)
+    const visitorConversations = await db
       .select()
       .from(conversations)
-      .where(inArray(conversations.relationshipId, relationshipIds))
-      .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt)); // 🔥 NUEVO ORDER BY
+      .where(eq(conversations.ownerAccountId, accountId))
+      .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt));
 
-    // 3. Enrich with contact name (the OTHER account in the relationship)
+    // 4. Merge and deduplicate (a conversation could match both if it was converted)
+    const seenIds = new Set<string>();
+    const allConversations = [...relationshipConversations, ...visitorConversations].filter(c => {
+      if (seenIds.has(c.id)) return false;
+      seenIds.add(c.id);
+      return true;
+    });
+
+    // Sort merged list
+    allConversations.sort((a, b) => {
+      const aTime = a.lastMessageAt?.getTime() || a.createdAt.getTime();
+      const bTime = b.lastMessageAt?.getTime() || b.createdAt.getTime();
+      return bTime - aTime;
+    });
+
+    // 5. Enrich with contact name
     const enrichedConversations = await Promise.all(
-      accountConversations.map(async (conv) => {
+      allConversations.map(async (conv) => {
+        // Visitor conversation (no relationship)
+        if (!conv.relationshipId && conv.visitorToken) {
+          return {
+            ...conv,
+            contactName: 'Visitante',
+            contactAccountId: null,
+            contactAvatar: null,
+            contactProfile: null,
+            isVisitorConversation: true,
+          };
+        }
+
+        // Relationship-based conversation
         const rel = accountRelationships.find(r => r.id === conv.relationshipId);
         if (!rel) return { ...conv, contactName: 'Desconocido' };
 
-        // Find the OTHER account (not the current one)
         const otherAccountId = rel.accountAId === accountId
           ? rel.accountBId
           : rel.accountAId;

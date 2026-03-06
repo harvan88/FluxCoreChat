@@ -127,7 +127,7 @@ export function AccountDataAuditPanel() {
                 <option value="">Selecciona desde la lista…</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.displayName || account.username} ({account.id.slice(0, 8)}…)
+                    {account.displayName || account.alias} ({account.id.slice(0, 8)}…)
                   </option>
                 ))}
               </select>

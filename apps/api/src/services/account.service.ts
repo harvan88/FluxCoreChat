@@ -1,6 +1,6 @@
 import { db } from '@fluxcore/db';
 import { accounts, actors, users } from '@fluxcore/db';
-import { eq, and, or, ilike } from 'drizzle-orm';
+import { eq, and, or, ne, ilike } from 'drizzle-orm';
 import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
 import { extensionHost } from './extension-host.service';
 import { coreEventBus } from '../core/events';
@@ -11,22 +11,25 @@ import type { Account } from '@fluxcore/db';
 export class AccountService {
   async createAccount(data: {
     ownerUserId: string;
-    username: string;
+    alias: string;
+    username?: string;
     displayName: string;
     accountType: 'personal' | 'business';
     profile?: any;
     privateContext?: string;
     allowAutomatedUse?: boolean;
   }) {
-    // Check if username is taken
+    const aliasValue = data.alias;
+
+    // Check if alias is taken
     const existing = await db
       .select()
       .from(accounts)
-      .where(eq(accounts.username, data.username))
+      .where(eq(accounts.alias, aliasValue))
       .limit(1);
 
     if (existing.length > 0) {
-      throw new Error('Username already taken');
+      throw new Error('Alias already taken');
     }
 
     // COR-006: Validación centralizada de límites
@@ -40,12 +43,13 @@ export class AccountService {
       throw new Error(privateContextValidation.error);
     }
 
-    // Create account
+    // Create account — write both username and alias for backward compat
     const [account] = await db
       .insert(accounts)
       .values({
         ownerUserId: data.ownerUserId,
-        username: data.username,
+        username: data.username || aliasValue,
+        alias: aliasValue,
         displayName: data.displayName,
         accountType: data.accountType,
         profile: data.profile || {},
@@ -92,6 +96,7 @@ export class AccountService {
       profile?: any;
       privateContext?: string;
       allowAutomatedUse?: boolean;
+      alias?: string | null;
     }
   ) {
     // Verify ownership
@@ -120,6 +125,28 @@ export class AccountService {
       }
     }
 
+    // Alias validation
+    if (data.alias !== undefined && data.alias !== null) {
+      const raw = data.alias.trim().toLowerCase();
+      const aliasRegex = /^[a-z][a-z0-9_-]{2,29}$/;
+      if (!aliasRegex.test(raw)) {
+        throw new Error('El alias debe tener 3-30 caracteres, empezar con letra y solo contener letras, números, guiones o guiones bajos.');
+      }
+      const reserved = ['admin', 'api', 'app', 'login', 'register', 'settings', 'help', 'support', 'meetgar', 'fluxcore', 'system', 'null', 'undefined', 'public', 'private'];
+      if (reserved.includes(raw)) {
+        throw new Error('Este alias está reservado.');
+      }
+      // Check uniqueness (exclude current account)
+      const existing = await db.query.accounts.findFirst({
+        where: and(eq(accounts.alias, raw), ne(accounts.id, accountId)),
+        columns: { id: true },
+      });
+      if (existing) {
+        throw new Error('Este alias ya está en uso.');
+      }
+      data.alias = raw;
+    }
+
     const [updated] = await db
       .update(accounts)
       .set({
@@ -139,26 +166,26 @@ export class AccountService {
   }
 
   /**
-   * Search accounts by username, alias, or owner email
-   * @param query - Search query (can be @username, email, or partial match)
+   * Search accounts by alias or owner email
+   * @param query - Search query (can be @alias, email, or partial match)
    */
   async searchAccounts(query: string) {
     // Remove @ prefix if present
     const searchTerm = query.startsWith('@') ? query.slice(1) : query;
     const pattern = `%${searchTerm}%`;
 
-    // Search in accounts by username or displayName
+    // Search in accounts by alias or displayName
     const accountResults = await db
       .select({
         id: accounts.id,
-        username: accounts.username,
+        alias: accounts.alias,
         displayName: accounts.displayName,
         accountType: accounts.accountType,
       })
       .from(accounts)
       .where(
         or(
-          ilike(accounts.username, pattern),
+          ilike(accounts.alias, pattern),
           ilike(accounts.displayName, pattern)
         )
       )
@@ -168,7 +195,7 @@ export class AccountService {
     const userResults = await db
       .select({
         id: accounts.id,
-        username: accounts.username,
+        alias: accounts.alias,
         displayName: accounts.displayName,
         accountType: accounts.accountType,
       })

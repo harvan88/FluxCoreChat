@@ -91,7 +91,8 @@ export type PhysicalFactType =
     | 'MEDIA_CAPTURED'
     | 'SYSTEM_TIMER_ELAPSED'
     | 'CONNECTION_EVENT_OBSERVED'
-    | 'chatcore.message.received';
+    | 'chatcore.message.received'
+    | 'AI_RESPONSE_GENERATED';
 
 /**
  * KernelCandidateSignal: the ONLY input the Kernel accepts.

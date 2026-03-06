@@ -35,10 +35,10 @@ export class AuthService {
       .returning();
 
     // Create default personal account for the user
-    const username = data.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const aliasBase = data.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '_');
     const account = await accountService.createAccount({
       ownerUserId: user.id,
-      username: `${username}_${Date.now().toString(36)}`, // Ensure unique
+      alias: `${aliasBase}_${Date.now().toString(36)}`, // Ensure unique
       displayName: data.name,
       accountType: 'personal',
       profile: {},
@@ -71,7 +71,7 @@ export class AuthService {
     const userAccounts = await db
       .select({
         id: accounts.id,
-        username: accounts.username,
+        alias: accounts.alias,
         displayName: accounts.displayName,
         accountType: accounts.accountType,
       })

@@ -94,7 +94,9 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         content: typeof msg.content === 'string' ? 
           (msg.content.startsWith('{') ? JSON.parse(msg.content) : { text: msg.content }) : 
           msg.content,
-        type: msg.senderAccountId === accountId ? 'outgoing' : 'incoming',
+        type: (msg.type === 'incoming' && msg.senderAccountId === accountId)
+          ? 'incoming'
+          : (msg.senderAccountId === accountId ? 'outgoing' : 'incoming'),
         generatedBy: msg.generatedBy || 'human',
         status: msg.status || 'synced',
         replyToId: msg.replyToId,

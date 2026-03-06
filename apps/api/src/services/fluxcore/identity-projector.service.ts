@@ -1,5 +1,5 @@
 import { BaseProjector } from '../../core/kernel/base.projector';
-import { db, fluxcoreSignals, fluxcoreActors, fluxcoreActorIdentityLinks, fluxcoreAddresses, fluxcoreActorAddressLinks, eq } from '@fluxcore/db';
+import { db, fluxcoreSignals, fluxcoreActors, fluxcoreActorIdentityLinks, fluxcoreAddresses, fluxcoreActorAddressLinks, eq, and } from '@fluxcore/db';
 import { actorResolutionService } from './actor-resolution.service';
 import { coreEventBus } from '../../core/events';
 
@@ -245,16 +245,15 @@ export class IdentityProjector extends BaseProjector {
 
         // Create or find Actor for this account
         let actor = await client.query.fluxcoreActors.findFirst({
-            where: eq(fluxcoreActors.displayName, `Account ${accountId.slice(0, 8)}`)
+            where: eq(fluxcoreActors.externalKey, accountId)
         });
 
         if (!actor) {
             // Create new actor
             const [newActor] = await client.insert(fluxcoreActors).values({
-                actorType: 'account',
-                displayName: `Account ${accountId.slice(0, 8)}`,
-                metadata: JSON.stringify({ source: 'chatcore-gateway', accountId }),
-                isActive: 'true'
+                type: 'real',
+                externalKey: accountId,
+                tenantId: accountId,
             }).returning();
             actor = newActor;
             console.log(`[IdentityProjector] CHATCORE Seq #${signal.sequenceNumber} — created actor ${actor.id} for account ${accountId}`);

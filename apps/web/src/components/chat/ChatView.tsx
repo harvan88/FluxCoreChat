@@ -418,7 +418,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
                   <Building2 size={12} />
                   <span>Workspace: {currentWorkspace.name || 'Sin nombre'}</span>
                   <span>•</span>
-                  <span>Enviando como: {currentAccount?.username || accountId}</span>
+                  <span>Enviando como: {currentAccount?.alias || accountId}</span>
                 </div>
               )}
             </div>
@@ -529,12 +529,12 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
               <div key={msg.id} id={`msg-${msg.id}`}>
                 <MessageBubble
                   message={msg}
-                  isOwn={msg.senderAccountId === accountId}
+                  isOwn={msg.type === 'outgoing'}
                   onReply={() => setReplyingTo(msg)}
-                  onEdit={msg.senderAccountId === accountId ? () => {
+                  onEdit={msg.type === 'outgoing' && msg.generatedBy === 'human' ? () => {
                     setMessage(msg.content.text || '');
                   } : undefined}
-                  onDelete={msg.senderAccountId === accountId ? () => handleDelete(msg.id) : undefined}
+                  onDelete={msg.type === 'outgoing' ? () => handleDelete(msg.id) : undefined}
                   onScrollToMessage={scrollToMessage}
                   viewerAccountId={accountId}
                 />

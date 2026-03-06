@@ -7,7 +7,7 @@ import { api } from './api';
 import type { Account, AccountDeletionJob, ApiResponse } from '../types';
 
 export interface CreateAccountData {
-  username: string;
+  alias: string;
   displayName: string;
   accountType: 'personal' | 'business';
   profile?: {
@@ -129,7 +129,7 @@ export const accountsApi = {
         if (localResponse.success && localResponse.data) {
           const filtered = localResponse.data.filter(
             (account) =>
-              account.username?.toLowerCase().includes(query.toLowerCase()) ||
+              account.alias?.toLowerCase().includes(query.toLowerCase()) ||
               account.displayName?.toLowerCase().includes(query.toLowerCase())
           );
           return { success: true, data: filtered };

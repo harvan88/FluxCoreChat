@@ -97,7 +97,7 @@ export function SettingsPanel() {
               {activeAccount?.displayName || user?.name || 'Sin cuenta'}
             </div>
             <div className="text-sm text-secondary">
-              {activeAccount ? `@${activeAccount.username}` : user?.email || 'email@example.com'}
+              {activeAccount ? `@${activeAccount.alias}` : user?.email || 'email@example.com'}
             </div>
             {activeAccount && (
               <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full bg-subtle text-[11px] font-medium text-muted">

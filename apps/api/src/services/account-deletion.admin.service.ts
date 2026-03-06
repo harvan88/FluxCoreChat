@@ -45,7 +45,7 @@ class AccountDeletionAdminService {
       .select({
         job: accountDeletionJobs,
         accountDisplayName: accounts.displayName,
-        accountUsername: accounts.username,
+        accountAlias: accounts.alias,
       })
       .from(accountDeletionJobs)
       .leftJoin(accounts, eq(accountDeletionJobs.accountId, accounts.id))
@@ -53,10 +53,10 @@ class AccountDeletionAdminService {
       .orderBy(desc(accountDeletionJobs.createdAt))
       .limit(limit);
 
-    return rows.map(({ job, accountDisplayName, accountUsername }) => ({
+    return rows.map(({ job, accountDisplayName, accountAlias }) => ({
       ...job,
       accountDisplayName,
-      accountUsername,
+      accountAlias,
     }));
   }
 

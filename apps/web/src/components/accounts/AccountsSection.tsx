@@ -131,7 +131,7 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
                 <div className="flex items-center gap-3">
                   <Avatar
                     src={currentAccount.profile?.avatarUrl}
-                    name={currentAccount.displayName || currentAccount.username}
+                    name={currentAccount.displayName || currentAccount.alias}
                     size="xl"
                   />
                   <div className="flex-1 min-w-0">
@@ -308,7 +308,7 @@ interface AccountCardProps {
 function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps) {
   const Icon = account.accountType === 'business' ? Building2 : User;
   const avatarUrl = account.profile?.avatarUrl;
-  const displayName = account.displayName || account.username;
+  const displayName = account.displayName || account.alias;
 
   return (
     <Card
@@ -334,7 +334,7 @@ function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps
           <div className="text-primary font-medium truncate">{account.displayName}</div>
           <div className="flex items-center gap-1 text-xs text-muted">
             <Icon size={12} />
-            <span>@{account.username}</span>
+            <span>@{account.alias}</span>
           </div>
           <div className="mt-1">
             <IdCopyable id={account.id} prefix="" />
@@ -360,7 +360,7 @@ function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps
 
 interface CreateBusinessAccountFormProps {
   onCancel: () => void;
-  onCreate: (data: { username: string; displayName: string }) => Promise<void>;
+  onCreate: (data: { alias: string; displayName: string }) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -369,17 +369,17 @@ function CreateBusinessAccountForm({
   onCreate,
   isLoading,
 }: CreateBusinessAccountFormProps) {
-  const [username, setUsername] = useState('');
+  const [alias, setAlias] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [errors, setErrors] = useState<{ username?: string; displayName?: string }>({});
+  const [errors, setErrors] = useState<{ alias?: string; displayName?: string }>({});
 
   const validate = () => {
     const newErrors: typeof errors = {};
 
-    if (!username || username.length < 3) {
-      newErrors.username = 'Mínimo 3 caracteres';
-    } else if (!/^[a-z0-9_]+$/.test(username)) {
-      newErrors.username = 'Solo letras minúsculas, números y _';
+    if (!alias || alias.length < 3) {
+      newErrors.alias = 'Mínimo 3 caracteres';
+    } else if (!/^[a-z][a-z0-9_-]{2,29}$/.test(alias)) {
+      newErrors.alias = 'Debe empezar con letra. Solo minúsculas, números, _ y -';
     }
 
     if (!displayName || displayName.length < 2) {
@@ -393,7 +393,7 @@ function CreateBusinessAccountForm({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (validate()) {
-      await onCreate({ username, displayName });
+      await onCreate({ alias, displayName });
     }
   };
 
@@ -418,17 +418,17 @@ function CreateBusinessAccountForm({
         </div>
 
         <div>
-          <label className="text-sm font-medium text-primary">Usuario (alias)</label>
+          <label className="text-sm font-medium text-primary">Alias</label>
           <Input
             type="text"
-            value={username}
-            onChange={(event) => setUsername(event.target.value.toLowerCase())}
-            placeholder="mi_empresa"
-            error={errors.username}
+            value={alias}
+            onChange={(event) => setAlias(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+            placeholder="mi-empresa"
+            error={errors.alias}
             className="mt-1"
           />
           <p className="text-xs text-muted mt-1">
-            Este será tu identificador único. Ej: @mi_empresa
+            Este será tu identificador único. Ej: @mi-empresa
           </p>
         </div>
       </div>

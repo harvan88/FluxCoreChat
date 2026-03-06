@@ -168,7 +168,7 @@ class FluxPolicyContextService {
             authorizedTemplates,
             resolvedBusinessProfile,
             workDefinitions: [],
-            activeRuntimeId: assistant?.runtime || null,
+            activeRuntimeId: assistant ? this.mapRuntimeId(assistant.runtime) : null,
         };
 
         console.log(`[FluxPolicyContext] ✅ REALIDAD DEFINIDA PARA CUENTA ${accountId}:`);

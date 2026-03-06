@@ -1,8 +1,8 @@
-import { 
-  bigint, 
-  bigserial, 
-  pgTable, 
-  text, 
+import {
+  bigint,
+  bigserial,
+  pgTable,
+  text,
   timestamp,
   index
 } from 'drizzle-orm/pg-core';
