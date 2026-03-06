@@ -6,7 +6,7 @@ import { Button, Card, Input, Switch } from '../ui';
 
 type AdminAccountRow = {
   id: string;
-  username: string;
+  alias: string;
   displayName: string;
   accountType: 'personal' | 'business';
   balance: number;
@@ -289,7 +289,7 @@ export function CreditsSection({ onBack }: CreditsSectionProps) {
           <Input
             variant="search"
             label="Buscar cuenta"
-            placeholder="Email o @username"
+            placeholder="Email o @alias"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -329,7 +329,7 @@ export function CreditsSection({ onBack }: CreditsSectionProps) {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-primary font-medium truncate">{r.displayName}</div>
-                    <div className="text-xs text-muted truncate">@{r.username} · {r.accountType}</div>
+                    <div className="text-xs text-muted truncate">@{r.alias} · {r.accountType}</div>
                   </div>
                   <div className="flex-shrink-0 text-sm text-primary">{r.balance}</div>
                 </div>

@@ -2,6 +2,7 @@ import { pgTable, uuid, timestamp, varchar, text, uniqueIndex, index } from 'dri
 import { sql } from 'drizzle-orm';
 import { conversations } from './conversations';
 import { accounts } from './accounts';
+import { actors } from './actors';
 
 export const conversationParticipants = pgTable('conversation_participants', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -11,6 +12,7 @@ export const conversationParticipants = pgTable('conversation_participants', {
   accountId: uuid('account_id')
     .notNull()
     .references(() => accounts.id, { onDelete: 'cascade' }),
+  actorId: uuid('actor_id').references(() => actors.id), // Referencia ontológica al actor
   role: varchar('role', { length: 20 }).notNull().default('initiator'),
   identityType: varchar('identity_type', { length: 20 }).notNull().default('registered'),
   visitorToken: text('visitor_token'),
@@ -20,6 +22,7 @@ export const conversationParticipants = pgTable('conversation_participants', {
   conversationAccountUnique: uniqueIndex('ux_conversation_participants_account').on(table.conversationId, table.accountId),
   conversationIdx: index('idx_conversation_participants_conversation').on(table.conversationId),
   accountIdx: index('idx_conversation_participants_account').on(table.accountId),
+  actorIdx: index('idx_conversation_participants_actor').on(table.actorId),
   visitorTokenIdx: index('idx_conversation_participants_token').on(table.visitorToken),
   roleValid: sql`CHECK (${table.role} IN ('initiator', 'recipient', 'observer'))`,
   identityTypeValid: sql`CHECK (${table.identityType} IN ('registered', 'anonymous', 'system'))`,

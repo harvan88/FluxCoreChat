@@ -3,7 +3,7 @@
  * Incluye: BioEditor (FC-801), AIContextEditor (FC-803), BusinessToggle (FC-806)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ChevronRight,
   Save,
@@ -13,6 +13,10 @@ import {
   Copy,
   Download,
   Check,
+  Link,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { useProfile } from '../../hooks/useProfile';
 import { usePanelStore } from '../../store/panelStore';
@@ -49,8 +53,59 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const [aiIncludeBio, setAiIncludeBio] = useState(true);
   const [aiIncludePrivateContext, setAiIncludePrivateContext] = useState(true);
   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
+  const [alias, setAlias] = useState('');
+  const [aliasStatus, setAliasStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved' | 'current'>('idle');
+  const [aliasMessage, setAliasMessage] = useState<string | null>(null);
+  const aliasCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+  // Debounced alias availability check
+  const checkAliasAvailability = useCallback(async (value: string) => {
+    if (!value || value.length < 3) {
+      setAliasStatus('idle');
+      setAliasMessage(null);
+      return;
+    }
+    // If same as current alias, mark as current
+    if (account && value === (account.alias || '')) {
+      setAliasStatus('current');
+      setAliasMessage('Este es tu alias actual.');
+      return;
+    }
+    setAliasStatus('checking');
+    setAliasMessage(null);
+    try {
+      const res = await fetch(`${API_URL}/public/profiles/check-alias/${encodeURIComponent(value)}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        if (json.data.available) {
+          setAliasStatus('available');
+          setAliasMessage('¡Disponible!');
+        } else {
+          setAliasStatus(json.data.reason === 'reserved' ? 'reserved' : json.data.reason === 'invalid_format' ? 'invalid' : 'taken');
+          setAliasMessage(json.data.message);
+        }
+      }
+    } catch {
+      setAliasStatus('idle');
+      setAliasMessage('Error al verificar disponibilidad.');
+    }
+  }, [account, API_URL]);
+
+  const handleAliasChange = (value: string) => {
+    const cleaned = value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
+    setAlias(cleaned);
+    if (aliasCheckTimer.current) clearTimeout(aliasCheckTimer.current);
+    if (!cleaned || cleaned.length < 3) {
+      setAliasStatus('idle');
+      setAliasMessage(cleaned.length > 0 ? 'Mínimo 3 caracteres.' : null);
+      return;
+    }
+    aliasCheckTimer.current = setTimeout(() => checkAliasAvailability(cleaned), 400);
+  };
 
   // Handle open expanded editor
   const handleOpenExpandedEditor = () => {
@@ -76,6 +131,11 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     if (profile) {
       setDisplayName(profile.displayName || '');
       setBio(profile.bio || '');
+      setAlias(account?.alias || '');
+      if (account?.alias) {
+        setAliasStatus('current');
+        setAliasMessage('Este es tu alias actual.');
+      }
       setAvatarAssetId(profile.avatarAssetId || '');
       setAvatarUrl(profile.avatarUrl);
       setPrivateContext(profile.privateContext || '');
@@ -93,6 +153,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       const changed =
         displayName !== (profile.displayName || '') ||
         bio !== (profile.bio || '') ||
+        alias !== (account?.alias || '') ||
         avatarAssetId !== (profile.avatarAssetId || '') ||
         privateContext !== (profile.privateContext || '') ||
         allowAutomatedUse !== (profile.allowAutomatedUse || false) ||
@@ -101,14 +162,14 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true);
       setHasChanges(changed);
     }
-  }, [displayName, bio, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile]);
+  }, [displayName, bio, alias, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile, account]);
 
   // Handle save
   const handleSave = async () => {
     // Si cualquiera de los permisos granulares está activo, la cuenta está autorizada para uso automatizado
     const isDelegated = aiIncludeName || aiIncludeBio || aiIncludePrivateContext;
 
-    const success = await updateProfile({
+    const updateData: any = {
       displayName,
       bio,
       avatarAssetId,
@@ -117,7 +178,12 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       aiIncludeName,
       aiIncludeBio,
       aiIncludePrivateContext,
-    });
+    };
+    // Include alias if changed
+    if (alias !== (account?.alias || '')) {
+      updateData.alias = alias || null;
+    }
+    const success = await updateProfile(updateData);
 
     if (success) {
       setSaveSuccess(true);
@@ -192,6 +258,48 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
               <IdCopyable id={account.id} />
             </div>
           )}
+
+          {/* Alias / Public URL */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-primary flex items-center gap-2">
+              <Link size={16} className="text-secondary" />
+              Alias público
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <span className="text-muted text-sm">meetgar.com/p/</span>
+              </div>
+              <input
+                type="text"
+                value={alias}
+                onChange={(e) => handleAliasChange(e.target.value)}
+                placeholder="tu-alias"
+                className="w-full pl-[108px] pr-10 py-2 rounded-lg border border-subtle bg-surface text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
+                maxLength={30}
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                {aliasStatus === 'checking' && <Loader2 size={16} className="animate-spin text-muted" />}
+                {aliasStatus === 'available' && <CheckCircle2 size={16} className="text-green-500" />}
+                {aliasStatus === 'current' && <Check size={16} className="text-blue-500" />}
+                {(aliasStatus === 'taken' || aliasStatus === 'reserved') && <XCircle size={16} className="text-red-500" />}
+                {aliasStatus === 'invalid' && <AlertCircle size={16} className="text-amber-500" />}
+              </div>
+            </div>
+            {aliasMessage && (
+              <p className={`text-xs ${
+                aliasStatus === 'available' ? 'text-green-600' :
+                aliasStatus === 'current' ? 'text-blue-500' :
+                aliasStatus === 'invalid' ? 'text-amber-600' :
+                (aliasStatus === 'taken' || aliasStatus === 'reserved') ? 'text-red-500' :
+                'text-muted'
+              }`}>
+                {aliasMessage}
+              </p>
+            )}
+            <p className="text-[11px] text-muted">
+              Este será tu enlace público. Las personas podrán visitarte y enviarte mensajes directamente.
+            </p>
+          </div>
 
           {/* Display Name */}
           <div className="space-y-2">

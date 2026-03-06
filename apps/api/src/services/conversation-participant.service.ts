@@ -54,22 +54,23 @@ class ConversationParticipantService {
             }
         }
 
-        // 🔥 NUEVO: Manejar conversaciones visitor (widget)
+        // Manejar conversaciones visitor (widget)
         if (conversation.visitorToken && !conversation.relationshipId) {
             console.log(`[Participants] 🎯 Creando participant observer para visitor ${conversation.visitorToken}`);
             desiredParticipants.push({
-                accountId: 'visitor', // 🔥 CORREGIDO: 'visitor' placeholder, no null (account_id NOT NULL)
-                role: 'observer', // ✅ 'observer' está en CHECK constraint
+                accountId: 'visitor',
+                role: 'observer',
                 identityType: 'anonymous',
             });
-        }
 
-        if (conversation.ownerAccountId) {
-            desiredParticipants.push({
-                accountId: conversation.ownerAccountId,
-                role: 'recipient',
-                identityType: 'registered',
-            });
+            // Add owner account (tenant) as recipient so they see the conversation
+            if (conversation.ownerAccountId) {
+                desiredParticipants.push({
+                    accountId: conversation.ownerAccountId,
+                    role: 'recipient',
+                    identityType: 'registered',
+                });
+            }
         }
 
         const seenAccounts = new Set<string>();

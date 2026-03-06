@@ -156,6 +156,10 @@ export function useProfile(): UseProfileReturn {
         updateData.avatarAssetId = data.avatarAssetId;
       }
 
+      if ((data as any).alias !== undefined) {
+        updateData.alias = (data as any).alias;
+      }
+
       if (data.bio !== undefined || data.profile !== undefined) {
         const existingProfile = stripAvatarUrl(account.profile as Record<string, any> | null | undefined);
         const incomingProfile = data.profile ? stripAvatarUrl(data.profile as Record<string, any>) : {};

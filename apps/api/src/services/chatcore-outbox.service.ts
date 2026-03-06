@@ -1,4 +1,4 @@
-import { db, sql } from '@fluxcore/db';
+import { db, sql, chatcoreOutbox, eq } from '@fluxcore/db';
 import { chatCoreGateway } from './fluxcore/chatcore-gateway.service';
 
 export interface OutboxMessage {
@@ -46,10 +46,19 @@ export class ChatCoreOutboxService {
 
     for (const item of pending as any[]) {
       try {
+        console.log(`[ChatCoreOutbox] ▶️ PROCESSING item.id=${item.id}, message_id=${item.message_id}`);
+        console.log(`[ChatCoreOutbox] 📊 ITEM TYPE CHECK:`, {
+          id_type: typeof item.id,
+          id_value: item.id,
+          message_id_type: typeof item.message_id,
+          attempts_type: typeof item.attempts,
+          attempts_value: item.attempts
+        });
+        
         // Marcar como processing para evitar doble procesamiento
         await db.execute(sql`
           UPDATE chatcore_outbox 
-          SET status = 'processing' 
+          SET status = 'processing'
           WHERE id = ${item.id}
         `);
         
@@ -67,9 +76,9 @@ export class ChatCoreOutboxService {
         if (payload.__processed__) {
             console.log(`[ChatCoreOutbox] ⚠️ Message ${item.message_id} already processed, skipping`);
             await db.execute(sql`
-                UPDATE chatcore_outbox 
-                SET status = 'sent', sent_at = NOW()
-                WHERE id = ${item.id}
+              UPDATE chatcore_outbox 
+              SET status = 'sent', sent_at = NOW()
+              WHERE id = ${item.id}
             `);
             continue;
         }
@@ -95,16 +104,16 @@ export class ChatCoreOutboxService {
         
         // Marcar como procesado para evitar bucles
         await db.execute(sql`
-            UPDATE chatcore_outbox 
-            SET payload = ${JSON.stringify({...payload, __processed__: true})}
-            WHERE id = ${item.id}
+          UPDATE chatcore_outbox 
+          SET payload = ${JSON.stringify({...payload, __processed__: true})}
+          WHERE id = ${item.id}
         `);
         
         // Vincular el mensaje con la señal creada
         if (result.accepted && result.signalId) {
           await db.execute(sql`
             UPDATE messages 
-            SET signal_id = ${result.signalId} 
+            SET signal_id = ${result.signalId}
             WHERE id = ${item.message_id}
           `);
         }
@@ -112,7 +121,7 @@ export class ChatCoreOutboxService {
         // Marcar como enviado
         await db.execute(sql`
           UPDATE chatcore_outbox 
-          SET status = 'sent', sent_at = NOW() 
+          SET status = 'sent', sent_at = NOW()
           WHERE id = ${item.id}
         `);
           
@@ -129,7 +138,9 @@ export class ChatCoreOutboxService {
         // Mantener en pending para reintentos
         await db.execute(sql`
           UPDATE chatcore_outbox 
-          SET status = 'pending', attempts = ${newAttempts}, last_error = ${error instanceof Error ? error.message : String(error)}
+          SET status = 'pending', 
+              attempts = ${newAttempts}, 
+              last_error = ${error instanceof Error ? error.message : String(error)}
           WHERE id = ${item.id}
         `);
           
@@ -163,9 +174,9 @@ export class ChatCoreOutboxService {
     total: number;
   }> {
     const [pending, processing, sent] = await Promise.all([
-      db.execute(sql`SELECT COUNT(*) as count FROM chatcore_outbox WHERE status = 'pending'`),
-      db.execute(sql`SELECT COUNT(*) as count FROM chatcore_outbox WHERE status = 'processing'`),
-      db.execute(sql`SELECT COUNT(*) as count FROM chatcore_outbox WHERE status = 'sent'`)
+      db.select({ count: sql<number>`count(*)::int` }).from(chatcoreOutbox).where(eq(chatcoreOutbox.status, 'pending')),
+      db.select({ count: sql<number>`count(*)::int` }).from(chatcoreOutbox).where(eq(chatcoreOutbox.status, 'processing')),
+      db.select({ count: sql<number>`count(*)::int` }).from(chatcoreOutbox).where(eq(chatcoreOutbox.status, 'sent'))
     ]);
 
     return {

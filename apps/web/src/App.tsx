@@ -8,6 +8,7 @@ import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SystemMonitor } from './components/monitor';
 import { AccountDeletionPortalPage } from './pages/AccountDeletionPortalPage';
+import { PublicProfilePage } from './public-profile';
 
 function App() {
   const { isAuthenticated, initFromStorage } = useAuthStore();
@@ -51,6 +52,7 @@ function App() {
           path="/login" 
           element={!isAuthenticated ? <AuthPage /> : <Navigate to="/" />} 
         />
+        <Route path="/p/:alias" element={<PublicProfilePage />} />
         <Route 
           path="/*" 
           element={isAuthenticated ? <Layout /> : <Navigate to="/login" />} 

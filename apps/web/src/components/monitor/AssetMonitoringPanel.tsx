@@ -269,7 +269,7 @@ export function AssetMonitoringPanel() {
                                 <option value="">Todas</option>
                                 {accounts.map((account) => (
                                     <option key={account.id} value={account.id}>
-                                        {account.displayName || account.username}
+                                        {account.displayName || account.alias}
                                     </option>
                                 ))}
                             </select>

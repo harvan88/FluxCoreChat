@@ -95,7 +95,7 @@ export function ContactDetails({ contactId, onStartChat, onEditContext }: Contac
             <h2 className="text-xl font-semibold text-primary truncate">
               {contact.displayName}
             </h2>
-            <p className="text-sm text-muted">@{contact.username}</p>
+            <p className="text-sm text-muted">@{contact.alias}</p>
             {profile?.bio && (
               <p className="text-sm text-secondary mt-2">{profile.bio}</p>
             )}

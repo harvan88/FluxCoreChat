@@ -52,6 +52,7 @@ import { testChatCoreRoutes } from './routes/test-chatcore.routes';
 import { assetRelationsRoutes } from './routes/asset-relations.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
+import { publicProfileRoutes } from './routes/public-profile.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
@@ -239,7 +240,8 @@ const elysiaApp = new Elysia()
   .use(assetsRoutes)
   .use(assetRelationsRoutes)
   .use(templatesRoutes)
-  .use(ragConfigRoutes);
+  .use(ragConfigRoutes)
+  .use(publicProfileRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: Server<WebSocketData>;

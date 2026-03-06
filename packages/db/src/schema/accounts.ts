@@ -12,8 +12,8 @@ export const accounts = pgTable('accounts', {
   accountType: varchar('account_type', { length: 20 }).notNull(), // 'personal' | 'business'
   profile: jsonb('profile').default({}).notNull(),
   privateContext: text('private_context'),
-  // COR-005: Alias para identificación contextual (migration-009)
-  alias: varchar('alias', { length: 100 }),
+  // Primary human identity field — unique, NOT NULL (migration-045)
+  alias: varchar('alias', { length: 100 }).notNull().unique(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   allowAutomatedUse: boolean('allow_automated_use').default(false).notNull(),

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { conversations } from './conversations';
 import { accounts } from './accounts';
 import { users } from './users';
+import { actors } from './actors';
 import { fluxcoreActors } from './fluxcore-identity';
 
 export const messages = pgTable('messages', {
@@ -21,7 +22,7 @@ export const messages = pgTable('messages', {
   // COR-002: Status de sincronización/entrega (migration-007)
   status: varchar('status', { length: 20 }).default('synced').notNull(),
   // COR-003: Actor model para mensajes (migration-008)
-  fromActorId: uuid('from_actor_id').references(() => fluxcoreActors.id),
+  fromActorId: uuid('from_actor_id').references(() => actors.id),
   toActorId: uuid('to_actor_id').references(() => fluxcoreActors.id),
   parentId: uuid('parent_id'),
   originalId: uuid('original_id'),

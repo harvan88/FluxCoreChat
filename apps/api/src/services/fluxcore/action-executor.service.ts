@@ -18,13 +18,12 @@
  * Canon Invariant: "If a message goes out, it MUST be in ChatCore's `messages` table."
  */
 
-import { db, messages, conversations, relationships, fluxcoreCognitionQueue, fluxcoreActionAudit } from '@fluxcore/db';
+import { db, fluxcoreCognitionQueue, fluxcoreActionAudit } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
 import type { ExecutionAction, ProposeWorkAction, OpenWorkAction, AdvanceWorkStateAction, RequestSlotAction, CloseWorkAction } from '../../core/fluxcore-types';
 import type { FluxPolicyContext } from '@fluxcore/db';
 import { coreEventBus } from '../../core/events';
 import { workEngineService } from '../work-engine.service';
-import { messageCore } from '../../core/message-core';
 
 export interface ActionExecutionResult {
     action: ExecutionAction;
@@ -50,10 +49,21 @@ class ActionExecutorService {
             policyContext?: FluxPolicyContext;
         }
     ): Promise<ActionExecutionResult[]> {
+        console.log(`[ActionExecutor] 🎬 EXECUTE START: ${actions.length} actions for turn ${params.turnId}`);
+        console.log(`[ActionExecutor] 📋 PARAMS:`);
+        console.log(`  - turnId: ${params.turnId}`);
+        console.log(`  - conversationId: ${params.conversationId}`);
+        console.log(`  - accountId (responder): ${params.accountId}`);
+        console.log(`  - targetAccountId: ${params.targetAccountId || 'undefined'}`);
+        console.log(`  - runtimeId: ${params.runtimeId}`);
+        console.log(`  - policyContext.mode: ${params.policyContext?.mode || 'undefined'}`);
+        console.log(`[ActionExecutor] 📋 ACTIONS TO EXECUTE: ${actions.map(a => a.type).join(', ')}`);
+        
         const results: ActionExecutionResult[] = [];
         const { turnId, conversationId, accountId, targetAccountId, runtimeId, policyContext } = params;
 
         for (const action of actions) {
+            console.log(`[ActionExecutor] ⏳ Executing action: ${action.type}`);
             let status: 'executed' | 'rejected' | 'failed' = 'executed';
             let rejectionReason: string | undefined;
 
@@ -72,6 +82,7 @@ class ActionExecutorService {
                 // if (action.type === 'call_tool' && policyContext) { ... }
 
                 const result = await this.executeOne(action, { conversationId, accountId, targetAccountId });
+                console.log(`[ActionExecutor] ✓ Action ${action.type} result: success=${result.success}${result.messageId ? ` messageId=${result.messageId.slice(0,8)}` : ''}${result.error ? ` error="${result.error}"` : ''}`);
                 results.push(result);
 
                 if (!result.success) {
@@ -102,11 +113,13 @@ class ActionExecutorService {
         }
 
         // 2. MARK AS PROCESSED (PRINCIPLE: Mediated Execution closes the loop)
+        console.log(`[ActionExecutor] ⏳ Marking turn ${turnId} as processed...`);
         await this.closeTurn(turnId, accountId);
 
         const succeeded = results.filter(r => r.success).length;
         const failed = results.filter(r => !r.success).length;
-        console.log(`[ActionExecutor] Batch complete for turn ${turnId}: ${succeeded} succeeded, ${failed} failed`);
+        console.log(`[ActionExecutor] ✅ EXECUTE COMPLETE for turn ${turnId}: ${succeeded} succeeded, ${failed} failed`);
+        console.log(`[ActionExecutor]   Results: ${results.map(r => `${r.action.type}=${r.success?'OK':'FAIL'}`).join(', ')}`);
 
         return results;
     }
@@ -171,103 +184,50 @@ class ActionExecutorService {
 
 
     /**
-     * Send a message through ChatCore.
+     * Send a message through the Kernel → ChatCore pipeline.
      * 
-     * Canon: "ChatCore persists the message (generated_by: 'ai'),
-     *         sends it to the adapter, and emits the WebSocket event."
+     * Architecture v4.0:
+     * FluxCore (Brain) certifies its response as a Kernel signal (AI_RESPONSE_GENERATED).
+     * ChatProjector observes the signal and delivers via messageCore.receive().
+     * ChatCore (Body) handles: persistence, WebSocket broadcast, conversation update.
+     * 
+     * FluxCore NEVER writes directly to ChatCore's messages table.
      */
     private async executeSendMessage(
         action: { type: 'send_message'; content: string; conversationId: string },
-        context: { accountId: string; targetAccountId?: string }
+        context: { conversationId: string; accountId: string; targetAccountId?: string }
     ): Promise<ActionExecutionResult> {
         try {
-            // SEMÁNTICA CORRECTA POST-FIX:
-            // context.accountId = quien RESPONDE (Patricia - tiene la IA activa)
-            // context.targetAccountId = a quien responder (Harold - recibe la respuesta)
-            
-            // 1. Persist via ChatCore (Body writes to its own table)
-            console.log(`[ActionExecutor] 🤖 IA GENERANDO RESPUESTA:`);
-            console.log(`📋 CONTEXTO DE RESPUESTA:`);
-            console.log(`  - Account ID (quien responde): ${context.accountId}`);
-            console.log(`  - Target Account (para quien): ${context.targetAccountId}`);
+            console.log(`[ActionExecutor] �→🔑 CERTIFYING AI RESPONSE VIA KERNEL:`);
+            console.log(`  - Account ID (responder): ${context.accountId}`);
+            console.log(`  - Target Account (receiver): ${context.targetAccountId}`);
             console.log(`  - Conversation ID: ${action.conversationId}`);
-            console.log(`  - Content: "${action.content}"`);
-            
-            const [msg] = await db.insert(messages).values({
+            console.log(`  - Content: "${action.content.substring(0, 100)}..."`);
+
+            const { cognitionGateway } = await import('./cognition-gateway.service');
+
+            const certResult = await cognitionGateway.certifyAiResponse({
                 conversationId: action.conversationId,
-                senderAccountId: context.accountId, // ✅ AI envía DESDE quien responde (Patricia)
+                accountId: context.accountId,
+                targetAccountId: context.targetAccountId || 'unknown',
                 content: { text: action.content },
-                type: 'outgoing',
-                generatedBy: 'ai',
-                status: 'pending',
-                metadata: {
-                    // 🔑 AGREGAR METADATA DE LA VERDAD DEL MUNDO
-                    originalChannel: 'unknown', // 🔴 DEBERÍA SER EL CANAL ORIGINAL
-                    originalMessageId: 'unknown', // 🔴 DEBERÍA SER EL MENSAJE ORIGINAL
-                    responseTimestamp: new Date().toISOString(),
-                    aiModel: 'unknown', // 🔴 DEBERÍA SER EL MODELO DE IA
-                    mode: 'unknown' // 🔴 DEBERÍA SER EL MODO DE IA
-                }
-            }).returning();
-
-            // 2. Update conversation metadata
-            await db.update(conversations).set({
-                lastMessageAt: new Date(),
-                lastMessageText: action.content.substring(0, 200),
-                updatedAt: new Date(),
-            }).where(eq(conversations.id, action.conversationId));
-
-            // 2. Emit event for WebSocket distribution (ChatCore responsibility)
-            console.log(`[ActionExecutor] 📤 EMITIENDO EVENTO A MessageDispatch:`);
-            console.log(`📋 ENVELOPE PARA MessageDispatch:`);
-            console.log(`  - Conversation ID: ${action.conversationId}`);
-            console.log(`  - Sender Account (quien envía): ${context.accountId}`);
-            console.log(`  - Target Account (para quien): ${context.targetAccountId}`);
-            console.log(`  - Content: "${action.content}"`);
-            console.log(`  - Generated By: ai`);
-            
-            coreEventBus.emit('core:message_received', {
-                envelope: {
-                    conversationId: action.conversationId,
-                    senderAccountId: context.accountId,
-                    targetAccountId: context.targetAccountId, // 🔑 Usar targetAccountId para el receptor
-                    content: { text: action.content },
-                    type: 'outgoing',
-                    generatedBy: 'ai',
-                    meta: {
-                        // ✅ META para MessageDispatch
-                        targetAccountId: context.targetAccountId, // 🔑 Para quien va el mensaje
-                        // 🔑 AGREGAR MÁS META DE LA VERDAD DEL MUNDO
-                        originalChannel: 'unknown', // 🔴 DEBERÍA SER EL CANAL ORIGINAL
-                        originalMessageId: 'unknown', // 🔴 DEBERÍA SER EL MENSAJE ORIGINAL
-                        responseTimestamp: new Date().toISOString(),
-                        aiModel: 'unknown', // 🔴 DEBERÍA SER EL MODELO DE IA
-                        mode: 'unknown' // 🔴 DEBERÍA SER EL MODO DE IA
-                    }
-                },
-                result: { success: true, messageId: msg.id }
+                turnId: 0, // Will be enriched by caller if needed
             });
 
-            // 3. ✅ NO MÁS BROADCAST DUPLICADO
-            // El broadcast ahora se maneja automáticamente por MessageCore.receive()
-            // Este código era un remanente del refactor anterior
-            console.log(`[ActionExecutor] ✅ Message persisted - broadcast handled by MessageCore`);
-            console.log(`📋 MENSAJE GUARDADO:`);
-            console.log(`  - Message ID: ${msg.id}`);
-            console.log(`  - Conversation ID: ${action.conversationId}`);
-            console.log(`  - Content: "${action.content}"`);
-            console.log(`  - Sender: ${context.accountId}`);
-            console.log(`  - Target: ${context.targetAccountId}`);
+            if (!certResult.accepted) {
+                console.error(`[ActionExecutor] ❌ Kernel rejected AI response: ${certResult.reason}`);
+                return { action, success: false, error: `Kernel rejected: ${certResult.reason}` };
+            }
 
-            console.log(`[FluxPipeline] ✅ SENT  conv=${action.conversationId.slice(0, 7)} msgId=${msg.id.slice(0, 7)} by=ai`);
+            console.log(`[ActionExecutor] ✅ AI response certified as signal #${certResult.signalId}`);
+            console.log(`[FluxPipeline] ✅ CERTIFIED  conv=${action.conversationId.slice(0, 7)} signal=#${certResult.signalId} by=ai`);
 
             return {
                 action,
                 success: true,
-                messageId: msg.id,
             };
         } catch (error: any) {
-            console.error(`[ActionExecutor] ❌ Failed to send message:`, error.message);
+            console.error(`[ActionExecutor] ❌ Failed to certify AI response:`, error.message);
             return { action, success: false, error: error.message };
         }
     }

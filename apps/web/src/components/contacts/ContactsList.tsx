@@ -460,7 +460,7 @@ function AddContactModal({ currentAccountId, onClose, onContactAdded }: AddConta
                     {account.displayName}
                   </div>
                   <div className="text-xs text-muted">
-                    @{account.username}
+                    @{account.alias}
                   </div>
                 </div>
 

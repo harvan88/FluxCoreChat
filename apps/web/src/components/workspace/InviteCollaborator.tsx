@@ -62,7 +62,7 @@ export function InviteCollaborator({ workspaceId, onClose, onSuccess }: InviteCo
 
   const handleSelectUser = (user: Account) => {
     setSelectedUser(user);
-    setSearchQuery(user.displayName || user.username || '');
+    setSearchQuery(user.displayName || user.alias || '');
     setSearchResults([]);
   };
 
@@ -79,7 +79,7 @@ export function InviteCollaborator({ workspaceId, onClose, onSuccess }: InviteCo
     } else if (selectedUser) {
       // In real implementation, we'd need the user's email
       // For now, we'll use a placeholder
-      emailToInvite = `${selectedUser.username}@fluxcore.local`;
+      emailToInvite = `${selectedUser.alias}@fluxcore.local`;
     } else {
       return;
     }
@@ -198,7 +198,7 @@ export function InviteCollaborator({ workspaceId, onClose, onSuccess }: InviteCo
                   </div>
                   <div className="flex-1 text-left">
                     <div className="text-primary text-sm font-medium">{user.displayName}</div>
-                    <div className="text-muted text-xs">@{user.username}</div>
+                    <div className="text-muted text-xs">@{user.alias}</div>
                   </div>
                 </button>
               ))}
@@ -213,7 +213,7 @@ export function InviteCollaborator({ workspaceId, onClose, onSuccess }: InviteCo
               </div>
               <div className="flex-1">
                 <div className="text-primary text-sm font-medium">{selectedUser.displayName}</div>
-                <div className="text-muted text-xs">@{selectedUser.username}</div>
+                <div className="text-muted text-xs">@{selectedUser.alias}</div>
               </div>
               <button
                 onClick={() => {

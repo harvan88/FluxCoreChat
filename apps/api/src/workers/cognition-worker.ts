@@ -54,15 +54,23 @@ class CognitionWorkerService {
         console.log('[CognitionWorker] 🧠 Started — event-driven + 30s safeguard poll');
 
         this.wakeupHandler = () => {
-            this.processReadyTurns().catch((err) => {
-                console.error('[CognitionWorker] Error en wakeup handler:', err);
-            });
+            // Delay processing by TURN_WINDOW + buffer so the turn has time to expire
+            // Without this, wakeup fires immediately but turn_window_expires_at is 3s in the future
+            // and processReadyTurns() finds 0 ready turns
+            const TURN_WINDOW_DELAY_MS = 4000; // 3s turn window + 1s buffer
+            console.log(`[CognitionWorker] 🔔 WAKEUP received — scheduling check in ${TURN_WINDOW_DELAY_MS}ms`);
+            setTimeout(() => {
+                console.log('[CognitionWorker] ⏰ Delayed wakeup firing now...');
+                this.processReadyTurns().catch((err) => {
+                    console.error('[CognitionWorker] Error en wakeup handler:', err);
+                });
+            }, TURN_WINDOW_DELAY_MS);
         };
 
         coreEventBus.on('kernel:cognition:wakeup', this.wakeupHandler);
 
         this.safeguardInterval = setInterval(() => {
-            this.processReadyTurns().catch(() => {});
+            this.processReadyTurns().catch(() => { });
         }, SAFEGUARD_INTERVAL_MS);
     }
 
@@ -140,32 +148,51 @@ class CognitionWorkerService {
     }): Promise<void> {
         const entryId = Number(entry.id);
 
-        console.log(`[FluxPipeline] 🔄 TURN  conv=${entry.conversation_id.slice(0,7)} account=${entry.account_id.slice(0,7)} attempt=${entry.attempts + 1}/${MAX_ATTEMPTS}`);
+        console.log(`[FluxPipeline] 🔄 TURN  conv=${entry.conversation_id.slice(0, 7)} account=${entry.account_id.slice(0, 7)} attempt=${entry.attempts + 1}/${MAX_ATTEMPTS}`);
+        
+        // 🔍 DEBUG LOGS
+        console.log(`[CognitionWorker] 🔍 PROCESSING TURN START:`);
+        console.log(`  - entryId: ${entryId}`);
+        console.log(`  - conversation_id: ${entry.conversation_id}`);
+        console.log(`  - account_id (responder): ${entry.account_id}`);
+        console.log(`  - target_account_id: ${entry.target_account_id || 'undefined'}`);
+        console.log(`  - last_signal_seq: ${entry.last_signal_seq}`);
+        console.log(`  - attempts: ${entry.attempts}`);
 
         try {
             // 1. Increment attempt counter
+            console.log(`[CognitionWorker] ⏳ Incrementing attempt counter...`);
             await db.update(fluxcoreCognitionQueue)
                 .set({ attempts: entry.attempts + 1 })
                 .where(eq(fluxcoreCognitionQueue.id, entryId));
+            console.log(`[CognitionWorker] ✓ Attempt counter updated to ${entry.attempts + 1}`);
 
             // 2. Delegate to CognitiveDispatcher
+            console.log(`[CognitionWorker] 📤 Delegating to CognitiveDispatcher...`);
             // account_id = quien RESPONDE (Patricia)
             // target_account_id = a quien responder (Harold) — solo para routing posterior
             const result = await cognitiveDispatcher.dispatch({
                 turnId: entryId,
                 conversationId: entry.conversation_id,
                 accountId: entry.account_id,
-                targetAccountId: entry.target_account_id,
                 lastSignalSeq: entry.last_signal_seq,
             });
+            
+            console.log(`[CognitionWorker] 📥 Result from CognitiveDispatcher:`);
+            console.log(`  - success: ${result.success}`);
+            console.log(`  - runtimeUsed: ${result.runtimeUsed}`);
+            console.log(`  - actions count: ${result.actions?.length || 0}`);
+            if (result.error) console.log(`  - error: ${result.error}`);
 
             if (result.success) {
                 // 3. Success logged by Dispatcher/Executor. 
                 //    ActionExecutor is now responsible for marking processedAt.
-                console.log(`[CognitionWorker] ✅ Turn delegation complete: conversation ${entry.conversation_id}, runtime=${result.runtimeUsed}`);
+                console.log(`[CognitionWorker] ✅ Turn delegation SUCCESS: conversation ${entry.conversation_id}, runtime=${result.runtimeUsed}`);
+                console.log(`[CognitionWorker]   Actions executed: ${result.actions?.map(a => a.type).join(', ') || 'none'}`);
             } else {
                 // 3b. Log error and Handle Backoff (PRINCIPLE: Resilience)
                 const errorMsg = result.error || 'Unknown dispatch error';
+                console.log(`[CognitionWorker] ⚠️ Turn FAILED (not catastrophic): ${errorMsg}`);
                 const isConfigError = errorMsg.includes('not found') ||
                     errorMsg.includes('not registered');
 

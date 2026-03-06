@@ -16,12 +16,12 @@ class AccountLabelService {
         }
 
         const [account] = await db
-            .select({ displayName: accounts.displayName, username: accounts.username })
+            .select({ displayName: accounts.displayName, alias: accounts.alias })
             .from(accounts)
             .where(eq(accounts.id, accountId))
             .limit(1);
 
-        const label = account?.displayName || account?.username || accountId.slice(0, 7);
+        const label = account?.displayName || account?.alias || accountId.slice(0, 7);
         this.cache.set(accountId, { label, expiresAt: Date.now() + this.TTL_MS });
         return label;
     }

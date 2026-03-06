@@ -88,6 +88,8 @@ class CognitiveDispatcherService {
             console.log(`[FluxPipeline] 📋 POLICY mode=${policyContext.mode} runtime=${policyContext.activeRuntimeId} account=${accountLabel} (${accountId.slice(0, 7)})`);
             if (policyContext.mode === 'off') {
                 console.log(`[FluxPipeline] ⛔ OFF   account=${accountLabel} (${accountId.slice(0, 7)}) → automation disabled`);
+                // CRITICAL: Close the turn so it doesn't block future messages
+                await actionExecutor.closeTurn(turnId, accountId);
                 return {
                     actions: [{ type: 'no_action', reason: 'Automation mode is off' }],
                     runtimeUsed: 'none',
@@ -136,20 +138,42 @@ class CognitiveDispatcherService {
 
                 // 8. Invoke runtime via gateway
                 console.log(`[CognitiveDispatcher] Step 8: Invoking runtime '${runtimeId}'...`);
+                console.log(`[CognitiveDispatcher] 📤 RUNTIME INPUT:`);
+                console.log(`  - policyContext.mode: ${input.policyContext.mode}`);
+                console.log(`  - policyContext.activeRuntimeId: ${input.policyContext.activeRuntimeId}`);
+                console.log(`  - runtimeConfig.assistantId: ${input.runtimeConfig.assistantId?.slice(0,8) || 'none'}`);
+                console.log(`  - runtimeConfig.model: ${input.runtimeConfig.model || 'default'}`);
+                console.log(`  - runtimeConfig.provider: ${input.runtimeConfig.provider || 'default'}`);
+                console.log(`  - conversationHistory.length: ${input.conversationHistory.length}`);
+                console.log(`  - last message role: ${input.conversationHistory[input.conversationHistory.length-1]?.role || 'none'}`);
+                
                 const actions = await runtimeGateway.invoke(runtimeId, input);
-                console.log(`[CognitiveDispatcher] ✓ Runtime returned ${actions.length} actions`);
+                
+                console.log(`[CognitiveDispatcher] 📥 RUNTIME RETURNED ${actions.length} actions:`);
+                actions.forEach((action, i) => {
+                    console.log(`  [${i}] type=${action.type}${action.type === 'send_message' ? ` content="${(action as any).content?.slice(0,50)}..."` : ''}`);
+                });
 
                 typingKeepAlive.stop();
 
                 // 9. Execute actions via ActionExecutor (Canon §4.8: mediated effects)
-                console.log(`[CognitiveDispatcher] Step 9: Executing actions (mode=${policyContext.mode})...`);
+                console.log(`[CognitiveDispatcher] Step 9: Executing ${actions.length} actions via ActionExecutor (mode=${policyContext.mode})...`);
+                console.log(`[CognitiveDispatcher] 📤 ACTION EXECUTOR PARAMS:`);
+                console.log(`  - turnId: ${turnId}`);
+                console.log(`  - conversationId: ${conversationId}`);
+                console.log(`  - accountId (responder): ${accountId}`);
+                console.log(`  - runtimeId: ${runtimeId}`);
+                console.log(`  - policyContext.mode: ${policyContext.mode}`);
                 if (policyContext.mode === 'auto') {
                     // Resolve targetAccountId from cognition_queue
+                    console.log(`[CognitiveDispatcher] 🔍 Looking up targetAccountId from cognition_queue...`);
                     const [queueEntry] = await db
                         .select({ targetAccountId: fluxcoreCognitionQueue.targetAccountId })
                         .from(fluxcoreCognitionQueue)
                         .where(eq(fluxcoreCognitionQueue.id, turnId))
                         .limit(1);
+                    
+                    console.log(`[CognitiveDispatcher] ✓ targetAccountId resolved: ${queueEntry?.targetAccountId || 'undefined'}`);
                     
                     await actionExecutor.execute(actions, {
                         turnId,
