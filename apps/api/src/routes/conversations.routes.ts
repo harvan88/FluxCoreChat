@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { and, eq } from 'drizzle-orm';
+import { accounts, conversationParticipants, db } from '@fluxcore/db';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { conversationService } from '../services/conversation.service';
 
@@ -112,7 +114,7 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
         const userAccounts = await db
           .select()
           .from(accounts)
-          .where(eq(accounts.ownerId, user.id));
+          .where(eq(accounts.ownerUserId, user.id));
         
         const accountIds = userAccounts.map(a => a.id);
         if (!accountIds.includes(query.accountId)) {
@@ -152,7 +154,14 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
           viewerRole = participant[0]?.role || null;
         }
 
-        const messages = await messageService.getMessagesByConversationId(params.id, limit, cursor);
+        // Resolve viewer actor for visibility filtering
+        let viewerActorId: string | undefined;
+        if (user && activeAccountId) {
+          const { resolveActorId } = await import('../utils/actor-resolver');
+          viewerActorId = await resolveActorId(activeAccountId) || undefined;
+        }
+
+        const messages = await messageService.getMessagesByConversationId(params.id, limit, cursor, viewerActorId);
 
         // 🔥 NUEVO: Agregar viewerRole a cada mensaje para perspectiva correcta
         const messagesWithPerspective = messages.map(msg => ({
@@ -218,7 +227,7 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
   )
   .post(
     '/convert-visitor',
-    async ({ user, body, set }) => {
+    async ({ user, body, set, request }) => {
       if (!user) {
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
@@ -250,11 +259,28 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
           relationshipId: relationship.id,
         });
 
+        const { chatCoreWebchatGateway } = await import('../services/fluxcore/chatcore-webchat-gateway.service');
+        const identityCertification = await chatCoreWebchatGateway.certifyConnectionEvent({
+          visitorToken,
+          realAccountId: visitorAccountId,
+          tenantId: ownerAccountId,
+          meta: {
+            ip: request.headers.get('x-forwarded-for') || undefined,
+            userAgent: request.headers.get('user-agent') || undefined,
+            requestId: request.headers.get('x-request-id') || `convert-visitor-${Date.now()}`,
+          },
+        });
+
+        if (!identityCertification.accepted) {
+          throw new Error(identityCertification.reason || 'Failed to certify identity link');
+        }
+
         return {
           success: true,
           data: {
             conversation: converted,
             relationshipId: relationship.id,
+            identitySignalId: identityCertification.signalId ?? null,
           },
         };
       } catch (error: any) {
@@ -277,6 +303,53 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
       },
     }
   )
+  .post(
+    '/:id/clear',
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const userAccounts = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.ownerUserId, user.id));
+
+        const senderAccountId = userAccounts[0]?.id;
+        if (!senderAccountId) {
+          set.status = 400;
+          return { success: false, message: 'No account found' };
+        }
+
+        const { resolveActorId } = await import('../utils/actor-resolver');
+        const actorId = await resolveActorId(senderAccountId);
+        if (!actorId) {
+          set.status = 400;
+          return { success: false, message: 'Could not resolve actor' };
+        }
+
+        const { messageDeletionService } = await import('../services/message-deletion.service');
+        const result = await messageDeletionService.hideAllMessagesForActor(params.id, actorId);
+
+        if (!result.success) {
+          set.status = 500;
+          return { success: false, message: result.reason };
+        }
+
+        return { success: true, data: { hiddenCount: result.hiddenCount } };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      detail: { tags: ['Conversations'], summary: 'Clear chat (hide all messages for current actor)' },
+    }
+  )
   .delete(
     '/:id',
     async ({ user, params, set }) => {
@@ -287,7 +360,7 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
 
       try {
         await conversationService.deleteConversation(params.id, user.id);
-        return { success: true, message: 'Conversation deleted' };
+        return { success: true, message: 'Se ha abandonado la conversación correctamente' };
       } catch (error: any) {
         set.status = 400;
         return { success: false, message: error.message };
@@ -296,6 +369,6 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
     {
       isAuthenticated: true,
       params: t.Object({ id: t.String() }),
-      detail: { tags: ['Conversations'], summary: 'Delete conversation and its messages' },
+      detail: { tags: ['Conversations'], summary: 'Leave conversation (soft delete)' },
     }
   );

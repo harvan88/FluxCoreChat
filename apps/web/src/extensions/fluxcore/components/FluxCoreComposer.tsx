@@ -59,6 +59,7 @@ export function FluxCoreComposer(props: {
     const [isEmojiOpen, setIsEmojiOpen] = useState(false);
     const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
     const [wasTextTruncated, setWasTextTruncated] = useState(false);
+    const [isAIBlockCollapsed, setIsAIBlockCollapsed] = useState(false);
     const openTab = usePanelStore((state) => state.openTab);
     const setActiveActivity = useUIStore((state) => state.setActiveActivity);
 
@@ -486,9 +487,16 @@ export function FluxCoreComposer(props: {
                 />
             )}
 
-            {aiBlockInfo && (
-                <div className="mb-3 rounded-2xl border border-warning bg-warning/10 p-3">
-                    <div className="flex items-start gap-3">
+            {aiBlockInfo && !isAIBlockCollapsed && (
+                <div className="mb-3 rounded-2xl border border-warning bg-warning/10 p-3 relative">
+                    <button
+                        onClick={() => setIsAIBlockCollapsed(true)}
+                        className="absolute top-2 right-2 p-1 rounded-md text-warning hover:bg-warning/20 transition-colors"
+                        aria-label="Cerrar aviso"
+                    >
+                        <X size={14} />
+                    </button>
+                    <div className="flex items-start gap-3 pr-8">
                         <AlertTriangle size={18} className="text-warning mt-0.5" />
                         <div className="flex-1 min-w-0">
                             <div className="text-sm font-semibold text-warning">{aiBlockInfo.title}</div>
@@ -514,6 +522,18 @@ export function FluxCoreComposer(props: {
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {aiBlockInfo && isAIBlockCollapsed && (
+                <div className="mb-3 flex justify-center">
+                    <button
+                        onClick={() => setIsAIBlockCollapsed(false)}
+                        className="px-3 py-1.5 text-xs rounded-full border border-warning bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
+                    >
+                        <AlertTriangle size={12} className="inline mr-1" />
+                        Mostrar aviso de IA
+                    </button>
                 </div>
             )}
 

@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { relationshipService } from '../services/relationship.service';
 import { presentAccountWithAvatar } from '../utils/account-avatar.presenter';
+import { resolveActorId, resolveAccountId } from '../utils/actor-resolver';
 
 export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
   .use(authMiddleware)
@@ -31,13 +32,15 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
         const rels = await relationshipService.getRelationshipsByAccountId(accountId);
 
         // Enrich with contact name
+        const myActorId = await resolveActorId(accountId);
         const enrichedRelationships = await Promise.all(
           rels.map(async (rel) => {
-            const otherAccountId = rel.accountAId === accountId
-              ? rel.accountBId
-              : rel.accountAId;
+            const otherActorId = rel.actorAId === myActorId
+              ? rel.actorBId
+              : rel.actorAId;
+            const otherAccountId = await resolveAccountId(otherActorId);
 
-            const otherAccount = await accountService.getAccountById(otherAccountId);
+            const otherAccount = otherAccountId ? await accountService.getAccountById(otherAccountId) : null;
             const presentedAccount = await presentAccountWithAvatar(otherAccount, { actorId: user.id });
 
             return {
@@ -65,14 +68,20 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
       }
 
       // Enrich with contact name (the OTHER account, not the user's)
+      const actorIdSet = new Set<string>();
+      for (const acc of accounts) {
+        const aid = await resolveActorId(acc.id);
+        if (aid) actorIdSet.add(aid);
+      }
       const enrichedRelationships = await Promise.all(
         allRelationships.map(async (rel) => {
-          // Find the OTHER account ID
-          const otherAccountId = userAccountIds.includes(rel.accountAId)
-            ? rel.accountBId
-            : rel.accountAId;
+          // Find the OTHER actor
+          const otherActorId = actorIdSet.has(rel.actorAId)
+            ? rel.actorBId
+            : rel.actorAId;
+          const otherAccountId = await resolveAccountId(otherActorId);
 
-          const otherAccount = await accountService.getAccountById(otherAccountId);
+          const otherAccount = otherAccountId ? await accountService.getAccountById(otherAccountId) : null;
           const presentedAccount = await presentAccountWithAvatar(otherAccount, { actorId: user.id });
 
           return {

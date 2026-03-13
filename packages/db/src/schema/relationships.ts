@@ -1,19 +1,15 @@
-import { pgTable, uuid, timestamp, jsonb, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, timestamp, jsonb, check, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { accounts } from './accounts';
-import { fluxcoreActors } from './fluxcore-identity';
+import { actors } from './actors';
 
 export const relationships = pgTable('relationships', {
   id: uuid('id').primaryKey().defaultRandom(),
-  accountAId: uuid('account_a_id')
+  actorAId: uuid('actor_a_id')
     .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
-  accountBId: uuid('account_b_id')
+    .references(() => actors.id),
+  actorBId: uuid('actor_b_id')
     .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
-
-  // ALIGNMENT: Link to Ontological Actor
-  actorId: uuid('actor_id').references(() => fluxcoreActors.id),
+    .references(() => actors.id),
 
   // Perspectivas bilaterales (sin contexto)
   perspectiveA: jsonb('perspective_a')
@@ -31,7 +27,8 @@ export const relationships = pgTable('relationships', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   lastInteraction: timestamp('last_interaction'),
 }, (table) => ({
-  noSelfRelationship: check('no_self_relationship', sql`${table.accountAId} <> ${table.accountBId}`),
+  noSelfRelationship: check('no_self_relationship', sql`${table.actorAId} <> ${table.actorBId}`),
+  actorsIdx: index('idx_relationships_actors').on(table.actorAId, table.actorBId),
 }));
 
 export type Relationship = typeof relationships.$inferSelect;

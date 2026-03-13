@@ -1,9 +1,20 @@
 import { Elysia, t } from 'elysia';
-import { db, accounts, conversations, messages } from '@fluxcore/db';
+import { jwt } from '@elysiajs/jwt';
+import { db, accounts, conversations, messages, actors } from '@fluxcore/db';
 import { eq, and, desc } from 'drizzle-orm';
 import { assetPolicyService } from '../services/asset-policy.service';
+import { conversationService } from '../services/conversation.service';
+import { getOrCreateAccountActorId } from '../utils/actor-resolver';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
+  .use(
+    jwt({
+      name: 'jwt',
+      secret: JWT_SECRET,
+    })
+  )
   .get(
     '/check-alias/:alias',
     async ({ params, set }) => {
@@ -62,6 +73,93 @@ export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
     }
   )
   .get(
+    '/:alias/session',
+    async ({ params, query, set, jwt }) => {
+      try {
+        const visitorToken = query.visitorToken?.trim();
+        if (!visitorToken) {
+          set.status = 400;
+          return { success: false, message: 'visitorToken required' };
+        }
+
+        const account = await db.query.accounts.findFirst({
+          where: eq(accounts.alias, params.alias),
+        });
+
+        if (!account) {
+          set.status = 404;
+          return { success: false, message: 'Profile not found' };
+        }
+
+        const ownerActorId = await getOrCreateAccountActorId(account.id, account.displayName || account.alias || undefined);
+
+        const [existingVisitorActor] = await db
+          .select({ id: actors.id })
+          .from(actors)
+          .where(
+            and(
+              eq(actors.actorType, 'visitor'),
+              eq(actors.externalKey, visitorToken),
+              eq(actors.tenantId, account.id)
+            )
+          )
+          .limit(1);
+
+        let visitorActorId = existingVisitorActor?.id;
+        if (!visitorActorId) {
+          const [visitorActor] = await db
+            .insert(actors)
+            .values({
+              actorType: 'visitor',
+              externalKey: visitorToken,
+              tenantId: account.id,
+              displayName: `Visitor ${visitorToken.slice(0, 8)}`,
+            })
+            .returning({ id: actors.id });
+
+          visitorActorId = visitorActor.id;
+        }
+
+        const conversation = await conversationService.ensureConversation({
+          visitorToken,
+          ownerAccountId: account.id,
+          channel: 'webchat',
+        });
+
+        const publicToken = await jwt.sign({
+          type: 'public_profile',
+          ownerAccountId: account.id,
+          visitorToken,
+          visitorActorId,
+        });
+
+        return {
+          success: true,
+          data: {
+            conversationId: conversation.id,
+            ownerAccountId: account.id,
+            ownerActorId,
+            visitorActorId,
+            visitorToken,
+            publicToken,
+          },
+        };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message || 'Internal server error' };
+      }
+    },
+    {
+      params: t.Object({ alias: t.String() }),
+      query: t.Object({ visitorToken: t.String() }),
+      detail: {
+        tags: ['PublicProfile'],
+        summary: 'Create or resume public profile session',
+        description: 'Resolves the visitor actor, conversation and temporary JWT for a public profile chat session.',
+      },
+    }
+  )
+  .get(
     '/:alias',
     async ({ params, set }) => {
       try {
@@ -100,6 +198,8 @@ export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
           avatarUrl = profile.avatarUrl as string;
         }
 
+        const actorId = await getOrCreateAccountActorId(account.id, account.displayName || account.alias || undefined);
+
         return {
           success: true,
           data: {
@@ -109,6 +209,7 @@ export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
             accountType: account.accountType,
             bio: (profile.bio as string) || null,
             avatarUrl,
+            actorId,
           },
         };
       } catch (error: any) {

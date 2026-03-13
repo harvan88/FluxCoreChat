@@ -259,6 +259,18 @@ class ApiService {
     return this.request(`/messages/${id}`, { method: 'DELETE' });
   }
 
+  async deleteMessagesBulk(messageIds: string[], scope: 'self' | 'all' = 'self', accountId?: string): Promise<ApiResponse<{
+    deleted: number;
+    failed: number;
+    scope: string;
+    action: string;
+  }>> {
+    return this.request('/messages/bulk', { 
+      method: 'DELETE',
+      body: JSON.stringify({ messageIds, scope, accountId })
+    });
+  }
+
   // Health
   async health(): Promise<ApiResponse<{ status: string }>> {
     return this.request<{ status: string }>('/health');
@@ -575,7 +587,14 @@ class ApiService {
     });
   }
 
-  // Delete conversation
+  // Clear chat (hide all messages for current actor)
+  async clearChat(conversationId: string): Promise<ApiResponse<{ hiddenCount: number }>> {
+    return this.request<{ hiddenCount: number }>(`/conversations/${conversationId}/clear`, {
+      method: 'POST',
+    });
+  }
+
+  // Delete conversation (leave / soft delete)
   async deleteConversation(conversationId: string): Promise<ApiResponse<void>> {
     return this.request<void>(`/conversations/${conversationId}`, {
       method: 'DELETE',

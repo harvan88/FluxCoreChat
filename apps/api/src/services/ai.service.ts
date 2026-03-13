@@ -12,6 +12,7 @@ import { accounts, messages, conversations, relationships, extensionInstallation
 import type { FluxPolicyContext } from '@fluxcore/db';
 import { and, eq } from 'drizzle-orm';
 import { manifestLoader } from './manifest-loader.service';
+import { resolveActorId } from '../utils/actor-resolver';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { aiEntitlementsService, type AIProviderId } from './ai-entitlements.service';
@@ -1047,13 +1048,20 @@ class AIService {
         return;
       }
 
+      const fluxcoreActorId = await resolveActorId(fluxcoreAccount.id);
+      const newActorId = await resolveActorId(params.newAccountId);
+      if (!fluxcoreActorId || !newActorId) {
+        console.warn('[AIService] Could not resolve actor IDs for welcome flow');
+        return;
+      }
+
       const [existingRelationship] = await db
         .select()
         .from(relationships)
         .where(
           and(
-            eq(relationships.accountAId, fluxcoreAccount.id),
-            eq(relationships.accountBId, params.newAccountId)
+            eq(relationships.actorAId, fluxcoreActorId),
+            eq(relationships.actorBId, newActorId)
           )
         )
         .limit(1);
@@ -1093,8 +1101,8 @@ class AIService {
       const [relationship] = await db
         .insert(relationships)
         .values({
-          accountAId: fluxcoreAccount.id,
-          accountBId: params.newAccountId,
+          actorAId: fluxcoreActorId,
+          actorBId: newActorId,
           perspectiveA: { savedName: params.userName },
           perspectiveB: { savedName: 'FluxCore' },
         })

@@ -14,7 +14,7 @@ export const authMiddleware = new Elysia({ name: 'auth' })
     const auth = headers.authorization;
 
     if (!auth || !auth.startsWith('Bearer ')) {
-      return { user: null };
+      return { user: null, publicActor: null, publicProfile: null };
     }
 
     const token = auth.slice(7);
@@ -23,17 +23,46 @@ export const authMiddleware = new Elysia({ name: 'auth' })
       const payload = await jwt.verify(token);
 
       if (!payload) {
-        return { user: null };
+        return { user: null, publicActor: null, publicProfile: null };
       }
 
+      // Check if it's a public actor token
+      if (payload.type === 'public_actor') {
+        return {
+          user: null,
+          publicProfile: null,
+          publicActor: {
+            actorId: payload.actorId as string,
+            accountId: payload.accountId as string,
+            permissions: payload.permissions || ['send_messages', 'receive_messages']
+          }
+        };
+      }
+
+      if (payload.type === 'public_profile') {
+        return {
+          user: null,
+          publicActor: null,
+          publicProfile: {
+            ownerAccountId: payload.ownerAccountId as string,
+            visitorToken: payload.visitorToken as string,
+            visitorActorId: payload.visitorActorId as string,
+            permissions: payload.permissions || ['send_messages', 'read_messages']
+          }
+        };
+      }
+
+      // Regular user authentication
       return {
         user: {
           id: payload.userId as string,
           email: payload.email as string,
         },
+        publicProfile: null,
+        publicActor: null,
       };
     } catch {
-      return { user: null };
+      return { user: null, publicActor: null, publicProfile: null };
     }
   })
   .macro(({ onBeforeHandle }) => ({

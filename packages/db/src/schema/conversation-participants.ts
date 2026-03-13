@@ -1,7 +1,6 @@
 import { pgTable, uuid, timestamp, varchar, text, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { conversations } from './conversations';
-import { accounts } from './accounts';
 import { actors } from './actors';
 
 export const conversationParticipants = pgTable('conversation_participants', {
@@ -9,9 +8,7 @@ export const conversationParticipants = pgTable('conversation_participants', {
   conversationId: uuid('conversation_id')
     .notNull()
     .references(() => conversations.id, { onDelete: 'cascade' }),
-  accountId: uuid('account_id')
-    .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
+  accountId: text('account_id').notNull(),
   actorId: uuid('actor_id').references(() => actors.id), // Referencia ontológica al actor
   role: varchar('role', { length: 20 }).notNull().default('initiator'),
   identityType: varchar('identity_type', { length: 20 }).notNull().default('registered'),

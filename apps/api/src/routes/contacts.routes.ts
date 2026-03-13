@@ -4,6 +4,7 @@ import { relationshipService } from '../services/relationship.service';
 import { accountService } from '../services/account.service';
 import { db, messages, conversations } from '@fluxcore/db';
 import { eq, desc } from 'drizzle-orm';
+import { resolveActorId } from '../utils/actor-resolver';
 
 export const contactsRoutes = new Elysia({ prefix: '/contacts' })
   .use(authMiddleware)
@@ -24,8 +25,9 @@ export const contactsRoutes = new Elysia({ prefix: '/contacts' })
 
         // Find relationship between user and contact
         const relationships = await relationshipService.getRelationshipsByAccountId(userAccountIds[0]);
+        const contactActorId = await resolveActorId(contactId);
         const relationship = relationships.find(
-          r => r.accountAId === contactId || r.accountBId === contactId
+          r => r.actorAId === contactActorId || r.actorBId === contactActorId
         );
 
         if (!relationship) {

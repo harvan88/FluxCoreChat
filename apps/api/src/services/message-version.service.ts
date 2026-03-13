@@ -56,11 +56,11 @@ class MessageVersionService {
         };
       }
 
-      // 3. Verificar si ya está eliminado
-      if (currentMessage.deletedAt) {
+      // 3. Verificar si ya está redactado
+      if (currentMessage.redactedAt) {
         return {
           success: false,
-          reason: 'Cannot edit deleted message'
+          reason: 'Cannot edit redacted message'
         };
       }
 
@@ -175,7 +175,7 @@ class MessageVersionService {
    */
   async canEdit(messageId: string): Promise<{ canEdit: boolean; timeRemaining?: number; reason?: string }> {
     const [message] = await db
-      .select({ createdAt: messages.createdAt, deletedAt: messages.deletedAt })
+      .select({ createdAt: messages.createdAt, redactedAt: messages.redactedAt })
       .from(messages)
       .where(eq(messages.id, messageId))
       .limit(1);
@@ -187,11 +187,11 @@ class MessageVersionService {
       };
     }
 
-    // No se pueden editar mensajes eliminados
-    if (message.deletedAt) {
+    // No se pueden editar mensajes redactados
+    if (message.redactedAt) {
       return {
         canEdit: false,
-        reason: 'Cannot edit deleted message'
+        reason: 'Cannot edit redacted message'
       };
     }
 
@@ -223,7 +223,7 @@ class MessageVersionService {
       .where(and(
         eq(messages.conversationId, conversationId),
         eq(messages.isCurrent, true),
-        isNull(messages.deletedAt) // No mostrar eliminados
+        isNull(messages.redactedAt) // No mostrar redactados
       ))
       .orderBy(messages.createdAt);
   }

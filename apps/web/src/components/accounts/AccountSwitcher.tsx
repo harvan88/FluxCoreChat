@@ -52,7 +52,7 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
   // Load accounts on mount
   useEffect(() => {
     loadAccounts();
-  }, [loadAccounts]);
+  }, []); // Empty deps - solo ejecutar una vez al montar
 
   useEffect(() => {
     if (accounts.length === 0) return;

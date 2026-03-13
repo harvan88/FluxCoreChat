@@ -17,6 +17,7 @@ interface UseChatOptions {
 
 interface SendMessageParams {
   content: { text?: string; type?: string };
+  fromActorId?: string;
   generatedBy?: 'human' | 'ai' | 'system';
   replyToId?: string;
 }
@@ -58,8 +59,10 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         return;
       }
 
-      // Cargar últimos 50 mensajes
-      const response = await fetch(`${API_URL}/conversations/${conversationId}/messages?limit=50`, {
+      // Cargar últimos 50 mensajes (con accountId para filtro de visibilidad)
+      const msgParams = new URLSearchParams({ limit: '50' });
+      if (accountId) msgParams.set('accountId', accountId);
+      const response = await fetch(`${API_URL}/conversations/${conversationId}/messages?${msgParams}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -91,6 +94,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         id: msg.id,
         conversationId: msg.conversationId,
         senderAccountId: msg.senderAccountId,
+        fromActorId: msg.fromActorId,
         content: typeof msg.content === 'string' ? 
           (msg.content.startsWith('{') ? JSON.parse(msg.content) : { text: msg.content }) : 
           msg.content,
@@ -144,6 +148,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         id: tempId,
         conversationId,
         senderAccountId: accountId,
+        fromActorId: params.fromActorId,
         content: params.content,
         type: 'outgoing',
         generatedBy: params.generatedBy || 'human',
@@ -165,6 +170,15 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         return optimisticMessage;
       }
 
+      console.log(`[useChat] 📤 Sending message:`, {
+        conversationId,
+        senderAccountId: accountId,
+        fromActorId: params.fromActorId,
+        content: params.content.text?.substring(0, 50),
+        type: 'outgoing',
+        token: token ? 'present' : 'missing'
+      });
+
       const response = await fetch(`${API_URL}/messages`, {
         method: 'POST',
         headers: {
@@ -173,21 +187,26 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
         },
         body: JSON.stringify({
           conversationId,
-          // � RESTORED: Enviar senderAccountId explícitamente (cuenta seleccionada en UI)
+          // RESTORED: Enviar senderAccountId explícitamente (cuenta seleccionada en UI)
           senderAccountId: accountId,
+          fromActorId: params.fromActorId,
           content: params.content,
           type: 'outgoing',
           generatedBy: params.generatedBy || 'human',
           replyToId: params.replyToId,
-          // 🆕 Idempotency key para prevenir duplicados
+          // Idempotency key para prevenir duplicados
           requestId: `msg-${Date.now()}-${accountId}`,
         }),
       });
 
+      console.log(`[useChat] 📡 API response status:`, response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[useChat] ❌ API Error ${response.status}:`, errorText);
         pendingSignaturesRef.current.delete(signature);
         setMessages(prev => prev.filter(m => m.id !== tempId));
-        throw new Error('Failed to send message');
+        throw new Error(`Failed to send message: ${response.status} - ${errorText}`);
       }
 
       // El backend ya certificó el mensaje y FluxCore lo emitirá por WebSocket.
@@ -256,9 +275,11 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
   }, []);
 
   // Eliminar mensaje
-  const deleteMessage = useCallback(async (messageId: string) => {
+  const deleteMessage = useCallback(async (messageId: string, scope: 'self' | 'all' = 'self') => {
     try {
-      const response = await fetch(`${API_URL}/messages/${messageId}`, {
+      const params = new URLSearchParams({ scope });
+      if (accountId) params.set('accountId', accountId);
+      const response = await fetch(`${API_URL}/messages/${messageId}?${params}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -266,16 +287,18 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete message');
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || 'Failed to delete message');
       }
 
       setMessages(prev => prev.filter(m => m.id !== messageId));
       return true;
     } catch (err: any) {
+      console.error('[useChat] deleteMessage error:', err.message);
       setError(err.message);
       return false;
     }
-  }, []);
+  }, [accountId]);
 
   // Reintentar mensaje fallido
   const retryMessage = useCallback(async (messageId: string) => {
@@ -288,6 +311,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
     // Reenviar
     return sendMessage({
       content: { text: message.content.text },
+      fromActorId: message.fromActorId,
       generatedBy: message.generatedBy,
       replyToId: message.replyToId,
     });
@@ -310,6 +334,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
 
   return {
     messages,
+    setMessages,
     isLoading,
     isSending,
     error,

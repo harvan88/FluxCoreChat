@@ -20,7 +20,7 @@ function App() {
     // Pequeño delay para evitar flash de contenido
     const timer = setTimeout(() => setIsInitializing(false), 100);
     return () => clearTimeout(timer);
-  }, [initFromStorage]);
+  }, []); // Empty deps - solo ejecutar una vez al montar
 
   // Aplicar tema al documento
   useEffect(() => {

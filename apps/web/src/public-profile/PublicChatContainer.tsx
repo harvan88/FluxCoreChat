@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2, WifiOff, MessageCircle } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 import { MessageBubble } from '../components/chat/MessageBubble';
+import { getVisitorActorId } from '../modules/visitor-token';
 import type { Message } from '../types';
 import type { PublicProfile } from './hooks/usePublicChat';
 
@@ -22,6 +23,9 @@ export function PublicChatContainer({
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Get visitor actor ID for proper isOwn calculation
+  const visitorActorId = getVisitorActorId();
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -59,6 +63,9 @@ export function PublicChatContainer({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <div className="w-14 h-14 mb-4 bg-elevated border border-subtle rounded-2xl flex items-center justify-center">
+              <MessageCircle className="text-muted" size={28} />
+            </div>
             <Avatar
               name={profile.displayName}
               src={profile.avatarUrl || undefined}
@@ -77,7 +84,8 @@ export function PublicChatContainer({
           <div key={msg.id} id={`msg-${msg.id}`}>
             <MessageBubble
               message={msg}
-              isOwn={msg.type === 'outgoing'}
+              isOwn={msg.fromActorId === visitorActorId}
+              isAI={msg.generatedBy === 'ai'}
             />
           </div>
         ))}

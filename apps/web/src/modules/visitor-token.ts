@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'fluxcore_visitor_token';
+const VISITOR_ACTOR_KEY = 'fluxcore_visitor_actor_id';
 
 /**
  * Returns the visitor_token for this browser session.
@@ -17,12 +18,27 @@ export function getOrCreateVisitorToken(): string {
 }
 
 /**
- * Clears the visitor_token from localStorage.
+ * Stores the visitor actor ID in localStorage for widget sessions
+ */
+export function setVisitorActorId(actorId: string): void {
+    localStorage.setItem(VISITOR_ACTOR_KEY, actorId);
+}
+
+/**
+ * Gets the stored visitor actor ID
+ */
+export function getVisitorActorId(): string | null {
+    return localStorage.getItem(VISITOR_ACTOR_KEY);
+}
+
+/**
+ * Clears the visitor_token and visitor actor ID from localStorage.
  * Should be called only after the visitor has fully authenticated
  * and the identity link has been persisted server-side.
  */
 export function clearVisitorToken(): void {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(VISITOR_ACTOR_KEY);
 }
 
 /**
