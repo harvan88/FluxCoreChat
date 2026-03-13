@@ -33,6 +33,9 @@ interface UseWebSocketOptions {
   onSuggestionAutoCancelled?: (payload: { suggestionId: string }) => void;
   onActivityState?: (payload: { accountId: string; conversationId: string; activity: string }) => void;
   autoConnect?: boolean;
+  accountIdOverride?: string | null;
+  authTokenOverride?: string | null;
+  includeSelectedAccountId?: boolean;
   reconnect?: boolean;
   reconnectInterval?: number;
   pingInterval?: number; // Add pingInterval option
@@ -50,6 +53,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     onSuggestionAutoCancelled,
     onActivityState,
     autoConnect = true,
+    accountIdOverride = null,
+    authTokenOverride = null,
+    includeSelectedAccountId = true,
     reconnect = true,
     reconnectInterval = 3000,
     pingInterval = 30000, // Add default pingInterval
@@ -57,6 +63,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   // Obtener accountId actual para reconexión automática
   const selectedAccountId = useUIStore((state) => state.selectedAccountId);
+  const effectiveAccountId = includeSelectedAccountId
+    ? (accountIdOverride ?? selectedAccountId)
+    : accountIdOverride;
+  const effectiveAuthToken = authTokenOverride ?? localStorage.getItem('fluxcore_token');
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [lastError, setLastError] = useState<string | null>(null);
@@ -65,11 +75,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribedRelationshipsRef = useRef<Set<string>>(new Set());
+  const subscribedConversationsRef = useRef<Set<string>>(new Set());
   const reconnectAttemptsRef = useRef(0);
   const manualDisconnectRef = useRef(false);
   const mountedRef = useRef(true);
+  const autoConnectEnabledRef = useRef(false);
   const currentAccountIdRef = useRef<string | null>(null);
+  const currentAuthTokenRef = useRef<string | null>(effectiveAuthToken);
   const MAX_RECONNECT_ATTEMPTS = 5;
+
+  // Refs for connect-time values (avoids recreating connect on every change)
+  const effectiveAccountIdRef = useRef(effectiveAccountId);
+  effectiveAccountIdRef.current = effectiveAccountId;
+  const effectiveAuthTokenRef = useRef(effectiveAuthToken);
+  effectiveAuthTokenRef.current = effectiveAuthToken;
   
   // Refs para callbacks estables (evitar loops de reconexión)
   const callbacksRef = useRef({
@@ -83,7 +102,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     onSuggestionAutoCancelled,
     onActivityState,
   });
-  callbacksRef.current = {
+
+  // Solo actualizar callbacksRef si realmente cambiaron
+  const prevCallbacksRef = useRef({
     onMessage,
     onSuggestion,
     onSuggestionGenerating,
@@ -93,7 +114,32 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     onSuggestionAutoSending,
     onSuggestionAutoCancelled,
     onActivityState,
-  };
+  });
+
+  if (
+    prevCallbacksRef.current.onMessage !== onMessage ||
+    prevCallbacksRef.current.onSuggestion !== onSuggestion ||
+    prevCallbacksRef.current.onSuggestionGenerating !== onSuggestionGenerating ||
+    prevCallbacksRef.current.onSuggestionDisabled !== onSuggestionDisabled ||
+    prevCallbacksRef.current.onSuggestionAutoWaiting !== onSuggestionAutoWaiting ||
+    prevCallbacksRef.current.onSuggestionAutoTyping !== onSuggestionAutoTyping ||
+    prevCallbacksRef.current.onSuggestionAutoSending !== onSuggestionAutoSending ||
+    prevCallbacksRef.current.onSuggestionAutoCancelled !== onSuggestionAutoCancelled ||
+    prevCallbacksRef.current.onActivityState !== onActivityState
+  ) {
+    callbacksRef.current = {
+      onMessage,
+      onSuggestion,
+      onSuggestionGenerating,
+      onSuggestionDisabled,
+      onSuggestionAutoWaiting,
+      onSuggestionAutoTyping,
+      onSuggestionAutoSending,
+      onSuggestionAutoCancelled,
+      onActivityState,
+    };
+    prevCallbacksRef.current = callbacksRef.current;
+  }
 
   // Limpiar timeout de reconexión
   const clearReconnectTimeout = useCallback(() => {
@@ -105,7 +151,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   // Conectar WebSocket
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
@@ -118,12 +164,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       const connectWebSocket = () => {
         console.log('[WebSocket] Connecting to:', WS_URL);
         
-        // 🔥 CRÍTICO: Obtener token JWT para autenticación WebSocket
-        const token = localStorage.getItem('fluxcore_token');
+        // Read from refs to avoid stale closures and unnecessary connect recreations
+        const token = effectiveAuthTokenRef.current;
+        const acctId = effectiveAccountIdRef.current;
         console.log('[WebSocket] 🎯 Token available:', !!token);
-        
-        // 🔥 CRÍTICO: Obtener accountId seleccionada del UI Store (ya viene del hook)
-        console.log('[WebSocket] 🎯 Selected accountId from UI Store:', selectedAccountId);
+        console.log('[WebSocket] 🎯 Effective accountId for WebSocket:', acctId);
         
         // Construir URL con token y accountId como query parameters
         let wsUrl = WS_URL;
@@ -136,9 +181,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
           console.log('[WebSocket] ⚠️ No token found, connecting without authentication');
         }
         
-        if (selectedAccountId) {
-          params.append('accountId', selectedAccountId);
-          console.log('[WebSocket] 🎯 Connecting with selected account:', selectedAccountId);
+        if (acctId) {
+          params.append('accountId', acctId);
+          console.log('[WebSocket] 🎯 Connecting with selected account:', acctId);
         }
         
         if (params.toString()) {
@@ -156,11 +201,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
           setLastError(null);
           
           // Actualizar accountId actual
-          currentAccountIdRef.current = useUIStore.getState().selectedAccountId;
+          currentAccountIdRef.current = acctId;
+          currentAuthTokenRef.current = token;
           
           // Re-suscribir a relationships anteriores
           subscribedRelationshipsRef.current.forEach(relationshipId => {
             ws.send(JSON.stringify({ type: 'subscribe', relationshipId }));
+          });
+
+          // Re-suscribir a conversaciones anteriores
+          subscribedConversationsRef.current.forEach(conversationId => {
+            ws.send(JSON.stringify({ type: 'subscribe', conversationId }));
           });
         };
 
@@ -347,10 +398,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       setStatus('error');
       setLastError('WebSocket: no se pudo conectar');
     }
-  }, [clearReconnectTimeout, reconnect, reconnectInterval]); // Callbacks ahora usan refs
+  }, [clearReconnectTimeout, reconnect, reconnectInterval]); // Stable: reads effectiveAccountId/Token from refs
 
   // Desconectar WebSocket
   const disconnect = useCallback(() => {
+    console.trace('[WebSocket] ws.close() called from:');
     clearReconnectTimeout();
     manualDisconnectRef.current = true;
     if (wsRef.current) {
@@ -380,6 +432,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const unsubscribe = useCallback((relationshipId: string) => {
     subscribedRelationshipsRef.current.delete(relationshipId);
     return send({ type: 'unsubscribe', relationshipId });
+  }, [send]);
+
+  const subscribeConversation = useCallback((conversationId: string) => {
+    subscribedConversationsRef.current.add(conversationId);
+    return send({ type: 'subscribe', conversationId });
+  }, [send]);
+
+  const unsubscribeConversation = useCallback((conversationId: string) => {
+    subscribedConversationsRef.current.delete(conversationId);
+    return send({ type: 'unsubscribe', conversationId });
   }, [send]);
 
   // Solicitar sugerencia de IA
@@ -446,21 +508,36 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   // Auto-conectar (solo una vez al montar)
   useEffect(() => {
     mountedRef.current = true;
-    
-    if (autoConnect) {
-      connect();
-    }
 
     return () => {
       mountedRef.current = false;
       disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - solo ejecutar una vez al montar
+
+  useEffect(() => {
+    if (!mountedRef.current) return;
+
+    if (!autoConnect) {
+      autoConnectEnabledRef.current = false;
+      if (wsRef.current) {
+        disconnect();
+      }
+      return;
+    }
+
+    if (!autoConnectEnabledRef.current) {
+      autoConnectEnabledRef.current = true;
+      currentAccountIdRef.current = effectiveAccountId;
+      currentAuthTokenRef.current = effectiveAuthToken;
+      connect();
+    }
+  }, [autoConnect, disconnect, effectiveAccountId, effectiveAuthToken]); // Removed connect to prevent reconnection loops
 
   // Reconectar automáticamente cuando cambia el accountId
   useEffect(() => {
-    if (selectedAccountId && selectedAccountId !== currentAccountIdRef.current) {
+    if (!autoConnect) return;
+    if (effectiveAccountId !== currentAccountIdRef.current) {
       console.log('[WebSocket] Account changed, reconnecting...');
       disconnect();
       // Pequeña pausa para asegurar limpieza completa
@@ -470,7 +547,20 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         }
       }, 100);
     }
-  }, [selectedAccountId, disconnect, connect]);
+  }, [effectiveAccountId, disconnect, connect]);
+
+  useEffect(() => {
+    if (!autoConnect) return;
+    if (effectiveAuthToken !== currentAuthTokenRef.current) {
+      console.log('[WebSocket] Auth token changed, reconnecting...');
+      disconnect();
+      setTimeout(() => {
+        if (mountedRef.current) {
+          connect();
+        }
+      }, 100);
+    }
+  }, [autoConnect, effectiveAuthToken, disconnect, connect]);
 
   // Ping periódico para mantener conexión
   useEffect(() => {
@@ -498,6 +588,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     send,
     subscribe,
     unsubscribe,
+    subscribeConversation,
+    unsubscribeConversation,
     requestSuggestion,
     approveSuggestion,
     discardSuggestion,

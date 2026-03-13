@@ -101,6 +101,34 @@ export const accountsApi = {
   },
 
   /**
+   * Obtener actor ID para una cuenta
+   */
+  async getActorForAccount(accountId: string): Promise<ApiResponse<{ actorId: string }>> {
+    try {
+      const token = localStorage.getItem('fluxcore_token');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      
+      const response = await fetch(
+        `${API_URL}/accounts/${accountId}/actor`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[accountsApi] getActorForAccount error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
    * Buscar usuarios por alias/username
    * Usa el endpoint backend /accounts/search para búsqueda eficiente
    */

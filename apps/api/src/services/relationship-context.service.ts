@@ -12,6 +12,7 @@ import { relationships } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 import type { ContextEntry, RelationshipContext, RelationshipPerspective } from '@fluxcore/db';
 import { coreEventBus } from '../core/events';
+import { resolveActorId } from '../utils/actor-resolver';
 
 const MAX_CONTEXT_CHARS = 2000;
 
@@ -222,9 +223,10 @@ class RelationshipContextService {
 
     if (!rel) return null;
 
-    if (rel.accountAId === accountId) {
+    const myActorId = await resolveActorId(accountId);
+    if (rel.actorAId === myActorId) {
       return rel.perspectiveA as RelationshipPerspective;
-    } else if (rel.accountBId === accountId) {
+    } else if (rel.actorBId === myActorId) {
       return rel.perspectiveB as RelationshipPerspective;
     }
 
@@ -250,10 +252,11 @@ class RelationshipContextService {
     let perspectiveField: 'perspectiveA' | 'perspectiveB';
     let currentPerspective: RelationshipPerspective;
 
-    if (rel.accountAId === accountId) {
+    const myActorId = await resolveActorId(accountId);
+    if (rel.actorAId === myActorId) {
       perspectiveField = 'perspectiveA';
       currentPerspective = rel.perspectiveA as RelationshipPerspective;
-    } else if (rel.accountBId === accountId) {
+    } else if (rel.actorBId === myActorId) {
       perspectiveField = 'perspectiveB';
       currentPerspective = rel.perspectiveB as RelationshipPerspective;
     } else {

@@ -69,6 +69,9 @@ export * from './asset-audit-logs';
 // AM-200: Asset Enrichments
 export * from './asset-enrichments';
 
+// Canonical message visibility (per-actor hiding)
+export * from './message-visibility';
+
 // AM-300: Asset Relationships
 export * from './message-assets';
 export * from './template-assets';

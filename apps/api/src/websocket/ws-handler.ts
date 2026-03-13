@@ -14,6 +14,7 @@ import { chatCoreWebchatGateway } from '../services/fluxcore/chatcore-webchat-ga
 import { conversationService } from '../services/conversation.service';
 import { db, accounts } from '@fluxcore/db';
 import { eq, inArray } from 'drizzle-orm';
+import { resolveActorId } from '../utils/actor-resolver';
 
 interface WSMessage {
   type:
@@ -194,7 +195,7 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
             const participantOwners = await db
               .select({ ownerUserId: accounts.ownerUserId, accountId: accounts.id })
               .from(accounts)
-              .where(inArray(accounts.id, participants.map(p => p.accountId).filter(Boolean)));
+              .where(inArray(accounts.id, participants.map(p => p.accountId).filter((id): id is string => !!id)));
             
             const senderOwnerId = senderAccountInfo[0]?.ownerUserId;
             isSameUserAccount = participantOwners.some(p => p.ownerUserId === senderOwnerId);
@@ -244,13 +245,14 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
             }
 
             // Si el Kernel acepta (o ya existe), procedemos
-            messageCore.send({
+            resolveActorId(data.senderAccountId!).then(actorId => messageCore.send({
               conversationId: data.conversationId!,
               senderAccountId: data.senderAccountId!,
+              fromActorId: actorId || undefined,
               content: data.content!,
               type: 'outgoing',
               generatedBy: 'human',
-            }).then((result) => {
+            })).then((result) => {
               if (result.success) {
                 ws.send(JSON.stringify({
                   type: 'message:sent',
@@ -298,13 +300,14 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
             ? { text: finalText, __fluxcore: { branding: true } }
             : { text: finalText };
 
-          messageCore.send({
-            conversationId: data.conversationId,
-            senderAccountId: data.senderAccountId,
+          resolveActorId(data.senderAccountId!).then(actorId => messageCore.send({
+            conversationId: data.conversationId!,
+            senderAccountId: data.senderAccountId!,
+            fromActorId: actorId || undefined,
             content,
             type: 'outgoing',
             generatedBy: 'ai',
-          }).then((result) => {
+          })).then((result) => {
             if (result.success) {
               ws.send(JSON.stringify({
                 type: 'suggestion:approved',
@@ -425,8 +428,10 @@ export function handleWSOpen(ws: any): void {
 }
 
 export function handleWSClose(ws: any): void {
-  console.log('WebSocket connection closed');
+  console.log('[WebSocket] Connection closed - Code:', ws.readyState, 'Reason:', ws.reason);
+  console.log('[WebSocket] Active connections before cleanup:', activeConnections.size);
   activeConnections.delete(ws);
+  console.log('[WebSocket] Active connections after cleanup:', activeConnections.size);
   // Limpiar subscripciones de este ws
   for (const [relationshipId, subs] of relationshipSubscriptions.entries()) {
     if (subs.has(ws)) {
@@ -792,6 +797,52 @@ async function handleWidgetConnect(ws: any, data: WSMessage): Promise<void> {
 
     const wsData = ws.data || {};
 
+    // 1. Ensure tenant actor exists (account owner)
+    const { actors } = await import('@fluxcore/db');
+    const [tenantActor] = await db
+      .select()
+      .from(actors)
+      .where(eq(actors.accountId, account.id))
+      .limit(1);
+
+    if (!tenantActor) {
+      // Create tenant actor if doesn't exist
+      const [newTenantActor] = await db
+        .insert(actors)
+        .values({
+          actorType: 'account',
+          accountId: account.id,
+          displayName: account.displayName || account.alias,
+        })
+        .returning();
+      console.log(`[Widget] Created tenant actor ${newTenantActor.id} for account ${account.id}`);
+    }
+
+    // 2. Ensure visitor actor exists (for authenticated visitors)
+    let visitorActorId: string | null = null;
+    if (accountId) {
+      const [visitorActor] = await db
+        .select()
+        .from(actors)
+        .where(eq(actors.accountId, accountId))
+        .limit(1);
+
+      if (!visitorActor) {
+        const [newVisitorActor] = await db
+          .insert(actors)
+          .values({
+            actorType: 'account',
+            accountId: accountId,
+            displayName: `User ${accountId.slice(0, 8)}`,
+          })
+          .returning();
+        visitorActorId = newVisitorActor.id;
+        console.log(`[Widget] Created visitor actor ${newVisitorActor.id} for authenticated user ${accountId}`);
+      } else {
+        visitorActorId = visitorActor.id;
+      }
+    }
+
     // B2 — Si el visitante ya está autenticado, certificar el vínculo de identidad
     // Guard: accountId must be a valid non-empty UUID
     const validAccountId = accountId && typeof accountId === 'string' && accountId.length > 0
@@ -855,9 +906,13 @@ async function processSuggestion(ws: any, params: {
       ? extensionHost.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
       : params.suggestion.suggestedText;
 
+    // 🔥 CRITICAL: Resolve the actor for the responding account so AI messages have proper sender identity
+    const fromActorId = await resolveActorId(params.accountId);
+
     await messageCore.send({
       conversationId: params.conversationId,
       senderAccountId: params.accountId,
+      fromActorId: fromActorId || undefined,
       content: { text: finalText } as any,
       type: 'outgoing',
       generatedBy: 'ai',
@@ -899,8 +954,33 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
 
     const wsData = ws.data || {};
 
-    // 1. Ensure conversation exists (creates on first message)
-    // ownerAccountId links this visitor conversation to the tenant (Carlos) so it appears in their chat list
+    // 1. Ensure tenant actor exists (account owner) BEFORE conversation creation
+    const { actors } = await import('@fluxcore/db');
+    const [tenantActor] = await db
+      .select()
+      .from(actors)
+      .where(eq(actors.accountId, account.id))
+      .limit(1);
+
+    let tenantActorId: string;
+    if (!tenantActor) {
+      // Create tenant actor if doesn't exist
+      const [newTenantActor] = await db
+        .insert(actors)
+        .values({
+          actorType: 'account',
+          accountId: account.id,
+          displayName: account.displayName || account.alias,
+        })
+        .returning();
+      tenantActorId = newTenantActor.id;
+      console.log(`[Widget] Created tenant actor ${newTenantActor.id} for account ${account.id}`);
+    } else {
+      tenantActorId = tenantActor.id;
+    }
+
+    // 2. Ensure conversation exists (creates on first message)
+    // ownerAccountId links this visitor conversation to the tenant so it appears in their chat list
     const conversation = await conversationService.ensureConversation({
       visitorToken: token,
       ownerAccountId: account.id,
@@ -909,13 +989,44 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
 
     const conversationId = conversation.id;
 
-    // 2. Persist visitor's message via ChatCore
-    // senderAccountId must be a valid account UUID (FK constraint).
-    // We use account.id with type='incoming' + generatedBy='human' → CognitiveDispatcher maps to role:'user'.
-    // visitorToken is stored in metadata for traceability.
+    // 3. Ensure visitor actor exists in ChatCore's actors table
+    const [existingActor] = await db
+      .select()
+      .from(actors)
+      .where(eq(actors.externalKey, token))
+      .limit(1);
+
+    let visitorActorId: string;
+    if (existingActor) {
+      visitorActorId = existingActor.id;
+    } else {
+      const [newActor] = await db
+        .insert(actors)
+        .values({
+          actorType: 'visitor',
+          externalKey: token,
+          tenantId: account.id,
+          displayName: `Visitor ${token.slice(0, 8)}`,
+        })
+        .returning();
+      visitorActorId = newActor.id;
+      console.log(`[Widget] Created visitor actor ${visitorActorId} for token ${token}`);
+    }
+
+    // 3. Store visitor actor ID for frontend isOwn calculation
+    // Send actor ID back to visitor via WebSocket response
+    ws.send(JSON.stringify({
+      type: 'widget:visitor_actor',
+      visitorActorId: visitorActorId,
+      conversationId,
+    }));
+
+    // 4. Persist visitor's message via ChatCore with REAL actor identity
+    // senderAccountId = visitor actor ID (ontological correctness), fromActorId = visitor actor ID
     const msgResult = await messageCore.send({
       conversationId,
-      senderAccountId: account.id,
+      senderAccountId: visitorActorId,
+      fromActorId: visitorActorId,
       targetAccountId: account.id,
       content: content!,
       type: 'incoming',
@@ -960,6 +1071,7 @@ async function handleWidgetMessage(ws: any, data: WSMessage): Promise<void> {
       messageId: msgResult.messageId,
       conversationId,
       signalId: certification.signalId,
+      visitorActorId: visitorActorId,
       timestamp: new Date().toISOString(),
     }));
 

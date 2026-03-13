@@ -2,6 +2,7 @@ import { db } from '@fluxcore/db';
 import {
   relationships,
   conversations,
+  actors,
   type RelationshipContext,
   type ContextEntry,
   type RelationshipPerspective,
@@ -10,15 +11,48 @@ import { eq, and, or } from 'drizzle-orm';
 import { validateRelationshipContext, validateContextEntry } from '../utils/context-limits';
 
 export class RelationshipService {
+  /**
+   * Resolve an accountId to its actor UUID.
+   * Every account should have a corresponding actor row.
+   */
+  private async resolveActorId(accountId: string): Promise<string> {
+    const [actor] = await db
+      .select({ id: actors.id })
+      .from(actors)
+      .where(eq(actors.accountId, accountId))
+      .limit(1);
+
+    if (!actor) {
+      throw new Error(`No actor found for account ${accountId}`);
+    }
+    return actor.id;
+  }
+
+  /**
+   * Resolve an actorId back to an accountId (for backward compat with callers expecting accountId).
+   */
+  private async resolveAccountId(actorId: string): Promise<string | null> {
+    const [actor] = await db
+      .select({ accountId: actors.accountId })
+      .from(actors)
+      .where(eq(actors.id, actorId))
+      .limit(1);
+
+    return actor?.accountId ?? null;
+  }
+
   async createRelationship(accountAId: string, accountBId: string) {
+    const actorAId = await this.resolveActorId(accountAId);
+    const actorBId = await this.resolveActorId(accountBId);
+
     // Check if relationship already exists
     const existing = await db
       .select()
       .from(relationships)
       .where(
         or(
-          and(eq(relationships.accountAId, accountAId), eq(relationships.accountBId, accountBId)),
-          and(eq(relationships.accountAId, accountBId), eq(relationships.accountBId, accountAId))
+          and(eq(relationships.actorAId, actorAId), eq(relationships.actorBId, actorBId)),
+          and(eq(relationships.actorAId, actorBId), eq(relationships.actorBId, actorAId))
         )
       )
       .limit(1);
@@ -45,8 +79,8 @@ export class RelationshipService {
     const [relationship] = await db
       .insert(relationships)
       .values({
-        accountAId,
-        accountBId,
+        actorAId,
+        actorBId,
       })
       .returning();
 
@@ -60,13 +94,16 @@ export class RelationshipService {
   }
 
   async getRelationship(accountAId: string, accountBId: string) {
+    const actorAId = await this.resolveActorId(accountAId);
+    const actorBId = await this.resolveActorId(accountBId);
+
     const [relationship] = await db
       .select()
       .from(relationships)
       .where(
         or(
-          and(eq(relationships.accountAId, accountAId), eq(relationships.accountBId, accountBId)),
-          and(eq(relationships.accountAId, accountBId), eq(relationships.accountBId, accountAId))
+          and(eq(relationships.actorAId, actorAId), eq(relationships.actorBId, actorBId)),
+          and(eq(relationships.actorAId, actorBId), eq(relationships.actorBId, actorAId))
         )
       )
       .limit(1);
@@ -85,10 +122,30 @@ export class RelationshipService {
   }
 
   async getRelationshipsByAccountId(accountId: string) {
+    const actorId = await this.resolveActorId(accountId);
     return await db
       .select()
       .from(relationships)
-      .where(or(eq(relationships.accountAId, accountId), eq(relationships.accountBId, accountId)));
+      .where(or(eq(relationships.actorAId, actorId), eq(relationships.actorBId, actorId)));
+  }
+
+  /**
+   * Given a relationship and an accountId, determine which side (A or B) this account is on.
+   * Returns the actorId for the other side.
+   */
+  async getOtherActorId(relationship: any, accountId: string): Promise<string | null> {
+    const actorId = await this.resolveActorId(accountId);
+    if (relationship.actorAId === actorId) return relationship.actorBId;
+    if (relationship.actorBId === actorId) return relationship.actorAId;
+    return null;
+  }
+
+  /**
+   * Check if an accountId is actor A in the relationship.
+   */
+  async isActorA(relationship: any, accountId: string): Promise<boolean> {
+    const actorId = await this.resolveActorId(accountId);
+    return relationship.actorAId === actorId;
   }
 
   async updatePerspective(
@@ -102,9 +159,9 @@ export class RelationshipService {
     }
 
     // Determine which perspective to update
-    const isAccountA = relationship.accountAId === accountId;
-    const field = isAccountA ? 'perspectiveA' : 'perspectiveB';
-    const currentPerspective = isAccountA
+    const isA = await this.isActorA(relationship, accountId);
+    const field = isA ? 'perspectiveA' : 'perspectiveB';
+    const currentPerspective = isA
       ? (relationship.perspectiveA as RelationshipPerspective)
       : (relationship.perspectiveB as RelationshipPerspective);
 
@@ -186,8 +243,12 @@ export class RelationshipService {
     const userAccounts = await accountService.getAccountsByUserId(userId);
     const userAccountIds = userAccounts.map(a => a.id);
 
-    const isOwner = userAccountIds.includes(relationship.accountAId) ||
-      userAccountIds.includes(relationship.accountBId);
+    // Resolve actor IDs to account IDs for authorization check
+    const accountAId = await this.resolveAccountId(relationship.actorAId);
+    const accountBId = await this.resolveAccountId(relationship.actorBId);
+
+    const isOwner = (accountAId && userAccountIds.includes(accountAId)) ||
+      (accountBId && userAccountIds.includes(accountBId));
 
     if (!isOwner) {
       throw new Error('Not authorized to delete this relationship');

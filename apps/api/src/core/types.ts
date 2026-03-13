@@ -7,6 +7,7 @@ export interface MessageEnvelope {
     id?: string;
     conversationId: string;
     senderAccountId: string;
+    fromActorId?: string; // Real actor who sent the message (visitor, account, bot)
     content: MessageContent;
     type: 'incoming' | 'outgoing' | 'system';
     generatedBy?: 'human' | 'ai' | 'system';

@@ -50,6 +50,7 @@ export class MessageCore {
       const message = await messageService.createMessage({
         conversationId: envelope.conversationId,
         senderAccountId: envelope.senderAccountId,
+        fromActorId: envelope.fromActorId,
         content: envelope.content,
         type: envelope.type,
         generatedBy: envelope.generatedBy || 'human',
@@ -156,15 +157,19 @@ export class MessageCore {
         // 6. DELEGAR TODO A CONSUMIDORES (Desacoplado vía EventBus)
         // El núcleo solo emite el evento. FluxCore (IA) u otras extensiones
         // se "despertarán" escuchando este evento.
-        const relationship = conversation.relationshipId
-          ? await relationshipService.getRelationshipById(conversation.relationshipId)
-          : null;
-        if (relationship && relationship.accountAId) {
-          const targetAccountId = envelope.targetAccountId ||
-            (envelope.senderAccountId === relationship.accountAId
-              ? relationship.accountBId
-              : relationship.accountAId);
-          envelope.targetAccountId = targetAccountId || 'unknown';
+        if (conversation.relationshipId && !envelope.targetAccountId) {
+          const otherActorId = await relationshipService.getOtherActorId(
+            await relationshipService.getRelationshipById(conversation.relationshipId),
+            envelope.senderAccountId
+          );
+          if (otherActorId) {
+            // Resolve actor back to accountId for downstream compat
+            const { actors } = await import('@fluxcore/db');
+            const { eq } = await import('drizzle-orm');
+            const { db } = await import('@fluxcore/db');
+            const [otherActor] = await db.select({ accountId: actors.accountId }).from(actors).where(eq(actors.id, otherActorId)).limit(1);
+            envelope.targetAccountId = otherActor?.accountId ?? 'unknown';
+          }
         }
       }
 

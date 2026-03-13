@@ -1,8 +1,17 @@
 import { Avatar } from '../components/ui/Avatar';
-import type { PublicProfile } from './hooks/usePublicChat';
+
+interface PublicProfileHeaderProfile {
+  id: string;
+  displayName: string;
+  alias: string;
+  accountType: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  actorId?: string | null;
+}
 
 interface PublicProfileHeaderProps {
-  profile: PublicProfile;
+  profile: PublicProfileHeaderProfile;
   isConnected: boolean;
 }
 

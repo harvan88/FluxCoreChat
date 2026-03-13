@@ -4,16 +4,17 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Loader2, MessageSquare, Trash2, Check, X } from 'lucide-react';
-import clsx from 'clsx';
-import { useUIStore } from '../../store/uiStore';
+import { Search, Plus, MessageSquare, Loader2, X, Check } from 'lucide-react';
 import { api } from '../../services/api';
+import { useUIStore } from '../../store/uiStore';
 import { Avatar } from '../ui/Avatar';
-import { useScroll } from '../../hooks/useScroll';
-import { useAssistantMode, type AssistantMode } from '../../hooks/fluxcore/useAssistantMode';
-import { useExtensions } from '../../hooks/useExtensions';
 import { AIStatusHeader } from './AIStatusHeader';
 import { AIStatusIndicator } from './AIStatusIndicator';
+import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
+import { useAssistantMode, type AssistantMode } from '../../hooks/fluxcore/useAssistantMode';
+import { useExtensions } from '../../hooks/useExtensions';
+import { useScroll } from '../../hooks/useScroll';
+import clsx from 'clsx';
 
 export function ConversationsList() {
   const {
@@ -237,7 +238,7 @@ export function ConversationsList() {
                 tabIndex={0}
                 aria-label={`Abrir conversación ${(conversation as any).contactName || conversation.id}`}
                 className={clsx(
-                  'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left group',
+                  'w-full p-3 flex gap-3 hover:bg-hover transition-colors text-left group items-center',
                   selectedConversationId === conversation.id && 'bg-active'
                 )}
               >
@@ -319,16 +320,12 @@ export function ConversationsList() {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmDeleteId(conversation.id);
-                    }}
+                  <DoubleConfirmationDeleteButton
+                    onConfirm={() => handleDeleteConversation(conversation.id)}
+                    size={16}
+                    disabled={deletingConvId === conversation.id}
                     className="p-1.5 text-muted hover:text-red-500 hover:bg-hover rounded transition-colors opacity-0 group-hover:opacity-100"
-                    title="Eliminar conversación"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  />
                 )}
               </div>
             );

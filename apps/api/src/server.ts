@@ -21,6 +21,7 @@ interface WebSocketData {
   userAgent?: string;
   requestId?: string | null;
   accountId?: string | null;
+  userId?: string | null;
 }
 
 import { healthRoutes } from './routes/health';
@@ -53,6 +54,7 @@ import { assetRelationsRoutes } from './routes/asset-relations.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { publicProfileRoutes } from './routes/public-profile.routes';
+import { actorsRoutes } from './routes/actors.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
@@ -73,7 +75,6 @@ import { cognitionWorker } from './workers/cognition-worker';
 import { chatCoreOutboxService } from './services/chatcore-outbox.service';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { Server } from 'bun';
 
 const rootEnvPath = path.resolve(__dirname, '../../../.env');
 
@@ -108,6 +109,42 @@ function isPlaceholderEnvValue(value: string): boolean {
     v.startsWith('your-') ||
     v.includes('change-in-production')
   );
+}
+
+async function resolveWebSocketIdentityFromToken(token: string, source: string): Promise<{ accountId: string | null; userId: string | null }> {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+
+    if (payload.type === 'public_profile' && typeof payload.ownerAccountId === 'string') {
+      console.log(`[WebSocket] ✅ AccountId resolved from public_profile token (${source}):`, payload.ownerAccountId);
+      return { accountId: payload.ownerAccountId, userId: null };
+    }
+
+    const userId = payload.userId || payload.sub;
+    console.log(`[WebSocket] 🎯 UserId from token (${source}):`, userId);
+
+    if (!userId) {
+      return { accountId: null, userId: null };
+    }
+
+    const { db, accounts } = await import('@fluxcore/db');
+    const userAccounts = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(eq(accounts.ownerUserId, userId))
+      .limit(1);
+
+    if (userAccounts.length > 0) {
+      console.log(`[WebSocket] ✅ AccountId resolved for user (${source}):`, userAccounts[0].id);
+      return { accountId: userAccounts[0].id, userId };
+    }
+
+    console.log(`[WebSocket] ⚠️ No accounts found for user (${source}):`, userId);
+    return { accountId: null, userId };
+  } catch (error) {
+    console.error(`[WebSocket] ❌ Error decoding token (${source}):`, error);
+    return { accountId: null, userId: null };
+  }
 }
 
 if (fs.existsSync(rootEnvPath)) {
@@ -219,6 +256,7 @@ const elysiaApp = new Elysia()
   .use(relationshipsRoutes)
   .use(conversationsRoutes)
   .use(messagesRoutes)
+  .use(actorsRoutes)
   .use(contactsRoutes)
   .use(automationRoutes)
   .use(adaptersRoutes)
@@ -258,114 +296,48 @@ try {
         console.log('[WebSocket] Upgrade request received');
         console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
 
-        // 🔥 CRÍTICO: Extraer accountId desde token JWT para filtrado de mensajes
+        // Extraer accountId + userId desde token JWT
         const authHeader = req.headers.get('authorization');
-        let accountId = null;
+        let accountId: string | null = null;
+        let userId: string | null = null;
         
-        // 🔥 NUEVO: Priorizar accountId seleccionada del frontend
+        // Priorizar accountId seleccionada del frontend
         const selectedAccountId = url.searchParams.get('accountId');
-        if (selectedAccountId) {
-          accountId = selectedAccountId;
-          console.log('[WebSocket] 🎯 Using selected accountId from frontend:', accountId);
+        
+        // Resolve identity from token (header or query param)
+        const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+        const tokenFromQuery = url.searchParams.get('token');
+        const token = tokenFromHeader || tokenFromQuery;
+        
+        if (token) {
+          const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'header' : 'query');
+          userId = identity.userId;
+          accountId = selectedAccountId || identity.accountId;
         } else {
-          // Fallback: Extraer desde token JWT y buscar account del usuario
-          console.log('[WebSocket] ⚠️ No selected accountId, resolving from token...');
-          
-          // Intentar obtener desde Authorization header primero
-          if (authHeader?.startsWith('Bearer ')) {
-            try {
-              const token = authHeader.substring(7);
-              // Decodificar token JWT (sin verificar firma para performance en upgrade)
-              const payload = JSON.parse(atob(token.split('.')[1]));
-              
-              // 🔥 CORRECCIÓN CRÍTICA: El token tiene userId, pero necesitamos accountId
-              // Las conversaciones son entre accounts, no entre users
-              const userId = payload.userId || payload.sub;
-              console.log('[WebSocket] 🎯 UserId from token:', userId);
-              console.log('[WebSocket] 📋 Token payload:', payload);
-              
-              // 🔥 BUSCAR LA ACCOUNT DEL USUARIO (necesitamos la account para las conversaciones)
-              if (userId) {
-                try {
-                  // Importar dinámicamente para evitar dependencias circulares
-                  const { db, accounts } = await import('@fluxcore/db');
-                  const userAccounts = await db
-                    .select({ id: accounts.id })
-                    .from(accounts)
-                    .where(eq(accounts.ownerUserId, userId))
-                    .limit(1);
-                  
-                  if (userAccounts.length > 0) {
-                    accountId = userAccounts[0].id;
-                    console.log('[WebSocket] ✅ AccountId resolved for user:', accountId);
-                  } else {
-                    console.log('[WebSocket] ⚠️ No accounts found for user:', userId);
-                  }
-                } catch (dbError) {
-                  console.error('[WebSocket] ❌ Error resolving account for user:', dbError);
-                }
-              }
-            } catch (error) {
-              console.error('[WebSocket] ❌ Error decoding token from header:', error);
-              console.log('[WebSocket] 📋 Auth header:', authHeader?.substring(0, 50) + '...');
-            }
-          } else if (url.searchParams.has('token')) {
-            // Fallback: extraer desde query parameter
-            try {
-              const token = url.searchParams.get('token');
-              if (token) {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-              
-              // 🔥 CORRECCIÓN CRÍTICA: El token tiene userId, pero necesitamos accountId
-              const userId = payload.userId || payload.sub;
-              console.log('[WebSocket] 🎯 UserId from query token:', userId);
-              console.log('[WebSocket] 📋 Query token payload:', payload);
-              
-              // 🔥 BUSCAR LA ACCOUNT DEL USUARIO
-              if (userId) {
-                try {
-                  const { db, accounts } = await import('@fluxcore/db');
-                  const userAccounts = await db
-                    .select({ id: accounts.id })
-                    .from(accounts)
-                    .where(eq(accounts.ownerUserId, userId))
-                    .limit(1);
-                  
-                  if (userAccounts.length > 0) {
-                    accountId = userAccounts[0].id;
-                    console.log('[WebSocket] ✅ AccountId resolved for user (query):', accountId);
-                  } else {
-                    console.log('[WebSocket] ⚠️ No accounts found for user (query):', userId);
-                  }
-                } catch (dbError) {
-                  console.error('[WebSocket] ❌ Error resolving account for user (query):', dbError);
-                }
-              }
-              }
-            } catch (error) {
-              console.error('[WebSocket] ❌ Error decoding token from query:', error);
-              console.log('[WebSocket] 📋 Query token preview:', url.searchParams.get('token')?.substring(0, 50) + '...');
-            }
-          } else {
-            console.log('[WebSocket] ⚠️ No token found in header or query params');
-          }
+          accountId = selectedAccountId;
+          console.log('[WebSocket] ⚠️ No token found in header or query params');
+        }
+        
+        if (selectedAccountId) {
+          console.log('[WebSocket] 🎯 Using selected accountId from frontend:', selectedAccountId);
         }
 
         const success = server.upgrade(req, {
           data: {
             ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,
             userAgent: req.headers.get('user-agent'),
-            requestId: req.headers.get('x-request-id'),
-            accountId: accountId // 🔥 CRÍTICO: AccountId para filtrado
+            requestId: `ws-${Date.now()}-${accountId || 'anonymous'}`,
+            accountId: accountId,
+            userId: userId,
           }
         });
 
         console.log('[WebSocket] Upgrade result:', success);
         if (success) {
-          console.log('[WebSocket] Upgrade successful, returning undefined');
+          console.log('[WebSocket] ✅ Upgrade successful, returning undefined');
           return; // Must return undefined (or nothing) for successful upgrade
         }
-        console.error('[WebSocket] Upgrade failed');
+        console.error('[WebSocket] ❌ Upgrade failed');
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
 
@@ -477,93 +449,39 @@ try {
         console.log('[WebSocket] Upgrade request received (fallback)');
         console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
         
-        // 🔥 CRÍTICO: Extraer accountId desde token JWT para filtrado de mensajes
         const authHeader = req.headers.get('authorization');
-        let accountId = null;
+        let accountId: string | null = null;
+        let userId: string | null = null;
         
-        // Intentar obtener desde Authorization header primero
-        if (authHeader?.startsWith('Bearer ')) {
-          try {
-            const token = authHeader.substring(7);
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            
-            // 🔥 CORRECCIÓN CRÍTICA: El token tiene userId, pero necesitamos accountId
-            const userId = payload.userId || payload.sub;
-            console.log('[WebSocket] 🎯 UserId from token (fallback):', userId);
-            
-            // 🔥 BUSCAR LA ACCOUNT DEL USUARIO
-            if (userId) {
-              try {
-                const { db, accounts } = await import('@fluxcore/db');
-                const userAccounts = await db
-                  .select({ id: accounts.id })
-                  .from(accounts)
-                  .where(eq(accounts.ownerUserId, userId))
-                  .limit(1);
-                
-                if (userAccounts.length > 0) {
-                  accountId = userAccounts[0].id;
-                  console.log('[WebSocket] ✅ AccountId resolved for user (fallback):', accountId);
-                } else {
-                  console.log('[WebSocket] ⚠️ No accounts found for user (fallback):', userId);
-                }
-              } catch (dbError) {
-                console.error('[WebSocket] ❌ Error resolving account for user (fallback):', dbError);
-              }
-            }
-          } catch (error) {
-            console.error('[WebSocket] ❌ Error decoding token from header (fallback):', error);
-          }
-        } else if (url.searchParams.has('token')) {
-          // Fallback: extraer desde query parameter
-          try {
-            const token = url.searchParams.get('token');
-            if (token) {
-              const payload = JSON.parse(atob(token.split('.')[1]));
-            
-            // 🔥 CORRECCIÓN CRÍTICA: El token tiene userId, pero necesitamos accountId
-            const userId = payload.userId || payload.sub;
-            console.log('[WebSocket] 🎯 UserId from query token (fallback):', userId);
-            
-            // 🔥 BUSCAR LA ACCOUNT DEL USUARIO
-            if (userId) {
-              try {
-                const { db, accounts } = await import('@fluxcore/db');
-                const userAccounts = await db
-                  .select({ id: accounts.id })
-                  .from(accounts)
-                  .where(eq(accounts.ownerUserId, userId))
-                  .limit(1);
-                
-                if (userAccounts.length > 0) {
-                  accountId = userAccounts[0].id;
-                  console.log('[WebSocket] ✅ AccountId resolved for user (query fallback):', accountId);
-                } else {
-                  console.log('[WebSocket] ⚠️ No accounts found for user (query fallback):', userId);
-                }
-              } catch (dbError) {
-                console.error('[WebSocket] ❌ Error resolving account for user (query fallback):', dbError);
-              }
-            }
-            }
-          } catch (error) {
-            console.error('[WebSocket] ❌ Error decoding token from query (fallback):', error);
-          }
+        const selectedAccountId = url.searchParams.get('accountId');
+        const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+        const tokenFromQuery = url.searchParams.get('token');
+        const token = tokenFromHeader || tokenFromQuery;
+        
+        if (token) {
+          const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'fallback-header' : 'fallback-query');
+          userId = identity.userId;
+          accountId = selectedAccountId || identity.accountId;
         } else {
+          accountId = selectedAccountId;
           console.log('[WebSocket] ⚠️ No token found in header or query params (fallback)');
         }
         
         const success = server.upgrade(req, {
           data: {
-            accountId: accountId // 🔥 CRÍTICO: AccountId para filtrado
+            ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,
+            userAgent: req.headers.get('user-agent'),
+            requestId: `ws-${Date.now()}-${accountId || 'anonymous'}`,
+            accountId: accountId,
+            userId: userId,
           }
         });
         console.log('[WebSocket] Upgrade result:', success);
         if (success) {
-          console.log('[WebSocket] Upgrade successful, returning undefined');
+          console.log('[WebSocket] ✅ Upgrade successful, returning undefined');
           return; // Must return undefined (or nothing) for successful upgrade
         }
-        console.error('[WebSocket] Upgrade failed');
+        console.error('[WebSocket] ❌ Upgrade failed');
         return new Response('WebSocket upgrade failed', { status: 400 });
       }
 

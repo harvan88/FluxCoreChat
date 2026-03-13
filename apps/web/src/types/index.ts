@@ -139,6 +139,8 @@ export interface Message {
   id: string;
   conversationId: string;
   senderAccountId: string;
+  fromActorId?: string;
+  toActorId?: string;
   content: MessageContent;
   type: 'incoming' | 'outgoing' | 'system';
   generatedBy: 'human' | 'ai' | 'system';

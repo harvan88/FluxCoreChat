@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getOrCreateVisitorToken } from '../../modules/visitor-token';
+import { getOrCreateVisitorToken, setVisitorActorId } from '../../modules/visitor-token';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import type { Message } from '../../types';
@@ -14,6 +14,7 @@ export interface PublicProfile {
   accountType: string;
   bio: string | null;
   avatarUrl: string | null;
+  actorId: string | null; // 🆕 Add actorId for UnifiedChatView
 }
 
 /** @deprecated Use Message from '../../types' instead */
@@ -153,6 +154,7 @@ export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOpt
               id: m.id,
               conversationId: json.data.conversationId || '',
               senderAccountId: '',
+              fromActorId: m.fromActorId,
               content: { text: m.text },
               type: m.sender === 'visitor' ? 'outgoing' : 'incoming',
               generatedBy: m.generatedBy || (m.sender === 'account' ? 'ai' : 'human'),
@@ -231,9 +233,19 @@ export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOpt
             setConnectionStatus('error');
             break;
 
+          case 'widget:visitor_actor':
+            if (msg.visitorActorId) {
+              setVisitorActorId(msg.visitorActorId);
+              console.log('[PublicChat] Received visitor actor ID:', msg.visitorActorId);
+            }
+            break;
+
           case 'widget:message_received':
             if (msg.conversationId) {
               conversationIdRef.current = msg.conversationId;
+            }
+            if (msg.visitorActorId) {
+              setVisitorActorId(msg.visitorActorId);
             }
             break;
 
@@ -268,6 +280,7 @@ export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOpt
                     id: msgData.id || `msg_${Date.now()}`,
                     conversationId: msgData.conversationId || conversationIdRef.current || '',
                     senderAccountId: msgData.senderAccountId || '',
+                    fromActorId: msgData.fromActorId,
                     content: { text },
                     type: 'incoming',
                     generatedBy: msgData.generatedBy || 'ai',
@@ -376,6 +389,7 @@ export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOpt
     sendMessage,
     connectionStatus,
     isConnected: connectionStatus === 'connected',
+    conversationId: conversationIdRef.current, // 🆕 Add conversationId for UnifiedChatView
     visitorToken,
     tenantAccountId,
     isAuthenticated,

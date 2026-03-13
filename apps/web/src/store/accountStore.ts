@@ -12,6 +12,7 @@ interface AccountState {
   // State
   accounts: Account[];
   activeAccountId: string | null;
+  activeActorId: string | null;
   isLoading: boolean;
   error: string | null;
 
@@ -23,6 +24,8 @@ interface AccountState {
   // Actions
   loadAccounts: () => Promise<void>;
   setActiveAccount: (accountId: string) => void;
+  setActiveActor: (actorId: string) => void;
+  loadActorForAccount: (accountId: string) => Promise<void>;
   createAccount: (data: {
     alias: string;
     displayName: string;
@@ -40,6 +43,7 @@ export const useAccountStore = create<AccountState>()(
       // Initial state
       accounts: [],
       activeAccountId: null,
+      activeActorId: null,
       isLoading: false,
       error: null,
 
@@ -60,6 +64,7 @@ export const useAccountStore = create<AccountState>()(
 
       // Actions
       loadAccounts: async () => {
+        console.trace('[AccountStore] loadAccounts called from:');
         console.log('[AccountStore] loadAccounts called');
         set({ isLoading: true, error: null });
 
@@ -77,6 +82,12 @@ export const useAccountStore = create<AccountState>()(
             if (!state.activeAccountId && accounts.length > 0) {
               console.log('[AccountStore] Auto-selecting first account:', accounts[0].id);
               set({ activeAccountId: accounts[0].id });
+              // Load actor for auto-selected account
+              get().loadActorForAccount(accounts[0].id);
+            } else if (state.activeAccountId) {
+              // Load actor for existing active account
+              console.log('[AccountStore] Loading actor for existing active account:', state.activeAccountId);
+              get().loadActorForAccount(state.activeAccountId);
             }
           } else {
             console.error('[AccountStore] Error:', response.error);
@@ -92,6 +103,40 @@ export const useAccountStore = create<AccountState>()(
         const account = get().accounts.find((a) => a.id === accountId);
         if (account) {
           set({ activeAccountId: accountId });
+          // Load corresponding actor
+          get().loadActorForAccount(accountId);
+        }
+      },
+
+      setActiveActor: (actorId: string) => {
+        const current = get().activeActorId;
+        console.log('[AccountStore] setActiveActor current:', current, '→ new:', actorId, 'same?', current === actorId);
+        if (current !== actorId) {
+          set({ activeActorId: actorId });
+        }
+      },
+
+      loadActorForAccount: async (accountId: string) => {
+        console.log(`[AccountStore] Loading actor for account: ${accountId}`);
+        try {
+          const response = await accountsApi.getActorForAccount(accountId);
+          console.log(`[AccountStore] Actor response:`, response);
+          if (response.success && response.data?.actorId) {
+            console.log(`[AccountStore] Setting activeActorId to: ${response.data.actorId}`);
+            const current = get().activeActorId;
+            console.log('[AccountStore] loadActorForAccount current:', current, '→ new:', response.data.actorId, 'same?', current === response.data.actorId);
+            if (current !== response.data.actorId) {
+              set({ activeActorId: response.data.actorId });
+            }
+          } else {
+            console.warn(`[AccountStore] No actor found for account: ${accountId}, using fallback`);
+            // Fallback: try to resolve from existing messages or use accountId as placeholder
+            set({ activeActorId: accountId }); // Temporary fallback
+          }
+        } catch (err) {
+          console.error('[AccountStore] Error loading actor for account:', err);
+          // Fallback: use accountId as placeholder
+          set({ activeActorId: accountId });
         }
       },
 
@@ -214,12 +259,14 @@ export function useAccounts() {
     accounts: store.accounts,
     activeAccount: store.activeAccount,
     activeAccountId: store.activeAccountId,
+    activeActorId: store.activeActorId,
     personalAccounts: store.personalAccounts,
     businessAccounts: store.businessAccounts,
     isLoading: store.isLoading,
     error: store.error,
     loadAccounts: store.loadAccounts,
     setActiveAccount: store.setActiveAccount,
+    setActiveActor: store.setActiveActor,
     createAccount: store.createAccount,
     updateAccount: store.updateAccount,
     convertToBusiness: store.convertToBusiness,

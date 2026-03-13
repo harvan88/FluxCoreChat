@@ -114,10 +114,17 @@ export class ChatProjector extends BaseProjector {
         // messageCore.receive() handles: persist + WebSocket broadcast + conversation update
         setImmediate(async () => {
             try {
+                // 🔥 CRITICAL: Resolve the actor for the responding account so messages have proper sender identity
+                const { resolveActorId } = await import('../../utils/actor-resolver');
+                const fromActorId = await resolveActorId(accountId);
+                
+                console.log(`[ChatProjector] 🎭 Resolved actor for AI response: accountId=${accountId.slice(0, 8)} -> actorId=${fromActorId?.slice(0, 8) || 'null'}`);
+
                 const { messageCore } = await import('../message-core');
                 const result = await messageCore.receive({
                     conversationId,
                     senderAccountId: accountId,
+                    fromActorId: fromActorId || undefined,
                     targetAccountId,
                     content,
                     type: 'outgoing',

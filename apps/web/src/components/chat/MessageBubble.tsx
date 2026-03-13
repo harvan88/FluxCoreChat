@@ -5,27 +5,35 @@
  * CORREGIDO: Usando sistema de diseño canónico
  */
 
-import { useState } from 'react';
-import { Check, CheckCheck, Clock, AlertCircle, RotateCcw, Reply, Pencil, Trash2, Bot, File, ShieldAlert } from 'lucide-react';
+import { useState, Fragment } from 'react';
+import { CheckIcon, CheckCheckIcon, ClockIcon, AlertCircleIcon, RotateCcwIcon, ReplyIcon, EditIcon, TrashIcon, BotIcon, FileIcon, ShieldAlertIcon, GripVerticalIcon, ForwardIcon, CopyIcon, FlagIcon, DownloadIcon, XIcon } from '../../lib/icon-library';
 import clsx from 'clsx';
 import type { Message, MessageStatus } from '../../types';
 import { AssetPreview } from './AssetPreview';
+import { DeleteMessageModal } from '../ui/DeleteMessageModal';
 
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
+  isAI?: boolean;
   replyToMessage?: Message;
   onReply?: () => void;
   onEdit?: () => void;
-  onDelete?: () => void;
+  onDelete?: (scope: 'self' | 'all') => void;
   onRetry?: () => void;
   onScrollToMessage?: (messageId: string) => void;
   viewerAccountId?: string;
-}
+  // Props para modo selección
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onSelectionToggle?: (messageId: string, selected: boolean) => void;
+  onSelectionModeToggle?: (messageId: string) => void;
+  }
 
 export function MessageBubble({
   message,
   isOwn,
+  isAI = false,
   replyToMessage,
   onReply,
   onEdit,
@@ -33,8 +41,36 @@ export function MessageBubble({
   onRetry,
   onScrollToMessage,
   viewerAccountId,
+  isSelectionMode = false,
+  isSelected = false,
+  onSelectionToggle,
+  onSelectionModeToggle,
 }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
+  const [showOptionsButton, setShowOptionsButton] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = (scope: 'self' | 'all') => {
+    if (onDelete) {
+      onDelete(scope);
+    }
+  };
+
+  const canDeleteForAll = isOwn && !isAI; // Only own messages can be deleted for all
+
+  // Gradiente global para efecto Instagram - ÚNICA FUENTE DE VERDAD
+  const GLOBAL_GRADIENT_MASK = {
+  // Del 0% al 40% es Azul Oscuro (Header zone)
+  // Del 40% al 60% ocurre toda la transición (Reading zone)
+  // Del 60% al 100% es Cian/Azul brillante (Input zone)
+  background: 'linear-gradient(to bottom, #0f172a 0%, #0f172a 30%, #2563eb 55%, #06b6d4 80%, #06b6d4 100%)',
+  backgroundAttachment: 'fixed',
+  backgroundSize: '100vw 100vh',
+  };
 
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
   const resolveMediaUrl = (url: string) => {
@@ -84,18 +120,18 @@ export function MessageBubble({
     switch (status) {
       case 'pending_backend':
       case 'local_only':
-        return <Clock size={14} className="text-muted" />;
+        return <ClockIcon size={14} className="text-muted" />;
       case 'synced':
       case 'sent':
-        return <Check size={14} className="text-muted" />;
+        return <CheckIcon size={14} className="text-muted" />;
       case 'delivered':
-        return <CheckCheck size={14} className="text-muted" />;
+        return <CheckCheckIcon size={14} className="text-muted" />;
       case 'seen':
-        return <CheckCheck size={14} className="text-accent" />;
+        return <CheckCheckIcon size={14} className="text-accent" />;
       case 'failed':
-        return <AlertCircle size={14} className="text-error" />;
+        return <AlertCircleIcon size={14} className="text-error" />;
       default:
-        return <Check size={14} className="text-muted" />;
+        return <CheckIcon size={14} className="text-muted" />;
     }
   };
 
@@ -109,7 +145,7 @@ export function MessageBubble({
       <div className="flex justify-center my-2" data-component-name="MessageBubble">
         <div className="max-w-[85%] rounded-xl px-4 py-2.5 bg-warning/10 border border-warning/20 text-center">
           <div className="flex items-center justify-center gap-2 mb-1">
-            <ShieldAlert size={14} className="text-warning" />
+            <ShieldAlertIcon size={14} className="text-warning" />
             <span className="text-xs font-medium text-warning">
               {systemMeta?.type === 'ai_blocked' ? 'IA no disponible' : 'Sistema'}
             </span>
@@ -126,51 +162,73 @@ export function MessageBubble({
   }
 
   return (
+    <Fragment>
     <div
       className={clsx(
-        'group flex gap-2',
+        'group flex gap-0.5 items-center',
         isOwn ? 'justify-end' : 'justify-start'
       )}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
+      {/* Selector Circle - fuera del bubble */}
+      {isSelectionMode && (
+        <button
+          onClick={() => onSelectionToggle?.(message.id, !isSelected)}
+          className={clsx(
+            'flex-shrink-0 w-5 h-5 rounded-full border-2 transition-all items-center justify-center',
+            isOwn ? 'order-1' : 'order-[-1]',
+            isSelected 
+              ? 'bg-accent border-accent' 
+              : 'bg-surface border-muted hover:border-accent'
+          )}
+          aria-label={isSelected ? 'Deseleccionar mensaje' : 'Seleccionar mensaje'}
+        >
+          {isSelected && (
+            <div className="w-full h-full flex items-center justify-center">
+              <CheckIcon size={12} className="text-white" />
+            </div>
+          )}
+        </button>
+      )}
+
       {/* Actions (left side for own messages) */}
-      {isOwn && showActions && (
+      {isOwn && showActions && !isSelectionMode && (
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {message.status === 'failed' && onRetry && (
             <button
               onClick={onRetry}
-              className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
-              title="Reintentar"
+              className="p-1 rounded-md text-muted hover:text-primary hover:bg-hover transition-colors"
+              aria-label="Reintentar envío"
             >
-              <RotateCcw size={14} />
+              <RotateCcwIcon size={14} />
             </button>
           )}
-          {onEdit && message.status !== 'failed' && (
+          {onEdit && (
             <button
               onClick={onEdit}
-              className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
-              title="Editar"
+              className="p-1 rounded-md text-muted hover:text-primary hover:bg-hover transition-colors"
+              aria-label="Editar mensaje"
             >
-              <Pencil size={14} />
+              <EditIcon size={14} />
             </button>
           )}
           {onDelete && (
             <button
-              onClick={onDelete}
-              className="p-1 text-muted hover:text-error hover:bg-hover rounded"
-              title="Eliminar"
+              onClick={handleDeleteClick}
+              className="p-1 rounded-md text-error hover:text-error hover:bg-error/10 transition-colors"
+              aria-label="Eliminar mensaje"
             >
-              <Trash2 size={14} />
+              <TrashIcon size={14} />
             </button>
           )}
           {onReply && (
             <button
               onClick={onReply}
-              className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
-              title="Responder"
+              className="p-1 rounded-md text-muted hover:text-primary hover:bg-hover transition-colors"
+              aria-label="Responder mensaje"
             >
-              <Reply size={14} />
+              <ReplyIcon size={14} />
             </button>
           )}
         </div>
@@ -179,11 +237,23 @@ export function MessageBubble({
       {/* Message Bubble */}
       <div
         className={clsx(
-          'max-w-[70%] rounded-2xl px-4 py-2 relative',
+          'max-w-[80%] px-4 py-2 relative rounded-2xl transition-all',
           isOwn 
-            ? 'ml-auto bg-accent text-primary rounded-br-md' 
-            : 'mr-auto bg-elevated text-primary rounded-bl-md'
+            ? 'ml-auto text-white rounded-br-sm shadow-md' 
+            : 'mr-auto bg-elevated text-primary rounded-bl-sm',
+          // Si es IA y no es propio, aplicamos clase de borde
+          (!isOwn && isAI) && 'border border-transparent'
         )}
+        style={{
+          ...(isOwn ? GLOBAL_GRADIENT_MASK : {}),
+          ...((!isOwn && isAI) ? {
+            backgroundImage: `linear-gradient(var(--bg-elevated), var(--bg-elevated)), ${GLOBAL_GRADIENT_MASK.background}`,
+            backgroundOrigin: 'border-box',
+            backgroundClip: 'padding-box, border-box',
+            backgroundAttachment: 'fixed',
+            opacity: 0.85
+          } : {})
+        }}
       >
         {/* Reply-to preview */}
         {replyToMessage && (
@@ -288,7 +358,7 @@ export function MessageBubble({
                         isOwn ? 'bg-elevated' : 'bg-active'
                       )}
                     >
-                      <File size={18} className="text-info flex-shrink-0" />
+                      <FileIcon size={18} className="text-info flex-shrink-0" />
                       <div className="min-w-0">
                         <div className="text-sm truncate text-primary">
                           {fallbackName}
@@ -308,42 +378,178 @@ export function MessageBubble({
 
         {/* Message content */}
         {typeof message.content.text === 'string' && message.content.text.trim().length > 0 && (
-          <p className="text-sm whitespace-pre-wrap break-words">{message.content.text}</p>
+          <p className={clsx(
+            'text-sm whitespace-pre-wrap break-words',
+            isOwn ? 'font-medium' : ''
+          )}>{message.content.text}</p>
         )}
 
-        {/* Footer: time, AI badge, status */}
+        {/* Footer: time, AI badge, status, options */}
         <div
           className={clsx(
             'flex items-center gap-1.5 mt-1 text-xs',
-            isOwn ? 'text-secondary opacity-70 justify-end' : 'text-muted'
+            isOwn ? 'text-white/80 justify-end' : 'text-muted'
           )}
+          onMouseEnter={() => setShowOptionsButton(true)}
+          onMouseLeave={() => setShowOptionsButton(false)}
         >
           {message.updatedAt && message.updatedAt !== message.createdAt && (
             <span className="opacity-70">(editado)</span>
           )}
           <span>{formatTime(message.createdAt)}</span>
           {message.generatedBy === 'ai' && (
-            <span className="flex items-center gap-0.5 bg-accent-muted px-1.5 py-0.5 rounded text-accent">
-              <Bot size={10} />
+            <span className={clsx(
+              'flex items-center gap-0.5 px-1.5 py-0.5 rounded',
+              isOwn 
+                ? 'bg-white/20 text-white' 
+                : 'bg-accent-muted text-accent'
+            )}>
+              <BotIcon size={10} />
               IA
             </span>
           )}
           {isOwn && renderStatus(message.status)}
+          
+          {/* Options Button - aparece al hover en metadata */}
+          {showOptionsButton && !isSelectionMode && (
+            <button
+              onClick={() => onSelectionModeToggle?.(message.id)}
+              className="p-0.5 rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+              aria-label="Opciones de mensaje"
+            >
+              <GripVerticalIcon size={12} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Actions (right side for received messages) */}
-      {!isOwn && showActions && onReply && (
+      {!isOwn && showActions && onReply && !isSelectionMode && (
         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={onReply}
             className="p-1 text-muted hover:text-primary hover:bg-hover rounded"
             title="Responder"
           >
-            <Reply size={14} />
+            <ReplyIcon size={14} />
           </button>
         </div>
       )}
     </div>
+
+    {/* Delete Confirmation Modal */}
+    <DeleteMessageModal
+      isOpen={showDeleteModal}
+      onClose={() => setShowDeleteModal(false)}
+      onConfirm={handleDeleteConfirm}
+      messageCount={1}
+      canDeleteForAll={canDeleteForAll}
+    />
+    </Fragment>
+  );
+}
+
+// Componente de barra de acciones para modo selección
+interface MessageSelectionToolbarProps {
+  selectedCount: number;
+  onClose: () => void;
+  onForward: () => void;
+  onCopy: () => void;
+  onReport: () => void;
+  onDownload: () => void;
+  onDelete: (scope: 'self' | 'all') => void;
+}
+
+export function MessageSelectionToolbar({
+  selectedCount,
+  onClose,
+  onForward,
+  onCopy,
+  onReport,
+  onDownload,
+  onDelete,
+}: MessageSelectionToolbarProps) {
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = (scope: 'self' | 'all') => {
+    if (onDelete) {
+      onDelete(scope);
+    }
+    setShowDeleteModal(false);
+  };
+
+  // For bulk selection, we can delete for all if user has permission
+  const canDeleteForAll = true; // This could be determined by user permissions
+
+  return (
+    <Fragment>
+      <div className="flex items-center justify-between px-4 py-2 bg-surface border-t border-subtle">
+        {/* Lado izquierdo: cerrar + contador */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onClose}
+            className="p-1 rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+            aria-label="Cerrar modo selección"
+          >
+            <XIcon size={16} />
+          </button>
+          <span className="text-sm text-primary">
+            {selectedCount} {selectedCount === 1 ? 'mensaje seleccionado' : 'mensajes seleccionados'}
+          </span>
+        </div>
+
+        {/* Lado derecho: acciones */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onForward}
+            className="p-2 rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+            aria-label="Reenviar mensajes"
+          >
+            <ForwardIcon size={16} />
+          </button>
+          <button
+            onClick={onCopy}
+            className="p-2 rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+            aria-label="Copiar mensajes"
+          >
+            <CopyIcon size={16} />
+          </button>
+          <button
+            onClick={onReport}
+            className="p-2 rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+            aria-label="Reportar mensajes"
+          >
+            <FlagIcon size={16} />
+          </button>
+          <button
+            onClick={handleDeleteClick}
+            className="p-1 rounded-md text-error hover:text-error hover:bg-error/10 transition-colors"
+            aria-label="Eliminar mensajes seleccionados"
+          >
+            <TrashIcon size={14} />
+          </button>
+          <button
+            onClick={onDownload}
+            className="p-2 rounded text-muted hover:text-primary hover:bg-hover transition-colors"
+            aria-label="Descargar mensajes"
+          >
+            <DownloadIcon size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteMessageModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteConfirm}
+        messageCount={selectedCount}
+        canDeleteForAll={canDeleteForAll}
+      />
+    </Fragment>
   );
 }

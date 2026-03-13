@@ -534,4 +534,45 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
         summary: 'Get latest account deletion job',
       },
     }
+  )
+  .get(
+    '/:id/actor',
+    async ({ user, params, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      try {
+        const { db, accounts } = await import('@fluxcore/db');
+        const { eq } = await import('drizzle-orm');
+        const { getOrCreateAccountActorId } = await import('../utils/actor-resolver');
+
+        const [account] = await db
+          .select({ id: accounts.id, displayName: accounts.displayName, alias: accounts.alias })
+          .from(accounts)
+          .where(eq(accounts.id, params.id))
+          .limit(1);
+
+        if (!account) {
+          set.status = 404;
+          return { success: false, message: 'Account not found' };
+        }
+
+        const actorId = await getOrCreateAccountActorId(account.id, account.displayName || account.alias || undefined);
+
+        return { success: true, data: { actorId } };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message || 'Failed to fetch actor' };
+      }
+    },
+    {
+      isAuthenticated: true,
+      params: t.Object({ id: t.String() }),
+      detail: {
+        tags: ['Accounts'],
+        summary: 'Get actor ID for account',
+      },
+    }
   );

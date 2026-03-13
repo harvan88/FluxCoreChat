@@ -4,11 +4,12 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { AlertTriangle, MessageCircle, MoreVertical, Phone, Video, Loader2, X } from 'lucide-react';
+import { AlertTriangle, MessageCircle, Phone, Video, Loader2, X } from 'lucide-react';
 import type { Message } from '../../types';
 import { AISuggestionCard, useAISuggestions, type AISuggestion } from '../extensions';
-import { MessageBubble } from './MessageBubble';
+import { MessageBubble, MessageSelectionToolbar } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
+import { ChatOptionsMenu } from './ChatOptionsMenu';
 import { useAssetUpload } from '../../hooks/useAssetUpload';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useUIStore } from '../../store/uiStore';
@@ -17,7 +18,9 @@ import { Avatar } from '../ui/Avatar';
 import { ParticipantsActivityBar } from './ParticipantsActivityBar';
 import { useAuthStore } from '../../store/authStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
+import { useAccounts } from '../../store/accountStore';
 import { useChat } from '../../hooks/useChat';
+import { api } from '../../services/api';
 import { Building2 } from 'lucide-react';
 
 const CHAT_SUPPORTED_MIME_TYPES = [
@@ -57,8 +60,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   // 🔥 CONTEXTO DE REALIDAD: Anclar al workspace actual
   const { activeWorkspace, workspaces } = useWorkspaceStore();
   const currentWorkspace = activeWorkspace || workspaces[0];
-  const { accounts } = useUIStore();
-  const currentAccount = accounts.find(acc => acc.id === accountId);
+  const { activeActorId, activeAccount } = useAccounts();
   
   if (!currentWorkspace) {
     console.warn('⚠️ ChatView: No hay workspace activo. Esto puede causar desorientación.');
@@ -75,6 +77,10 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   const isAtBottomRef = useRef(true);
   const pendingConversationScrollRef = useRef(false);
 
+  // Estado para modo selección
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
+
   // Obtener nombre del contacto desde las conversaciones cargadas
   const conversations = useUIStore((state) => state.conversations);
   const currentConversation = conversations.find(c => c.id === conversationId);
@@ -86,6 +92,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   // V2-1: useChat (WebSocket-driven)
   const {
     messages,
+    setMessages,
     isLoading,
     isSending: chatIsSending,
     error,
@@ -96,6 +103,10 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   } = useChat({ conversationId, accountId }); // 🔥 Pasar accountId sin fallback
 
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+
+  // Debug: Log activeActorId and message fromActorId values
+  console.log('[ChatView] Debug - activeActorId:', activeActorId);
+  console.log('[ChatView] Debug - messages with fromActorId:', messages.map(m => ({ id: m.id, fromActorId: m.fromActorId, type: m.type, content: m.content.text?.substring(0, 30) })));
 
   // Assets: session-based uploads
   const {
@@ -175,6 +186,76 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   const SMART_DELAY_TYPING_MS = 5000;
 
   const [participantActivities, setParticipantActivities] = useState<Record<string, ActivityType>>({});
+
+  // Handlers para modo selección
+  const handleSelectionModeToggle = useCallback((messageId: string) => {
+    setIsSelectionMode(true);
+    setSelectedMessages(new Set([messageId]));
+  }, []);
+
+  const handleSelectionToggle = useCallback((messageId: string, selected: boolean) => {
+    setSelectedMessages(prev => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(messageId);
+      } else {
+        newSet.delete(messageId);
+      }
+      // Si no hay mensajes seleccionados, salir del modo selección
+      if (newSet.size === 0) {
+        setIsSelectionMode(false);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleExitSelectionMode = useCallback(() => {
+    setIsSelectionMode(false);
+    setSelectedMessages(new Set());
+  }, []);
+
+  const handleForward = useCallback(() => {
+    console.log('Forward messages:', Array.from(selectedMessages));
+    // TODO: Implementar reenvío
+  }, [selectedMessages]);
+
+  const handleCopy = useCallback(() => {
+    console.log('Copy messages:', Array.from(selectedMessages));
+    // TODO: Implementar copiado
+  }, [selectedMessages]);
+
+  const handleReport = useCallback(() => {
+    console.log('Report messages:', Array.from(selectedMessages));
+    // TODO: Implementar reporte
+  }, [selectedMessages]);
+
+  const handleDownload = useCallback(() => {
+    console.log('Download messages:', Array.from(selectedMessages));
+    // TODO: Implementar descarga
+  }, [selectedMessages]);
+
+  const handleDeleteSelected = useCallback(async (scope: 'self' | 'all' = 'self') => {
+    if (selectedMessages.size === 0) return;
+
+    try {
+      const messageIds = Array.from(selectedMessages);
+      const response = await api.deleteMessagesBulk(messageIds, scope, accountId);
+      
+      if (response.success) {
+        console.log(`[ChatView] Bulk delete: ${response.data?.deleted} messages (scope=${scope})`);
+        
+        // Update local state: remove deleted messages from the messages array
+        setMessages(prev => prev.filter(msg => !selectedMessages.has(msg.id)));
+        
+        // Exit selection mode
+        handleExitSelectionMode();
+      } else {
+        console.error('[ChatView] Failed to delete messages:', response.message);
+      }
+    } catch (error) {
+      console.error('[ChatView] Error deleting messages:', error);
+    }
+  }, [selectedMessages, handleExitSelectionMode]);
 
   const handleActivityState = useCallback((event: {
     accountId: string;
@@ -326,6 +407,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
           text: content.text || '',
           ...(hasMedia ? { media: content.media } : {}),
         },
+        fromActorId: activeActorId || undefined,
         generatedBy: 'human',
       });
 
@@ -369,13 +451,30 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  // Delete message
-  const handleDelete = async (messageId: string) => {
+  // Delete message (with scope from DeleteMessageModal)
+  const handleDelete = async (messageId: string, scope: 'self' | 'all' = 'self') => {
     try {
-      await deleteMessage(messageId);
+      await deleteMessage(messageId, scope);
       await refresh();
     } catch (err) {
       console.error('[ChatView] Delete error:', err);
+    }
+  };
+
+  // Clear chat (hide all messages for current actor, keep conversation)
+  const handleClearChat = async () => {
+    try {
+      const { api } = await import('../../services/api');
+      const response = await api.clearChat(conversationId);
+      
+      if (response.success) {
+        console.log(`[ChatView] Chat cleared: ${response.data?.hiddenCount} messages hidden`);
+        setMessages([]);
+      } else {
+        console.error('[ChatView] Error clearing chat:', response.message);
+      }
+    } catch (err) {
+      console.error('[ChatView] Error clearing chat:', err);
     }
   };
 
@@ -418,24 +517,24 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
                   <Building2 size={12} />
                   <span>Workspace: {currentWorkspace.name || 'Sin nombre'}</span>
                   <span>•</span>
-                  <span>Enviando como: {currentAccount?.alias || accountId}</span>
+                  <span>Enviando como: {activeAccount?.alias || accountId}</span>
                 </div>
               )}
             </div>
           </div>
-          <ParticipantsActivityBar activities={participantActivities} />
+          
+          {/* Controles alineados a la derecha */}
+          <div className="flex items-center gap-1">
+            <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
+              <Phone size={20} />
+            </button>
+            <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
+              <Video size={20} />
+            </button>
+            <ChatOptionsMenu conversationId={conversationId} onLeave={handleClearChat} />
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
-            <Phone size={20} />
-          </button>
-          <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
-            <Video size={20} />
-          </button>
-          <button className="p-2 text-secondary hover:text-primary hover:bg-hover rounded-lg transition-colors">
-            <MoreVertical size={20} />
-          </button>
-        </div>
+        <ParticipantsActivityBar activities={participantActivities} />
       </div>
 
       {/* Loading */}
@@ -524,22 +623,41 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
             <p className="text-sm text-secondary">Envía el primer mensaje para iniciar la conversación</p>
           </div>
         ) : (
-          <div className="min-h-full flex flex-col justify-start space-y-3">
-            {messages.map((msg) => (
+          <div className="min-h-full flex flex-col justify-start space-y-0.5">
+            {messages.map((msg) => {
+              // Actor model: ownership determined solely by fromActorId comparison
+              let isOwn = false;
+              if (msg.fromActorId && activeActorId) {
+                isOwn = msg.fromActorId === activeActorId;
+              } else if (msg.senderAccountId === accountId) {
+                // Legacy fallback: if message was sent by current account
+                isOwn = true; // Si senderAccountId coincide, es tuyo
+              } else {
+                // Si no hay fromActorId ni senderAccountId coincide, no es tuyo
+                isOwn = false;
+              }
+              
+              console.log(`[ChatView] Message ${msg.id} - fromActorId: ${msg.fromActorId}, activeActorId: ${activeActorId}, senderAccountId: ${msg.senderAccountId}, isOwn: ${isOwn}, type: ${msg.type}, content: ${msg.content.text?.substring(0, 30)}`);
+              return (
               <div key={msg.id} id={`msg-${msg.id}`}>
                 <MessageBubble
                   message={msg}
-                  isOwn={msg.type === 'outgoing'}
+                  isOwn={isOwn}
+                  isAI={msg.generatedBy === 'ai'}
+                  isSelectionMode={isSelectionMode}
+                  isSelected={selectedMessages.has(msg.id)}
+                  onSelectionToggle={handleSelectionToggle}
+                  onSelectionModeToggle={handleSelectionModeToggle}
                   onReply={() => setReplyingTo(msg)}
                   onEdit={msg.type === 'outgoing' && msg.generatedBy === 'human' ? () => {
                     setMessage(msg.content.text || '');
                   } : undefined}
-                  onDelete={msg.type === 'outgoing' ? () => handleDelete(msg.id) : undefined}
+                  onDelete={(scope) => handleDelete(msg.id, scope)}
                   onScrollToMessage={scrollToMessage}
                   viewerAccountId={accountId}
                 />
               </div>
-            ))}
+            )})}
 
             {/* COR-043/COR-044: AI Suggestions */}
             {isGenerating && (
@@ -596,29 +714,41 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
 
       <ParticipantsActivityBar activities={participantActivities} />
 
-      {/* Input */}
-      {autoReplyState && (
-        <div className="mx-4 mb-3 p-3 bg-accent/10 border border-accent/20 rounded-xl flex items-center justify-between gap-3 flex-shrink-0">
-          <div>
-            <div className="text-sm text-primary font-medium">
-              {autoReplyState.message || 'Fluxi está preparando una respuesta automática'}
-            </div>
-            {remainingSeconds !== null && (
-              <div className="text-xs text-muted">
-                Se enviará en {remainingSeconds}s · ID {autoReplyState.suggestionId.slice(0, 6)}
+      {/* Input o Selection Toolbar */}
+      {isSelectionMode && selectedMessages.size > 0 ? (
+        <MessageSelectionToolbar
+          selectedCount={selectedMessages.size}
+          onClose={handleExitSelectionMode}
+          onForward={handleForward}
+          onCopy={handleCopy}
+          onReport={handleReport}
+          onDownload={handleDownload}
+          onDelete={handleDeleteSelected}
+        />
+      ) : (
+        <>
+          {autoReplyState && (
+            <div className="mx-4 mb-3 p-3 bg-accent/10 border border-accent/20 rounded-xl flex items-center justify-between gap-3 flex-shrink-0">
+              <div>
+                <div className="text-sm text-primary font-medium">
+                  {autoReplyState.message || 'Fluxi está preparando una respuesta automática'}
+                </div>
+                {remainingSeconds !== null && (
+                  <div className="text-xs text-muted">
+                    Se enviará en {remainingSeconds}s · ID {autoReplyState.suggestionId.slice(0, 6)}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleCancelAutoReply}
-            className="px-4 py-1.5 rounded-full bg-error-muted text-error text-sm hover:bg-error-muted/80 transition-colors"
-          >
-            Cancelar auto-respuesta
-          </button>
-        </div>
-      )}
-      <ChatComposer
+              <button
+                type="button"
+                onClick={handleCancelAutoReply}
+                className="px-4 py-1.5 rounded-full bg-error-muted text-error text-sm hover:bg-error-muted/80 transition-colors"
+              >
+                Cancelar auto-respuesta
+              </button>
+            </div>
+          )}
+          <ChatComposer
         value={message}
         onChange={setMessage}
         disabled={!accountId}
@@ -634,6 +764,8 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
         onClearUploadError={clearUploadError}
         onUserActivity={handleUserActivity}
       />
+        </>
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
-import { db, conversations, relationships, accounts } from '@fluxcore/db';
-import { eq, inArray, desc, and, or } from 'drizzle-orm';
+import { db, conversations, relationships, accounts, actors, messages, conversationParticipants } from '@fluxcore/db';
+import { eq, inArray, desc, and, or, isNull } from 'drizzle-orm';
 import { presentAccountWithAvatar } from '../utils/account-avatar.presenter';
 import { conversationParticipantService } from './conversation-participant.service';
+import { resolveActorId, resolveAccountId, resolveActorIds } from '../utils/actor-resolver';
 
 export class ConversationService {
   /**
@@ -24,8 +25,25 @@ export class ConversationService {
       const rel = await client.query.relationships.findFirst({
         where: eq(relationships.id, relationshipId),
       });
-      if (rel && rel.accountAId === rel.accountBId) {
-        throw new Error(`[ConversationService] Ontological violation: relationship ${relationshipId} links the same account`);
+      if (rel && rel.actorAId === rel.actorBId) {
+        throw new Error(`[ConversationService] Ontological violation: relationship ${relationshipId} links the same actor`);
+      }
+
+      // Ensure both actors exist in actors table
+      const [actorA] = await client
+        .select()
+        .from(actors)
+        .where(eq(actors.id, rel.actorAId))
+        .limit(1);
+      
+      const [actorB] = await client
+        .select()
+        .from(actors)
+        .where(eq(actors.id, rel.actorBId))
+        .limit(1);
+
+      if (!actorA || !actorB) {
+        throw new Error(`[ConversationService] Missing actors for relationship ${relationshipId}: actorA=${!!actorA}, actorB=${!!actorB}`);
       }
     }
 
@@ -33,6 +51,19 @@ export class ConversationService {
     if (relationshipId) {
       whereClause = and(eq(conversations.relationshipId, relationshipId), eq(conversations.channel, channel));
     } else if (visitorToken) {
+      // For visitor conversations, ensure owner actor exists
+      if (ownerAccountId) {
+        const [ownerActor] = await client
+          .select()
+          .from(actors)
+          .where(eq(actors.accountId, ownerAccountId))
+          .limit(1);
+
+        if (!ownerActor) {
+          throw new Error(`[ConversationService] Missing actor for owner account ${ownerAccountId} in visitor conversation`);
+        }
+      }
+
       whereClause = and(
         eq(conversations.visitorToken, visitorToken),
         eq(conversations.channel, channel)
@@ -117,52 +148,104 @@ export class ConversationService {
     relationshipId: string;
   }) {
     const { visitorToken, ownerAccountId, visitorAccountId, relationshipId } = params;
+    void visitorAccountId;
 
-    // Find the visitor conversation
-    const [conversation] = await db
-      .select()
-      .from(conversations)
-      .where(
-        and(
-          eq(conversations.visitorToken, visitorToken),
-          eq(conversations.ownerAccountId, ownerAccountId),
-          eq(conversations.channel, 'webchat')
+    return await db.transaction(async (tx) => {
+      const linkedAt = new Date();
+
+      const [conversation] = await tx
+        .select()
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.visitorToken, visitorToken),
+            eq(conversations.ownerAccountId, ownerAccountId),
+            eq(conversations.channel, 'webchat')
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (!conversation) {
-      return null;
-    }
+      const [relationshipConversation] = await tx
+        .select()
+        .from(conversations)
+        .where(eq(conversations.relationshipId, relationshipId))
+        .limit(1);
 
-    // Check if the relationship already has a conversation (avoid duplicate)
-    const existingRelConv = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.relationshipId, relationshipId))
-      .limit(1);
+      if (!conversation) {
+        if (!relationshipConversation) {
+          return null;
+        }
 
-    if (existingRelConv.length > 0) {
-      // Relationship already has a conversation — visitor conversation stays as archive
-      return existingRelConv[0];
-    }
+        const [updatedRelationshipConversation] = await tx
+          .update(conversations)
+          .set({
+            conversationType: 'internal',
+            identityLinkedAt: linkedAt,
+            updatedAt: linkedAt,
+          })
+          .where(eq(conversations.id, relationshipConversation.id))
+          .returning();
 
-    // Convert: link to relationship, update type, stamp the link time
-    const [updated] = await db
-      .update(conversations)
-      .set({
-        relationshipId,
-        conversationType: 'internal',
-        identityLinkedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(conversations.id, conversation.id))
-      .returning();
+        await conversationParticipantService.ensureParticipantsForConversation(updatedRelationshipConversation.id, tx);
+        return updatedRelationshipConversation;
+      }
 
-    // Re-ensure participants now that there's a relationship
-    await conversationParticipantService.ensureParticipantsForConversation(updated.id);
+      if (relationshipConversation && relationshipConversation.id !== conversation.id) {
+        await tx
+          .update(messages)
+          .set({ conversationId: relationshipConversation.id })
+          .where(eq(messages.conversationId, conversation.id));
 
-    return updated;
+        const useVisitorLastMessage = !!conversation.lastMessageAt
+          && (!relationshipConversation.lastMessageAt || conversation.lastMessageAt > relationshipConversation.lastMessageAt);
+
+        const [updatedRelationshipConversation] = await tx
+          .update(conversations)
+          .set({
+            conversationType: 'internal',
+            status: 'active',
+            identityLinkedAt: linkedAt,
+            updatedAt: linkedAt,
+            ...(useVisitorLastMessage
+              ? {
+                  lastMessageAt: conversation.lastMessageAt,
+                  lastMessageText: conversation.lastMessageText,
+                }
+              : {}),
+          })
+          .where(eq(conversations.id, relationshipConversation.id))
+          .returning();
+
+        await tx
+          .update(conversations)
+          .set({
+            status: 'archived',
+            visitorToken: null,
+            identityLinkedAt: linkedAt,
+            updatedAt: linkedAt,
+          })
+          .where(eq(conversations.id, conversation.id));
+
+        await conversationParticipantService.ensureParticipantsForConversation(updatedRelationshipConversation.id, tx);
+        return updatedRelationshipConversation;
+      }
+
+      const [updated] = await tx
+        .update(conversations)
+        .set({
+          relationshipId,
+          conversationType: 'internal',
+          visitorToken: null,
+          identityLinkedAt: linkedAt,
+          updatedAt: linkedAt,
+        })
+        .where(eq(conversations.id, conversation.id))
+        .returning();
+
+      await conversationParticipantService.ensureParticipantsForConversation(updated.id, tx);
+
+      return updated;
+    });
   }
 
   async getAllConversations(): Promise<Array<{ id: string; relationshipId: string | null }>> {
@@ -215,24 +298,54 @@ export class ConversationService {
    */
   async getConversationsByAccountId(accountId: string, ctx: { actorId: string }) {
     // 1. Get relationships where this specific account is involved
-    const accountRelationships = await db
-      .select()
-      .from(relationships)
-      .where(
-        or(
-          eq(relationships.accountAId, accountId),
-          eq(relationships.accountBId, accountId)
-        )
-      );
+    const myActorId = await resolveActorId(accountId);
+    const accountRelationships = myActorId
+      ? await db
+          .select()
+          .from(relationships)
+          .where(
+            or(
+              eq(relationships.actorAId, myActorId),
+              eq(relationships.actorBId, myActorId)
+            )
+          )
+      : [];
 
     // 2. Get conversations for those relationships
     const relationshipIds = accountRelationships.map((r) => r.id);
 
-    const relationshipConversations = relationshipIds.length > 0
+    // 2.1 Filter only active conversations (not unsubscribed)
+    let activeConversationIds: string[] = [];
+    if (relationshipIds.length > 0) {
+      const allRelConversations = await db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(inArray(conversations.relationshipId, relationshipIds));
+      
+      const convIds = allRelConversations.map(c => c.id);
+      
+      if (convIds.length > 0) {
+        const activeParticipants = await db
+          .select({ conversationId: conversationParticipants.conversationId })
+          .from(conversationParticipants)
+          .where(
+            and(
+              inArray(conversationParticipants.conversationId, convIds),
+              eq(conversationParticipants.accountId, accountId),
+              // Filtrar donde unsubscribedAt es null (todavía activo)
+              isNull(conversationParticipants.unsubscribedAt)
+            )
+          );
+          
+        activeConversationIds = activeParticipants.map(p => p.conversationId);
+      }
+    }
+
+    const relationshipConversations = activeConversationIds.length > 0
       ? await db
           .select()
           .from(conversations)
-          .where(inArray(conversations.relationshipId, relationshipIds))
+          .where(inArray(conversations.id, activeConversationIds))
           .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt))
       : [];
 
@@ -277,15 +390,18 @@ export class ConversationService {
         const rel = accountRelationships.find(r => r.id === conv.relationshipId);
         if (!rel) return { ...conv, contactName: 'Desconocido' };
 
-        const otherAccountId = rel.accountAId === accountId
-          ? rel.accountBId
-          : rel.accountAId;
+        const otherActorId = rel.actorAId === myActorId
+          ? rel.actorBId
+          : rel.actorAId;
+        const otherAccountId = await resolveAccountId(otherActorId);
 
-        const [otherAccount] = await db
-          .select()
-          .from(accounts)
-          .where(eq(accounts.id, otherAccountId))
-          .limit(1);
+        const [otherAccount] = otherAccountId
+          ? await db
+              .select()
+              .from(accounts)
+              .where(eq(accounts.id, otherAccountId))
+              .limit(1)
+          : [];
 
         const presentedAccount = otherAccount
           ? await presentAccountWithAvatar(otherAccount, { actorId: ctx.actorId })
@@ -323,15 +439,19 @@ export class ConversationService {
     const accountIds = userAccounts.map((a) => a.id);
 
     // 2. Get all relationships where user's accounts are involved
-    const userRelationships = await db
-      .select()
-      .from(relationships)
-      .where(
-        or(
-          inArray(relationships.accountAId, accountIds),
-          inArray(relationships.accountBId, accountIds)
-        )
-      );
+    const actorMap = await resolveActorIds(accountIds);
+    const actorIds = [...actorMap.values()];
+    const userRelationships = actorIds.length > 0
+      ? await db
+          .select()
+          .from(relationships)
+          .where(
+            or(
+              inArray(relationships.actorAId, actorIds),
+              inArray(relationships.actorBId, actorIds)
+            )
+          )
+      : [];
 
     if (userRelationships.length === 0) {
       return [];
@@ -351,16 +471,19 @@ export class ConversationService {
         const rel = userRelationships.find(r => r.id === conv.relationshipId);
         if (!rel) return { ...conv, contactName: 'Desconocido' };
 
-        // Find the OTHER account (not the user's)
-        const otherAccountId = accountIds.includes(rel.accountAId)
-          ? rel.accountBId
-          : rel.accountAId;
+        // Find the OTHER actor (not the user's)
+        const otherActorId = actorIds.includes(rel.actorAId)
+          ? rel.actorBId
+          : rel.actorAId;
+        const otherAccountId = await resolveAccountId(otherActorId);
 
-        const [otherAccount] = await db
-          .select()
-          .from(accounts)
-          .where(eq(accounts.id, otherAccountId))
-          .limit(1);
+        const [otherAccount] = otherAccountId
+          ? await db
+              .select()
+              .from(accounts)
+              .where(eq(accounts.id, otherAccountId))
+              .limit(1)
+          : [];
 
         const presentedAccount = otherAccount
           ? await presentAccountWithAvatar(otherAccount, { actorId: ctx.actorId })
@@ -380,7 +503,8 @@ export class ConversationService {
   }
 
   /**
-   * Delete a conversation and all its messages
+   * Leave a conversation (soft delete)
+   * Marks the user's accounts as unsubscribed from the conversation
    */
   async deleteConversation(conversationId: string, userId: string) {
     // Get conversation
@@ -411,23 +535,37 @@ export class ConversationService {
       .where(eq(accounts.ownerUserId, userId));
 
     const userAccountIds = userAccounts.map(a => a.id);
-    const isOwner = userAccountIds.includes(rel.accountAId) || userAccountIds.includes(rel.accountBId);
+    const actorAAccountId = await resolveAccountId(rel.actorAId);
+    const actorBAccountId = await resolveAccountId(rel.actorBId);
+    const isOwner = (actorAAccountId && userAccountIds.includes(actorAAccountId)) ||
+      (actorBAccountId && userAccountIds.includes(actorBAccountId));
 
     if (!isOwner) {
       throw new Error('Not authorized to delete this conversation');
     }
 
-    // Delete all messages in the conversation
+    // SOFT DELETE: Update unsubscribed_at for the user's accounts
     await db
-      .delete(messages)
-      .where(eq(messages.conversationId, conversationId));
+      .update(conversationParticipants)
+      .set({ unsubscribedAt: new Date() })
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, conversationId),
+          inArray(conversationParticipants.accountId, userAccountIds)
+        )
+      );
 
-    // Delete the conversation
-    await db
-      .delete(conversations)
-      .where(eq(conversations.id, conversationId));
+    // CASCADE: Hide all messages for the leaving actor(s) in message_visibility
+    // This ensures old messages don't reappear if the conversation is re-shown
+    const { messageDeletionService } = await import('./message-deletion.service');
+    for (const accId of userAccountIds) {
+      const actorId = await resolveActorId(accId);
+      if (actorId) {
+        await messageDeletionService.hideAllMessagesForActor(conversationId, actorId);
+      }
+    }
 
-    console.log(`[ConversationService] Deleted conversation ${conversationId} and all messages`);
+    console.log(`[ConversationService] User ${userId} left conversation ${conversationId} (messages cascade-hidden)`);
   }
 }
 

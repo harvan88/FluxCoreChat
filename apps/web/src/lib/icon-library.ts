@@ -62,7 +62,31 @@ export {
 
   Check as CheckIcon,
 
+  CheckCheck as CheckCheckIcon,
+
+  Clock as ClockIcon,
+
+  AlertCircle as AlertCircleIcon,
+
+  RotateCcw as RotateCcwIcon,
+
+  Reply as ReplyIcon,
+
+  File as FileIcon,
+
+  ShieldAlert as ShieldAlertIcon,
+
+  Flag as FlagIcon,
+
+  Copy as CopyIcon,
+
+  Forward as ForwardIcon,
+
+  Download as DownloadIcon,
+
   X as XIcon,
+
+  GripVertical as GripVerticalIcon,
 
   HardDrive as HardDriveIcon,
 

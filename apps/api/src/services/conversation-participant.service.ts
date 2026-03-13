@@ -1,5 +1,6 @@
-import { db, conversationParticipants, conversations, relationships } from '@fluxcore/db';
+import { db, conversationParticipants, conversations, relationships, actors } from '@fluxcore/db';
 import { and, eq, isNull } from 'drizzle-orm';
+import { resolveAccountId, resolveActorId } from '../utils/actor-resolver';
 
 type DbClient = typeof db;
 
@@ -28,7 +29,7 @@ class ConversationParticipantService {
 
         console.log(`[Participants] 🔍 Procesando conversación ${conversationId} (relationship: ${conversation.relationshipId}, visitor: ${conversation.visitorToken})`);
 
-        const desiredParticipants: Array<{ accountId: string; role: ParticipantRole; identityType: ParticipantIdentity }> = [];
+        const desiredParticipants: Array<{ accountId: string; actorId?: string; role: ParticipantRole; identityType: ParticipantIdentity }> = [];
 
         if (conversation.relationshipId) {
             const relationship = await client.query.relationships.findFirst({
@@ -36,17 +37,22 @@ class ConversationParticipantService {
             });
 
             if (relationship) {
-                if (relationship.accountAId) {
+                const accountAId = await resolveAccountId(relationship.actorAId);
+                const accountBId = await resolveAccountId(relationship.actorBId);
+
+                if (accountAId) {
                     desiredParticipants.push({
-                        accountId: relationship.accountAId,
+                        accountId: accountAId,
+                        actorId: relationship.actorAId,
                         role: 'initiator',
                         identityType: 'registered',
                     });
                 }
 
-                if (relationship.accountBId && relationship.accountBId !== relationship.accountAId) {
+                if (accountBId && accountBId !== accountAId) {
                     desiredParticipants.push({
-                        accountId: relationship.accountBId,
+                        accountId: accountBId,
+                        actorId: relationship.actorBId,
                         role: 'recipient',
                         identityType: 'registered',
                     });
@@ -57,16 +63,27 @@ class ConversationParticipantService {
         // Manejar conversaciones visitor (widget)
         if (conversation.visitorToken && !conversation.relationshipId) {
             console.log(`[Participants] 🎯 Creando participant observer para visitor ${conversation.visitorToken}`);
+
+            // Find or create visitor actor
+            const [visitorActor] = await db
+                .select({ id: actors.id })
+                .from(actors)
+                .where(eq(actors.externalKey, conversation.visitorToken))
+                .limit(1);
+
             desiredParticipants.push({
                 accountId: 'visitor',
+                actorId: visitorActor?.id,
                 role: 'observer',
                 identityType: 'anonymous',
             });
 
             // Add owner account (tenant) as recipient so they see the conversation
             if (conversation.ownerAccountId) {
+                const ownerActorId = await resolveActorId(conversation.ownerAccountId);
                 desiredParticipants.push({
                     accountId: conversation.ownerAccountId,
+                    actorId: ownerActorId || undefined,
                     role: 'recipient',
                     identityType: 'registered',
                 });
@@ -151,13 +168,28 @@ class ConversationParticipantService {
         return recipient[0] || null;
     }
 
+    async ensureActiveParticipant(conversationId: string, accountId: string, tx?: DbClient): Promise<void> {
+        const client = tx || db;
+        
+        await client
+            .update(conversationParticipants)
+            .set({ unsubscribedAt: null })
+            .where(
+                and(
+                    eq(conversationParticipants.conversationId, conversationId),
+                    eq(conversationParticipants.accountId, accountId)
+                )
+            );
+    }
+
     private async upsertParticipant(
         params: {
             conversationId: string;
             accountId: string;
+            actorId?: string;
             role: ParticipantRole;
             identityType: ParticipantIdentity;
-            visitorToken?: string; // 🔥 NUEVO: Agregar visitorToken opcional
+            visitorToken?: string;
         },
         tx?: DbClient
     ): Promise<void> {
@@ -167,17 +199,19 @@ class ConversationParticipantService {
             .values({
                 conversationId: params.conversationId,
                 accountId: params.accountId,
+                actorId: params.actorId || null,
                 role: params.role,
                 identityType: params.identityType,
-                visitorToken: params.visitorToken, // 🔥 NUEVO: Incluir visitorToken
+                visitorToken: params.visitorToken,
                 unsubscribedAt: null,
             })
             .onConflictDoUpdate({
                 target: [conversationParticipants.conversationId, conversationParticipants.accountId],
                 set: {
+                    actorId: params.actorId || null,
                     role: params.role,
                     identityType: params.identityType,
-                    visitorToken: params.visitorToken, // 🔥 NUEVO: Actualizar visitorToken
+                    visitorToken: params.visitorToken,
                     unsubscribedAt: null,
                 },
             });
