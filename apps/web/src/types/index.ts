@@ -149,6 +149,14 @@ export interface Message {
   aiApprovedBy?: string;
   createdAt: string;
   updatedAt?: string;
+  
+  // Nuevos campos de sobrescritura (reemplazan a redacted)
+  overwrittenAt?: string;
+  overwrittenBy?: string;
+  
+  // Campos legacy (redacción) - mantener por compatibilidad
+  redactedAt?: string;
+  redactedBy?: string;
 }
 
 export interface MessageContent {

@@ -10,12 +10,39 @@ Todos los componentes del modelo canónico están funcionando en producción. Es
 
 ## Principios del modelo
 
-1. Los mensajes nunca se eliminan físicamente por acción de un actor
-2. "Eliminar para todos" = sobrescribir contenido (redacción)
-3. "Eliminar para mí" = ocultar por actor (tabla de visibilidad)
-4. Las conversaciones se desuscriben, no se eliminan
-5. Eliminación física solo cuando no quedan suscriptores (GC del sistema)
-6. Toda mutación estructural debe notificarse al Kernel
+1. Los mensajes nunca se eliminan físicamente por acción de un actor.
+2. "Eliminar para todos" = **sobrescritura** (reemplazo destructivo del contenido).
+3. "Eliminar para mí" = ocultamiento por actor (message_visibility).
+4. Las conversaciones se desuscriben, no se eliminan.
+5. Eliminación física solo cuando no quedan suscriptores (GC del sistema).
+6. Toda mutación estructural debe notificarse al Kernel.
+
+## 🔄 Refactoring Terminológico (2026-03-13)
+
+### Cambio: "Redacción" → "Sobrescritura"
+
+**Motivo:** Eliminar ambigüedad terminológica. "Redacción" suena a escritura, cuando realmente significa sobrescritura destructiva.
+
+### Mapeo de Términos
+| Anterior | Nuevo | Significado Real |
+|----------|-------|------------------|
+| `redactMessage()` | `overwriteMessageForAll()` | Sobrescribe contenido para todos |
+| `redactedAt` | `overwrittenAt` | Timestamp de sobrescritura |
+| `redactedBy` | `overwrittenBy` | Quién sobrescribió |
+| `REDACTED_CONTENT` | `OVERWRITTEN_CONTENT` | Contenido de reemplazo |
+
+### Compatibilidad
+- **Métodos legacy:** `redactMessage()` redirige a `overwriteMessageForAll()`
+- **Campos legacy:** `redactedAt/redactedBy` se mantienen y sincronizan
+- **Frontend:** Detecta ambos campos (`overwrittenAt` o `redactedAt`)
+
+### Estado: ✅ **COMPLETADO** (2026-03-13)
+- ✅ Schema actualizado (`overwrittenAt`, `overwrittenBy`)
+- ✅ Backend services actualizados (`overwriteMessageForAll()`, `OVERWRITTEN_CONTENT`)
+- ✅ Frontend types actualizados
+- ✅ Componentes actualizados (merge parcial en WebSocket handlers)
+- ✅ Métodos legacy (`redactMessage()`, `canRedact()`) redirigen a nuevos métodos
+- ⏳ Tests por actualizar
 
 ## Checklist de auditoría - ✅ COMPLETADO
 
@@ -113,9 +140,19 @@ Usuario clickea "Eliminar" en MessageBubble
   → scope ('self'|'all') pasa por: MessageBubble → ChatView → useChat → API
   → DELETE /messages/:id?scope=X
   → messageService.deleteMessage() → messageDeletionService.deleteMessage()
-  → scope='all' → redactMessage() (sobrescribe contenido, marca redactedAt/redactedBy)
-  → scope='self' → hideMessageForActor() (insert en message_visibility)
-  → Frontend filtra mensaje del estado local
+
+  scope='all' (Sobrescritura):
+  → overwriteMessageForAll() sobrescribe contenido en DB (OVERWRITTEN_CONTENT)
+  → Marca overwrittenAt/overwrittenBy (+ campos legacy redactedAt/redactedBy)
+  → Envía WebSocket message:updated via broadcastToConversation()
+  → Frontend NO elimina mensaje localmente, espera notificación WebSocket
+  → WebSocket llega a TODOS los participantes (incluido el emisor)
+  → Frontend hace merge parcial: solo actualiza content, overwrittenAt, overwrittenBy
+  → Preserva estructura original del mensaje (type, fromActorId, status) = misma estética ✅
+
+  scope='self' (Ocultamiento):
+  → hideMessageForActor() inserta en message_visibility
+  → Frontend elimina mensaje del estado local inmediatamente
   → Al recargar: loadMessages() pasa accountId → backend aplica getMessagesWithVisibilityFilter()
   → Mensaje oculto NO reaparece ✅
 ```
@@ -140,6 +177,45 @@ DELETE /conversations/:id
   → Conversación desaparece de getConversationsByAccountId() (filtra por unsubscribedAt IS NULL)
 ```
 
+### Fase 7: Sincronización en Tiempo Real vía WebSocket ✅
+
+- [x] `message-deletion.service.ts`: Envía `message:updated` vía WebSocket tras sobrescribir
+- [x] `ws-handler.ts`: Filtro de autorización permite `message:updated` a todos los participantes
+- [x] `ChatView.tsx`: Handler `onMessage` procesa `message:updated` con merge parcial
+- [x] `UnifiedChatView.tsx`: Handler `onMessage` procesa `message:updated` con merge parcial
+- [x] `useChat.ts`: `deleteMessage(id, 'all')` NO elimina localmente, espera WebSocket
+- [x] `useChatUnified.ts`: `deleteMessage(id, 'all')` NO elimina localmente, espera WebSocket
+- [x] `MessageBubble.tsx`: Sin early return especial para mensajes sobrescritos (renderiza contenido normal del DB)
+- [x] `ChatView.tsx`: `handleDelete` y `handleDeleteSelected` no hacen `refresh()` para scope='all'
+
+### Fase 8: Certificación en Kernel ✅
+
+La sobrescritura de mensajes (eliminar para todos) ahora certifica la mutación en el Kernel
+vía `chatCoreGateway.certifyStateChange()`, usando el adapter `chatcore-gateway` existente.
+
+**Señal certificada: `EXTERNAL_STATE_OBSERVED`**
+
+```
+stateChange:        message_content_overwritten
+messageId:          {messageId}
+overwrittenBy:      {requesterAccountId}
+conversationId:     {conversationId}
+originalContentHash: SHA-256 del contenido original
+certified_by_adapter: chatcore-gateway
+```
+
+**Implementación:**
+- `message-deletion.service.ts` → `overwriteMessageForAll()` llama a `chatCoreGateway.certifyStateChange()` después de sobrescribir en DB
+- `hashContent()` genera SHA-256 del contenido original para referencia (no se persiste el contenido original)
+- La certificación es best-effort: si falla, la operación principal (sobrescritura + WebSocket) no se ve afectada
+
+**¿Por qué `EXTERNAL_STATE_OBSERVED`?**
+- No es un input nuevo del usuario (no es un mensaje).
+- Es un cambio de estado en un objeto existente (el mensaje).
+- El fenómeno es: "el emisor decidió destruir el contenido de su mensaje".
+
+---
+
 ## Bugs críticos corregidos
 
 1. **Frontend no pasaba accountId** → loadMessages() ahora incluye `?accountId=X`
@@ -147,6 +223,11 @@ DELETE /conversations/:id
 3. **getMessagesWithVisibilityFilter sin paginación** → ahora soporta limit/cursor
 4. **"Vaciar chat" abandonaba conversación** → ahora usa POST /clear (hideAllMessagesForActor)
 5. **Bulk delete hardcodeado a 'self'** → ahora acepta scope del toolbar modal
+6. **Sobrescritura no sincronizaba en tiempo real** → WebSocket `message:updated` implementado
+7. **Filtro WebSocket bloqueaba `message:updated`** → `broadcastToRelationship` ahora permite `message:updated` a todos
+8. **Actor emisor veía mensaje desaparecer (parpadeo)** → Frontend ya no elimina localmente para scope='all', espera WebSocket
+9. **Bubble con estética diferente tras WebSocket** → Merge parcial en vez de reemplazo total del objeto Message
+10. **Early return en MessageBubble creaba bubble inconsistente** → Eliminado, el contenido del DB se renderiza con el bubble normal
 
 ---
 

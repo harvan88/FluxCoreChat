@@ -278,14 +278,15 @@ export function useChatUnified({
     onNewMessage?.(message);
   }, [buildSignature, onNewMessage]);
 
-  const deleteMessage = useCallback(async (messageId: string) => {
+  const deleteMessage = useCallback(async (messageId: string, scope: 'self' | 'all' = 'self') => {
     const token = await getToken();
     if (!token) {
       throw new Error('Authentication required');
     }
 
     try {
-      const response = await fetch(`${API_URL}/messages/${messageId}`, {
+      const params = new URLSearchParams({ scope });
+      const response = await fetch(`${API_URL}/messages/${messageId}?${params}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -298,7 +299,14 @@ export function useChatUnified({
 
       const result = await response.json();
       if (result.success) {
-        setMessages(prev => prev.filter(m => m.id !== messageId));
+        // 🔄 Solo eliminar localmente si es 'self' (eliminar para mí)
+        // Para 'all' (eliminar para todos), esperar la notificación WebSocket
+        if (scope === 'self') {
+          setMessages(prev => prev.filter(m => m.id !== messageId));
+          console.log(`[useChatUnified] Message ${messageId} hidden locally (scope=self)`);
+        } else {
+          console.log(`[useChatUnified] Message ${messageId} overwrite sent (scope=all), waiting for WebSocket update`);
+        }
       } else {
         throw new Error(result.message || 'Failed to delete message');
       }
@@ -327,6 +335,12 @@ export function useChatUnified({
     }
   }, [conversationId, isPublicMode, loadMessages]);
 
+  const updateMessage = useCallback((messageId: string, updatedMessage: Partial<Message>) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId ? { ...msg, ...updatedMessage } : msg
+    ));
+  }, []);
+
   return {
     messages,
     isLoading,
@@ -335,6 +349,7 @@ export function useChatUnified({
     sendMessage,
     addReceivedMessage,
     deleteMessage,
+    updateMessage, // 🔄 Nueva función para actualizar mensajes
     refresh,
     getMessageOwnership,
     isPublicMode,

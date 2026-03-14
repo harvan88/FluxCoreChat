@@ -28,7 +28,7 @@ interface MessageBubbleProps {
   isSelected?: boolean;
   onSelectionToggle?: (messageId: string, selected: boolean) => void;
   onSelectionModeToggle?: (messageId: string) => void;
-  }
+}
 
 export function MessageBubble({
   message,
@@ -37,7 +37,6 @@ export function MessageBubble({
   replyToMessage,
   onReply,
   onEdit,
-  onDelete,
   onRetry,
   onScrollToMessage,
   viewerAccountId,
@@ -48,19 +47,6 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [showOptionsButton, setShowOptionsButton] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-
-  const handleDeleteClick = () => {
-    setShowDeleteModal(true);
-  };
-
-  const handleDeleteConfirm = (scope: 'self' | 'all') => {
-    if (onDelete) {
-      onDelete(scope);
-    }
-  };
-
-  const canDeleteForAll = isOwn && !isAI; // Only own messages can be deleted for all
 
   // Gradiente global para efecto Instagram - ÚNICA FUENTE DE VERDAD
   const GLOBAL_GRADIENT_MASK = {
@@ -211,15 +197,6 @@ export function MessageBubble({
               aria-label="Editar mensaje"
             >
               <EditIcon size={14} />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={handleDeleteClick}
-              className="p-1 rounded-md text-error hover:text-error hover:bg-error/10 transition-colors"
-              aria-label="Eliminar mensaje"
-            >
-              <TrashIcon size={14} />
             </button>
           )}
           {onReply && (
@@ -436,16 +413,7 @@ export function MessageBubble({
         </div>
       )}
     </div>
-
-    {/* Delete Confirmation Modal */}
-    <DeleteMessageModal
-      isOpen={showDeleteModal}
-      onClose={() => setShowDeleteModal(false)}
-      onConfirm={handleDeleteConfirm}
-      messageCount={1}
-      canDeleteForAll={canDeleteForAll}
-    />
-    </Fragment>
+  </Fragment>
   );
 }
 

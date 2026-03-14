@@ -274,7 +274,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
     }
   }, []);
 
-  // Eliminar mensaje
+  // Sobrescribir mensaje (eliminar para todos) u ocultar (eliminar para mí)
   const deleteMessage = useCallback(async (messageId: string, scope: 'self' | 'all' = 'self') => {
     try {
       const params = new URLSearchParams({ scope });
@@ -288,17 +288,28 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.message || 'Failed to delete message');
+        throw new Error(body.message || 'Failed to overwrite message');
       }
 
-      setMessages(prev => prev.filter(m => m.id !== messageId));
+      // 🔄 Solo eliminar localmente si es 'self' (eliminar para mí)
+      // Para 'all' (eliminar para todos), esperar la notificación WebSocket
+      if (scope === 'self') {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+        console.log(`[useChat] Message ${messageId} hidden locally (scope=self)`);
+      } else {
+        console.log(`[useChat] Message ${messageId} overwrite sent (scope=all), waiting for WebSocket update`);
+      }
+      
       return true;
     } catch (err: any) {
-      console.error('[useChat] deleteMessage error:', err.message);
+      console.error('[useChat] overwriteMessage error:', err.message);
       setError(err.message);
       return false;
     }
   }, [accountId]);
+
+  // Mantener método legacy por compatibilidad
+  const deleteMessageLegacy = deleteMessage; // Alias si es necesario para compatibilidad
 
   // Reintentar mensaje fallido
   const retryMessage = useCallback(async (messageId: string) => {

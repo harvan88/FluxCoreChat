@@ -244,18 +244,24 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       if (response.success) {
         console.log(`[ChatView] Bulk delete: ${response.data?.deleted} messages (scope=${scope})`);
         
-        // Update local state: remove deleted messages from the messages array
-        setMessages(prev => prev.filter(msg => !selectedMessages.has(msg.id)));
+        // 🔄 Solo eliminar localmente si es 'self' (eliminar para mí)
+        // Para 'all' (eliminar para todos), esperar las notificaciones WebSocket
+        if (scope === 'self') {
+          setMessages(prev => prev.filter(msg => !selectedMessages.has(msg.id)));
+          console.log('[ChatView] Messages hidden locally (bulk scope=self)');
+        } else {
+          console.log('[ChatView] Bulk overwrite sent (scope=all), waiting for WebSocket updates');
+        }
         
         // Exit selection mode
         handleExitSelectionMode();
       } else {
         console.error('[ChatView] Failed to delete messages:', response.message);
       }
-    } catch (error) {
-      console.error('[ChatView] Error deleting messages:', error);
+    } catch (err) {
+      console.error('[ChatView] Bulk delete error:', err);
     }
-  }, [selectedMessages, handleExitSelectionMode]);
+  }, [selectedMessages, accountId, handleExitSelectionMode]);
 
   const handleActivityState = useCallback((event: {
     accountId: string;
@@ -282,6 +288,14 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     reportActivity,
   } = useWebSocket({
     onMessage: (msg) => {
+      console.log('[ChatView] WebSocket message received:', {
+        type: msg.type,
+        conversationId: msg.data?.conversationId,
+        currentConversationId: conversationId,
+        messageId: msg.data?.id,
+        action: msg.data?.action
+      });
+      
       if (msg.type === 'message:new' && msg.data?.conversationId === conversationId) {
         const generatedBy = msg.data?.generatedBy;
         addReceivedMessage(msg.data as Message);
@@ -291,6 +305,39 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
             removeSuggestion(autoStateForConversation.suggestionId);
             completeAutoReply(conversationId);
           }
+        }
+      }
+      
+      // 🔄 Manejar mensajes actualizados (sobrescritos/eliminados para todos)
+      if (msg.type === 'message:updated') {
+        console.log('[ChatView] message:updated received, checking conversation match:', {
+          messageConversationId: msg.data?.conversationId,
+          currentConversationId: conversationId,
+          isMatch: msg.data?.conversationId === conversationId
+        });
+        
+        if (msg.data?.conversationId === conversationId) {
+          const wsData = msg.data;
+          console.log('[ChatView] Processing message:updated (overwritten):', wsData);
+          
+          // 🔄 Merge parcial: solo actualizar campos que cambiaron,
+          // preservar estructura original del mensaje (type, fromActorId, status, etc.)
+          setMessages(prev => {
+            const newMessages = prev.map(m => {
+              if (m.id !== wsData.id) return m;
+              return {
+                ...m, // Preservar campos originales (type, fromActorId, status, etc.)
+                content: wsData.content, // Actualizar contenido sobrescrito
+                overwrittenAt: wsData.overwrittenAt,
+                overwrittenBy: wsData.overwrittenBy,
+              };
+            });
+            console.log('[ChatView] Messages merged (partial update):', {
+              messageId: wsData.id,
+              found: prev.some(m => m.id === wsData.id),
+            });
+            return newMessages;
+          });
         }
       }
     },
@@ -455,7 +502,15 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
   const handleDelete = async (messageId: string, scope: 'self' | 'all' = 'self') => {
     try {
       await deleteMessage(messageId, scope);
-      await refresh();
+      
+      // 🔄 Solo hacer refresh si es 'self' (eliminar para mí)
+      // Para 'all' (eliminar para todos), esperar la notificación WebSocket
+      if (scope === 'self') {
+        await refresh();
+        console.log('[ChatView] Refreshed after hiding message (scope=self)');
+      } else {
+        console.log('[ChatView] Overwrite sent (scope=all), waiting for WebSocket update');
+      }
     } catch (err) {
       console.error('[ChatView] Delete error:', err);
     }

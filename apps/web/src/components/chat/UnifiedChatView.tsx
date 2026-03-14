@@ -62,6 +62,7 @@ export function UnifiedChatView({
     error,
     sendMessage,
     addReceivedMessage,
+    updateMessage,
     getMessageOwnership,
     conversationId: resolvedConversationId,
     publicSession,
@@ -93,9 +94,24 @@ export function UnifiedChatView({
     accountIdOverride: isAuthenticatedMode ? (accountId || null) : null,
     authTokenOverride: isPublicMode ? (publicSession?.publicToken || null) : null,
     onMessage: (wsMessage) => {
-      if (wsMessage.type !== 'message:new') return;
-      if (wsMessage.data?.conversationId !== resolvedConversationId) return;
-      addReceivedMessage(wsMessage.data as Message);
+      if (wsMessage.type === 'message:new') {
+        if (wsMessage.data?.conversationId !== resolvedConversationId) return;
+        addReceivedMessage(wsMessage.data as Message);
+      }
+      
+      // 🔄 Manejar mensajes actualizados (sobrescritos/eliminados para todos)
+      if (wsMessage.type === 'message:updated') {
+        if (wsMessage.data?.conversationId !== resolvedConversationId) return;
+        const wsData = wsMessage.data;
+        console.log('[UnifiedChatView] Message updated (overwritten):', wsData);
+        
+        // Merge parcial: solo actualizar contenido sobrescrito, preservar estructura original
+        updateMessage(wsData.id, {
+          content: wsData.content,
+          overwrittenAt: wsData.overwrittenAt,
+          overwrittenBy: wsData.overwrittenBy,
+        });
+      }
     },
   });
 

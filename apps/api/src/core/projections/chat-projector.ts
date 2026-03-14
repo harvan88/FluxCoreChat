@@ -44,6 +44,14 @@ export class ChatProjector extends BaseProjector {
             return;
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // NUEVO: Manejar cambios de estado de ChatCore (EXTERNAL_STATE_OBSERVED)
+        // ═══════════════════════════════════════════════════════════════
+        if (signal.factType === 'EXTERNAL_STATE_OBSERVED') {
+            await this.projectStateChange(signal);
+            return;
+        }
+
         // Solo procesar mensajes de entrada del usuario
         if (signal.factType !== 'EXTERNAL_INPUT_OBSERVED' && 
             signal.factType !== 'chatcore.message.received') {
@@ -189,6 +197,46 @@ export class ChatProjector extends BaseProjector {
                 context: evidenceRoot?.context, // context.userId = sender account
             },
         };
+    }
+
+    /**
+     * Maneja señales de mutación de estado de ChatCore
+     * 
+     * Ontológicamente: Observa declaraciones de mutación estructural
+     * y opcionalmente actualiza metadatos derivados
+     */
+    private async projectStateChange(signal: typeof fluxcoreSignals.$inferSelect): Promise<void> {
+        const evidence = signal.evidenceRaw as any;
+        
+        // ✅ NUEVO: Manejar mutaciones estructurales
+        if (evidence.stateChange) {
+            return this.handleStructuralMutation(evidence);
+        }
+        
+        // Lógica existente para otros cambios de estado (typing, recording, idle)
+        console.log(`[ChatProjector] State change processed: ${Object.keys(evidence)}`);
+    }
+
+    private async handleStructuralMutation(evidence: any): Promise<void> {
+        switch (evidence.stateChange) {
+            case 'message_content_overwritten':
+                console.log(`[ChatProjector] Message ${evidence.messageId} overwritten by ${evidence.overwrittenBy}`);
+                // Actualizar cachés, metadatos si es necesario
+                break;
+                
+            case 'message_content_edited':
+                console.log(`[ChatProjector] Message ${evidence.messageId} edited`);
+                // Lógica para versionamiento futuro
+                break;
+                
+            case 'conversation_destroyed':
+                console.log(`[ChatProjector] Conversation ${evidence.conversationId} destroyed`);
+                // Opcional: limpiar estructuras derivadas
+                break;
+                
+            default:
+                console.log(`[ChatProjector] Unknown state mutation: ${evidence.stateChange}`);
+        }
     }
 }
 

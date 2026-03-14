@@ -59,6 +59,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const aliasCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -196,6 +197,29 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     navigator.clipboard.writeText(privateContext);
   };
 
+  // Handle copy public URL
+  const handleCopyPublicUrl = async () => {
+    if (alias && alias.length >= 3) {
+      const publicUrl = `meetgar.com/p/${alias}`;
+      try {
+        await navigator.clipboard.writeText(publicUrl);
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      } catch (err) {
+        console.error('[ProfileSection] Error copying to clipboard:', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = publicUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      }
+    }
+  };
+
   // Handle download context
   const handleDownloadContext = () => {
     const blob = new Blob([privateContext], { type: 'text/plain' });
@@ -267,22 +291,37 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-muted text-sm">meetgar.com/p/</span>
+                <span className="text-muted text-sm" style={{minWidth: '120px'}}>meetgar.com/p/</span>
               </div>
               <input
                 type="text"
                 value={alias}
                 onChange={(e) => handleAliasChange(e.target.value)}
                 placeholder="tu-alias"
-                className="w-full pl-[108px] pr-10 py-2 rounded-lg border border-subtle bg-surface text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
+                className="w-full pl-[130px] pr-20 py-2 rounded-lg border border-subtle bg-surface text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
                 maxLength={30}
               />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                {aliasStatus === 'checking' && <Loader2 size={16} className="animate-spin text-muted" />}
-                {aliasStatus === 'available' && <CheckCircle2 size={16} className="text-green-500" />}
-                {aliasStatus === 'current' && <Check size={16} className="text-blue-500" />}
-                {(aliasStatus === 'taken' || aliasStatus === 'reserved') && <XCircle size={16} className="text-red-500" />}
-                {aliasStatus === 'invalid' && <AlertCircle size={16} className="text-amber-500" />}
+              <div className="absolute inset-y-0 right-0 flex items-center">
+                <div className="flex items-center pr-2">
+                  {aliasStatus === 'checking' && <Loader2 size={16} className="animate-spin text-muted" />}
+                  {aliasStatus === 'available' && <CheckCircle2 size={16} className="text-green-500" />}
+                  {aliasStatus === 'current' && <Check size={16} className="text-blue-500" />}
+                  {(aliasStatus === 'taken' || aliasStatus === 'reserved') && <XCircle size={16} className="text-red-500" />}
+                  {aliasStatus === 'invalid' && <AlertCircle size={16} className="text-amber-500" />}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyPublicUrl}
+                  disabled={!alias || alias.length < 3}
+                  className={`p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    copySuccess 
+                      ? 'text-green-500 bg-green-500/10' 
+                      : 'text-muted hover:text-primary hover:bg-hover'
+                  }`}
+                  title={copySuccess ? "¡Copiado!" : "Copiar enlace público"}
+                >
+                  {copySuccess ? <Check size={14} /> : <Copy size={14} />}
+                </button>
               </div>
             </div>
             {aliasMessage && (

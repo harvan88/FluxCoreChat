@@ -82,7 +82,7 @@ export interface ExternalObservation {
 }
 
 /**
- * PhysicalFactType: the 6 immutable classes of physical observation.
+ * PhysicalFactType: immutable classes of physical observation.
  * The Kernel ONLY accepts these. Business semantics live in projectors.
  */
 export type PhysicalFactType =
@@ -93,7 +93,7 @@ export type PhysicalFactType =
     | 'SYSTEM_TIMER_ELAPSED'
     | 'CONNECTION_EVENT_OBSERVED'
     | 'chatcore.message.received'
-    | 'AI_RESPONSE_GENERATED';
+    | 'AI_RESPONSE_GENERATED'; // Nuevo: Para mutaciones estructurales de ChatCore
 
 /**
  * KernelCandidateSignal: the ONLY input the Kernel accepts.

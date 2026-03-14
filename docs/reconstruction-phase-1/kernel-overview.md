@@ -108,9 +108,22 @@ La parte del canon que debe leerse con matiz es el conjunto exacto de tipos fís
 ChatCore no escribe directamente en el journal. Lo hace por medio de reality adapters:
 
 - `apps/api/src/services/fluxcore/chatcore-gateway.service.ts`
-  - certifica mensajes autenticados como observaciones físicas
+  - certifica mensajes autenticados como observaciones físicas (`EXTERNAL_INPUT_OBSERVED`)
+  - certifica cambios de estado estructural (`EXTERNAL_STATE_OBSERVED` con `stateChange`)
 - `apps/api/src/services/fluxcore/chatcore-webchat-gateway.service.ts`
   - certifica mensajes y eventos de identidad del widget/webchat
+
+### 🔄 **Flujo de Certificación de Mutaciones (2026-03-13)**
+```
+Usuario elimina mensaje → message-deletion.service.ts
+↓ Sobrescribe mensaje en BD
+↓ ChatCoreGateway.certifyStateChange()
+↓ Firma con HMAC-SHA256
+↓ Kernel.ingestSignal()
+↓ Persiste en fluxcore_signals (#554)
+↓ ChatProjector.processSignal()
+↓ Procesa mutación estructural
+```
 
 Una vez certificada la señal, el Kernel la escribe en `fluxcore_signals`. Luego los projectores la observan. Para ChatCore, el projector clave es `chat-projector.ts`, porque convierte señales del Kernel en acciones conversacionales entregadas otra vez al mundo del chat.
 
@@ -120,8 +133,13 @@ FluxCore tampoco salta el Kernel. Cuando FluxCore decide responder:
 
 - `apps/api/src/services/fluxcore/cognition-gateway.service.ts`
   - certifica una señal `AI_RESPONSE_GENERATED`
-- el Kernel la ingiere y la deja en `fluxcore_signals`
+  - el Kernel la ingiere y la deja en `fluxcore_signals`
 - `ChatProjector` la observa y delega la entrega a ChatCore
+
+### 📊 **Estado Actual del Flujo ChatCore → Kernel → FluxCore**
+- **✅ ChatCore → Kernel:** Certificación de mutaciones funcionando
+- **⏳ Kernel → FluxCore:** Señales persistiendo, procesamiento de mutaciones verificado
+- **🔍 Pendiente:** Verificar impacto en respuestas cognitivas
 
 Esto impone una separación importante:
 
