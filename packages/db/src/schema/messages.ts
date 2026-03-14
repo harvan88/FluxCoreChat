@@ -24,8 +24,13 @@ export const messages = pgTable('messages', {
   originalId: uuid('original_id'),
   version: integer('version').notNull().default(1),
   isCurrent: boolean('is_current').notNull().default(true),
+  // Columnas legacy (redacción) - mantener por compatibilidad
   redactedAt: timestamp('redacted_at', { withTimezone: true }),
   redactedBy: text('redacted_by'),
+  
+  // Columnas nuevas (sobrescritura) - reemplazo futuro
+  overwrittenAt: timestamp('overwritten_at', { withTimezone: true }),
+  overwrittenBy: text('overwritten_by'),
   // FLUX-001: Kernel alignment
   signalId: bigint('signal_id', { mode: 'number' }),
   metadata: jsonb('metadata').default({}).notNull(),
@@ -35,6 +40,10 @@ export const messages = pgTable('messages', {
   messagesConversationIdx: index('idx_messages_conversation').on(table.conversationId, table.createdAt),
   messagesParentIdx: index('idx_messages_parent').on(table.parentId),
   messagesOriginalIdx: index('idx_messages_original').on(table.originalId),
+  
+  // Índices para columnas de sobrescritura (nuevas)
+  idxMessagesOverwrittenAt: index('idx_messages_overwritten_at').on(table.overwrittenAt),
+  idxMessagesOverwrittenBy: index('idx_messages_overwritten_by').on(table.overwrittenBy),
   messageHasContent: check('message_has_content', sql`
     (${table.content} ->> 'text') IS NOT NULL
     OR jsonb_array_length(COALESCE(${table.content} -> 'media', '[]'::jsonb)) > 0

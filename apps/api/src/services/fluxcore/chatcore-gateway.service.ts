@@ -210,6 +210,93 @@ export class ChatCoreGatewayService {
         console.log(`[ChatCoreGateway] 🔍 CANONICALIZE OBJECT RESULT:`, result);
         return result;
     }
+
+    /**
+     * Certifica cambios de estado de ChatCore (sobrescritura, edición, destrucción)
+     * 
+     * Ontológicamente: Declara que "el sistema observó un cambio de estado estructural"
+     */
+    async certifyStateChange(params: {
+        stateChange: 'message_content_overwritten' | 'message_content_edited' | 'conversation_destroyed';
+        messageId?: string;
+        overwrittenBy?: string;
+        editedBy?: string;
+        conversationId?: string;
+        originalContentHash?: string;
+        newContentHash?: string;
+        destructionReason?: string;
+        messageCount?: number;
+        lastMessageAt?: string;
+    }): Promise<{ accepted: boolean; signalId?: number; reason?: string }> {
+        // 🚨 VALIDACIÓN CRÍTICA - El messageId es obligatorio para certificar
+        if (!params.messageId) {
+            const error = 'certifyStateChange: messageId is required for state change certification';
+            console.error(`[ChatCoreGateway] ❌ ${error}`);
+            return { accepted: false, reason: error };
+        }
+        
+        try {
+            console.log(`[ChatCoreGateway] 🔍 CERTIFY_STATE_CHANGE START ==================`);
+            console.log(`[ChatCoreGateway] 📥 INPUT PARAMS:`);
+            console.log(`  - stateChange: ${params.stateChange}`);
+            console.log(`  - messageId: ${params.messageId}`);
+            console.log(`  - conversationId: ${params.conversationId}`);
+            console.log(`  - mutatedBy: ${params.overwrittenBy || params.editedBy}`);
+            
+            const evidenceRaw = {
+                stateChange: params.stateChange,
+                messageId: params.messageId,
+                overwrittenBy: params.overwrittenBy,
+                editedBy: params.editedBy,
+                conversationId: params.conversationId,
+                originalContentHash: params.originalContentHash,
+                newContentHash: params.newContentHash,
+                mutatedAt: new Date().toISOString(),
+                semantics: 'structural_mutation_certified'
+            };
+
+            const evidence: Evidence = {
+                raw: evidenceRaw,
+                format: 'json',
+                provenance: {
+                    driverId: this.DRIVER_ID, // ✅ Usar el driver_id del adapter
+                    externalId: `${params.stateChange}-${params.messageId}-${Date.now()}`,
+                    entryPoint: 'message-deletion.service'
+                }
+            };
+
+            const sourceRef = { namespace: '@chatcore/internal', key: 'message-service' };
+            const subjectRef = { namespace: '@chatcore/messages', key: params.messageId };
+
+            const candidate: KernelCandidateSignal = {
+                factType: 'EXTERNAL_STATE_OBSERVED', // ✅ USAR TIPO EXISTENTE
+                source: sourceRef,
+                subject: subjectRef,
+                evidence,
+                certifiedBy: {
+                    adapterId: this.ADAPTER_ID,
+                    adapterVersion: this.ADAPTER_VERSION,
+                    signature: ''
+                }
+            };
+
+            // 5. Firmar Candidato
+            candidate.certifiedBy.signature = this.signCandidate(candidate);
+            console.log(`[ChatCoreGateway] ✍️  Candidate signed: signature=${candidate.certifiedBy.signature.substring(0, 16)}...`);
+
+            // 6. Ingesta en Kernel (Soberanía)
+            console.log(`[ChatCoreGateway] ➡️  Calling kernel.ingestSignal()...`);
+            const seq = await kernel.ingestSignal(candidate);
+
+            console.log(`[ChatCoreGateway] ✅ STATE_CHANGE CERTIFIED ==================`);
+            console.log(`[ChatCoreGateway] 👁️ State change certified: ${params.stateChange} Signal #${seq}`);
+            return { accepted: true, signalId: seq };
+
+        } catch (error: any) {
+            console.error(`[ChatCoreGateway] ❌ State change certification failed:`, error.message);
+            return { accepted: false, reason: error.message };
+        }
+    }
 }
 
 export const chatCoreGateway = new ChatCoreGatewayService();

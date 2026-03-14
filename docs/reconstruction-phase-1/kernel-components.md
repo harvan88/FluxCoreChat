@@ -22,6 +22,25 @@ Responsabilidades observables:
 - resolver idempotencia por `provenanceExternalId` y por `signalFingerprint`
 - emitir `kernel:wakeup` después del commit
 
+### 🔍 **Gates de Validación - Lecciones Aprendidas (2026-03-13)**
+
+La implementación actual aplica estos gates en orden:
+
+1. **Validación del tipo de hecho** - ✅ `EXTERNAL_STATE_OBSERVED` soportado
+2. **Lookup del reality adapter** - ✅ `chatcore-gateway` registrado
+3. **Bloqueo de adapters `INTERPRETER`** - ✅ Solo `GATEWAY` permitido
+4. **Verificación de `driverId`** - ❌ **CRÍTICO**: Debe usar `this.DRIVER_ID`
+5. **Verificación criptográfica de firma** - ✅ HMAC-SHA256 funcionando
+
+**Error común:** `driverId` hardcodeado en lugar de usar `this.DRIVER_ID`
+```typescript
+// ❌ ERROR COMÚN
+provenance: { driverId: 'chatcore/message-state' }
+
+// ✅ CORRECTO
+provenance: { driverId: this.DRIVER_ID } // 'chatcore/internal'
+```
+
 ## 2. Gates de validación antes del journal
 
 La implementación actual en `kernel.ts` aplica, en este orden:
@@ -46,6 +65,16 @@ Responsabilidades observables:
 - preservar evidencia, procedencia y metadata de certificación
 - servir de fuente de verdad para projectores
 
+### 📊 **Tipos de Señales Soportados (2026-03-13)**
+
+**ChatCore → Kernel:**
+- `EXTERNAL_INPUT_OBSERVED` - Mensajes humanos
+- `EXTERNAL_STATE_OBSERVED` - Cambios de estado estructural ✅ **NUEVO**
+
+**FluxCore → Kernel:**
+- `AI_RESPONSE_GENERATED` - Respuestas cognitivas
+- `CONNECTION_EVENT_OBSERVED` - Eventos de conexión
+
 ### Outbox del Kernel
 
 - `packages/db/src/schema/fluxcore-outbox.ts`
@@ -54,6 +83,48 @@ Responsabilidades observables:
 
 - registrar que una señal nueva debe despertar procesamiento posterior
 - desacoplar ingesta del procesamiento de projectores
+
+### 🔧 **Patrones de Implementación - Lecciones Aprendidas**
+
+#### **✅ Logs de Diagnóstico (2026-03-13)**
+```typescript
+// ✅ Logs fuera de transacción (siempre visibles)
+console.log(`[Kernel] 🔍 DEBUG: Starting gates validation...`);
+return db.transaction(async (tx) => {
+  // Lógica dentro de transacción
+});
+
+// ❌ Logs dentro de transacción (no visibles si falla)
+return db.transaction(async (tx) => {
+  console.log('DEBUG: Starting...'); // No visible si falla antes
+});
+```
+
+#### **✅ Validación de Parámetros Obligatorios**
+```typescript
+// ✅ Validar messageId para evitar errores silenciosos
+if (!params.messageId) {
+  const error = 'certifyStateChange: messageId is required';
+  console.error(`❌ ${error}`);
+  return { accepted: false, reason: error };
+}
+```
+
+#### **✅ Manejo de Idempotencia**
+```typescript
+// ✅ Verificar duplicados antes de INSERT
+const existing = await tx.query.fluxcoreSignals.findFirst({
+  where: (t, { and, eq }) => and(
+    eq(t.certifiedByAdapter, candidate.certifiedBy.adapterId),
+    eq(t.provenanceExternalId, candidate.evidence.provenance.externalId!)
+  ),
+});
+
+if (existing) {
+  console.log(`📋 DUPLICATE: signal ${existing.sequenceNumber} already exists`);
+  return existing.sequenceNumber;
+}
+```
 
 ### Observación relevante sobre columnas
 
@@ -106,54 +177,120 @@ Responsabilidades observables:
 Responsabilidades observables:
 
 - cold start de projectores
-- replay del journal al iniciar el proceso
-- suscripción al evento `kernel:wakeup`
-- coordinación de múltiples projectores activos
-
-### Persistencia de control
-
-- `packages/db/src/schema/fluxcore-projector-cursors.ts`
-- `packages/db/src/schema/fluxcore-projector-errors.ts`
-
-Responsabilidades observables:
-
-- guardar la última `sequenceNumber` procesada por cada projector
-- registrar errores de proyección, intentos y resolución
-
-## 7. Projectores observados en el código actual
-
-### `IdentityProjector`
-
-- `apps/api/src/services/fluxcore/identity-projector.service.ts`
-
-Responsabilidades observables:
-
-- resolver actores desde señales del journal
-- manejar actores autenticados
-- crear actor provisional para `visitorToken`
-- materializar vínculo visitante → cuenta al observar `CONNECTION_EVENT_OBSERVED`
-
-### `ChatProjector`
 
 - `apps/api/src/core/projections/chat-projector.ts`
 
 Responsabilidades observables:
 
-- traducir señales relevantes del Kernel al mundo conversacional
-- encolar turnos en `fluxcore_cognition_queue`
-- devolver respuestas `AI_RESPONSE_GENERATED` al dominio ChatCore mediante `messageCore.receive()`
+- procesar señales de chat (`EXTERNAL_INPUT_OBSERVED`, `AI_RESPONSE_GENERATED`)
+- **✅ NUEVO:** procesar mutaciones estructurales (`EXTERNAL_STATE_OBSERVED` con `stateChange`)
+- convertir señales del Kernel en acciones conversacionales
+- delegar entrega a ChatCore vía MessageCore
 
-### `SessionProjector`
+### 🔄 **Procesamiento de Mutaciones Estructurales (2026-03-13)**
 
-- `apps/api/src/services/session-projector.service.ts`
+```typescript
+// ✅ ChatProjector procesa mutaciones
+if (signal.factType === 'EXTERNAL_STATE_OBSERVED') {
+  const evidence = signal.evidenceRaw as any;
+  
+  if (evidence.stateChange === 'message_content_overwritten') {
+    console.log(`[ChatProjector] Message ${evidence.messageId} overwritten by ${evidence.overwrittenBy}`);
+    // Aquí se pueden actualizar cachés, metadatos, etc.
+  }
+}
+```
 
-Responsabilidades observables:
+## 6. Invariantes de implementación
 
-- proyectar eventos de login y ciclo de vida de sesión
-- mantener `fluxcore_session_projection`
-- derivar estados `pending`, `active`, `invalidated`
+### Atomicidad de journal + outbox
 
-## 8. Flujo operativo real del Kernel
+El Kernel garantiza que una señal está en el journal Y en el outbox o en ninguna de las dos. Esto se logra con una transacción PostgreSQL que inserta en ambas tablas antes de hacer commit.
+
+### Inmutabilidad del journal
+
+Una vez que una señal tiene un `sequence_number`, nunca se modifica ni se elimina. Esto es fundamental para la consistencia de los projectores que usan cursores secuenciales.
+
+### Soberanía de ingesta
+
+El Kernel no acepta señales sin validación criptográfica y autorización de adapter. Esto impide que cualquier componente pueda escribir directamente en el journal sin pasar por los gates de validación.
+
+### 📋 **Lecciones Aprendidas sobre Invariantes (2026-03-13)**
+
+#### **✅ Validación Criptográfica Funciona**
+- HMAC-SHA256 con signing secret del adapter
+- Canonicalización determinista de candidatos
+- Fingerprint único por señal
+
+#### **✅ Idempotencia por ExternalId**
+- `provenanceExternalId` evita duplicados
+- `signalFingerprint` evita colisiones
+- Retorno de sequence_number existente
+
+#### **⚠️ Logs No Persistentes en Errores**
+- Logs dentro de transacción no aparecen si hay rollback
+- Poner logs de diagnóstico fuera de la transacción
+- Usar console.error para errores críticos
+
+## 7. Interacciones con el mundo exterior
+
+### ChatCore → Kernel
+
+ChatCore certifica realidad a través de `chatcore-gateway.service.ts`:
+
+- `EXTERNAL_INPUT_OBSERVED` para mensajes humanos
+- `EXTERNAL_STATE_OBSERVED` para mutaciones estructurales ✅ **NUEVO**
+
+### FluxCore → Kernel
+
+FluxCore certifica decisiones cognitivas a través de `cognition-gateway.service.ts`:
+
+- `AI_RESPONSE_GENERATED` para respuestas de IA
+- `CONNECTION_EVENT_OBSERVED` para eventos de conexión
+
+### Kernel → Projectores
+
+El Kernel emite `kernel:wakeup` y los projectores leen del journal usando cursores persistentes.
+
+### 📊 **Estado Actual del Flujo Completo (2026-03-13)**
+
+```
+✅ ChatCore → Kernel: Certificación funcionando
+✅ Kernel → BD: Persistencia garantizada  
+✅ BD → ChatProjector: Procesamiento activo
+⏳ ChatProjector → FluxCore: Impacto en respuestas pendiente
+```
+
+## 8. Próximos pasos y extensibilidad
+
+### Extensión a nuevos tipos de hechos
+
+Para agregar un nuevo `PhysicalFactType`:
+
+1. Agregar al conjunto `PHYSICAL_FACT_TYPES`
+2. Crear constraint en `fluxcore_signals`
+3. Registrar adapter correspondiente
+4. Implementar procesamiento en projector específico
+
+### Extensión a nuevos adapters
+
+Para agregar un nuevo reality adapter:
+
+1. Implementar firma HMAC con `canonicalize` del Kernel
+2. Registrar en `fluxcore_reality_adapters`
+3. Usar `driverId` consistente
+4. Implementar lógica de certificación específica
+
+### 🎯 **Recomendaciones Basadas en Experiencia (2026-03-13)**
+
+1. **Siempre usar `this.DRIVER_ID`** en lugar de hardcodear
+2. **Poner logs de diagnóstico fuera de transacciones**
+3. **Validar parámetros obligatorios antes de procesar**
+4. **Manejar idempotencia con externalId + fingerprint**
+5. **Usar `EXTERNAL_STATE_OBSERVED` para mutaciones estructurales**
+6. **No crear nuevos PhysicalFactTypes si existe uno adecuado**
+
+## 9. Flujo operativo real del Kernel
 
 Flujo observable cuando un adapter certifica una observación:
 
@@ -166,7 +303,7 @@ Flujo observable cuando un adapter certifica una observación:
 7. `ProjectorRunner` despierta projectores
 8. cada projector avanza desde su cursor y materializa estado derivado
 
-## 9. Fronteras del dominio Kernel
+## 10. Fronteras del dominio Kernel
 
 El Kernel sí hace:
 
@@ -184,7 +321,7 @@ El Kernel no hace:
 - construcción de `PolicyContext`
 - ejecución directa de acciones de negocio
 
-## 10. Observaciones importantes del código actual
+## 11. Observaciones importantes del código actual
 
 ### Conjunto de fact types aceptados por la implementación
 

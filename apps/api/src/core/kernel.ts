@@ -114,12 +114,21 @@ export class Kernel {
         console.log(`  - certifiedBy.adapterVersion: ${candidate.certifiedBy.adapterVersion}`);
         console.log(`  - certifiedBy.signature (preview): ${candidate.certifiedBy.signature.substring(0, 16)}...`);
         console.log(`[Kernel] 🔍 INGEST_SIGNAL END ==================`);
+        
+        // 🔍 DEBUG INMEDIATO DESPUÉS DE INGEST_SIGNAL END
+        console.log(`[Kernel] 🔍 DEBUG: Starting gates validation for factType: ${candidate.factType}`);
+        
         // ── Gate 1: Physical fact type ──
+        console.log(`[Kernel] 🔍 DEBUG: Checking PHYSICAL_FACT_TYPES...`);
         if (!PHYSICAL_FACT_TYPES.has(candidate.factType)) {
+            console.error(`[Kernel] ❌ DEBUG: Unknown physical fact class: ${candidate.factType}`);
+            console.error(`[Kernel] 🔍 DEBUG: Available types:`, Array.from(PHYSICAL_FACT_TYPES));
             throw new Error(`Unknown physical fact class: ${candidate.factType}`);
         }
+        console.log(`[Kernel] ✅ DEBUG: Physical fact type validated: ${candidate.factType}`);
 
         // ── Gate 2: Adapter registration ──
+        console.log(`[Kernel] 🔍 DEBUG: Checking adapter registration...`);
         const adapterAllowed = await db.query.fluxcoreRealityAdapters.findFirst({
             where: (t, { eq }) => eq(t.adapterId, candidate.certifiedBy.adapterId),
             columns: {
@@ -132,22 +141,31 @@ export class Kernel {
         });
 
         if (!adapterAllowed) {
+            console.error(`[Kernel] ❌ DEBUG: Unknown reality adapter: ${candidate.certifiedBy.adapterId}`);
             throw new Error(`Unknown reality adapter: ${candidate.certifiedBy.adapterId}`);
         }
+        console.log(`[Kernel] ✅ DEBUG: Adapter validated: ${adapterAllowed.adapterId}`);
 
         // ── Gate 3: Adapter class ──
+        console.log(`[Kernel] 🔍 DEBUG: Checking adapter class...`);
         if (adapterAllowed.adapterClass === 'INTERPRETER') {
+            console.error(`[Kernel] ❌ DEBUG: Interpreter adapter cannot certify: ${adapterAllowed.adapterClass}`);
             throw new Error(
                 `Interpreter adapters cannot certify physical reality (${candidate.certifiedBy.adapterId})`
             );
         }
+        console.log(`[Kernel] ✅ DEBUG: Adapter class validated: ${adapterAllowed.adapterClass}`);
 
         // ── Gate 4: Driver match ──
+        console.log(`[Kernel] 🔍 DEBUG: Checking driver match...`);
+        console.log(`[Kernel] 🔍 DEBUG: Expected driver: ${adapterAllowed.driverId}, Received: ${candidate.evidence.provenance.driverId}`);
         if (adapterAllowed.driverId !== candidate.evidence.provenance.driverId) {
+            console.error(`[Kernel] ❌ DEBUG: Driver mismatch for adapter ${candidate.certifiedBy.adapterId}`);
             throw new Error(
                 `Driver mismatch for adapter ${candidate.certifiedBy.adapterId}`
             );
         }
+        console.log(`[Kernel] ✅ DEBUG: Driver match validated`);
 
         // ── Gate 5: HMAC signature verification ──
         console.log(`[Kernel] 🔍 CANONICALIZANDO:`);
@@ -235,13 +253,35 @@ export class Kernel {
 
         console.log(`[Kernel] ✅ SIGNATURE VERIFIED SUCCESSFULLY`);
 
+        // 🔍 DEBUG ANTES DE LA TRANSACCIÓN
+        console.log(`[Kernel] 🔍 DEBUG: All gates passed, starting transaction...`);
+        console.log(`[Kernel] 🔍 DEBUG: About to prepare data for INSERT...`);
+
+        // ── Preparación fuera de la transacción para logs visibles
+        const occurredAt = candidate.evidence.claimedOccurredAt 
+            ? new Date(candidate.evidence.claimedOccurredAt).toISOString()
+            : new Date().toISOString();
+        
+        const checksum = checksumEvidence(candidate.evidence.raw);
+        const signalFingerprint = fingerprint(candidate, checksum);
+        
+        console.log(`[Kernel] 🔍 PREPARING INSERT:`);
+        console.log(`📋 factType: ${candidate.factType}`);
+        console.log(`📋 source: ${candidate.source.namespace}, ${candidate.source.key}`);
+        console.log(`📋 subject: ${candidate.subject?.namespace || 'null'}, ${candidate.subject?.key || 'null'}`);
+        console.log(`📋 occurredAt: ${occurredAt}`);
+        console.log(`📋 checksum: ${checksum.substring(0, 16)}...`);
+        console.log(`📋 fingerprint: ${signalFingerprint.substring(0, 16)}...`);
+        
+        console.log(`[Kernel] 🔍 DEBUG: Starting db.transaction...`);
+
         // ── Atomic Transaction: Journal + Outbox ──
         return db.transaction(async (tx) => {
-            const checksum = checksumEvidence(candidate.evidence.raw);
-            const signalFingerprint = fingerprint(candidate, checksum);
-
+            console.log(`[Kernel] 🔍 DEBUG: Inside transaction, checking idempotency...`);
+            
             // Idempotency: check by (adapter, external_id) first
             if (candidate.evidence.provenance.externalId) {
+                console.log(`[Kernel] 🔍 DEBUG: Checking for duplicate with externalId: ${candidate.evidence.provenance.externalId}`);
                 const existingByExternal = await tx.query.fluxcoreSignals.findFirst({
                     where: (t, { and, eq }) => and(
                         eq(t.certifiedByAdapter, candidate.certifiedBy.adapterId),
@@ -251,42 +291,49 @@ export class Kernel {
                 });
 
                 if (existingByExternal) {
+                    console.log(`[Kernel] 📋 DUPLICATE: signal ${existingByExternal.sequenceNumber} already exists`);
                     return existingByExternal.sequenceNumber;
                 }
+                console.log(`[Kernel] 🔍 DEBUG: No duplicate found, proceeding with INSERT...`);
             }
-
-            // Insert into Journal using raw SQL to avoid timestamp conversion issues
-            const occurredAt = candidate.evidence.claimedOccurredAt 
-                ? new Date(candidate.evidence.claimedOccurredAt).toISOString()
-                : new Date().toISOString();
             
-            const insertResult = await tx.execute(sql`
-                INSERT INTO fluxcore_signals (
-                    fact_type, 
-                    source_namespace, source_key,
-                    subject_namespace, subject_key,
-                    object_namespace, object_key,
-                    evidence_raw, evidence_format, evidence_checksum,
-                    provenance_driver_id, provenance_external_id, provenance_entry_point,
-                    certified_by_adapter, certified_adapter_version,
-                    claimed_occurred_at, signal_fingerprint
-                ) VALUES (
-                    ${candidate.factType},
-                    ${candidate.source.namespace}, ${candidate.source.key},
-                    ${candidate.subject?.namespace ?? null}, ${candidate.subject?.key ?? null},
-                    ${candidate.object?.namespace ?? null}, ${candidate.object?.key ?? null},
-                    ${candidate.evidence.raw}, ${candidate.evidence.format}, ${checksum},
-                    ${candidate.evidence.provenance.driverId}, ${candidate.evidence.provenance.externalId ?? null}, ${candidate.evidence.provenance.entryPoint ?? null},
-                    ${candidate.certifiedBy.adapterId}, ${adapterAllowed.adapterVersion},
-                    ${occurredAt}::timestamp, ${signalFingerprint}
-                )
-                ON CONFLICT (signal_fingerprint) DO NOTHING
-                RETURNING sequence_number
-            `);
-            
-            const sequenceNumber = insertResult[0]?.sequence_number;
-            
-            if (sequenceNumber) {
+            console.log(`[Kernel] 🔍 DEBUG: About to execute INSERT SQL...`);
+            try {
+                const insertResult = await tx.execute(sql`
+                    INSERT INTO fluxcore_signals (
+                        fact_type, 
+                        source_namespace, source_key,
+                        subject_namespace, subject_key,
+                        object_namespace, object_key,
+                        evidence_raw, evidence_format, evidence_checksum,
+                        provenance_driver_id, provenance_external_id, provenance_entry_point,
+                        certified_by_adapter, certified_adapter_version,
+                        claimed_occurred_at, signal_fingerprint
+                    ) VALUES (
+                        ${candidate.factType},
+                        ${candidate.source.namespace}, ${candidate.source.key},
+                        ${candidate.subject?.namespace ?? null}, ${candidate.subject?.key ?? null},
+                        ${candidate.object?.namespace ?? null}, ${candidate.object?.key ?? null},
+                        ${candidate.evidence.raw}, ${candidate.evidence.format}, ${checksum},
+                        ${candidate.evidence.provenance.driverId}, ${candidate.evidence.provenance.externalId ?? null}, ${candidate.evidence.provenance.entryPoint ?? null},
+                        ${candidate.certifiedBy.adapterId}, ${adapterAllowed.adapterVersion},
+                        ${occurredAt}::timestamp, ${signalFingerprint}
+                    )
+                    ON CONFLICT (signal_fingerprint) DO NOTHING
+                    RETURNING sequence_number
+                `);
+                
+                console.log(`[Kernel] ✅ INSERT SUCCESS: ${JSON.stringify(insertResult)}`);
+                
+                const sequenceNumber = insertResult[0]?.sequence_number;
+                
+                if (!sequenceNumber) {
+                    console.error(`[Kernel] ❌ INSERT FAILED: No sequence number returned`);
+                    console.error(`📋 insertResult: ${JSON.stringify(insertResult)}`);
+                    throw new Error('Failed to insert signal - no sequence number returned');
+                }
+                
+                console.log(`[Kernel] ✅ SIGNAL INSERTED: sequence_number=${sequenceNumber}`);
                 console.log(`[Diag][Kernel] message=${candidate.evidence.provenance.externalId || candidate.source.key} runtime=- decision=respond stage=ingest_stored seq=${sequenceNumber}`);
                 
                 // Transactional Outbox — same transaction, guaranteed
@@ -298,30 +345,25 @@ export class Kernel {
                         ${JSON.stringify({
                             sequenceNumber,
                             factType: candidate.factType,
-                            adapterId: candidate.certifiedBy.adapterId
+                            source: candidate.source,
+                            subject: candidate.subject,
+                            adapterId: candidate.certifiedBy.adapterId,
+                            externalId: candidate.evidence.provenance.externalId
                         })},
                         'pending'
                     )
-                    ON CONFLICT DO NOTHING
                 `);
-
+                
+                console.log(`[Kernel] ✅ OUTBOX INSERTED: signal_id=${sequenceNumber}`);
+                
                 return sequenceNumber;
+            } catch (insertError: any) {
+                console.error(`[Kernel] ❌ INSERT FAILED: ${insertError.message}`);
+                console.error(`📋 Error Details:`, insertError);
+                console.error(`📋 SQL State:`, insertError.code);
+                console.error(`📋 Candidate:`, JSON.stringify(candidate, null, 2));
+                throw insertError;
             }
-
-            // Fingerprint collision → return existing sequence
-            const existing = await tx.query.fluxcoreSignals.findFirst({
-                where: (t, { eq }) => eq(t.signalFingerprint, signalFingerprint),
-                columns: { sequenceNumber: true },
-            });
-
-            if (!existing) {
-                throw new Error(
-                    'Kernel invariant violation: fingerprint conflict but record not found'
-                );
-            }
-
-            console.log(`[Diag][Kernel] message=${candidate.evidence.provenance.externalId || candidate.source.key} runtime=- decision=respond stage=ingest_duplicate seq=${existing.sequenceNumber}`);
-            return existing.sequenceNumber;
         });
         
         // Emit wakeup event AFTER transaction commits successfully

@@ -501,15 +501,17 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
         // Enviar solo si:
         // 1. Es el remitente del mensaje, O
         // 2. Es el destinatario del mensaje, O
-        // 3. Es un mensaje de IA (broadcast a todos)
+        // 3. Es un mensaje de IA (broadcast a todos), O
+        // 4. Es un mensaje sobrescrito/actualizado (broadcast a todos en la conversación)
         const isAIMessage = payload.data?.generatedBy === 'ai';
         const isSender = wsAccountId === messageSenderId;
         const isRecipient = wsAccountId === messageTargetId;
+        const isMessageUpdated = payload.type === 'message:updated';
         
-        console.log(`[WebSocket] 🎯 Decision: isAI=${isAIMessage}, isSender=${isSender}, isRecipient=${isRecipient}`);
+        console.log(`[WebSocket] 🎯 Decision: isAI=${isAIMessage}, isSender=${isSender}, isRecipient=${isRecipient}, isUpdated=${isMessageUpdated}`);
         
-        if (isAIMessage || isSender || isRecipient) {
-          console.log(`[WebSocket] ✅ Sending to ${wsAccountId}: sender=${messageSenderId}, target=${messageTargetId}, isAI=${isAIMessage}`);
+        if (isAIMessage || isSender || isRecipient || isMessageUpdated) {
+          console.log(`[WebSocket] ✅ Sending to ${wsAccountId}: sender=${messageSenderId}, target=${messageTargetId}, isAI=${isAIMessage}, isUpdated=${isMessageUpdated}`);
           ws.send(message);
         } else {
           console.log(`[WebSocket] 🚫 Filtering message for ${wsAccountId}: not authorized to see this message`);
