@@ -1,28 +1,18 @@
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { PublicProfileLayout } from './layouts/PublicProfileLayout';
+import { ProfileChatBlockMobile } from './components/blocks/ProfileChatBlockMobile';
+import { ProfileChatBlockDesktop } from './components/blocks/ProfileChatBlockDesktop';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
-import { UnifiedChatView } from '../components/chat/UnifiedChatView';
-import { clearVisitorToken, getVisitorToken } from '../modules/visitor-token';
-import { useAccountStore } from '../store/accountStore';
-import { useAuthStore } from '../store/authStore';
-import { PublicProfileHeader } from './PublicProfileHeader';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface PublicProfileData {
+interface PublicProfile {
   id: string;
   displayName: string;
   alias: string;
   accountType: string;
   bio: string | null;
   avatarUrl: string | null;
-  actorId?: string | null;
-}
-
-interface ConversationSummary {
-  id: string;
-  relationshipId: string | null;
+  actorId: string | null;
 }
 
 export function PublicProfilePage() {
@@ -36,256 +26,117 @@ export function PublicProfilePage() {
 }
 
 function PublicProfileView({ alias }: { alias: string }) {
-  const [profile, setProfile] = useState<PublicProfileData | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [authenticatedConversationId, setAuthenticatedConversationId] = useState<string | null>(null);
-  const [authenticatedRelationshipId, setAuthenticatedRelationshipId] = useState<string | null>(null);
-  const [chatBootstrapError, setChatBootstrapError] = useState<string | null>(null);
-
-  const token = useAuthStore((state) => state.token);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const activeAccountId = useAccountStore((state) => state.activeAccountId);
+  const isMobile = useIsMobile();
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadProfile = async () => {
-      setProfileLoading(true);
-      setProfileError(null);
-
+    const fetchProfile = async () => {
       try {
+        setLoading(true);
+        setError(null);
+        
+        const { getApiUrl } = await import('../utils/urls');
+        const API_URL = getApiUrl();
+        
         const response = await fetch(`${API_URL}/public/profiles/${encodeURIComponent(alias)}`);
+        
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-
-        const result = await response.json();
-        if (!result.success || !result.data) {
-          throw new Error(result.message || 'Perfil no encontrado');
+        
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          // Convertir URLs de avatar a IP local si es necesario
+          const profile = data.data;
+          if (profile.avatarUrl && profile.avatarUrl.includes('localhost:3000')) {
+            profile.avatarUrl = profile.avatarUrl.replace('localhost:3000', '192.168.0.179:3000');
+          }
+          setProfile(profile);
+        } else {
+          throw new Error(data.message || 'Invalid response');
         }
-
-        if (!cancelled) {
-          setProfile(result.data);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setProfile(null);
-          setProfileError(error instanceof Error ? error.message : 'Perfil no encontrado');
-        }
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
-        if (!cancelled) {
-          setProfileLoading(false);
-        }
+        setLoading(false);
       }
     };
 
-    loadProfile();
-
-    return () => {
-      cancelled = true;
-    };
+    if (alias) {
+      fetchProfile();
+    }
   }, [alias]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const resetAuthenticatedChat = () => {
-      if (!cancelled) {
-        setAuthenticatedConversationId(null);
-        setAuthenticatedRelationshipId(null);
-        setChatBootstrapError(null);
-      }
-    };
-
-    if (!profile || !isAuthenticated || !token || !activeAccountId || activeAccountId === profile.id) {
-      resetAuthenticatedChat();
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const bootstrapAuthenticatedChat = async () => {
-      try {
-        setChatBootstrapError(null);
-
-        const visitorToken = getVisitorToken();
-        let relationshipId: string | null = null;
-        let conversationId: string | null = null;
-
-        if (visitorToken) {
-          const convertResponse = await fetch(`${API_URL}/conversations/convert-visitor`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              visitorToken,
-              ownerAccountId: profile.id,
-              visitorAccountId: activeAccountId,
-            }),
-          });
-
-          const convertResult = await convertResponse.json();
-          if (!convertResponse.ok || !convertResult.success) {
-            throw new Error(convertResult.message || `HTTP ${convertResponse.status}`);
-          }
-
-          relationshipId = convertResult.data?.relationshipId || null;
-          conversationId = convertResult.data?.conversation?.id || null;
-          clearVisitorToken();
-        } else {
-          const relationshipResponse = await fetch(`${API_URL}/relationships`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              accountAId: activeAccountId,
-              accountBId: profile.id,
-            }),
-          });
-
-          const relationshipResult = await relationshipResponse.json();
-          if (!relationshipResponse.ok || !relationshipResult.success) {
-            throw new Error(relationshipResult.message || `HTTP ${relationshipResponse.status}`);
-          }
-
-          relationshipId = relationshipResult.data?.id || null;
-        }
-
-        if (!relationshipId) {
-          throw new Error('No se pudo resolver la relación autenticada');
-        }
-
-        if (!conversationId) {
-          const conversationsResponse = await fetch(`${API_URL}/conversations?accountId=${encodeURIComponent(activeAccountId)}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-
-          const conversationsResult = await conversationsResponse.json();
-          if (!conversationsResponse.ok || !conversationsResult.success) {
-            throw new Error(conversationsResult.message || `HTTP ${conversationsResponse.status}`);
-          }
-
-          const authenticatedConversation = ((conversationsResult.data || []) as ConversationSummary[]).find(
-            (conversation) => conversation.relationshipId === relationshipId
-          );
-
-          if (!authenticatedConversation?.id) {
-            throw new Error('No se encontró la conversación autenticada');
-          }
-
-          conversationId = authenticatedConversation.id;
-        }
-
-        if (!cancelled) {
-          setAuthenticatedRelationshipId(relationshipId);
-          setAuthenticatedConversationId(conversationId);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setAuthenticatedConversationId(null);
-          setAuthenticatedRelationshipId(null);
-          setChatBootstrapError(error instanceof Error ? error.message : 'No se pudo preparar el chat autenticado');
-        }
-      }
-    };
-
-    bootstrapAuthenticatedChat();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeAccountId, isAuthenticated, profile, token]);
-
-  const shouldUseAuthenticatedChat = !!authenticatedConversationId && !!activeAccountId && activeAccountId !== profile?.id;
-  const isBootstrappingAuthenticatedChat = !!profile && isAuthenticated && !!token && !!activeAccountId && activeAccountId !== profile.id && !authenticatedConversationId && !chatBootstrapError;
-
   // Loading state
-  if (profileLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-base flex items-center justify-center">
         <div className="text-center">
-          <Loader2 size={32} className="animate-spin text-accent mx-auto" />
-          <p className="text-sm text-muted mt-3">Cargando perfil...</p>
+          <div className="w-16 h-16 bg-accent rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <span className="text-inverse font-bold text-3xl">F</span>
+          </div>
+          <p className="text-muted text-sm">Cargando identidad...</p>
         </div>
       </div>
     );
   }
 
-  // Error / not found
-  if (profileError || !profile) {
+  // Error state
+  if (error || !profile) {
     return (
-      <div className="min-h-screen bg-base flex items-center justify-center">
-        <div className="text-center max-w-sm px-6">
-          <div className="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center mx-auto mb-4">
-            <AlertCircle size={28} className="text-error" />
+      <div className="min-h-screen bg-base flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <div className="w-20 h-20 rounded-3xl bg-error/10 flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">❌</span>
           </div>
-          <h1 className="text-xl font-bold text-primary">Perfil no encontrado</h1>
-          <p className="text-sm text-muted mt-2">
-            No existe un perfil con el alias <strong className="text-primary">@{alias}</strong>.
-            Verificá que la dirección sea correcta.
+          <h1 className="text-2xl font-bold text-primary">Identidad no encontrada</h1>
+          <p className="text-sm text-secondary mt-3 leading-relaxed">
+            No pudimos localizar a <strong className="text-primary">@{alias}</strong> en la red FluxCore.
           </p>
+          {error && (
+            <p className="text-xs text-error mt-2 bg-error/10 p-2 rounded">
+              Error: {error}
+            </p>
+          )}
           <a
             href="/"
-            className="inline-block mt-6 px-4 py-2 rounded-lg bg-accent text-inverse text-sm font-medium hover:bg-accent/90 transition-colors"
+            className="inline-block mt-8 px-6 py-3 rounded-xl bg-accent text-inverse text-sm font-bold hover:bg-accent/90 transition-all shadow-lg shadow-accent/20"
           >
-            Ir al inicio
+            Volver al inicio
           </a>
         </div>
       </div>
     );
   }
 
+
+  // Success state - Usar el chat público (sin autenticación)
   return (
-    <div className="min-h-screen bg-base flex flex-col">
-      {/* Branding bar */}
-      <div className="bg-surface border-b border-subtle px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-accent rounded-md flex items-center justify-center">
-            <span className="text-inverse font-bold text-xs">M</span>
-          </div>
-          <span className="text-xs text-muted">meetgar.com</span>
-        </div>
-        <a
-          href="/login"
-          className="text-xs text-accent hover:underline"
-        >
-          {isAuthenticated ? 'Abrir cuenta' : 'Iniciar sesión'}
-        </a>
-      </div>
-
-      {/* Profile header */}
-      <PublicProfileHeader profile={profile} isConnected={true} />
-
-      {chatBootstrapError && (
-        <div className="px-4 py-2 border-b border-subtle bg-warning/5 text-warning text-xs">
-          {chatBootstrapError}
-        </div>
-      )}
-
-      {isBootstrappingAuthenticatedChat ? (
-        <div className="flex-1 flex items-center justify-center px-6">
-          <div className="text-center">
-            <Loader2 size={28} className="animate-spin text-accent mx-auto" />
-            <p className="text-sm text-muted mt-3">Preparando tu conversación autenticada...</p>
-          </div>
-        </div>
-      ) : (
-        <UnifiedChatView
-          key={shouldUseAuthenticatedChat ? `auth:${authenticatedConversationId}` : `public:${profile.alias}`}
-          conversationId={shouldUseAuthenticatedChat ? (authenticatedConversationId || '') : ''}
-          accountId={shouldUseAuthenticatedChat ? (activeAccountId || undefined) : undefined}
-          relationshipId={shouldUseAuthenticatedChat ? (authenticatedRelationshipId || undefined) : undefined}
-          publicAlias={shouldUseAuthenticatedChat ? undefined : profile.alias}
-          profile={profile}
-        />
-      )}
-    </div>
+    <PublicProfileLayout
+      chatBlock={
+        isMobile ? (
+          <ProfileChatBlockMobile
+            key={`mobile:${profile.alias}`}
+            alias={profile.alias}
+            conversationId=""
+            accountId={undefined}
+            profile={profile}
+          />
+        ) : (
+          <ProfileChatBlockDesktop
+            key={`desktop:${profile.alias}`}
+            alias={profile.alias}
+            conversationId=""
+            accountId={undefined}
+            profile={profile}
+          />
+        )
+      }
+    />
   );
 }

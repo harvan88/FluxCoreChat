@@ -33,6 +33,171 @@ export class ChatProjector extends BaseProjector {
     // Turn-window para agrupar mensajes del usuario
     private readonly TURN_WINDOW_MS = 3000;
 
+    constructor() {
+        super();
+        this.setupTranscriptionListener();
+    }
+
+    private setupTranscriptionListener() {
+        // 🎯 Escuchar transcripciones completadas para actualizar mensajes
+        coreEventBus.on('asset:transcription_completed', async (payload) => {
+            console.log(`[ChatProjector] 🔔 RECEIVED asset:transcription_completed for asset ${payload.assetId}`);
+            await this.handleTranscriptionCompleted(payload);
+        });
+    }
+
+    private async handleTranscriptionCompleted(payload: {
+        assetId: string;
+        accountId: string;
+        transcription: string;
+        language?: string;
+        model: string;
+        processedAt: Date;
+    }) {
+        try {
+            // Buscar mensajes vinculados a este asset
+            const { db, messageAssets, messages } = await import('@fluxcore/db');
+            const { eq } = await import('drizzle-orm');
+
+            const linkedMessages = await db
+                .select({
+                    messageId: messages.id,
+                    conversationId: messages.conversationId,
+                    content: messages.content,
+                    senderAccountId: messages.senderAccountId,
+                })
+                .from(messageAssets)
+                .innerJoin(messages, eq(messageAssets.messageId, messages.id))
+                .where(eq(messageAssets.assetId, payload.assetId));
+
+            console.log(`[ChatProjector] 📝 Found ${linkedMessages.length} messages linked to asset ${payload.assetId}`);
+
+            for (const link of linkedMessages) {
+                // Actualizar el contenido del mensaje con la transcripción
+                const oldContent = link.content as any;
+                const updatedContent = {
+                    ...oldContent,
+                    text: payload.transcription,
+                    __fluxcore: {
+                        ...(oldContent?.__fluxcore || {}),
+                        transcribed: true,
+                        transcribedAt: payload.processedAt,
+                        transcriptionModel: payload.model,
+                        transcriptionLanguage: payload.language,
+                    },
+                };
+
+                console.log(`[ChatProjector] 📝 UPDATING message ${link.messageId} with transcription`);
+
+                await db
+                    .update(messages)
+                    .set({ 
+                        content: updatedContent,
+                    })
+                    .where(eq(messages.id, link.messageId));
+
+                // 🎯 EMITIR EVENTO DE MENSAJE ACTUALIZADO
+                coreEventBus.emit('core:message_updated', {
+                    messageId: link.messageId,
+                    conversationId: link.conversationId,
+                    accountId: payload.accountId,
+                    senderAccountId: link.senderAccountId,
+                    oldContent,
+                    newContent: updatedContent,
+                    transcription: payload.transcription,
+                });
+
+                console.log(`[ChatProjector] ✅ Message ${link.messageId} updated with transcription`);
+                
+                // 🎯 AHORA SÍ - ENCOLAR PARA IA CON LA TRANSCRIPCIÓN LISTA
+                console.log(`[ChatProjector] 🎵 TRANSCRIPTION READY - ENQUEUING for AI response (conv=${link.conversationId.slice(0, 8)})`);
+                
+                // 🎯 IMPORTANTE: Usar targetAccountId (receptor) no senderAccountId (emisor)
+                // El emisor (senderAccountId) está en mode=off, el receptor (targetAccountId) está en mode=auto
+                const targetAccountId = await this.getTargetAccountIdForConversation(link.conversationId, payload.accountId);
+                
+                // Crear una señal simulada para encolar
+                await this.enqueueTranscriptionForCognition(
+                    link.conversationId,
+                    targetAccountId, // 🎯 USAR RECEPTOR, NO EMISOR
+                    payload.accountId, // 🎯 EMISOR como target
+                    link.messageId
+                );
+            }
+        } catch (error) {
+            console.error(`[ChatProjector] ❌ Error handling transcription for asset ${payload.assetId}:`, error);
+        }
+    }
+
+    private async getTargetAccountIdForConversation(conversationId: string, currentAccountId: string): Promise<string> {
+        try {
+            const { db, conversationParticipants } = await import('@fluxcore/db');
+            const { eq } = await import('drizzle-orm');
+
+            // Buscar el otro participante de la conversación (no el actual)
+            const participants = await db
+                .select()
+                .from(conversationParticipants)
+                .where(eq(conversationParticipants.conversationId, conversationId));
+
+            const otherParticipant = participants.find(p => p.accountId !== currentAccountId);
+            
+            if (!otherParticipant) {
+                console.warn(`[ChatProjector] ⚠️ No other participant found for conversation ${conversationId}, using current account`);
+                return currentAccountId;
+            }
+
+            console.log(`[ChatProjector] 🎯 Found target account: ${otherParticipant.accountId} (current: ${currentAccountId})`);
+            return otherParticipant.accountId;
+        } catch (error) {
+            console.error(`[ChatProjector] ❌ Error finding target account for conversation ${conversationId}:`, error);
+            return currentAccountId; // fallback
+        }
+    }
+
+    private async enqueueTranscriptionForCognition(
+        conversationId: string, 
+        accountId: string, 
+        senderAccountId: string,
+        messageId: string
+    ): Promise<void> {
+        const expiresAt = new Date(Date.now() + this.TURN_WINDOW_MS);
+        const { db } = await import('@fluxcore/db');
+        const { sql } = await import('drizzle-orm');
+
+        // Insertar en cognition_queue para que FluxCore procese la transcripción
+        await db.transaction(async (tx: any) => {
+            await tx.execute(sql`
+                INSERT INTO fluxcore_cognition_queue (
+                    conversation_id, 
+                    account_id, 
+                    target_account_id,
+                    last_signal_seq, 
+                    turn_started_at, 
+                    turn_window_expires_at
+                )
+                VALUES
+                    (${conversationId}, ${accountId}, ${senderAccountId}, 0, NOW(), ${expiresAt})
+                ON CONFLICT (conversation_id) WHERE fluxcore_cognition_queue.processed_at IS NULL
+                DO UPDATE SET
+                    last_signal_seq = EXCLUDED.last_signal_seq,
+                    turn_window_expires_at = EXCLUDED.turn_window_expires_at,
+                    target_account_id = EXCLUDED.target_account_id,
+                    attempts = 0,
+                    last_error = NULL,
+                    processed_at = NULL
+            `);
+
+            console.log(`[ChatProjector] ✅ ENQUEUED transcription for AI response (messageId=${messageId.slice(0, 8)})`);
+            
+            // Despertar al CognitionWorker
+            coreEventBus.emit('kernel:cognition:wakeup', {
+                conversationId,
+                accountId,
+            });
+        });
+    }
+
     protected async project(signal: typeof fluxcoreSignals.$inferSelect, tx: any): Promise<void> {
         // Log ALL signals received for diagnosis
         console.log(`[ChatProjector] 📥 RECEIVED signal #${signal.sequenceNumber} type=${signal.factType}`);
@@ -81,12 +246,34 @@ export class ChatProjector extends BaseProjector {
 
         // targetAccountId = quien ENVIÓ el mensaje (a quien el AI debe responder)
         const targetAccountId = evidence.payload.context?.userId || null;
+        
+        // 🎯 VERIFICAR SI ES AUDIO PENDIENTE DE TRANSCRIPCIÓN
+        if (evidence.payload.isPendingAudioTranscription) {
+            console.log(`[ChatProjector] 🎵 AUDIO PENDING TRANSCRIPTION - NOT enqueuing for AI response yet`);
+            console.log(`[ChatProjector] 🎵 Waiting for asset:transcription_completed events for assets:`, evidence.payload.audioAssets.map((a: any) => a.assetId));
+            
+            // 🎯 NO encolar para IA - esperar transcripción
+            // El handler handleTranscriptionCompleted se encargará de encolar cuando la transcripción esté lista
+            return;
+        }
+        
         console.log(`[ChatProjector] 🎯 Ready to enqueue: conv=${conversationId.slice(0, 8)} account=${accountId.slice(0, 8)} target=${targetAccountId?.slice(0, 8) || 'none'}`);
 
         // Encolar en cognition_queue para FluxCore
         try {
             await this.enqueueForCognition(conversationId, accountId, targetAccountId, Number(signal.sequenceNumber), tx);
             console.log(`[ChatProjector] ✅ ENQUEUED signal #${signal.sequenceNumber} successfully`);
+
+            // 🎯 TELEMETRÍA (Fase 1): Proyección Encolada
+            try {
+                coreEventBus.emit('telemetry:pipeline_step', {
+                    messageId: String(signal.sequenceNumber),
+                    conversationId,
+                    step: 'proyeccion',
+                    status: 'success',
+                    timestamp: new Date().toISOString()
+                });
+            } catch (e) {}
         } catch (err: any) {
             console.error(`[ChatProjector] ❌ FAILED to enqueue signal #${signal.sequenceNumber}:`, err.message);
             throw err;
@@ -190,11 +377,26 @@ export class ChatProjector extends BaseProjector {
     private parseEvidence(signal: typeof fluxcoreSignals.$inferSelect) {
         const evidenceRoot: any = signal.evidenceRaw;
         
+        // 🎯 DETECTAR SI ES AUDIO PENDIENTE DE TRANSCRIPCIÓN
+        const content = evidenceRoot?.content || {};
+        const hasAudio = content?.media?.some((m: any) => m.type === 'audio');
+        const hasEmptyText = !content?.text || content?.text === '';
+        
+        const isPendingAudioTranscription = hasAudio && hasEmptyText;
+        
+        if (isPendingAudioTranscription) {
+            console.log(`[ChatProjector] 🎵 DETECTED PENDING AUDIO TRANSCRIPTION (signal #${signal.sequenceNumber})`);
+            console.log(`[ChatProjector] 🎵 Audio assets:`, content.media.filter((m: any) => m.type === 'audio').map((a: any) => ({ assetId: a.assetId, name: a.name })));
+        }
+        
         return {
             payload: {
                 // Regular gateway uses accountId; webchat gateway uses tenantId
                 accountId: evidenceRoot?.accountId || evidenceRoot?.tenantId,
                 context: evidenceRoot?.context, // context.userId = sender account
+                // 🎯 NUEVO: Marcar si es audio pendiente de transcripción
+                isPendingAudioTranscription,
+                audioAssets: isPendingAudioTranscription ? content.media.filter((m: any) => m.type === 'audio') : [],
             },
         };
     }

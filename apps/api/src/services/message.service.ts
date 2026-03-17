@@ -53,6 +53,8 @@ export class MessageService {
       .filter((item): item is { assetId: string; position: number } => item !== null);
 
     if (assetsToLink.length > 0) {
+      console.log(`[MessageService] 🔗 LINKING ${assetsToLink.length} ASSETS TO MESSAGE ${message.id}:`, assetsToLink);
+      
       await Promise.all(
         assetsToLink.map(({ assetId, position }) =>
           assetRelationsService.linkAssetToMessage({
@@ -63,6 +65,10 @@ export class MessageService {
           })
         )
       );
+      
+      console.log(`[MessageService] ✅ ASSETS LINKED SUCCESSFULLY TO MESSAGE ${message.id}`);
+    } else {
+      console.log(`[MessageService] ℹ️ NO ASSETS TO LINK FOR MESSAGE ${message.id}`);
     }
 
     return message;

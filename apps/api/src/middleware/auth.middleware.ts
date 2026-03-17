@@ -21,8 +21,10 @@ export const authMiddleware = new Elysia({ name: 'auth' })
 
     try {
       const payload = await jwt.verify(token);
+      console.log('[AuthMiddleware] Token verified, payload type:', payload?.type);
 
       if (!payload) {
+        console.log('[AuthMiddleware] No payload after verify');
         return { user: null, publicActor: null, publicProfile: null };
       }
 

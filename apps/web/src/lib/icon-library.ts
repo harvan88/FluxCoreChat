@@ -64,6 +64,8 @@ export {
 
   CheckCheck as CheckCheckIcon,
 
+  BadgeCheck as BadgeCheckIcon,
+
   Clock as ClockIcon,
 
   AlertCircle as AlertCircleIcon,
@@ -89,6 +91,11 @@ export {
   GripVertical as GripVerticalIcon,
 
   HardDrive as HardDriveIcon,
+
+  MapPin as MapPinIcon,
+  Menu as MenuIcon,
+  Phone as PhoneIcon,
+  UtensilsCrossed as UtensilsCrossedIcon,
 
 } from 'lucide-react';
 

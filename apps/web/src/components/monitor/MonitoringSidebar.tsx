@@ -5,6 +5,7 @@ import {
   DatabaseIcon,
   AlertTriangleIcon,
   HardDriveIcon,
+  CreditsIcon,
 } from '../../lib/icon-library';
 import { usePanelStore } from '../../store/panelStore';
 import { useAccountDeletionMonitorStore } from '../../store/accountDeletionMonitorStore';
@@ -31,10 +32,15 @@ export function MonitoringSidebar() {
     if (!activeTab || activeTab.type !== 'monitoring') return null;
     if (activeTab.identity) return activeTab.identity;
     const view = typeof activeTab.context?.view === 'string' ? activeTab.context.view : 'hub';
-    return view === 'audit' ? 'monitoring-data-audit' : 'monitoring-hub';
+    if (view === 'audit') return 'monitoring-data-audit';
+    if (view === 'kernel') return 'monitoring-kernel';
+    if (view === 'pipeline') return 'monitoring-pipeline';
+    if (view === 'orphans') return 'monitoring-orphans';
+    if (view === 'assets') return 'monitoring-assets';
+    return 'monitoring-hub';
   })();
 
-  const openMonitoringTab = (identity: string, view: 'hub' | 'audit' | 'orphans', title: string, icon: string) => {
+  const openMonitoringTab = (identity: string, view: 'hub' | 'audit' | 'orphans' | 'kernel' | 'assets', title: string, icon: string) => {
     openTab('dashboard', {
       type: 'monitoring',
       identity,
@@ -55,6 +61,22 @@ export function MonitoringSidebar() {
     onClick: () => openMonitoringTab('monitoring-hub', 'hub', 'Monitoring Hub', 'Activity'),
     meta: isFetchingLogs ? 'Cargando…' : `${logs.length} registros locales`,
   },
+  {
+    id: 'monitoring-kernel',
+    identity: 'monitoring-kernel',
+    icon: <MonitoringIcon size={18} />,
+    title: 'Kernel Console',
+    description: 'Monitor de señales en tiempo real desde FluxCore Kernel.',
+    onClick: () => openMonitoringTab('monitoring-kernel', 'kernel', 'Kernel Console', 'Activity'),
+  },
+    {
+      id: 'monitoring-pipeline',
+      identity: 'monitoring-pipeline',
+      icon: <CreditsIcon size={18} />, // Usando Zap (CreditsIcon) para el pipeline cognitivo
+      title: 'Cognitive Pipeline',
+      description: 'Trazabilidad visual en tiempo real de mensajes e IA.',
+      onClick: () => openMonitoringTab('monitoring-pipeline', 'pipeline' as any, 'Visual Pipeline', 'Zap'),
+    },
   {
     id: 'monitoring-audit',
     identity: 'monitoring-data-audit',

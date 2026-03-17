@@ -37,6 +37,11 @@ class ExtensionService {
       canSharePermissions = true,
     } = params;
 
+    // Validar accountId
+    if (!accountId || accountId === '' || accountId === 'undefined') {
+      throw new Error('Invalid accountId provided for extension installation');
+    }
+
     // Verificar si ya está instalada
     const existing = await db
       .select()
@@ -76,6 +81,10 @@ class ExtensionService {
    * Desinstalar una extensión
    */
   async uninstall(accountId: string, extensionId: string) {
+    // Validar accountId
+    if (!accountId || accountId === '' || accountId === 'undefined') {
+      throw new Error('Invalid accountId provided for extension uninstallation');
+    }
     // Eliminar contextos de la extensión
     await db
       .delete(extensionContexts)
@@ -104,6 +113,11 @@ class ExtensionService {
    * Obtener todas las extensiones instaladas para una cuenta
    */
   async getInstalled(accountId: string) {
+    if (!accountId || accountId === '' || accountId === 'undefined') {
+      console.warn('[ExtensionService] Invalid accountId provided:', accountId);
+      return [];
+    }
+
     return db
       .select()
       .from(extensionInstallations)
@@ -114,6 +128,11 @@ class ExtensionService {
    * Obtener una instalación específica
    */
   async getInstallation(accountId: string, extensionId: string) {
+    // Validar accountId
+    if (!accountId || accountId === '' || accountId === 'undefined') {
+      console.warn('[ExtensionService] Invalid accountId provided for getInstallation:', accountId);
+      return null;
+    }
     const [installation] = await db
       .select()
       .from(extensionInstallations)
@@ -132,6 +151,10 @@ class ExtensionService {
    * Actualizar configuración de una extensión
    */
   async update(accountId: string, extensionId: string, params: UpdateExtensionParams) {
+    // Validar accountId
+    if (!accountId || accountId === '' || accountId === 'undefined') {
+      throw new Error('Invalid accountId provided for extension update');
+    }
     const updates: any = { updatedAt: new Date() };
 
     if (params.enabled !== undefined) {

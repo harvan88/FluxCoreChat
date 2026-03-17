@@ -65,15 +65,23 @@ Responsabilidades observables:
 - preservar evidencia, procedencia y metadata de certificación
 - servir de fuente de verdad para projectores
 
-### 📊 **Tipos de Señales Soportados (2026-03-13)**
+### 📊 **Tipos de Señales Soportados v4.0**
 
 **ChatCore → Kernel:**
-- `EXTERNAL_INPUT_OBSERVED` - Mensajes humanos
-- `EXTERNAL_STATE_OBSERVED` - Cambios de estado estructural ✅ **NUEVO**
+- `EXTERNAL_INPUT_OBSERVED` - Mensajes humanos (texto, audio pendiente)
+- `EXTERNAL_STATE_OBSERVED` - Cambios de estado estructural (typing, recording, idle)
+- `chatcore.message.received` - Mensajes recibidos (legacy)
+- `CONNECTION_EVENT_OBSERVED` - Eventos de conexión (visitor → account)
 
 **FluxCore → Kernel:**
-- `AI_RESPONSE_GENERATED` - Respuestas cognitivas
-- `CONNECTION_EVENT_OBSERVED` - Eventos de conexión
+- `AI_RESPONSE_GENERATED` - Respuestas cognitivas de IA ✅ **NUEVO v4.0**
+
+**Media/Assets:**
+- `MEDIA_CAPTURED` - Captura de medios (audio, imagen)
+- `DELIVERY_SIGNAL_OBSERVED` - Señales de entrega
+
+**Sistema:**
+- `SYSTEM_TIMER_ELAPSED` - Eventos de temporizador
 
 ### Outbox del Kernel
 
@@ -84,7 +92,7 @@ Responsabilidades observables:
 - registrar que una señal nueva debe despertar procesamiento posterior
 - desacoplar ingesta del procesamiento de projectores
 
-### 🔧 **Patrones de Implementación - Lecciones Aprendidas**
+### 🔧 **Patrones de Implementación v4.0 - Lecciones Aprendidas**
 
 #### **✅ Logs de Diagnóstico (2026-03-13)**
 ```typescript
@@ -97,6 +105,58 @@ return db.transaction(async (tx) => {
 // ❌ Logs dentro de transacción (no visibles si falla)
 return db.transaction(async (tx) => {
   console.log('DEBUG: Starting...'); // No visible si falla antes
+});
+```
+
+#### **✅ ChatProjector Resiliente v4.0**
+```typescript
+// ✅ No bloquear el pipeline si identidad no está lista
+if (!address || !link) {
+  console.log(`Identity not ready for signal #${seq}, deferring...`);
+  return; // NO throw error, NO bloquea
+}
+
+// ❌ Antes: Fallaba fatalmente
+if (!address) {
+  throw new Error(`Identity not resolved...`); // Bloqueaba todo
+}
+```
+
+#### **✅ Eventos de Transcripción de Audio v4.0**
+```typescript
+// ✅ Escuchar transcripciones completadas
+coreEventBus.on('asset:transcription_completed', async (payload) => {
+  console.log(`[ChatProjector] 🔔 RECEIVED asset:transcription_completed`);
+  await this.handleTranscriptionCompleted(payload);
+});
+
+// ✅ Detectar audio pendiente
+if (evidence.payload.isPendingAudioTranscription) {
+  console.log(`🎵 AUDIO PENDING TRANSCRIPTION - NOT enqueuing for AI yet`);
+  return; // Esperar evento de transcripción
+}
+```
+
+#### **✅ Timestamps Estandarizados v4.0**
+```typescript
+// ✅ ISO strings en lugar de Date objects
+claimedOccurredAt: '2026-03-15T12:00:00.000Z' // Estándar
+
+// ❌ Date objects (problemas de canonicalización)
+claimedOccurredAt: new Date() // No recomendado
+```
+
+#### **✅ Outbox Transaccional v4.0**
+```typescript
+// ✅ Insertar señal y outbox en misma transacción
+return db.transaction(async (tx) => {
+  const signalId = await tx.insert(fluxcoreSignals).values(signal);
+  await tx.insert(fluxcoreOutbox).values({
+    signalId,
+    eventType: 'kernel:signal_ingested',
+    status: 'pending'
+  });
+  return signalId;
 });
 ```
 
@@ -321,7 +381,62 @@ El Kernel no hace:
 - construcción de `PolicyContext`
 - ejecución directa de acciones de negocio
 
-## 11. Observaciones importantes del código actual
+## 11. Enriquecimiento de Trazas (2026-03-15)
+
+### **Propagación de Contexto en Señales AI_RESPONSE_GENERATED**
+
+Las señales de IA ahora incluyen contexto completo gracias a la propagación a través de la cadena:
+
+```typescript
+// Flujo de propagación implementado
+CognitiveDispatcher (runtimeConfig + policyContext)
+    ↓
+ActionExecutor.execute(params.runtimeConfig)
+    ↓
+executeSendMessage(context.runtimeConfig)
+    ↓
+certifyAiResponse(model, provider, policyContext)
+    ↓
+evidenceRaw.context.enriquecido
+```
+
+### **Estructura de evidenceRaw Enriquecido**
+```json
+{
+  "evidenceRaw": {
+    "accountId": "responder-account-id",
+    "targetAccountId": "receiver-account-id", 
+    "content": { "text": "respuesta del asistente" },
+    "context": {
+      "conversationId": "conv-123",
+      "turnId": 45,
+      "runtimeId": "asistentes-local",
+      "model": "llama-3.1-8b-instant",
+      "provider": "groq",
+      "policyContext": {
+        "accountId": "business-account-id",
+        "mode": "auto",
+        "activeRuntimeId": "asistentes-local", 
+        "authorizedTemplates": 2
+      }
+    },
+    "generatedBy": "ai",
+    "generatedAt": "2026-03-15T19:43:00.000Z"
+  }
+}
+```
+
+### **Validaciones Implementadas**
+- **Error ruidoso** si falta `runtimeConfig` en `executeSendMessage`
+- **Optional chaining** para acceso seguro a datos del runtime
+- **Backward compatibility** con parámetros opcionales
+- **Logging completo** del flujo de propagación
+
+### **Impacto en Kernel Console**
+- **Antes**: `model: "unknown"`, `provider: "unknown"`, `policyContext: undefined`
+- **Después**: `model: "llama-3.1-8b-instant"`, `provider: "groq"`, `policyContext: {...}`
+
+## 12. Observaciones importantes del código actual
 
 ### Conjunto de fact types aceptados por la implementación
 

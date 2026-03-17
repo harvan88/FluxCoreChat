@@ -27,7 +27,9 @@ interface WSMessage {
   | 'discard_suggestion'
   | 'user_activity'
   | 'widget:connect'
-  | 'widget:message';
+  | 'widget:message'
+  | 'subscribe_telemetry'
+  | 'unsubscribe_telemetry';
   relationshipId?: string;
   conversationId?: string;
   content?: any;
@@ -42,6 +44,7 @@ interface WSMessage {
   alias?: string;
   visitorId?: string;   // legacy
   visitorToken?: string; // RFC-0001 provisional identity
+  role?: string;        // Para control de acceso a telemetria
 }
 
 // Store de conexiones activas por relationshipId
@@ -54,6 +57,27 @@ const visitorSubscriptions = new Map<string, Set<any>>();
 
 // Conexiones WS activas (para broadcast de eventos del sistema)
 const activeConnections = new Set<any>();
+
+// 🎯 NUEVO: Store para Kernel Console Telemetry (Fase 2)
+const kernelConsoleSubscriptions = new Set<any>();
+
+import { coreEventBus } from '../core/events';
+
+// Escuchar eventos de telemetría y enviarlos SOLO a la Kernel Console
+coreEventBus.on('telemetry:pipeline_step', (payload) => {
+  if (kernelConsoleSubscriptions.size === 0) return;
+  const message = JSON.stringify({
+    type: 'telemetry:pipeline_step',
+    payload: payload
+  });
+  for (const ws of kernelConsoleSubscriptions) {
+    try {
+      ws.send(message);
+    } catch {
+      kernelConsoleSubscriptions.delete(ws);
+    }
+  }
+});
 
 export function broadcastAll(payload: any): void {
   const message = JSON.stringify(payload);
@@ -142,8 +166,22 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
           }));
         }
         break;
-// ... (rest of the file)
 
+      case 'subscribe_telemetry':
+        // Fase 2: Pista Controlada de WebSocket
+        console.log(`[ws-handler] 📡 Petición de suscripción a telemetría. Role: ${data.role}`);
+        if (data.role === 'kernel_console') {
+          kernelConsoleSubscriptions.add(ws);
+          ws.send(JSON.stringify({ type: 'subscribed_telemetry', status: 'success' }));
+        } else {
+          ws.send(JSON.stringify({ type: 'error', message: 'Acceso denegado a telemetría' }));
+        }
+        break;
+
+      case 'unsubscribe_telemetry':
+        kernelConsoleSubscriptions.delete(ws);
+        ws.send(JSON.stringify({ type: 'unsubscribed_telemetry', status: 'success' }));
+        break;
 
       case 'message':
         if (data.conversationId && data.content && data.senderAccountId) {
@@ -468,6 +506,9 @@ export function handleWSClose(ws: any): void {
       }
     }
   }
+
+  // Limpiar suscripciones de telemetría
+  kernelConsoleSubscriptions.delete(ws);
 }
 
 export function broadcastToRelationship(relationshipId: string, payload: any): void {

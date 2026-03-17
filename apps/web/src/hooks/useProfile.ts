@@ -153,7 +153,10 @@ export function useProfile(): UseProfileReturn {
       }
 
       if (data.avatarAssetId !== undefined) {
-        updateData.avatarAssetId = data.avatarAssetId;
+        // Solo enviar avatarAssetId si es un UUID válido
+        if (data.avatarAssetId && data.avatarAssetId !== '' && data.avatarAssetId !== 'undefined') {
+          updateData.avatarAssetId = data.avatarAssetId;
+        }
       }
 
       if ((data as any).alias !== undefined) {

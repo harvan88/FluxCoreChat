@@ -13,6 +13,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { api } from '../services/api';
+import { getApiUrl } from '../utils/urls';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Tipos
@@ -173,8 +174,8 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
                 });
 
                 // Abrir conexión
-                // FC-FIX: Use full API_URL to match ApiService behavior and avoid proxy stripping '/api' prefix
-                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+                // FC-FIX: Use dynamic API_URL
+                const API_URL = getApiUrl();
                 xhr.open('PUT', `${API_URL}/api/assets/upload/${sessionId}?accountId=${accountId}`);
                 
                 // FC-FIX: Enviar como FormData para que Elysia pueda parsear con t.File()
@@ -208,13 +209,16 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
      * Confirmar upload
      */
     const commitUpload = useCallback(async (sessionId: string): Promise<UploadedAsset | null> => {
+        console.log('🎵 AUDIO DEBUG: commitUpload llamado con sessionId:', sessionId);
         setStatus('committing');
 
         try {
             if (!accountId) {
                 throw new Error('Account ID is required to commit uploads');
             }
+            console.log('🎵 AUDIO DEBUG: Llamando a api.commitAssetUpload...');
             const response = await api.commitAssetUpload(sessionId, accountId, { scope });
+            console.log('🎵 AUDIO DEBUG: Respuesta de commitAssetUpload:', response);
 
             if (!response.success || !response.data) {
                 throw new Error(response.error || 'Failed to commit upload');
@@ -234,6 +238,7 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
 
             return asset;
         } catch (err) {
+            console.error('🎵 AUDIO DEBUG: Error en commitUpload:', err);
             const errorMsg = err instanceof Error ? err.message : 'Failed to commit upload';
             setError(errorMsg);
             setStatus('error');
@@ -257,12 +262,17 @@ export function useAssetUpload(options: UseAssetUploadOptions): UseAssetUploadRe
 
         // Validar tipo MIME
         if (allowedMimeTypes && allowedMimeTypes.length > 0) {
+            console.log('🎵 AUDIO DEBUG: Validando MIME type:', file.type);
+            console.log('🎵 AUDIO DEBUG: MIME types permitidos:', allowedMimeTypes);
+            
             const isAllowed = allowedMimeTypes.some(type => {
                 if (type.endsWith('/*')) {
                     return file.type.startsWith(type.slice(0, -1));
                 }
                 return file.type === type;
             });
+
+            console.log('🎵 AUDIO DEBUG: MIME type permitido?', isAllowed);
 
             if (!isAllowed) {
                 const errorMsg = `File type not allowed. Allowed types: ${allowedMimeTypes.join(', ')}`;

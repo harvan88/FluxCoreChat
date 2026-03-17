@@ -257,11 +257,12 @@ class RuntimeGatewayService {
         let adapter = this.registry.get(activeRuntimeId);
         console.log(`[Diag][RuntimeGateway] message=${envelope.id} runtime=${activeRuntimeId} decision=resolve stage=runtime_select target=${targetAccountId}`);
 
-        // Fallback to echo if configured runtime is missing (or not yet implemented)
+        // NO FALLBACK - Runtimes are sovereign, errors must scream
         if (!adapter) {
-            console.warn(`[RuntimeGateway] Runtime '${activeRuntimeId}' not found in registry. Falling back to 'echo'.`);
-            adapter = this.registry.get('echo');
-            console.log(`[Diag][RuntimeGateway] message=${envelope.id} runtime=echo decision=fallback stage=runtime_select target=${targetAccountId}`);
+            const error = new Error(`Runtime "${activeRuntimeId}" not found in registry. Registered: [${Array.from(this.registry.keys()).join(', ')}]. Runtime sovereignty violation - no fallback allowed.`);
+            console.error(`[RuntimeGateway] ❌ SOVEREIGNTY VIOLATION: ${error.message}`);
+            console.error(`[Diag][RuntimeGateway] message=${envelope.id} runtime=${activeRuntimeId} decision=error stage=runtime_select target=${targetAccountId} error=${error.message}`);
+            throw error;
         }
 
         if (!adapter) {

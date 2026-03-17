@@ -150,6 +150,17 @@ class CognitionWorkerService {
 
         console.log(`[FluxPipeline] 🔄 TURN  conv=${entry.conversation_id.slice(0, 7)} account=${entry.account_id.slice(0, 7)} attempt=${entry.attempts + 1}/${MAX_ATTEMPTS}`);
         
+        // 🎯 TELEMETRÍA (Fase 1): Worker inició
+        try {
+            coreEventBus.emit('telemetry:pipeline_step', {
+                messageId: String(entryId),
+                conversationId: entry.conversation_id,
+                step: 'worker',
+                status: 'processing',
+                timestamp: new Date().toISOString()
+            });
+        } catch (e) {}
+        
         // 🔍 DEBUG LOGS
         console.log(`[CognitionWorker] 🔍 PROCESSING TURN START:`);
         console.log(`  - entryId: ${entryId}`);
@@ -189,6 +200,17 @@ class CognitionWorkerService {
                 //    ActionExecutor is now responsible for marking processedAt.
                 console.log(`[CognitionWorker] ✅ Turn delegation SUCCESS: conversation ${entry.conversation_id}, runtime=${result.runtimeUsed}`);
                 console.log(`[CognitionWorker]   Actions executed: ${result.actions?.map(a => a.type).join(', ') || 'none'}`);
+                
+                // 🎯 TELEMETRÍA (Fase 1): Worker completó
+                try {
+                    coreEventBus.emit('telemetry:pipeline_step', {
+                        messageId: String(entryId),
+                        conversationId: entry.conversation_id,
+                        step: 'worker',
+                        status: 'success',
+                        timestamp: new Date().toISOString()
+                    });
+                } catch (e) {}
             } else {
                 // 3b. Log error and Handle Backoff (PRINCIPLE: Resilience)
                 const errorMsg = result.error || 'Unknown dispatch error';
@@ -211,6 +233,18 @@ class CognitionWorkerService {
 
                 const status = isConfigError ? 'BACKOFF' : 'RETRY';
                 console.warn(`[CognitionWorker] ⚠️ Turn ${status}: ${errorMsg}. Next try in ${nextRetryMs / 1000}s`);
+                
+                // 🎯 TELEMETRÍA (Fase 1): Worker erró
+                try {
+                    coreEventBus.emit('telemetry:pipeline_step', {
+                        messageId: String(entryId),
+                        conversationId: entry.conversation_id,
+                        step: 'worker',
+                        status: 'error',
+                        metadata: { errorDetail: errorMsg },
+                        timestamp: new Date().toISOString()
+                    });
+                } catch (e) {}
             }
 
         } catch (error: any) {

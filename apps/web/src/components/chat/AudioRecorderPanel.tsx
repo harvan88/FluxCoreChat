@@ -469,6 +469,9 @@ export function AudioRecorderPanel(props: {
         .then(() => {
           props.onDiscard();
         })
+        .catch((error) => {
+          console.error('Error al enviar audio:', error);
+        })
         .finally(() => {
           setIsSending(false);
         });

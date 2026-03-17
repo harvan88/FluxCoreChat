@@ -2,91 +2,61 @@
 
 ## Propósito
 
-Esta carpeta contiene la reconstrucción activa de la arquitectura del sistema basada en el código actual y el esquema de base de datos del repositorio. Comenzó con una fase estructural y ahora incluye también documentación por componentes y por flujos transversales.
+Esta carpeta contiene la reconstrucción activa de la arquitectura del sistema basada en el código actual y el esquema de base de datos del repositorio. Es la **fuente activa de verdad** para la documentación arquitectónica del sistema.
 
-Desde este punto, esta carpeta debe considerarse la **fuente activa de verdad** para la documentación arquitectónica del sistema.
+---
 
-## Fuente de verdad usada en esta fase
+## 📁 Estructura Organizada
 
-La documentación de esta carpeta fue reconstruida a partir de:
- - el código actual en `apps/api`, `apps/web` y `packages/db`
- - el esquema actual en `packages/db/src/schema`
- - las relaciones observables entre rutas, servicios, workers, projectores y tablas
+### 🏛️ [Core Definitions](./core/)
+*Fundamentos y contratos transversales del sistema.*
+- [`FLUXCORE_CANON_FINAL_v8.3.md`](./core/FLUXCORE_CANON_FINAL_v8.3.md) - **Constitución del Sistema**.
+- [`canonical-definitions.md`](./core/canonical-definitions.md) - Definiciones canónicas.
+- [`FLUXCORE_WES_CANON.md`](./core/FLUXCORE_WES_CANON.md) - Especificaciones del Sistema de Trabajo Transaccional.
+- [`RUNTIME_SOVEREIGNTY_CANON.md`](./core/RUNTIME_SOVEREIGNTY_CANON.md) - Reglas de soberanía.
+- [`WEBSOCKET_ARCHITECTURE.md`](./core/WEBSOCKET_ARCHITECTURE.md) - Infraestructura de tiempo real.
+- [`CHATCORE_KERNEL_INTERSECTION.md`](./core/CHATCORE_KERNEL_INTERSECTION.md) - Fronteras del Kernel.
+- [`system-flows.md`](./core/system-flows.md) - Flujos end-to-end.
 
-La documentación anterior en `docs/` debe considerarse material histórico u orientativo, no una fuente canónica.
+### 🧩 [Modules & Components](./modules/)
+*Documentación detallada por dominio funcional.*
+- **ChatCore:** [`overview`](./modules/chatcore-overview.md), [`components`](./modules/chatcore-components.md), [`assets`](./modules/chatcore-assets.md).
+- **Kernel:** [`overview`](./modules/kernel-overview.md), [`components`](./modules/kernel-components.md).
+- **FluxCore:** [`overview`](./modules/fluxcore-overview.md), [`components`](./modules/fluxcore-components.md).
 
-## Alcance de esta fase
+### 📡 [Telemetry & Pipeline](./telemetry/)
+*Monitoreo y trazabilidad del Kernel.*
+- [`IMPLEMENTATION_PIPELINE_TELEMETRY.md`](./telemetry/IMPLEMENTATION_PIPELINE_TELEMETRY.md) - **Live Pipeline (NUEVO)**.
+- [`TELEMETRIA_IDEA_RECUPERADA.md`](./telemetry/TELEMETRIA_IDEA_RECUPERADA.md) - Visión conceptual.
+- [`PIPELINE_VISUAL_TRAZABILIDAD.md`](./telemetry/PIPELINE_VISUAL_TRAZABILIDAD.md) - Mapa visual de trazas.
 
-La carpeta contiene actualmente dos niveles de documentación:
+### ⚖️ [Governance & Methodology](./governance/)
+*Reglas para el desarrollo y documentación.*
+- [`documentation-governance.md`](./governance/documentation-governance.md) - Control documental.
+- [`SYSTEM_REFACTORING_METHODOLOGY.md`](./governance/SYSTEM_REFACTORING_METHODOLOGY.md) - Guía maestra de refactoring.
+- [`REFACTORING_METHODOLOGY_GUIDE.md`](./governance/REFACTORING_METHODOLOGY_GUIDE.md) - Casos específicos.
 
-### Capa 0 — definiciones y gobernanza documental
-- `canonical-definitions.md`
-- `documentation-governance.md`
-- `legacy-document-inventory.md`
+### 🔍 [Analysis & Audits](./analysis/)
+*Diagnósticos y auditorías técnicas.*
+- [`ANALYSIS_FLUXI_WES.md`](./analysis/ANALYSIS_FLUXI_WES.md) - Análisis de migración.
+- [`AUDIT_FLUX_NEW_ARCHITECTURE.md`](./analysis/AUDIT_FLUX_NEW_ARCHITECTURE.md) - Auditoría estructural.
+- [`CRISIS_IMPLEMENTACION_ANALYSIS.md`](./analysis/CRISIS_IMPLEMENTACION_ANALYSIS.md) - Post-mortem técnico.
 
-### Nivel 1 — visión estructural
-- `chatcore-overview.md`
-- `kernel-overview.md`
-- `fluxcore-overview.md`
+### 📈 [Phases & Progress](./phases/)
+*Histórico de construcción y bitácoras diarias.*
+- [`FASE1` a `FASE4`](./phases/) - Reportes de avance.
+- [`MIGRATION_FLUXI_*`](./phases/) - Planes de migración.
 
-### Nivel 2 — componentes reales y flujos
-- `chatcore-components.md`
-- `chatcore-assets.md`
-- `kernel-components.md`
-- `fluxcore-components.md`
-- `system-flows.md`
+### 🛠️ [Specs](./specs/)
+- [`KERNEL_CONSOLE_V4_SPECIFICATION.md`](./specs/KERNEL_CONSOLE_V4_SPECIFICATION.md) - Especificación de Consola Harvan.
 
-Los documentos de visión estructural responden a cuatro preguntas:
-- cuál es el rol del dominio dentro del sistema
-- cuáles son sus responsabilidades principales
-- qué componentes reales lo implementan en el código
-- cómo interactúa con los otros dominios
+---
 
-Los documentos de componentes y flujos bajan un nivel adicional:
-- identifican piezas concretas del código
-- describen el flujo operativo entre esas piezas
-- separan responsabilidades entre ChatCore, Kernel y FluxCore
-- dejan trazado el recorrido end-to-end de los casos principales
+## 🎯 Orden Sugerido de Lectura
 
-La capa de definiciones y gobernanza cumple dos funciones transversales:
-- recuperar definiciones canónicas históricas que sí resisten validación contra el código actual
-- fijar que esta carpeta es la única base activa para seguir escribiendo arquitectura
+1. `core/canonical-definitions.md`
+2. `governance/SYSTEM_REFACTORING_METHODOLOGY.md`
+3. `modules/chatcore-overview.md` | `kernel-overview.md` | `fluxcore-overview.md`
+4. `telemetry/IMPLEMENTATION_PIPELINE_TELEMETRY.md`
 
-El inventario de legacy agrega una tercera función operativa:
-- clasificar qué markdowns históricos deben absorberse, relegarse a histórico o moverse físicamente fuera del camino activo
-
-## Límites de esta fase
-
-Esta reconstrucción todavía no documenta en profundidad:
-- el detalle interno de cada servicio o componente
-- todos los endpoints y contratos de payload
-- todas las tablas secundarias del dominio
-- todos los caminos legacy o compatibilidad histórica
-
-## Criterio de organización
-
-La separación usada aquí es funcional:
-- **ChatCore**: mundo conversacional, persistencia de mensajes, conversaciones, participantes, transporte HTTP/WS y entrega al cliente
-- **Kernel**: certificación soberana de señales, journal inmutable y activación de projectores
-- **FluxCore**: interpretación cognitiva, policy context, runtimes, decisión y ejecución mediada de acciones
-
-## Orden sugerido de lectura
-
-1. `canonical-definitions.md`
-2. `documentation-governance.md`
-3. `legacy-document-inventory.md`
-4. `chatcore-overview.md`
-5. `kernel-overview.md`
-6. `fluxcore-overview.md`
-7. `chatcore-components.md`
-8. `chatcore-assets.md`
-9. `kernel-components.md`
-10. `fluxcore-components.md`
-11. `system-flows.md`
-
-## Próximo paso sugerido
-
-La siguiente etapa razonable sería profundizar cada documento de componentes en subdocumentos más finos, por ejemplo:
-1. ChatCore: rutas, `message-core`, `conversation.service`, `conversation-participant.service`, `ws-handler`
-2. Kernel: `kernel.ts`, reality adapters, outbox, `base.projector`, `projector-runner`, projectores concretos
-3. FluxCore: `flux-policy-context`, `chat-projector`, `cognition-worker`, `cognitive-dispatcher`, `action-executor`, `runtime-gateway`, asistentes
+**Última organización estructural:** 2026-03-16

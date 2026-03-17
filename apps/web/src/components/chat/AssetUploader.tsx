@@ -13,6 +13,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Upload, X, Image, FileText, Film, Music, AlertCircle, CheckCircle, Loader2, RefreshCcw } from 'lucide-react';
 import { useAssetUpload, formatBytes, type UploadedAsset, type UploadStatus, type UploadProgress } from '../../hooks/useAssetUpload';
+import { generateUUID } from '../../utils/uuid';
 import clsx from 'clsx';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -172,7 +173,7 @@ export function AssetUploader({
             ...prev,
             ...files.map((file) => ({
                 ...createPreview(file),
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 status: 'pending' as QueueStatus,
                 progress: null,
                 error: null,

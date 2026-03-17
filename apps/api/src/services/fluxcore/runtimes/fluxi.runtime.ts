@@ -38,8 +38,23 @@ interface ProposedAnalysis {
     confidence: number;
 }
 
+interface RuntimeInput {
+    policyContext: FluxPolicyContext;
+    runtimeConfig: {
+        // ... campos existentes
+        workEngineService?: any;  // Nuevo
+        messageCore?: any;         // Nuevo
+        provider?: string;
+        model?: string;
+        maxTokens?: number;
+        temperature?: number;
+        workDefinitions?: any[];
+    };
+    conversationHistory: ConversationMessage[];
+}
+
 export class FluxiRuntime implements RuntimeAdapter {
-    readonly runtimeId = 'fluxi-runtime';
+    readonly runtimeId = '@fluxcore/fluxi';
     readonly displayName = 'Fluxi/WES (v8.2)';
 
     async handleMessage(input: RuntimeInput): Promise<ExecutionAction[]> {

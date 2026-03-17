@@ -37,6 +37,7 @@ interface UnifiedChatViewProps {
     alias: string;
     avatarUrl: string | null;
   };
+  hideHeader?: boolean;
 }
 
 export function UnifiedChatView({
@@ -45,6 +46,7 @@ export function UnifiedChatView({
   relationshipId,
   publicAlias,
   profile,
+  hideHeader = false,
 }: UnifiedChatViewProps) {
   const [message, setMessage] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
@@ -98,13 +100,13 @@ export function UnifiedChatView({
         if (wsMessage.data?.conversationId !== resolvedConversationId) return;
         addReceivedMessage(wsMessage.data as Message);
       }
-      
+
       // 🔄 Manejar mensajes actualizados (sobrescritos/eliminados para todos)
       if (wsMessage.type === 'message:updated') {
         if (wsMessage.data?.conversationId !== resolvedConversationId) return;
         const wsData = wsMessage.data;
         console.log('[UnifiedChatView] Message updated (overwritten):', wsData);
-        
+
         // Merge parcial: solo actualizar contenido sobrescrito, preservar estructura original
         updateMessage(wsData.id, {
           content: wsData.content,
@@ -133,7 +135,7 @@ export function UnifiedChatView({
 
     try {
       setSendError(null);
-      
+
       await sendMessage({
         content: {
           text: messageText,
@@ -142,7 +144,7 @@ export function UnifiedChatView({
         generatedBy: 'human',
         replyToId: replyingTo?.id,
       });
-      
+
       setMessage('');
       setReplyingTo(null);
     } catch (err) {
@@ -178,11 +180,15 @@ export function UnifiedChatView({
   }, [accountId, currentUserId, performAssetUpload, uploadError]);
 
   const uploadAudioForComposer = useCallback(async ({ file }: { file: File }) => {
+    console.log('🎵 AUDIO DEBUG: uploadAudioForComposer llamado con file:', file.name);
     if (!currentUserId || !accountId) {
+      console.log('🎵 AUDIO DEBUG: No hay sesión activa');
       return { success: false, error: 'No hay sesión activa para grabar audio' };
     }
 
+    console.log('🎵 AUDIO DEBUG: Llamando a performAssetUpload...');
     const asset = await performAssetUpload({ file });
+    console.log('🎵 AUDIO DEBUG: performAssetUpload devolvió:', asset);
     return {
       success: !!asset,
       asset: asset ?? undefined,
@@ -213,20 +219,22 @@ export function UnifiedChatView({
   if (isPublicMode && profile) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="bg-surface border-b border-subtle px-4 py-3 flex items-center gap-3">
-          <Avatar
-            name={profile.displayName}
-            src={profile.avatarUrl || undefined}
-            size="md"
-          />
-          <div>
-            <h2 className="font-semibold text-primary">{profile.displayName}</h2>
-            <p className="text-sm text-muted">@{profile.alias}</p>
+        {!hideHeader && (
+          <div className="bg-surface border-b border-subtle px-4 py-3 flex items-center gap-3">
+            <Avatar
+              name={profile.displayName}
+              src={profile.avatarUrl || undefined}
+              size="md"
+            />
+            <div>
+              <h2 className="font-semibold text-primary">{profile.displayName}</h2>
+              <p className="text-sm text-muted">@{profile.alias}</p>
+            </div>
+            <div className="ml-auto">
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
+            </div>
           </div>
-          <div className="ml-auto">
-            <div className="w-2 h-2 bg-green-500 rounded-full" />
-          </div>
-        </div>
+        )}
 
         {(sendError || error) && (
           <div className="mx-4 mt-3 p-3 bg-error-muted border border-error-muted rounded-lg text-error text-sm flex items-start gap-2">
@@ -305,18 +313,20 @@ export function UnifiedChatView({
   // Modo autenticado (ChatView completo)
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="bg-surface border-b border-subtle px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Building2 size={20} className="text-muted" />
-          <div>
-            <h2 className="font-semibold text-primary">Conversación</h2>
-            <p className="text-sm text-muted">{accountId}</p>
+      {!hideHeader && (
+        <div className="bg-surface border-b border-subtle px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Building2 size={20} className="text-muted" />
+            <div>
+              <h2 className="font-semibold text-primary">Conversación</h2>
+              <p className="text-sm text-muted">{accountId}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full" />
-        </div>
-      </div>
+      )}
 
       {(sendError || error) && (
         <div className="mx-4 mt-3 p-3 bg-error-muted border border-error-muted rounded-lg text-error text-sm flex items-start gap-2">

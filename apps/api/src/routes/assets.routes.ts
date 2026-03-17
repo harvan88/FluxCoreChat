@@ -201,6 +201,7 @@ export const assetsRoutes = new Elysia({ prefix: '/api/assets' })
                 };
             }
 
+            console.log(`${DEBUG_PREFIX} 🔥🔥🔥 COMMIT ENDPOINT CALLED: sessionId=${params.sessionId}, accountId=${accountId}`);
             console.log(`${DEBUG_PREFIX} Creating asset from upload for account: ${accountId}`);
 
             const result = await assetRegistryService.createFromUpload({

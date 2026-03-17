@@ -216,9 +216,16 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
     '/',
     async ({ user, publicActor, publicProfile, query, set }) => {
       if (!user && !publicActor && !publicProfile) {
+        console.log('[MessagesRoute] Unauthorized: no user, no publicActor, no publicProfile');
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
       }
+
+      console.log('[MessagesRoute] Authorized access:', { 
+        userId: user?.id, 
+        publicActorId: publicActor?.actorId, 
+        publicProfileVisitor: publicProfile?.visitorToken 
+      });
 
       try {
         const { db, accounts } = await import('@fluxcore/db');

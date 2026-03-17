@@ -91,8 +91,43 @@ export class AssetPolicyService {
         // Usar política de cuenta o default
         const policy = accountPolicy || this.getDefaultPolicy(asset.scope || 'message_attachment');
 
-        // Verificar contexto permitido
-        const allowedContexts = policy.contexts;
+        // Verificar contexto permitido y obtener TTL
+        let allowedContexts: string[];
+        let ttlSeconds: number;
+        
+        if (accountPolicy) {
+            // Política desde DB: debe tener allowedContexts válido
+            if (!accountPolicy.allowedContexts) {
+                throw new Error(`[AssetPolicy] CRITICAL: Policy ${accountPolicy.id} has null allowedContexts`);
+            }
+            
+            if (accountPolicy.defaultTtlSeconds === null || accountPolicy.defaultTtlSeconds === undefined) {
+                throw new Error(`[AssetPolicy] CRITICAL: Policy ${accountPolicy.id} has null/undefined defaultTtlSeconds`);
+            }
+            
+            try {
+                allowedContexts = JSON.parse(accountPolicy.allowedContexts);
+                if (!Array.isArray(allowedContexts)) {
+                    throw new Error(`[AssetPolicy] CRITICAL: Policy ${accountPolicy.id} allowedContexts is not an array after parsing`);
+                }
+            } catch (e) {
+                const errorMessage = e instanceof Error ? e.message : String(e);
+                throw new Error(`[AssetPolicy] CRITICAL: Failed to parse allowedContexts for policy ${accountPolicy.id}: ${errorMessage}. Raw value: ${accountPolicy.allowedContexts}`);
+            }
+            
+            ttlSeconds = accountPolicy.defaultTtlSeconds;
+        } else {
+            // Política por defecto: debe tener contexts y ttlSeconds válidos
+            if (!policy || !policy.contexts) {
+                throw new Error(`[AssetPolicy] CRITICAL: Default policy for scope '${asset.scope}' has no contexts property`);
+            }
+            if (!('ttlSeconds' in policy)) {
+                throw new Error(`[AssetPolicy] CRITICAL: Default policy for scope '${asset.scope}' missing ttlSeconds property`);
+            }
+            allowedContexts = policy.contexts;
+            ttlSeconds = (policy as any).ttlSeconds;
+        }
+        
         if (!allowedContexts.includes(contextString) && !allowedContexts.includes('*')) {
             console.log(`${DEBUG_PREFIX} Access denied: context ${contextString} not allowed`);
             return { 
@@ -110,11 +145,11 @@ export class AssetPolicyService {
             // Por ahora, asumimos que la verificación se hace en el endpoint
         }
 
-        console.log(`${DEBUG_PREFIX} Access allowed: ttl=${policy.ttlSeconds}s`);
+        console.log(`${DEBUG_PREFIX} Access allowed: ttl=${ttlSeconds}s`);
 
         return {
             allowed: true,
-            ttlSeconds: policy.ttlSeconds,
+            ttlSeconds,
             policyId: accountPolicy?.id,
         };
     }
@@ -232,9 +267,14 @@ export class AssetPolicyService {
 
     /**
      * Obtener política por defecto para un scope
+     * Lanza error si el scope no existe (en lugar de fallback silencioso)
      */
     getDefaultPolicy(scope: string): { ttlSeconds: number; contexts: string[] } {
-        return DEFAULT_POLICIES[scope] || DEFAULT_POLICIES.message_attachment;
+        const policy = DEFAULT_POLICIES[scope];
+        if (!policy) {
+            throw new Error(`[AssetPolicy] CRITICAL: No default policy found for scope '${scope}'. Available scopes: ${Object.keys(DEFAULT_POLICIES).join(', ')}`);
+        }
+        return policy;
     }
 
     /**

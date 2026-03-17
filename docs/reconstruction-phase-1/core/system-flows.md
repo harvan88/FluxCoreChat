@@ -1,8 +1,59 @@
-# Flujos transversales del sistema actual
+# Flujos transversales del sistema v4.0
 
 ## Objetivo de este documento
 
-Este documento resume los flujos end-to-end más relevantes observados en el código actual. Sirve como puente entre la documentación por dominios.
+Este documento resume los flujos end-to-end más relevantes observados en el código actual v4.0. Sirve como puente entre la documentación por dominios.
+
+**🆕 Actualizado v4.0:** Incluye flujo completo de transcripción de audio a través del Kernel.
+
+---
+
+## 🎵 **Flujo 3: Audio → Transcripción → IA (Nuevo v4.0)**
+
+### Paso 1: Usuario envía audio
+
+- `apps/api/src/routes/messages.routes.ts` o `apps/api/src/websocket/ws-handler.ts`
+- ChatCore persiste mensaje con `content: {text: "", media: [{type: "audio", assetId: "..."}]}`
+- Se marca como `isPendingAudioTranscription: true`
+
+### Paso 2: Detección de audio
+
+- `apps/api/src/services/media-orchestrator.service.ts`
+- Escucha evento `asset:linked`
+- Detecta `mimeType.includes('audio')`
+- Invoca `AudioEnrichmentService`
+
+### Paso 3: Transcripción con Whisper
+
+- `apps/api/src/services/audio-enrichment.service.ts`
+- Descarga y procesa audio
+- Llama a OpenAI Whisper API
+- Emite evento `asset:transcription_completed`
+
+### Paso 4: ChatProjector coordina (Kernel)
+
+- `apps/api/src/core/projections/chat-projector.ts`
+- Escucha `asset:transcription_completed`
+- Actualiza mensaje con transcripción: `content.text = "transcripción..."`
+- Encola en `fluxcore_cognition_queue` para procesamiento IA
+
+### Paso 5: Procesamiento IA
+
+- `apps/api/src/workers/cognition-worker.ts`
+- FluxCore procesa texto transcrito
+- Genera respuesta AI
+
+### Paso 6: Certificación de respuesta
+
+- FluxCore certifica `AI_RESPONSE_GENERATED` en Kernel
+- ChatProjector observa señal de salida
+
+### Paso 7: Entrega al usuario
+
+- ChatProjector usa `messageCore.receive()` para persistir respuesta
+- WebSocket distribuye respuesta con texto transcrito + audio original
+
+---
 
 ## 1. Mensaje humano autenticado → respuesta AI
 
@@ -34,6 +85,8 @@ El mensaje humano se certifica como señal en el Kernel.
 - `apps/api/src/core/projections/chat-projector.ts`
 
 El projector observa la señal y actualiza `fluxcore_cognition_queue` para esa conversación.
+
+**🆕 v4.0:** Si es audio pendiente, espera transcripción antes de encolar.
 
 ### Paso 5: decisión cognitiva
 

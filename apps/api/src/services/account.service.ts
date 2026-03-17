@@ -97,6 +97,7 @@ export class AccountService {
       privateContext?: string;
       allowAutomatedUse?: boolean;
       alias?: string | null;
+      avatarAssetId?: string;
     }
   ) {
     // Verify ownership
@@ -145,6 +146,14 @@ export class AccountService {
         throw new Error('Este alias ya está en uso.');
       }
       data.alias = raw;
+    }
+
+    // Validar avatarAssetId si está presente
+    if (data.avatarAssetId !== undefined) {
+      if (!data.avatarAssetId || data.avatarAssetId === '' || data.avatarAssetId === 'undefined') {
+        // Si avatarAssetId es inválido, eliminarlo del objeto data
+        delete data.avatarAssetId;
+      }
     }
 
     const [updated] = await db
