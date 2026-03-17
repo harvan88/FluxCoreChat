@@ -224,7 +224,7 @@ class CognitiveDispatcherService {
                 console.log(`  - conversationHistory.length: ${input.conversationHistory.length}`);
                 console.log(`  - last message role: ${input.conversationHistory[input.conversationHistory.length-1]?.role || 'none'}`);
                 
-                const actions = await runtimeGateway.invoke(runtimeId, input);
+                const actions = await runtimeGateway.invoke(runtimeId, input, params.lastSignalSeq || undefined);
                 
                 console.log(`[CognitiveDispatcher] 📥 RUNTIME RETURNED ${actions.length} actions:`);
                 actions.forEach((action, i) => {
@@ -233,7 +233,55 @@ class CognitiveDispatcherService {
 
                 typingKeepAlive.stop();
 
+                // ── SUGGEST GATE ──────────────────────────────────────────
+                // Canon §4.9: In suggest mode, save suggestion for operator
+                // review and return early. NEVER execute actions automatically.
+                // ──────────────────────────────────────────────────────────
+                if (policyContext.mode === 'suggest') {
+                    console.log(`[CognitiveDispatcher] 🤝 SUGGEST MODE: Saving suggestion, NOT executing actions`);
+                    const sendAction = actions.find(a => a.type === 'send_message') as any;
+
+                    if (sendAction?.content) {
+                        console.log(`[FluxPipeline] 💬 SUGGEST conv=${conversationId.slice(0, 7)} content="${sendAction.content.slice(0, 80)}"`);
+
+                        // Persist suggestion for operator review
+                        await db.insert(aiSuggestions).values({
+                            conversationId,
+                            accountId,
+                            content: sendAction.content,
+                            model: enrichedRuntimeConfig.model || 'unknown',
+                            provider: enrichedRuntimeConfig.provider || 'unknown',
+                            status: 'pending',
+                        });
+                    }
+
+                    // Close turn so CognitionWorker doesn't re-pick it
+                    await actionExecutor.closeTurn(turnId, accountId);
+
+                    // Telemetry
+                    try {
+                        const { coreEventBus } = await import('../../core/events');
+                        coreEventBus.emit('telemetry:pipeline_step', {
+                            messageId: String(params.lastSignalSeq || turnId),
+                            conversationId,
+                            step: 'dispatcher',
+                            status: 'success',
+                            metadata: { runtimeId, mode: 'suggest' },
+                            timestamp: new Date().toISOString()
+                        });
+                    } catch (e) {}
+
+                    return {
+                        actions,
+                        runtimeUsed: runtimeId,
+                        durationMs: Date.now() - startTime,
+                        success: true,
+                    };
+                }
+                // ── END SUGGEST GATE ──────────────────────────────────────
+
                 // 9. Execute actions via ActionExecutor (Canon §4.8: mediated effects)
+                // Only AUTO mode reaches here (OFF already returned above)
                 console.log(`[CognitiveDispatcher] Step 9: Executing ${actions.length} actions via ActionExecutor (mode=${policyContext.mode})...`);
                 
                 // 10. Resolve targetAccountId from cognition_queue
@@ -248,10 +296,11 @@ class CognitiveDispatcherService {
                     turnId,
                     conversationId,
                     accountId,
-                    targetAccountId: queueEntry?.targetAccountId || undefined,
+                    targetAccountId: queueEntry?.targetAccountId || 'unknown',
                     runtimeId,
                     policyContext,
-                    runtimeConfig: enrichedRuntimeConfig
+                    runtimeConfig: input.runtimeConfig,
+                    triggerSignalId: params.lastSignalSeq || undefined,
                 });
 
                 // Verificar si se debe detener propagación
@@ -271,30 +320,11 @@ class CognitiveDispatcherService {
                     };
                 }
 
-                if (policyContext.mode === 'suggest') {
-                    console.log(`[CognitiveDispatcher] 🤝 MANUAL MODE: Creating suggestion for operator review`);
-                    const suggestion = actions.find(a => a.type === 'send_message') as any;
-                    if (suggestion?.content) {
-                        console.log(`[FluxPipeline] 💬 SUGGEST conv=${conversationId.slice(0, 7)} content="${suggestion.content.slice(0, 80)}"`);
-
-                        // Persist suggestion for operator review
-                        await db.insert(aiSuggestions).values({
-                            conversationId,
-                            accountId,
-                            content: suggestion.content,
-                            model: enrichedRuntimeConfig.model || 'unknown',
-                            provider: enrichedRuntimeConfig.provider || 'unknown',
-                            status: 'pending',
-                        });
-                    }
-                    await actionExecutor.closeTurn(turnId, accountId);
-                }
-
                 // 🎯 TELEMETRÍA (Fase 1): Soberanía verificada
                 try {
                     const { coreEventBus } = await import('../../core/events');
                     coreEventBus.emit('telemetry:pipeline_step', {
-                        messageId: String(turnId),
+                        messageId: String(params.lastSignalSeq || turnId),
                         conversationId,
                         step: 'dispatcher',
                         status: 'success',

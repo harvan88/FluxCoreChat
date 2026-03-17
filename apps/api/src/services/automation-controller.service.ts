@@ -2,9 +2,9 @@
  * COR-007: Automation Controller Service
  * 
  * Controla el modo de respuesta según TOTEM 9.9.1:
- * - automatic: IA responde automáticamente
- * - supervised: IA sugiere, humano aprueba
- * - disabled: Sin IA
+ * - auto: IA responde automáticamente
+ * - suggest: IA sugiere, humano aprueba
+ * - off: Sin IA
  */
 
 import { randomUUID } from 'crypto';
@@ -79,7 +79,26 @@ class AutomationControllerService {
    */
   async getMode(accountId: string, relationshipId?: string): Promise<AutomationMode> {
     const rule = await this.getEffectiveRule(accountId, relationshipId);
-    return (rule?.mode as AutomationMode) || 'supervised';
+    return (rule?.mode as AutomationMode) || 'suggest';
+  }
+
+  /**
+   * Obtener el modo específico para un relationship (sin fallback global)
+   */
+  async getRelationshipMode(accountId: string, relationshipId: string): Promise<AutomationMode | null> {
+    const [rule] = await db
+      .select()
+      .from(automationRules)
+      .where(
+        and(
+          eq(automationRules.accountId, accountId),
+          eq(automationRules.relationshipId, relationshipId),
+          eq(automationRules.enabled, true)
+        )
+      )
+      .limit(1);
+    
+    return (rule?.mode as AutomationMode) || null;
   }
 
   /**
@@ -138,7 +157,7 @@ class AutomationControllerService {
       console.warn('[AutomationController] Could not fetch rules:', error.message);
       return {
         shouldProcess: false,
-        mode: 'disabled',
+        mode: 'off',
         rule: null,
         reason: 'Rules unavailable, using default disabled mode',
       };
@@ -148,19 +167,19 @@ class AutomationControllerService {
     if (!rule) {
       return {
         shouldProcess: true,
-        mode: 'supervised',
+        mode: 'suggest',
         rule: null,
-        reason: 'No rule configured, using default supervised mode',
+        reason: 'No rule configured, using default suggest mode',
       };
     }
 
     const mode = rule.mode as AutomationMode;
 
     // Modo disabled = no procesar IA
-    if (mode === 'disabled') {
+    if (mode === 'off') {
       return {
         shouldProcess: false,
-        mode: 'disabled',
+        mode: 'off',
         rule,
         reason: 'Automation disabled for this account/relationship',
       };
@@ -461,7 +480,7 @@ class AutomationControllerService {
 
     config.triggers = triggers;
 
-    const mode = options.mode ?? (currentRule?.mode as AutomationMode) ?? 'automatic';
+    const mode = options.mode ?? (currentRule?.mode as AutomationMode) ?? 'auto';
     const enabled = currentRule?.enabled ?? true;
 
     const rule = await this.setRule(accountId, mode, {
@@ -599,12 +618,12 @@ class AutomationControllerService {
 
     const actions: WorkflowAction[] = [];
 
-    if (mode === 'automatic') {
+    if (mode === 'auto') {
       actions.push({
         type: 'generate_response',
         extensionId: config?.extensionId || '@fluxcore/asistentes',
       });
-    } else if (mode === 'supervised') {
+    } else if (mode === 'suggest') {
       actions.push({
         type: 'suggest_response',
         extensionId: config?.extensionId || '@fluxcore/asistentes',

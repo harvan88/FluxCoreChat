@@ -64,22 +64,28 @@ Todo lo construido como parte del **Live Cognitive Pipeline** es el futuro intoc
 
 Para cruzar la línea de meta y declarar a FluxCore saneado y moderno, debemos ejecutar este plan secuencial y quirúrgico:
 
-### 📍 HITO 1: Migración Definitiva de WES (Fluxi)
-Actualmente, Fluxi/WES tiene lógicas amarradas al sistema legacy, y aunque `ActionExecutor` ya tiene los manejadores (`propose_work`, `open_work`), necesitamos cerciorarnos de que la clase `FluxiRuntime` supla el flujo transaccional nativo sin invadir a otros runtimes.
-- **Acción:** Verificar y auditar internamente `fluxi.runtime.ts`. Asegurar que los pasos transaccionales emiten el flag `stopPropagation` y que fluyen correctamente por el nuevo dispatcher que ya soporta validación WES desde la última corrección.
+### 📍 HITO 1: Migración Definitiva de WES (Fluxi) - ✅ COMPLETADO
+Fluxi/WES ha sido migrado satisfactoriamente al nuevo pipeline. `ActionExecutor` maneja los flujos transaccionales (`propose_work`, `open_work`) y el sistema de `stopPropagation` funciona correctamente para evitar colisiones entre el flujo conversacional y el flujo de trabajo.
 
-### 📍 HITO 2: Purga del `ExtensionHost` y Despachadores Viejos
-Una vez Fluxi esté verificado sobre `RuntimeGateway`:
-- **Acción:** Deprecar y borrar de la base de código `message-dispatch.service.ts` y todas las clases relacionadas a `ExtensionHost`.
-- **Acción:** Eliminar `FLUX_NEW_ARCHITECTURE` del `.env` global y asumir valor permanente a `true`.
+### 📍 HITO 2: Purga del `ExtensionHost` y Despachadores Viejos - ✅ COMPLETADO
+Se ha realizado una limpieza profunda del código:
+- **`manifest-dispatch.service.ts`**: Eliminado.
+- **`extension-host.service.ts`**: Eliminado.
+- **`ai-orchestrator.old.ts`**: Eliminado.
+- **`FLUX_NEW_ARCHITECTURE`**: Feature flag eliminada; la nueva arquitectura es ahora el estándar permanente y el `CognitionWorker` corre perpetuamente.
+- **`message-core.ts`**: Refactorizado para ser un servicio agnóstico de IA, enfocado únicamente en persistencia y notificación al Kernel.
 
-### 📍 HITO 3: Blindaje de ChatCore
+### 📍 HITO 3: Blindaje de ChatCore - ✅ COMPLETADO
 Asegurar que **absolutamente ningún** controlador de UI lance invocaciones cognitivas.
-- **Acción:** Restringir todo Ingress de ChatCore a únicamente: persistir mensaje en `messageCore` y certificar al Kernel. Cerrar puertos clandestinos entre UI y FluxCore.
+- **Logro:** Se han eliminado los endpoints directos de `generate` y `suggestions` en `ai.routes.ts`.
+- **Logro:** Se ha corregido la referencia rota a `extensionHost` en las rutas de mensajes, consolidando el uso de `ai-branding.service`.
+- **Logro:** El `ws-handler` ya bloquea las solicitudes de sugerencia legacy, forzando el uso del pipeline soberano.
 
-### 📍 HITO 4: Consolidación de Telemetría (Phase Checkout)
-Extender la lógica actual de telemetría a capturar escenarios extremos en el visualizador (Timeouts severos en el LLM, cuelgues del worker y fallos de validación en el Dispatcher antes del Runtime).
-- **Acción:** Revisión transversal de validadores y throw errors para que el semáforo siempre termine en rojo reportado al usuario y evitemos "Cajas Negras / Trazas Grises Infinitas". 
+### 📍 HITO 4: Consolidación de Telemetría (Phase Checkout) - ✅ COMPLETADO
+Extender la lógica actual de telemetría a capturar escenarios extremos en el visualizador.
+- **Logro:** Se ha implementado el `triggerSignalId` como hilo conductor de toda la traza.
+- **Logro:** Los 7 nodos (Ingreso -> Entrega) ahora se agrupan bajo el ID de la señal original, permitiendo ver el "Viaje del Mensaje" completo.
+- **Logro:** Se han corregido inconsistencias de tipos en `ActionExecutor` y `messageCore` que afectaban la estabilidad del pipeline.
 
 ---
 *Este documento invalida versiones de arquitectura anteriores no respaldadas por el Live Cognitive Pipeline. Es el cimiento oficial del esfuerzo de migración remanente.*

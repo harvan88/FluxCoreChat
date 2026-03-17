@@ -1552,8 +1552,9 @@ const suggestionsRoutes = new Elysia({ prefix: '/suggestions' })
     async ({ user, params, body, set }) => {
       if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
       try {
-        const { db, aiSuggestions, messages, conversations } = await import('@fluxcore/db');
+        const { db, aiSuggestions, conversations } = await import('@fluxcore/db');
         const { eq } = await import('drizzle-orm');
+        const { messageCore } = await import('../core/message-core');
         const { status, editedContent } = body as any;
         if (!['approved', 'rejected', 'edited'].includes(status)) {
           set.status = 400;
@@ -1567,13 +1568,24 @@ const suggestionsRoutes = new Elysia({ prefix: '/suggestions' })
         if (status === 'approved' || status === 'edited') {
           const [conv] = await db.select().from(conversations).where(eq(conversations.id, suggestion.conversationId)).limit(1);
           if (conv) {
-            await db.insert(messages).values({
+            // ✅ FIX BUG-3: Use messageCore.send() instead of direct db.insert()
+            // This ensures the message goes through the proper ChatCore pipeline:
+            // persistence → WebSocket broadcast → conversation update
+            const { resolveActorId } = await import('../utils/actor-resolver');
+            const actorId = await resolveActorId(suggestion.accountId);
+            const result = await messageCore.send({
               conversationId: suggestion.conversationId,
               senderAccountId: suggestion.accountId,
+              fromActorId: actorId || undefined,
               content: { text: finalContent },
+              type: 'outgoing',
               generatedBy: 'ai',
-              status: 'sent',
-            } as any);
+            });
+
+            if (!result.success) {
+              set.status = 500;
+              return { success: false, message: `Failed to send approved message: ${result.error}` };
+            }
           }
         }
 

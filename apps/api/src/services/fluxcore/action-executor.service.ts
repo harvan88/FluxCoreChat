@@ -32,11 +32,18 @@ export interface ActionExecutionResult {
     error?: string;
 }
 
-export interface ExecutionContext {
-    turnId: number;
-    accountId: string;
-    conversationId: string;
+export interface ExecutionContext extends ActionExecutionContext {
     stopPropagation?: boolean; // Nuevo campo para stop propagation
+}
+
+export interface ActionExecutionContext {
+    turnId: number;
+    conversationId: string;
+    accountId: string;
+    targetAccountId?: string;
+    runtimeConfig?: RuntimeConfig;
+    policyContext?: FluxPolicyContext;
+    triggerSignalId?: number;
 }
 
 class ActionExecutorService {
@@ -54,6 +61,7 @@ class ActionExecutorService {
             runtimeId: string;
             policyContext?: FluxPolicyContext;
             runtimeConfig?: RuntimeConfig; // ✅ Nuevo: Propagar runtimeConfig completo
+            triggerSignalId?: number;     // ✅ Nuevo: Para trazabilidad unificada
         }
     ): Promise<{ results: ActionExecutionResult[]; executionContext: ExecutionContext }> {
         console.log(`[ActionExecutor] 🎬 EXECUTE START: ${actions.length} actions for turn ${params.turnId}`);
@@ -85,7 +93,7 @@ class ActionExecutorService {
         }
         
         const results: ActionExecutionResult[] = [];
-        const { turnId, conversationId, accountId, targetAccountId, runtimeId, policyContext, runtimeConfig } = params;
+        const { turnId, conversationId, accountId, targetAccountId, runtimeId, policyContext, runtimeConfig, triggerSignalId } = params;
 
         for (const action of actions) {
             console.log(`[ActionExecutor] ⏳ Executing action: ${action.type}`);
@@ -106,7 +114,7 @@ class ActionExecutorService {
                 // H8: Tool authorization check
                 // if (action.type === 'call_tool' && policyContext) { ... }
 
-                const result = await this.executeOne(action, { conversationId, accountId, targetAccountId, runtimeConfig, policyContext });
+                const result = await this.executeOne(action, { turnId, conversationId, accountId, targetAccountId, runtimeConfig, policyContext, triggerSignalId });
                 console.log(`[ActionExecutor] ✓ Action ${action.type} result: success=${result.success}${result.messageId ? ` messageId=${result.messageId.slice(0,8)}` : ''}${result.error ? ` error="${result.error}"` : ''}`);
                 results.push(result);
 
@@ -173,20 +181,14 @@ class ActionExecutorService {
      */
     private async executeOne(
         action: ExecutionAction,
-        context: { 
-            conversationId: string; 
-            accountId: string; 
-            targetAccountId?: string;
-            runtimeConfig?: RuntimeConfig;
-            policyContext?: FluxPolicyContext;
-        }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         switch (action.type) {
             case 'send_message':
                 return this.executeSendMessage(action, context);
 
             case 'send_template':
-                return this.executeSendTemplate(action, context);
+                return this.executeSendTemplate(action);
 
             case 'start_typing':
                 return this.executeStartTyping(action);
@@ -230,13 +232,7 @@ class ActionExecutorService {
      */
     private async executeSendMessage(
         action: { type: 'send_message'; content: string; conversationId: string },
-        context: { 
-            conversationId: string; 
-            accountId: string; 
-            targetAccountId?: string;
-            runtimeConfig?: RuntimeConfig;
-            policyContext?: FluxPolicyContext;
-        }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
             console.log(`[ActionExecutor] �→🔑 CERTIFYING AI RESPONSE VIA KERNEL:`);
@@ -260,6 +256,7 @@ class ActionExecutorService {
                 targetAccountId: context.targetAccountId || 'unknown',
                 content: { text: action.content },
                 turnId: 0, // Will be enriched by caller if needed
+                triggerSignalId: context.triggerSignalId, // ✅ Propagar ID de trazabilidad
                 // ✅ Propagar datos reales del runtime
                 runtimeId: context.runtimeConfig.runtimeId || 'unknown',
                 model: context.runtimeConfig.model || 'unknown',
@@ -290,8 +287,7 @@ class ActionExecutorService {
      * DEUDA: Integrate with templateService for proper rendering.
      */
     private async executeSendTemplate(
-        action: { type: 'send_template'; templateId: string; conversationId: string; variables?: Record<string, string> },
-        _context: { accountId: string }
+        action: { type: 'send_template'; templateId: string; conversationId: string; variables?: Record<string, string> }
     ): Promise<ActionExecutionResult> {
         try {
             // TODO H3: Call templateService.render(templateId, variables) and then send
@@ -345,7 +341,7 @@ class ActionExecutorService {
      */
     private async executeProposeWork(
         action: ProposeWorkAction,
-        context: { accountId: string }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
             const traceId = `propose-${Date.now()}`;
@@ -389,7 +385,7 @@ class ActionExecutorService {
      */
     private async executeOpenWork(
         action: OpenWorkAction,
-        context: { accountId: string }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
             const work = await workEngineService.openWork(context.accountId, action.proposedWorkId);
@@ -414,7 +410,7 @@ class ActionExecutorService {
      */
     private async executeAdvanceWorkState(
         action: AdvanceWorkStateAction,
-        context: { accountId: string }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
             if (action.slots.length > 0) {
@@ -442,7 +438,7 @@ class ActionExecutorService {
      */
     private async executeRequestSlot(
         action: RequestSlotAction,
-        context: { accountId: string }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
             const traceId = `semantic-${Date.now()}`;
@@ -472,7 +468,7 @@ class ActionExecutorService {
      */
     private async executeCloseWork(
         action: CloseWorkAction,
-        context: { accountId: string }
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
             const terminalState = action.resolution === 'completed' ? 'COMPLETED'

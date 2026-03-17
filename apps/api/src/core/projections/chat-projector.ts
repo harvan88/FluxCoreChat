@@ -295,6 +295,7 @@ export class ChatProjector extends BaseProjector {
         const accountId = evidence?.accountId;           // who responds (the business/assistant)
         const targetAccountId = evidence?.targetAccountId; // who receives (the user)
         const content = evidence?.content;
+        const triggerSignalId = evidence?.context?.triggerSignalId; // ✅ Correlación de trazabilidad
 
         if (!conversationId || !accountId || !content) {
             console.warn(`[ChatProjector] ⚠️ AI_RESPONSE_GENERATED signal #${signal.sequenceNumber} missing required fields`);
@@ -324,6 +325,7 @@ export class ChatProjector extends BaseProjector {
                     content,
                     type: 'outgoing',
                     generatedBy: 'ai',
+                    triggerSignalId, // ✅ Pasar ID original para telemetría
                 });
                 console.log(`[ChatProjector] ✅ AI response delivered via ChatCore: msgId=${result.messageId?.slice(0, 8)} success=${result.success}`);
             } catch (err: any) {

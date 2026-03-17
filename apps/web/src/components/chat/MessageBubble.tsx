@@ -365,7 +365,7 @@ export function MessageBubble({
         <div
           className={clsx(
             'flex items-center gap-1.5 mt-1 text-xs',
-            isOwn ? 'text-white/80 justify-end' : 'text-muted'
+            isOwn ? 'text-white/80 justify-end' : 'text-muted justify-end'
           )}
           onMouseEnter={() => setShowOptionsButton(true)}
           onMouseLeave={() => setShowOptionsButton(false)}

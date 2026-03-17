@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FluxPolicyContextService â€” Canon v8.3
  *
  * Resolves the flat FluxPolicyContext BEFORE any runtime is invoked.
@@ -13,18 +13,12 @@
  */
 
 import { coreEventBus } from '../core/events';
-import { db, relationships, accounts, fluxcoreWorks, fluxcoreWorkDefinitions } from '@fluxcore/db';
-import { sql, eq, and, notInArray } from 'drizzle-orm';
-import type { FluxPolicyContext, RuntimeConfig, OffHoursPolicy } from '@fluxcore/db';
+import { db, relationships, accounts } from '@fluxcore/db';
+import { sql, eq } from 'drizzle-orm';
+import type { FluxPolicyContext, RuntimeConfig } from '@fluxcore/db';
 import { assetPolicyService } from './asset-policy.service';
+import { automationController } from './automation-controller.service';
 
-interface FluxCoreExtensionConfig {
-    tone?: 'formal' | 'casual' | 'neutral';
-    useEmojis?: boolean;
-    language?: string;
-    mode?: 'suggest' | 'auto' | 'off';
-    responseDelay?: number;
-}
 
 class FluxPolicyContextService {
     private cache: Map<string, FluxPolicyContext> = new Map();
@@ -102,6 +96,17 @@ class FluxPolicyContextService {
             policyData = await this.createDefaultPolicy(accountId);
         }
 
+        // 1.1 Resolución Jerárquica del Modo (The Resolve Chain)
+        // Prioridad: Relationship (automation_rules) > Account (fluxcore_account_policies)
+        let resolvedMode = policyData.mode;
+        if (contactId) {
+            const relationshipMode = await automationController.getRelationshipMode(accountId, contactId);
+            if (relationshipMode) {
+                console.log(`[FluxPolicyContext] 🎯 EXCEPCIÓN ENCONTRADA: Usando modo '${relationshipMode}' para la relación ${contactId}`);
+                resolvedMode = relationshipMode;
+            }
+        }
+
         // 2. Asistente activo (fuente: fluxcore_assistants + relaciones)
         const assistantResult = await db.execute(sql`
             SELECT id, name, account_id, runtime, status, model_config, 
@@ -151,14 +156,14 @@ class FluxPolicyContextService {
         const authorizedTemplates = await this.resolveAuthorizedTemplates(accountId);
 
         // 6. Contexto Fluxi si está activo
-        const fluxiContext = await this.resolveFluxiContext(accountId);
+        await this.resolveFluxiContext(accountId);
 
         const policyContext: FluxPolicyContext = {
             accountId,
             contactId,
             conversationId: '', // Added if required by FluxPolicyContext type
             channel,
-            mode: policyData.mode,
+            mode: resolvedMode as any,
             responseDelayMs: policyData.responseDelayMs,
             turnWindowMs: policyData.turnWindowMs,
             turnWindowTypingMs: policyData.turnWindowTypingMs,
@@ -364,7 +369,7 @@ class FluxPolicyContextService {
                 actorType: 'system',
                 context: {
                     action: 'preview',
-                    channel: 'kernel',
+                    channel: 'kernel' as any,
                 },
             });
 
@@ -376,10 +381,6 @@ class FluxPolicyContextService {
         return profile as any;
     }
 
-    private async resolveBusinessHours(accountId: string): Promise<any> {
-        // Placeholder or implement based on existing logic if any
-        return [];
-    }
 
     private async createDefaultPolicy(accountId: string) {
         const result = await db.execute(sql`

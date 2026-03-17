@@ -120,6 +120,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     try {
       const accountId = (query as any)?.accountId as string | undefined;
       const relationshipId = (query as any)?.relationshipId as string | undefined;
+      const conversationId = (query as any)?.conversationId as string | undefined;
 
       if (!accountId) {
         set.status = 400;
@@ -137,6 +138,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
       const context = await fluxPolicyContextService.resolve({
         accountId,
         relationshipId,
+        conversationId: conversationId || '',
       });
 
       return { success: true, data: context };
@@ -148,6 +150,7 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
     query: t.Object({
       accountId: t.String(),
       relationshipId: t.Optional(t.String()),
+      conversationId: t.Optional(t.String()),
     }),
     detail: {
       tags: ['AI'],
@@ -385,221 +388,6 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
   }, {
     query: t.Object({
       accountId: t.String(),
-    }),
-  })
-
-  // POST /ai/generate - Generar respuesta manualmente
-  .post('/generate', async ({ user, body, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { success: false, message: 'Unauthorized' };
-    }
-
-    try {
-      const { conversationId, accountId, message } = body as any;
-
-      if (!conversationId || !accountId || !message) {
-        set.status = 400;
-        return {
-          success: false,
-          message: 'conversationId, accountId and message are required'
-        };
-      }
-
-      const userAccounts = await accountService.getAccountsByUserId(user.id);
-      const allowed = userAccounts.some((a) => a.id === accountId);
-      if (!allowed) {
-        set.status = 403;
-        return { success: false, message: 'Account does not belong to user' };
-      }
-
-      const result = await aiService.generateResponse(
-        conversationId,
-        accountId,
-        message,
-        { mode: 'suggest' }
-      );
-
-      if (!result.ok) {
-        set.status = 403;
-        return {
-          success: false,
-          message: result.block.message,
-          block: result.block,
-        };
-      }
-
-      if (!result.suggestion) {
-        return {
-          success: true,
-          data: null,
-          message: 'No suggestion generated (API may not be configured)',
-        };
-      }
-
-      return {
-        success: true,
-        data: result.suggestion,
-      };
-    } catch (error: any) {
-      set.status = 500;
-      return { success: false, message: error.message };
-    }
-  }, {
-    body: t.Object({
-      conversationId: t.String(),
-      accountId: t.String(),
-      message: t.String(),
-    }),
-  })
-
-  // GET /ai/suggestions/:conversationId - Obtener sugerencias pendientes
-  .get('/suggestions/:conversationId', async ({ user, params, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { success: false, message: 'Unauthorized' };
-    }
-
-    try {
-      const suggestions = aiService.getPendingSuggestions(params.conversationId);
-
-      return {
-        success: true,
-        data: suggestions,
-      };
-    } catch (error: any) {
-      set.status = 500;
-      return { success: false, message: error.message };
-    }
-  }, {
-    params: t.Object({
-      conversationId: t.String(),
-    }),
-  })
-
-  // GET /ai/suggestion/:suggestionId - Obtener una sugerencia específica
-  .get('/suggestion/:suggestionId', async ({ user, params, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { success: false, message: 'Unauthorized' };
-    }
-
-    try {
-      const suggestion = aiService.getSuggestion(params.suggestionId);
-
-      if (!suggestion) {
-        set.status = 404;
-        return { success: false, message: 'Suggestion not found' };
-      }
-
-      return {
-        success: true,
-        data: suggestion,
-      };
-    } catch (error: any) {
-      set.status = 500;
-      return { success: false, message: error.message };
-    }
-  }, {
-    params: t.Object({
-      suggestionId: t.String(),
-    }),
-  })
-
-  // POST /ai/suggestion/:suggestionId/approve - Aprobar sugerencia
-  .post('/suggestion/:suggestionId/approve', async ({ user, params, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { success: false, message: 'Unauthorized' };
-    }
-
-    try {
-      const suggestion = aiService.approveSuggestion(params.suggestionId);
-
-      if (!suggestion) {
-        set.status = 404;
-        return { success: false, message: 'Suggestion not found' };
-      }
-
-      return {
-        success: true,
-        data: suggestion,
-      };
-    } catch (error: any) {
-      set.status = 500;
-      return { success: false, message: error.message };
-    }
-  }, {
-    params: t.Object({
-      suggestionId: t.String(),
-    }),
-  })
-
-  // POST /ai/suggestion/:suggestionId/reject - Rechazar sugerencia
-  .post('/suggestion/:suggestionId/reject', async ({ user, params, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { success: false, message: 'Unauthorized' };
-    }
-
-    try {
-      const suggestion = aiService.rejectSuggestion(params.suggestionId);
-
-      if (!suggestion) {
-        set.status = 404;
-        return { success: false, message: 'Suggestion not found' };
-      }
-
-      return {
-        success: true,
-        data: suggestion,
-      };
-    } catch (error: any) {
-      set.status = 500;
-      return { success: false, message: error.message };
-    }
-  }, {
-    params: t.Object({
-      suggestionId: t.String(),
-    }),
-  })
-
-  // POST /ai/suggestion/:suggestionId/edit - Editar y aprobar sugerencia
-  .post('/suggestion/:suggestionId/edit', async ({ user, params, body, set }) => {
-    if (!user) {
-      set.status = 401;
-      return { success: false, message: 'Unauthorized' };
-    }
-
-    try {
-      const { content } = body as any;
-
-      if (!content) {
-        set.status = 400;
-        return { success: false, message: 'content is required' };
-      }
-
-      const suggestion = aiService.editSuggestion(params.suggestionId, content);
-
-      if (!suggestion) {
-        set.status = 404;
-        return { success: false, message: 'Suggestion not found' };
-      }
-
-      return {
-        success: true,
-        data: suggestion,
-      };
-    } catch (error: any) {
-      set.status = 500;
-      return { success: false, message: error.message };
-    }
-  }, {
-    params: t.Object({
-      suggestionId: t.String(),
-    }),
-    body: t.Object({
-      content: t.String(),
     }),
   })
 

@@ -344,7 +344,7 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     onSuggestion: (suggestion) => {
       if (suggestion.conversationId === conversationId) {
         addSuggestion(suggestion);
-        if ((suggestion as any).mode === 'automatic') {
+        if ((suggestion as any).mode === 'auto') {
           setWaitingAutoReply(conversationId, suggestion.id, SMART_DELAY_INITIAL_MS);
         }
       }

@@ -11,7 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 /**
  * Modos de automatización
  */
-export type AutomationMode = 'automatic' | 'supervised' | 'disabled';
+export type AutomationMode = 'auto' | 'suggest' | 'off';
 
 const AUTOMATION_UPDATE_EVENT = 'fluxcore:automation-update';
 
@@ -73,7 +73,7 @@ export interface TriggerEvaluation {
  */
 export function useAutomation(accountId: string | null, relationshipId?: string) {
   const [rules, setRules] = useState<AutomationRule[]>([]);
-  const [currentMode, setCurrentMode] = useState<AutomationMode>('disabled');
+  const [currentMode, setCurrentMode] = useState<AutomationMode>('off');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,9 +167,9 @@ export function useAutomation(accountId: string | null, relationshipId?: string)
       }
     } catch (err: any) {
       console.warn('[useAutomation] Could not load mode:', err.message);
-      return { mode: 'disabled', rule: null, source: 'default' };
+      return { mode: 'off', rule: null, source: 'default' };
     }
-  }, [accountId]);
+  }, [accountId, relationshipId]);
 
   // Crear o actualizar regla
   const setRule = useCallback(async (

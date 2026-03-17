@@ -2,7 +2,7 @@
  * COR-007: Automation Rules Schema
  * 
  * Define reglas de automatización por account/relationship.
- * Controla modos: automatic, supervised, disabled.
+ * Controla modos: auto, suggest, off.
  */
 
 import { pgTable, uuid, varchar, timestamp, jsonb, boolean } from 'drizzle-orm/pg-core';
@@ -12,7 +12,7 @@ import { relationships } from './relationships';
 /**
  * Modos de automatización según TOTEM 9.9.1
  */
-export type AutomationMode = 'automatic' | 'supervised' | 'disabled';
+export type AutomationMode = 'auto' | 'suggest' | 'off';
 
 /**
  * Tabla de configuración de automatización
@@ -32,10 +32,10 @@ export const automationRules = pgTable('automation_rules', {
   relationshipId: uuid('relationship_id')
     .references(() => relationships.id, { onDelete: 'cascade' }),
   
-  // Modo de automatización: automatic | supervised | disabled
+  // Modo de automatización: auto | suggest | off
   mode: varchar('mode', { length: 20 })
     .notNull()
-    .default('supervised'),
+    .default('suggest'),
   
   // Activo/inactivo
   enabled: boolean('enabled')

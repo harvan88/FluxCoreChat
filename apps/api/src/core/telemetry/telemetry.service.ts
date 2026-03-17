@@ -12,6 +12,8 @@ export interface PipelineTelemetryEvent {
     model?: string;
     errorDetail?: string;
     latencyMs?: number;
+    newSignalId?: number;
+    triggerSignalId?: number;
   };
   timestamp: string;
 }

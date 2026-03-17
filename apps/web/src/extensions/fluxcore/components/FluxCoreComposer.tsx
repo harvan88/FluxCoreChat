@@ -22,7 +22,8 @@ import { AudioRecorderPanel } from '../../../components/chat/AudioRecorderPanel'
 import { CameraCaptureModal } from '../../../components/chat/CameraCaptureModal';
 import { EmojiPanel } from '../../../components/chat/EmojiPanel';
 import { TemplateQuickPicker } from '../../../components/chat/TemplateQuickPicker';
-import { useAssistantMode, type AssistantMode, useAIStatus } from '../../../hooks/fluxcore';
+import { useAIStatus } from '../../../hooks/fluxcore';
+import { useAutomation, type AutomationMode } from '../../../hooks/useAutomation';
 import { SuggestResponsePanel } from './SuggestResponsePanel';
 import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadResult } from '../../../components/chat/composerUploadTypes';
 import type { Template } from '../../../components/templates/types';
@@ -63,7 +64,7 @@ export function FluxCoreComposer(props: {
     const openTab = usePanelStore((state) => state.openTab);
     const setActiveActivity = useUIStore((state) => state.setActiveActivity);
 
-    const { mode: currentMode, isLoading: isAutomationLoading, setMode: setModeOnAssistant } = useAssistantMode(props.accountId ?? null);
+    const { currentMode, isLoading: isAutomationLoading, setRule } = useAutomation(props.accountId ?? null, props.relationshipId);
     const {
         status: aiStatus,
         eligibility: aiEligibility,
@@ -76,7 +77,7 @@ export function FluxCoreComposer(props: {
     const openGalleryRef = useRef<(() => void) | null>(null);
     const openDocumentRef = useRef<(() => void) | null>(null);
 
-    const effectiveAIMode: AssistantMode = props.accountId ? (currentMode === 'off' ? 'off' : currentMode) : 'off';
+    const effectiveAIMode: AutomationMode = props.accountId ? (currentMode === 'off' ? 'off' : currentMode) : 'off';
     const isAutomaticMode = effectiveAIMode === 'auto';
     const hasQueuedMedia = queuedMedia.length > 0;
     const hasText = props.value.trim().length > 0;
@@ -128,7 +129,7 @@ export function FluxCoreComposer(props: {
 
     const isAutomationBlocked = Boolean(aiBlockInfo);
     const canSend = !props.disabled && !props.isSending && !isAutomaticMode && (hasText || hasQueuedMedia);
-    const canOpenAIModeSelector = !!props.accountId && !props.disabled && !isAutomationBlocked;
+    const canOpenAIModeSelector = !!props.accountId && !props.disabled;
 
     useEffect(() => {
         if (isAudioRecorderOpen) {
@@ -224,9 +225,9 @@ export function FluxCoreComposer(props: {
         }
     };
 
-    const setAIMode = async (mode: AssistantMode) => {
+    const setAIMode = async (mode: AutomationMode) => {
         if (!props.accountId) return;
-        await setModeOnAssistant(mode);
+        await setRule(mode, { relationshipId: props.relationshipId });
         setIsAIModeOpen(false);
     };
 

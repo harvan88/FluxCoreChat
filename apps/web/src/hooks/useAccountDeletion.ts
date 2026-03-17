@@ -153,11 +153,13 @@ export function useAccountDeletion({ accountId, sessionAccountId, accountName }:
       const shouldSwitchSelected = uiState.selectedAccountId === removedAccountId;
       const fallbackAccountId = pickFallbackAccountId(remainingAccounts);
 
+      // Update accountStore
       useAccountStore.setState((state) => ({
         accounts: remainingAccounts,
         activeAccountId: shouldSwitchActive ? fallbackAccountId : state.activeAccountId,
       }));
 
+      // Sync uiStore
       uiState.setAccounts(remainingAccounts);
 
       if (shouldSwitchSelected) {
@@ -165,6 +167,11 @@ export function useAccountDeletion({ accountId, sessionAccountId, accountName }:
         if (fallbackAccountId) {
           setCurrentAccountDB(fallbackAccountId);
         }
+      }
+
+      // If we switched the active account, ensure AccountSwitcher reflects this
+      if (shouldSwitchActive && fallbackAccountId) {
+        useAccountStore.getState().setActiveAccount(fallbackAccountId);
       }
 
       if (!remainingAccounts.length) {

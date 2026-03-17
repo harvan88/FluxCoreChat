@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
-import { AlertCircle, CheckCircle, CircleDashed, Loader2, Activity, ShieldCheck, Zap, Copy, Check } from 'lucide-react';
+import { AlertCircle, CheckCircle, CircleDashed, Loader2, Activity, ShieldCheck, Copy, Check } from 'lucide-react';
 
 interface TelemetryStep {
     step: 'ingreso' | 'proyeccion' | 'worker' | 'dispatcher' | 'runtime' | 'certificacion' | 'entrega';
@@ -110,11 +110,30 @@ export function VisualPipeline() {
         };
     }, [selectedAccountId, token]);
 
+    // Fallback para copiar cuando navigator.clipboard no está disponible
+    const copyViaFallback = useCallback((content: string) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = content;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const succeeded = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!succeeded) {
+            throw new Error('Fallback copy failed');
+        }
+    }, []);
+
     // Función para copiar una traza individual
-    const copyTraceToClipboard = useCallback((trace: PipelineTrace) => {
+    const copyTraceToClipboard = useCallback(async (trace: PipelineTrace) => {
+        const dataToCopy = JSON.stringify(trace, null, 2);
         try {
-            const dataToCopy = JSON.stringify(trace, null, 2);
-            navigator.clipboard.writeText(dataToCopy);
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(dataToCopy);
+            } else {
+                copyViaFallback(dataToCopy);
+            }
             
             setCopiedId(trace.messageId);
             setTimeout(() => setCopiedId(null), 2000);
@@ -126,23 +145,40 @@ export function VisualPipeline() {
                 durationMs: 3000
             });
         } catch (err) {
-            console.error('Failed to copy trace:', err);
-            pushToast({
-                type: 'error',
-                title: 'Error al copiar',
-                description: 'No se pudo copiar la traza al portapapeles.',
-                durationMs: 3000
-            });
+            console.warn('[VisualPipeline] clipboard copy failed, trying fallback', err);
+            try {
+                copyViaFallback(dataToCopy);
+                setCopiedId(trace.messageId);
+                setTimeout(() => setCopiedId(null), 2000);
+                pushToast({
+                    type: 'success',
+                    title: 'Copiado al portapapeles',
+                    description: `Trace ${trace.messageId.slice(0, 8)}... copiado exitosamente.`,
+                    durationMs: 3000
+                });
+            } catch (fallbackErr) {
+                console.error('Failed to copy trace:', fallbackErr);
+                pushToast({
+                    type: 'error',
+                    title: 'Error al copiar',
+                    description: 'No se pudo copiar la traza al portapapeles.',
+                    durationMs: 3000
+                });
+            }
         }
-    }, [pushToast]);
+    }, [pushToast, copyViaFallback]);
 
     // Función para copiar todas las trazas
-    const copyAllTraces = useCallback(() => {
+    const copyAllTraces = useCallback(async () => {
         if (Object.keys(traces).length === 0) return;
         
+        const dataToCopy = JSON.stringify(Object.values(traces), null, 2);
         try {
-            const dataToCopy = JSON.stringify(Object.values(traces), null, 2);
-            navigator.clipboard.writeText(dataToCopy);
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(dataToCopy);
+            } else {
+                copyViaFallback(dataToCopy);
+            }
             
             pushToast({
                 type: 'success',
@@ -151,15 +187,26 @@ export function VisualPipeline() {
                 durationMs: 3000
             });
         } catch (err) {
-            console.error('Failed to copy traces:', err);
-            pushToast({
-                type: 'error',
-                title: 'Error al copiar',
-                description: 'No se pudieron copiar las trazas.',
-                durationMs: 3000
-            });
+            console.warn('[VisualPipeline] clipboard copy failed, trying fallback', err);
+            try {
+                copyViaFallback(dataToCopy);
+                pushToast({
+                    type: 'success',
+                    title: 'Todas las trazas copiadas',
+                    description: `${Object.keys(traces).length} trazas copiadas al portapapeles.`,
+                    durationMs: 3000
+                });
+            } catch (fallbackErr) {
+                console.error('Failed to copy traces:', fallbackErr);
+                pushToast({
+                    type: 'error',
+                    title: 'Error al copiar',
+                    description: 'No se pudieron copiar las trazas.',
+                    durationMs: 3000
+                });
+            }
         }
-    }, [traces, pushToast]);
+    }, [traces, pushToast, copyViaFallback]);
 
     const renderStepIcon = (status?: string) => {
         switch (status) {

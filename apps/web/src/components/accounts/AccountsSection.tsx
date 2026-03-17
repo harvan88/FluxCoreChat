@@ -4,7 +4,7 @@
  * Incluye: ConvertToBusiness, CreateBusinessAccount
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ChevronRight,
   Building2,
@@ -36,11 +36,8 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
     convertToBusiness,
     clearError,
     loadAccounts,
-    setActiveAccount,
   } = useAccounts();
 
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [isDeletionModalOpen, setIsDeletionModalOpen] = useState(false);
   const [modalAccount, setModalAccount] = useState<Account | null>(null);
 
   useEffect(() => {
@@ -51,54 +48,31 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
     }
   }, [accounts.length, isLoading, loadAccounts]);
 
-  useEffect(() => {
-    if (!accounts.length) {
-      setSelectedAccountId(null);
-      return;
-    }
-
-    const knownActiveId = selectedAccountId || activeAccount?.id;
-    const accountExists = knownActiveId && accounts.some((account) => account.id === knownActiveId);
-
-    if (accountExists) {
-      if (!selectedAccountId && activeAccount?.id) {
-        setSelectedAccountId(activeAccount.id);
-      }
-      return;
-    }
-
-    const fallbackId = activeAccount?.id ?? accounts[0]?.id ?? null;
-    if (fallbackId) {
-      setSelectedAccountId(fallbackId);
-      setActiveAccount(fallbackId);
-    }
-  }, [accounts, activeAccount, selectedAccountId, setActiveAccount]);
-
-  const currentAccount = useMemo(() => {
-    if (!accounts.length) return null;
-    const id = selectedAccountId || activeAccount?.id;
-    if (!id) return null;
-    return accounts.find((account) => account.id === id) ?? null;
-  }, [accounts, selectedAccountId, activeAccount]);
-
-  const handleSelectAccount = (accountId: string) => {
-    setSelectedAccountId(accountId);
-    setActiveAccount(accountId);
-  };
+  const [isDeletionModalOpen, setIsDeletionModalOpen] = useState(false);
 
   const handleOpenDeletionModal = (account: Account) => {
-    if (selectedAccountId !== account.id) {
-      handleSelectAccount(account.id);
-    }
     setModalAccount(account);
     setIsDeletionModalOpen(true);
   };
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
+  const [accountToConvert, setAccountToConvert] = useState<Account | null>(null);
 
   const personalAccounts = accounts.filter((a) => a.accountType === 'personal');
   const businessAccounts = accounts.filter((a) => a.accountType === 'business');
+
+  const handleConvertToBusiness = (account: Account) => {
+    setAccountToConvert(account);
+    setShowConvertConfirm(true);
+  };
+
+  const handleConfirmConvert = async () => {
+    if (!accountToConvert) return;
+    await convertToBusiness(accountToConvert.id);
+    setShowConvertConfirm(false);
+    setAccountToConvert(null);
+  };
 
   return (
     <>
@@ -126,18 +100,18 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-6">
             {/* Active Account */}
-            {currentAccount && (
+            {activeAccount && (
               <Card className="p-4">
                 <div className="flex items-center gap-3">
                   <Avatar
-                    src={currentAccount.profile?.avatarUrl}
-                    name={currentAccount.displayName || currentAccount.alias}
+                    src={activeAccount.profile?.avatarUrl}
+                    name={activeAccount.displayName || activeAccount.alias}
                     size="xl"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-primary font-semibold truncate">{currentAccount.displayName}</div>
+                    <div className="text-primary font-semibold truncate">{activeAccount.displayName}</div>
                     <div className="flex items-center gap-1 text-sm text-secondary">
-                      {currentAccount.accountType === 'business' ? (
+                      {activeAccount.accountType === 'business' ? (
                         <>
                           <Building2 size={14} />
                           <span>Cuenta de negocio</span>
@@ -150,13 +124,13 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
                       )}
                     </div>
                     <div className="mt-1">
-                      <IdCopyable id={currentAccount.id} prefix="" />
+                      <IdCopyable id={activeAccount.id} prefix="" />
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="px-2 py-1 bg-accent/10 text-accent text-xs rounded font-medium">Activa</div>
                     <DoubleConfirmationDeleteButton
-                      onConfirm={() => handleOpenDeletionModal(currentAccount)}
+                      onConfirm={() => handleOpenDeletionModal(activeAccount)}
                       className="h-8"
                     />
                   </div>
@@ -164,43 +138,30 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
               </Card>
             )}
 
-            {/* Convert to Business (FC-813) */}
-            {currentAccount?.accountType === 'personal' && (
-              <Card variant="bordered" className="p-4">
+            {/* Convert to Business Confirmation Modal */}
+            {showConvertConfirm && accountToConvert && (
+              <Card variant="bordered" className="p-4 bg-warning/5 border-warning/20">
                 <div className="flex items-start gap-3">
-                  <Building2 size={24} className="text-accent flex-shrink-0 mt-0.5" />
+                  <Building2 size={24} className="text-warning flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <h3 className="text-primary font-semibold">Convertir a cuenta de negocio</h3>
                     <p className="text-sm text-secondary mt-1">
-                      Activa funciones empresariales como colaboradores, permisos avanzados y más.
+                      ¿Convertir "{accountToConvert.displayName}" a cuenta de negocio? Esta acción activará funciones empresariales como colaboradores, permisos avanzados y más.
                     </p>
-                    {showConvertConfirm ? (
-                      <div className="mt-4 p-3 bg-warning/10 border border-warning/20 rounded-lg">
-                        <p className="text-sm text-warning mb-3">¿Estás seguro? Esta acción no se puede deshacer.</p>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={async () => {
-                              if (!currentAccount) return;
-                              await convertToBusiness(currentAccount.id);
-                              setSelectedAccountId(currentAccount.id);
-                              setShowConvertConfirm(false);
-                            }}
-                            disabled={isLoading}
-                          >
-                            {isLoading ? <Loader2 size={14} className="animate-spin" /> : 'Confirmar'}
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setShowConvertConfirm(false)}>
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button variant="secondary" size="sm" className="mt-3" onClick={() => setShowConvertConfirm(true)}>
-                        Convertir cuenta
+                    <p className="text-sm text-warning mt-2">Esta acción no se puede deshacer.</p>
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleConfirmConvert}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? <Loader2 size={14} className="animate-spin" /> : 'Confirmar'}
                       </Button>
-                    )}
+                      <Button variant="ghost" size="sm" onClick={() => setShowConvertConfirm(false)}>
+                        Cancelar
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -217,9 +178,9 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
                   <AccountCard
                     key={account.id}
                     account={account}
-                    isActive={account.id === currentAccount?.id}
-                    onSelect={() => handleSelectAccount(account.id)}
+                    isActive={account.id === activeAccount?.id}
                     onDelete={() => handleOpenDeletionModal(account)}
+                    onConvertToBusiness={() => handleConvertToBusiness(account)}
                   />
                 ))}
               </div>
@@ -237,8 +198,7 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
                     <AccountCard
                       key={account.id}
                       account={account}
-                      isActive={account.id === currentAccount?.id}
-                      onSelect={() => handleSelectAccount(account.id)}
+                      isActive={account.id === activeAccount?.id}
                       onDelete={() => handleOpenDeletionModal(account)}
                     />
                   ))}
@@ -301,29 +261,17 @@ export function AccountsSection({ onBack }: AccountsSectionProps) {
 interface AccountCardProps {
   account: Account;
   isActive: boolean;
-  onSelect?: () => void;
   onDelete?: () => void;
+  onConvertToBusiness?: () => void;
 }
 
-function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps) {
+function AccountCard({ account, isActive, onDelete, onConvertToBusiness }: AccountCardProps) {
   const Icon = account.accountType === 'business' ? Building2 : User;
   const avatarUrl = account.profile?.avatarUrl;
   const displayName = account.displayName || account.alias;
 
   return (
-    <Card
-      className={`p-3 cursor-pointer ${isActive ? 'ring-1 ring-accent' : ''}`}
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (!onSelect) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-    >
+    <Card className={`p-3 ${isActive ? 'ring-1 ring-accent' : ''}`}>
       <div className="flex items-center gap-3">
         <Avatar
           src={avatarUrl}
@@ -342,6 +290,16 @@ function AccountCard({ account, isActive, onSelect, onDelete }: AccountCardProps
         </div>
         <div className="flex items-center gap-2">
           {isActive && <Check size={16} className="text-accent" />}
+          {account.accountType === 'personal' && onConvertToBusiness && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onConvertToBusiness}
+              className="text-xs"
+            >
+              Convertir
+            </Button>
+          )}
           {onDelete && (
             <DoubleConfirmationDeleteButton
               onConfirm={onDelete}

@@ -2,7 +2,6 @@ import { db } from '@fluxcore/db';
 import { accounts, actors, users } from '@fluxcore/db';
 import { eq, and, or, ne, ilike } from 'drizzle-orm';
 import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
-import { extensionHost } from './extension-host.service';
 import { coreEventBus } from '../core/events';
 import type { Account } from '@fluxcore/db';
 
@@ -66,10 +65,9 @@ export class AccountService {
       actorType: 'account',
     });
 
-    await extensionHost.installPreinstalledExtensions(account.id);
 
-    // Crear relación con FluxCore y conversación de bienvenida
-    await this.createFluxCoreWelcome(account.id, data.displayName);
+
+
 
     return account;
   }
@@ -271,12 +269,6 @@ export class AccountService {
     return updatedAccount;
   }
 
-  /**
-   * Crear relación con FluxCore y conversación de bienvenida
-   */
-  private async createFluxCoreWelcome(newAccountId: string, userName: string) {
-    await extensionHost.tryCreateWelcomeConversation({ newAccountId, userName });
-  }
 }
 
 export const accountService = new AccountService();

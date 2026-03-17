@@ -49,9 +49,9 @@ const triggerTypeOptions: SelectOption[] = [
 ];
 
 const modeOptions: SelectOption[] = [
-  { value: 'automatic', label: 'Automático' },
-  { value: 'supervised', label: 'Supervisado' },
-  { value: 'disabled', label: 'Deshabilitado' },
+  { value: 'auto', label: 'Automático' },
+  { value: 'suggest', label: 'Supervisado' },
+  { value: 'off', label: 'Apagado' },
 ];
 
 const formatter = new Intl.DateTimeFormat('es-ES', {
@@ -88,7 +88,7 @@ export function AutomationSection({ onBack }: AutomationSectionProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [formType, setFormType] = useState<TriggerFormType>('keyword');
   const [formValue, setFormValue] = useState('');
-  const [formMode, setFormMode] = useState<AutomationMode>('automatic');
+  const [formMode, setFormMode] = useState<AutomationMode>('suggest');
   const [cronTimezone, setCronTimezone] = useState('UTC');
   const [cronMatch, setCronMatch] = useState<'minute' | 'cron'>('cron');
   const [formError, setFormError] = useState<string | null>(null);
@@ -204,7 +204,7 @@ export function AutomationSection({ onBack }: AutomationSectionProps) {
   const handleResetForm = () => {
     setFormType('keyword');
     setFormValue('');
-    setFormMode('automatic');
+    setFormMode('suggest');
     setCronTimezone('UTC');
     setCronMatch('cron');
     setFormError(null);

@@ -1,6 +1,6 @@
 
 import clsx from 'clsx';
-import { useAssistantMode } from '../../hooks/fluxcore/useAssistantMode';
+import { useAutomation } from '../../hooks/useAutomation';
 import { useExtensions } from '../../hooks/useExtensions';
 
 export function AIStatusHeader({ accountId }: { accountId: string }) {
@@ -10,7 +10,8 @@ export function AIStatusHeader({ accountId }: { accountId: string }) {
         (i) => i.extensionId === '@fluxcore/asistentes' && i.enabled
     );
 
-    const { mode, setMode, isLoading } = useAssistantMode(accountId);
+    const { currentMode: mode, setRule, isLoading } = useAutomation(accountId);
+    const setMode = (newMode: 'auto' | 'suggest' | 'off') => setRule(newMode);
 
     if (!isFluxCoreEnabled) return null;
 

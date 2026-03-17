@@ -1,7 +1,6 @@
 import { bootstrapKernel } from './bootstrap/kernel.bootstrap';
 import { kernelDispatcher } from './core/kernel-dispatcher';
 import { startProjectors } from './core/kernel/projector-runner';
-import { messageDispatchService } from './services/message-dispatch.service';
 
 async function startKernelRuntime() {
   console.log('🧠 [KernelRuntime] Bootstrapping FluxCore kernel process');
@@ -26,10 +25,6 @@ async function startKernelRuntime() {
     console.error('[KernelRuntime] Failed to start projectors', error);
     throw error;
   }
-
-  // The import above instantiates MessageDispatchService and registers the listener.
-  messageDispatchService.init();
-  console.log('[KernelRuntime] MessageDispatchService online');
 }
 
 startKernelRuntime().catch((error) => {
