@@ -32,6 +32,7 @@ export class CognitionGatewayService {
         targetAccountId: string; // Cuenta que recibe la respuesta (el usuario)
         content: { text: string };
         turnId: number;
+        triggerSignalId?: number; // ✅ Nuevo: Para trazabilidad unificada
         runtimeId?: string;
         model?: string;
         provider?: string;      // ✅ Nuevo
@@ -56,6 +57,7 @@ export class CognitionGatewayService {
                     runtimeId: params.runtimeId || 'unknown',
                     model: params.model || 'unknown',
                     provider: params.provider || 'unknown',
+                    triggerSignalId: params.triggerSignalId, // ✅ Para correlación
                     // ✅ PolicyContext completo para trazabilidad
                     policyContext: params.policyContext ? {
                         accountId: params.policyContext.accountId,
@@ -113,10 +115,14 @@ export class CognitionGatewayService {
             try {
                 const { coreEventBus } = await import('../../core/events');
                 coreEventBus.emit('telemetry:pipeline_step', {
-                    messageId: seq.toString(),
+                    messageId: String(params.triggerSignalId || seq),
                     conversationId: params.conversationId,
                     step: 'certificacion',
                     status: 'success',
+                    metadata: { 
+                        newSignalId: seq,
+                        triggerSignalId: params.triggerSignalId 
+                    },
                     timestamp: new Date().toISOString()
                 });
             } catch (e) {}

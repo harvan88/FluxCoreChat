@@ -9,9 +9,9 @@ import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { AIStatusHeader } from './AIStatusHeader';
-import { AIStatusIndicator } from './AIStatusIndicator';
+import { ConversationRowAIStatus } from './ConversationRowAIStatus';
 import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
-import { useAssistantMode, type AssistantMode } from '../../hooks/fluxcore/useAssistantMode';
+
 import { useExtensions } from '../../hooks/useExtensions';
 import { useScroll } from '../../hooks/useScroll';
 import clsx from 'clsx';
@@ -25,7 +25,7 @@ export function ConversationsList() {
     selectedAccountId,
   } = useUIStore();
 
-  const { mode: globalAIMode, setMode, isLoading: isAutomationLoading } = useAssistantMode(selectedAccountId);
+
 
   // Check extensions
   const { installations } = useExtensions(selectedAccountId);
@@ -100,12 +100,7 @@ export function ConversationsList() {
       conv.channel.toLowerCase().includes(search);
   });
 
-  const getEffectiveAIMode = (_relationshipId: string): AssistantMode => globalAIMode;
-
-  const toggleConversationAIMode = async (_relationshipId: string, currentMode: AssistantMode) => {
-    const nextMode: AssistantMode = currentMode === 'auto' ? 'off' : 'auto';
-    await setMode(nextMode);
-  };
+  // getEffectiveAIMode y toggleConversationAIMode movidos a ConversationRowAIStatus
 
   // getAIModePresentation y toggleConversationAIMode movidos a AIStatusIndicator
 
@@ -221,7 +216,7 @@ export function ConversationsList() {
           </div>
         ) : (
           filteredConversations.map((conversation) => {
-            const aiMode = getEffectiveAIMode(conversation.relationshipId);
+            // El modo se maneja ahora dentro de ConversationRowAIStatus
 
             return (
               <div
@@ -272,14 +267,10 @@ export function ConversationsList() {
                       <div className="text-sm text-secondary truncate">
                         {conversation.lastMessageText || 'Sin mensajes'}
                       </div>
-                      <AIStatusIndicator
-                        mode={aiMode}
+                      <ConversationRowAIStatus
+                        accountId={selectedAccountId!}
+                        relationshipId={conversation.relationshipId}
                         isFluxCoreEnabled={isFluxCoreEnabled}
-                        isLoading={isAutomationLoading}
-                        onToggle={(e) => {
-                          e.stopPropagation();
-                          void toggleConversationAIMode(conversation.relationshipId, aiMode);
-                        }}
                       />
                     </div>
                     {conversation.unreadCountA > 0 && (

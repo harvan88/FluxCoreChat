@@ -1,8 +1,8 @@
 # Reconstruction Phase 1 - Documentation Index
 
 **Status:** ✅ Organized & Active  
-**Last Update:** 2026-03-16  
-**Focus:** Live Telemetry & Core Sovereignty  
+**Last Update:** 2026-03-17  
+**Focus:** AI Modes Unification & Suggest Mode Fix  
 
 ---
 
@@ -34,15 +34,21 @@
 ## 🔍 **Audits & Analysis**
 - [`CRISIS_ANALYSIS`](./analysis/CRISIS_IMPLEMENTACION_ANALYSIS.md) - Critical audit.
 - [`AUDIT_NEW_ARCH`](./analysis/AUDIT_FLUX_NEW_ARCHITECTURE.md) - Structural audit.
+- [`AI_MODES_UNIFICATION`](./analysis/AI_MODES_UNIFICATION.md) - ✅ Diagnóstico, migración y fix de modos de IA.
+- [`LIVE_PIPELINE_MANIFESTO`](./analysis/LIVE_COGNITIVE_PIPELINE_MANIFESTO.md) - Pipeline de 7 nodos y variantes por modo.
 
 ---
 
 ## 🎯 **Recent Achievements**
 - [x] **Deployment of Visual Telemetry** (7-node pipeline).
 - [x] **Handshake Authentication** for WebSockets.
-- [x] **Clipboard Integration** for technical traces.
+- [x] **Clipboard Integration** for technical traces (+ fallback fix).
 - [x] **Documentation Restructuring**.
+- [x] **AI Modes Unification** — `auto|suggest|off` en todo el stack.
+- [x] **Suggest Mode Bug Fix** — Gate pre-execute en CognitiveDispatcher.
+- [x] **Suggestion Approval Fix** — Aprobación vía `messageCore.send()` con broadcast WS.
+- [x] **Pipeline Manifesto Updated** — Variantes por modo documentadas.
 
 ---
 
-**Next Review:** Documentation cleanup and module expansion phase.
+**Next Review:** `temp/` limpiado. Originales archivados en `_historical/`.

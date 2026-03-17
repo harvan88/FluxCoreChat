@@ -901,27 +901,8 @@ class AIService {
       createdAt: options.triggerMessageCreatedAt || new Date(),
     };
 
-    // ── 5. Execute: OpenAI Assistants API path ──────────────────────────
+    // ── 5. Execute: OpenAI Assistants API path (Legacy/Removed) ──────────
     let suggestion: AISuggestion | null = null;
-
-    if (plan.runtime === 'openai' && plan.externalId) {
-      try {
-        const { extensionHost } = await import('./extension-host.service');
-        const openaiExtension = await extensionHost.loadExtensionRuntime('@fluxcore/asistentes-openai');
-        if (openaiExtension?.generateResponse) {
-          suggestion = await openaiExtension.generateResponse({
-            plan,
-            context,
-            event,
-            lastMessageContent,
-            options,
-          });
-        }
-      } catch (error: any) {
-        console.error(`${tracePrefix} OpenAI Assistants extension path failed:`, error?.message);
-        // Fall through to local runtime as last resort
-      }
-    }
 
     // ── 6. Execute: Local runtime (FluxCore extension) ──────────────────
     suggestion = await extension.generateResponse({

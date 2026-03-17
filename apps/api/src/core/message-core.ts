@@ -194,7 +194,7 @@ export class MessageCore {
       if (envelope.generatedBy === 'ai') {
         try {
           coreEventBus.emit('telemetry:pipeline_step', {
-            messageId: message.id,
+            messageId: String(envelope.triggerSignalId || message.id),
             conversationId: envelope.conversationId,
             step: 'entrega',
             status: 'success',
@@ -223,8 +223,8 @@ export class MessageCore {
   /**
    * Obtiene el historial de mensajes de una conversación
    */
-  async getHistory(conversationId: string, limit = 50, offset = 0) {
-    return await messageService.getMessagesByConversationId(conversationId, limit, offset);
+  async getHistory(conversationId: string, limit = 50, cursor?: Date) {
+    return await messageService.getMessagesByConversationId(conversationId, limit, cursor);
   }
 
   /**

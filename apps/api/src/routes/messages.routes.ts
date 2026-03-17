@@ -1,6 +1,5 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { extensionHost } from '../services/extension-host.service';
 import { db, accounts } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 
@@ -370,11 +369,12 @@ export const messagesRoutes = new Elysia({ prefix: '/messages' })
         const isFluxCoreBranded = existingContent?.__fluxcore?.branding === true;
 
         const typedBody: any = body as any;
+        const { appendFluxCoreBrandingFooter } = await import('../services/ai-branding.service');
         let nextContent: any = typedBody.content;
         if (isFluxCoreBranded && typeof nextContent?.text === 'string') {
           nextContent = {
             ...nextContent,
-            text: extensionHost.appendFluxCoreBrandingFooter(nextContent.text),
+            text: appendFluxCoreBrandingFooter(nextContent.text),
             __fluxcore: existingContent.__fluxcore,
           };
         }

@@ -60,7 +60,6 @@ import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-han
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
 import { mediaOrchestrator } from './services/media-orchestrator.service';
-import { messageDispatchService } from './services/message-dispatch.service';
 import { accountDeletionWorker } from './workers/account-deletion.worker';
 import { featureFlags } from './config/feature-flags';
 import { startAccountDeletionQueue, stopAccountDeletionQueue } from './workers/account-deletion.queue';
@@ -619,19 +618,14 @@ console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
     automationScheduler.init();
     wesScheduler.init();
     mediaOrchestrator.init();
-    messageDispatchService.init();
 
     console.log('   - FluxCore v8.2 Runtime Registration');
     runtimeGateway.register(asistentesLocalRuntime);
     runtimeGateway.register(asistentesOpenAIRuntime);
     runtimeGateway.register(fluxiRuntime);
 
-    if (featureFlags.fluxNewArchitecture) {
-      console.log('   - CognitionWorker (FLUX_NEW_ARCHITECTURE=true)');
-      cognitionWorker.start();
-    } else {
-      console.log('   - CognitionWorker DISABLED (set FLUX_NEW_ARCHITECTURE=true to enable)');
-    }
+    console.log('   - CognitionWorker (Always ON)');
+    cognitionWorker.start();
 
     console.log('✅ Kernel & Services started successfully');
   } catch (error) {
@@ -659,9 +653,7 @@ if (useAccountDeletionQueue) {
   accountDeletionWorker.start();
   addCleanupTask(() => accountDeletionWorker.stop());
   addCleanupTask(() => wesScheduler.stop());
-  if (featureFlags.fluxNewArchitecture) {
-    addCleanupTask(() => cognitionWorker.stop());
-  }
+  addCleanupTask(() => cognitionWorker.stop());
   console.log('🧹 AccountDeletion processing running on interval worker');
 }
 

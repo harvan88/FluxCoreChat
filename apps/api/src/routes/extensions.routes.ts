@@ -6,7 +6,6 @@
 import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { extensionService } from '../services/extension.service';
-import { extensionHost } from '../services/extension-host.service';
 import { manifestLoader } from '../services/manifest-loader.service';
 import { extensionPermissionsService } from '../services/extension-permissions.service';
 import { accountService } from '../services/account.service';
@@ -22,7 +21,7 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
     }
 
     try {
-      const available = extensionHost.getAvailableExtensions();
+      const available = manifestLoader.getAllManifests();
       return {
         success: true,
         data: available,
@@ -128,10 +127,7 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
         grantedBy: undefined, // null = auto-concedido (propietario)
         canSharePermissions: true, // Propietario puede compartir permisos
       });
-
-      await extensionHost.onInstall(accountId, extensionId);
-      await extensionHost.onConfigUpdate(accountId, extensionId, (installation as any).config || defaultConfig);
-      await extensionHost.onEnable(accountId, extensionId);
+      // Legacy lifecycle notifications removed
 
       return {
         success: true,
@@ -175,7 +171,7 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
       const extensionId = decodeURIComponent(params.extensionId);
 
-      await extensionHost.onUninstall(params.accountId, extensionId);
+      // await extensionHost.onUninstall(params.accountId, extensionId);
 
       const deleted = await extensionService.uninstall(params.accountId, extensionId);
       
@@ -218,31 +214,14 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
       const extensionId = decodeURIComponent(params.extensionId);
 
-      // Validar configuración si se proporciona
-      if (config) {
-        const validation = extensionHost.validateConfig(extensionId, config);
-        if (!validation.valid) {
-          set.status = 400;
-          return { success: false, message: validation.errors.join(', ') };
-        }
-      }
+      // Legacy config validation removed
 
       const updated = await extensionService.update(params.accountId, extensionId, {
         config,
         enabled,
       });
 
-      if (updated) {
-        if (config) {
-          await extensionHost.onConfigUpdate(params.accountId, extensionId, (updated as any).config || config);
-        }
-        if (enabled === true) {
-          await extensionHost.onEnable(params.accountId, extensionId);
-        }
-        if (enabled === false) {
-          await extensionHost.onDisable(params.accountId, extensionId);
-        }
-      }
+      // Legacy lifecycle notifications removed
 
       if (!updated) {
         set.status = 404;
@@ -285,7 +264,6 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
       const extensionId = decodeURIComponent(params.extensionId);
       const updated = await extensionService.setEnabled(params.accountId, extensionId, true);
-      await extensionHost.onEnable(params.accountId, extensionId);
       return { success: true, data: updated };
     } catch (error: any) {
       set.status = 500;
@@ -315,7 +293,6 @@ export const extensionRoutes = new Elysia({ prefix: '/extensions' })
 
       const extensionId = decodeURIComponent(params.extensionId);
       const updated = await extensionService.setEnabled(params.accountId, extensionId, false);
-      await extensionHost.onDisable(params.accountId, extensionId);
       return { success: true, data: updated };
     } catch (error: any) {
       set.status = 500;

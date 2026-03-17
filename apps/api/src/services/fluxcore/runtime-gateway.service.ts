@@ -41,7 +41,7 @@ class RuntimeGatewayService {
      * 
      * Enforces timeout and catches runtime errors gracefully.
      */
-    async invoke(runtimeId: string, input: RuntimeInput): Promise<ExecutionAction[]> {
+    async invoke(runtimeId: string, input: RuntimeInput, triggerSignalId?: string | number): Promise<ExecutionAction[]> {
         const runtime = this.runtimes.get(runtimeId);
         if (!runtime) {
             throw new Error(`Runtime "${runtimeId}" not found. Registered: [${this.listRegistered().join(', ')}]`);
@@ -64,7 +64,7 @@ class RuntimeGatewayService {
             try {
                 const { coreEventBus } = await import('../../core/events');
                 coreEventBus.emit('telemetry:pipeline_step', {
-                    messageId: String(input.policyContext.conversationId), // Reference ID
+                    messageId: String(triggerSignalId || input.policyContext.conversationId), // Reference ID
                     conversationId: input.policyContext.conversationId,
                     step: 'runtime',
                     status: 'success',
@@ -82,7 +82,7 @@ class RuntimeGatewayService {
             try {
                 const { coreEventBus } = await import('../../core/events');
                 coreEventBus.emit('telemetry:pipeline_step', {
-                    messageId: String(input.policyContext.conversationId), // Reference ID
+                    messageId: String(triggerSignalId || input.policyContext.conversationId), // Reference ID
                     conversationId: input.policyContext.conversationId,
                     step: 'runtime',
                     status: 'error',

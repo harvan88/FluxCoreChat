@@ -12,6 +12,7 @@
 import { db, extensionInstallations } from '@fluxcore/db';
 import { and, eq } from 'drizzle-orm';
 import { aiEntitlementsService, type AIProviderId } from './ai-entitlements.service';
+import { fluxPolicyContextService } from './flux-policy-context.service';
 import { creditsService } from './credits.service';
 import type {
   ExecutionPlan,
@@ -108,7 +109,18 @@ export async function resolveExecutionPlan(
     return blocked(accountId, conversationId, 'no_assistant', 'No hay asistente activo configurado para esta cuenta.');
   }
 
-  // 2. Read extension installation config (mode, enabled)
+  // 2. Resolve Effective Mode from Policy Context (Hierarchical: Rel > Account)
+  const policyContext = await fluxPolicyContextService.resolve({
+    accountId,
+    conversationId,
+  });
+
+  const mode = policyContext.mode;
+  if (mode === 'off') {
+    return blocked(accountId, conversationId, 'mode_off', 'El modo de IA está desactivado para esta conversación.', undefined, composition);
+  }
+
+  // 3. Read extension installation config (enabled)
   const [installation] = await db
     .select()
     .from(extensionInstallations)
@@ -127,12 +139,6 @@ export async function resolveExecutionPlan(
     return blocked(accountId, conversationId, 'ai_disabled', 'La extensión de IA está deshabilitada para esta cuenta.', undefined, composition);
   }
 
-  const tc = (composition.assistant.timingConfig as Record<string, any>) || {};
-  const mode = (tc.mode as 'suggest' | 'auto' | 'off') || 'auto';
-  if (mode === 'off') {
-    return blocked(accountId, conversationId, 'mode_off', 'El modo de IA está desactivado.', undefined, composition);
-  }
-
   // 3. Extract assistant model config
   const mc = (composition.assistant.modelConfig as Record<string, any>) || {};
 
@@ -143,7 +149,7 @@ export async function resolveExecutionPlan(
   const topP = typeof mc.topP === 'number' ? mc.topP : 1.0;
   const responseFormat = mc.responseFormat === 'json' ? 'json' as const : 'text' as const;
   const maxTokens = typeof mc.maxTokens === 'number' ? mc.maxTokens : 256;
-  const responseDelay = typeof tc.responseDelaySeconds === 'number' ? tc.responseDelaySeconds : 2;
+  const responseDelay = typeof policyContext.responseDelayMs === 'number' ? policyContext.responseDelayMs / 1000 : 2;
 
   // 4. Resolve entitlements & allowed providers
   const entitlement = await aiEntitlementsService.getEntitlement(accountId);

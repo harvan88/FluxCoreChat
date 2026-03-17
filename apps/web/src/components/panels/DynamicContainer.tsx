@@ -94,9 +94,19 @@ export function DynamicContainer({ container, isActive }: DynamicContainerProps)
   return (
     <div
       className={`
-        flex flex-col h-full bg-surface border border-subtle rounded overflow-hidden
-        ${isActive ? 'ring-1 ring-[var(--accent-primary)]' : ''}
+        flex flex-col h-full bg-surface rounded overflow-hidden relative
+        ${isActive ? 'border border-[var(--accent-primary)]' : 'border border-subtle'}
       `}
+      style={{
+        ...(isActive && {
+          zIndex: 10,
+          opacity: 1,
+          borderColor: 'rgba(59, 130, 246, 0.3)'  // azul #3b82f6 con 30% opacidad
+        }),
+        ...(!isActive && {
+          opacity: 0.8
+        })
+      }}
       onClick={handleFocus}
     >
       {/* Tab Bar */}

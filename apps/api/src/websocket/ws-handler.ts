@@ -7,7 +7,7 @@
 
 import { messageCore } from '../core/message-core';
 import { automationController } from '../services/automation-controller.service';
-import { extensionHost } from '../services/extension-host.service';
+import * as branding from '../services/ai-branding.service';
 import { smartDelayService } from '../services/smart-delay.service';
 import { chatCoreGateway } from '../services/fluxcore/chatcore-gateway.service';
 import { chatCoreWebchatGateway } from '../services/fluxcore/chatcore-webchat-gateway.service';
@@ -329,9 +329,9 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
       case 'approve_suggestion':
         // Aprobar y enviar sugerencia como mensaje
         if (data.conversationId && data.senderAccountId && data.suggestedText) {
-          const decision = extensionHost.getSuggestionBrandingDecision(data.suggestionId);
+          const decision = branding.getSuggestionBrandingDecision(data.suggestedText);
           const finalText = decision.promo
-            ? extensionHost.appendFluxCoreBrandingFooter(data.suggestedText)
+            ? branding.appendFluxCoreBrandingFooter(data.suggestedText)
             : data.suggestedText;
 
           const content: any = decision.promo
@@ -682,53 +682,20 @@ async function handleSuggestionRequest(ws: any, data: WSMessage): Promise<void> 
       }));
 
       const lastMessage = data.content?.text || 'Mensaje del usuario';
-      const result = await extensionHost.generateAIResponse(
-        conversationId!,
-        accountId!,
-        lastMessage,
-        {
-          mode: evaluation.mode === 'automatic' ? 'auto' : 'suggest',
-          triggerMessageId: typeof data?.messageId === 'string' ? data.messageId : undefined,
-          triggerMessageCreatedAt: data?.createdAt ? new Date(data.createdAt as any) : undefined,
-          traceId,
-        }
-      );
-
-      if (!result.ok) {
-        ws.send(JSON.stringify({
-          type: 'suggestion:unavailable',
-          reason: result.block.message,
-          conversationId,
-        }));
-        return null;
-      }
-
-      const aiSuggestion = result.suggestion;
-      if (!aiSuggestion) {
-        ws.send(JSON.stringify({
-          type: 'suggestion:unavailable',
-          reason: 'AI service not configured.',
-          conversationId,
-        }));
-        return null;
-      }
-
-      const stripped = extensionHost.stripFluxCorePromoMarker(aiSuggestion.content);
-      return {
-        id: aiSuggestion.id,
+      
+      // ⚠️ LEGACY: Direct generation from ChatCore WS is deprecated.
+      // Suggestions should flow through the Cognitive Pipeline (Kernel -> CognitionWorker).
+      // Returning error for now to force transition or use RuntimeGateway if available.
+      ws.send(JSON.stringify({
+        type: 'suggestion:unavailable',
+        reason: 'Legacy AI generation removed. Pipeline transformation in progress.',
         conversationId,
-        extensionId: '@fluxcore/asistentes',
-        suggestedText: stripped.text,
-        confidence: 0.9,
-        reasoning: `Generado por ${aiSuggestion.model} (${aiSuggestion.usage?.totalTokens ?? 0} tokens)`,
-        alternatives: [],
-        createdAt: aiSuggestion.generatedAt?.toISOString() ?? new Date().toISOString(),
-        mode: evaluation.mode,
-      };
+      }));
+      return null;
     };
 
     // 🔧 NUEVO: Aplicar delay ANTES de generar (en modo automático)
-    if (evaluation.mode === 'automatic') {
+    if (evaluation.mode === 'auto') {
       if (smartDelayEnabled) {
         // Smart delay: Monitorea actividad del usuario
         smartDelayService.scheduleResponse({
@@ -944,9 +911,9 @@ async function processSuggestion(ws: any, params: {
     }));
 
     // Send the message
-    const decision = extensionHost.getSuggestionBrandingDecision(params.suggestion.id);
+    const decision = branding.getSuggestionBrandingDecision(params.suggestion.suggestedText);
     const finalText = decision.promo
-      ? extensionHost.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
+      ? branding.appendFluxCoreBrandingFooter(params.suggestion.suggestedText)
       : params.suggestion.suggestedText;
 
     // 🔥 CRITICAL: Resolve the actor for the responding account so AI messages have proper sender identity

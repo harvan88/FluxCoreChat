@@ -153,7 +153,7 @@ class CognitionWorkerService {
         // 🎯 TELEMETRÍA (Fase 1): Worker inició
         try {
             coreEventBus.emit('telemetry:pipeline_step', {
-                messageId: String(entryId),
+                messageId: String(entry.last_signal_seq),
                 conversationId: entry.conversation_id,
                 step: 'worker',
                 status: 'processing',
@@ -204,7 +204,7 @@ class CognitionWorkerService {
                 // 🎯 TELEMETRÍA (Fase 1): Worker completó
                 try {
                     coreEventBus.emit('telemetry:pipeline_step', {
-                        messageId: String(entryId),
+                        messageId: String(entry.last_signal_seq),
                         conversationId: entry.conversation_id,
                         step: 'worker',
                         status: 'success',
@@ -237,7 +237,7 @@ class CognitionWorkerService {
                 // 🎯 TELEMETRÍA (Fase 1): Worker erró
                 try {
                     coreEventBus.emit('telemetry:pipeline_step', {
-                        messageId: String(entryId),
+                        messageId: String(entry.last_signal_seq),
                         conversationId: entry.conversation_id,
                         step: 'worker',
                         status: 'error',

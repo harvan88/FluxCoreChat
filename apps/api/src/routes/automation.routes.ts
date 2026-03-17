@@ -125,9 +125,9 @@ export const automationRoutes = new Elysia({ prefix: '/automation' })
       };
 
       // Validar modo
-      if (!['automatic', 'supervised', 'disabled'].includes(mode)) {
+      if (!['auto', 'suggest', 'off'].includes(mode)) {
         set.status = 400;
-        return { success: false, message: 'Invalid mode. Must be: automatic, supervised, or disabled' };
+        return { success: false, message: 'Invalid mode. Must be: auto, suggest, or off' };
       }
 
       const rule = await automationController.setRule(accountId, mode, {

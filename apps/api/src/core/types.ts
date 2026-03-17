@@ -1,7 +1,14 @@
 
 import type { MessageContent } from '@fluxcore/db';
-import type { ProcessMessageResult } from '../services/extension-host.service';
 import type { TriggerEvaluation } from '../services/automation-controller.service';
+ 
+ export interface ProcessMessageResult {
+    extensionId: string;
+    success: boolean;
+    error?: string;
+    data?: any;
+    stopPropagation?: boolean;
+}
 
 export interface MessageEnvelope {
     id?: string;
@@ -11,6 +18,7 @@ export interface MessageEnvelope {
     content: MessageContent;
     type: 'incoming' | 'outgoing' | 'system';
     generatedBy?: 'human' | 'ai' | 'system';
+    triggerSignalId?: number; // ✅ ID original para trazabilidad
     timestamp?: Date;
     // Contexto adicional para extensiones
     targetAccountId?: string;  // La cuenta que recibe el mensaje

@@ -4,7 +4,6 @@ import { users, accounts, passwordResetTokens } from '@fluxcore/db';
 import { eq, and, gt } from 'drizzle-orm';
 import { systemAdminService } from './system-admin.service';
 import { accountService } from './account.service';
-import { extensionHost } from './extension-host.service';
 
 const SALT_ROUNDS = 10;
 
@@ -46,8 +45,6 @@ export class AuthService {
 
     console.log(`[Auth] Created user ${user.id} with account ${account.id}`);
 
-    // Crear relación con FluxCore y conversación de bienvenida
-    await this.createFluxCoreWelcome(account.id, data.name);
 
     return user;
   }
@@ -182,12 +179,6 @@ export class AuthService {
     return true;
   }
 
-  /**
-   * Crear relación con FluxCore y mensaje de bienvenida
-   */
-  private async createFluxCoreWelcome(newAccountId: string, userName: string) {
-    await extensionHost.tryCreateWelcomeConversation({ newAccountId, userName });
-  }
 }
 
 export const authService = new AuthService();
