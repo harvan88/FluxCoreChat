@@ -52,7 +52,15 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
       }
 
       const accounts = await accountService.getAccountsByUserId(user.id);
-      const accountsWithAvatar = await presentAccountsWithAvatar(accounts, { actorId: user.id });
+      // Map each account with system actor for avatar signing (accounts can't sign their own assets)
+      const accountsWithAvatar = await Promise.all(
+        accounts.map(account => presentAccountWithAvatar(account, { 
+          actorId: 'system-account-avatar',
+          actorType: 'system',
+          action: 'preview',
+          channel: 'web'
+        }))
+      );
 
       return {
         success: true,
@@ -123,7 +131,12 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
 
       try {
         const account = await accountService.getAccountById(params.id);
-        const accountWithAvatar = await presentAccountWithAvatar(account, { actorId: user.id });
+        const accountWithAvatar = await presentAccountWithAvatar(account, { 
+          actorId: 'system-account-avatar',
+          actorType: 'system',
+          action: 'preview',
+          channel: 'web'
+        });
 
         return {
           success: true,
@@ -189,6 +202,7 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
         aiIncludeBio: t.Optional(t.Boolean()),
         aiIncludePrivateContext: t.Optional(t.Boolean()),
         alias: t.Optional(t.Union([t.String({ minLength: 3, maxLength: 30 }), t.Null()])),
+        avatarAssetId: t.Optional(t.String()),
       }),
       detail: {
         tags: ['Accounts'],

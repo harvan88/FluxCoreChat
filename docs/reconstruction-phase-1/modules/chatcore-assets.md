@@ -229,6 +229,43 @@ Esto confirma otra idea importante:
 - los assets no pertenecen solo al chat
 - también son infraestructura de perfil y presentación pública del sistema
 
+## 10.1. Avatar Presentation Pattern
+
+### Problema resuelto (2026-03-15)
+El AccountSwitcher y otros componentes del frontend no mostraban avatares porque usaban `account.id` como `actorId` para firmar assets, pero los actores tipo `account` no tienen permisos para firmar sus propios assets.
+
+### Solución canónica
+Los avatares usan un patrón de presentación específico:
+
+1. **Fuente de verdad**: `accounts.avatarAssetId` (UUID referenciando `assets.id`)
+2. **Signing**: Actores `system` con contexto específico para generar URLs firmadas
+3. **Presentación**: `account-avatar.presenter.ts` transforma `avatarAssetId` → `profile.avatarUrl`
+
+### Implementación
+```typescript
+// accounts.routes.ts - Avatar signing para UI autenticada
+presentAccountWithAvatar(account, { 
+  actorId: 'system-account-avatar',
+  actorType: 'system',
+  action: 'preview',
+  channel: 'web'
+})
+
+// public-profile.routes.ts - Avatar signing para perfiles públicos  
+presentAccountWithAvatar(account, { 
+  actorId: 'system-public-profile',
+  actorType: 'system',
+  action: 'preview', 
+  channel: 'web'
+})
+```
+
+### Invariantes
+- **Actores `account` nunca firman sus propios assets** (seguridad)
+- **Solo actores `system` pueden firmar assets** para presentación
+- **El frontend siempre consume `profile.avatarUrl`** (URL firmada, nunca el UUID)
+- **`avatarAssetId` permanece como única fuente de verdad** en la DB
+
 ## 11. Trazabilidad y auditoría
 
 La infraestructura actual ya prevé:

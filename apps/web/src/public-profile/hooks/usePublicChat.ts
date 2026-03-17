@@ -23,11 +23,12 @@ export type PublicMessage = Message;
 interface UsePublicChatOptions {
   alias: string;
   onConversationCreated?: (conversationId: string) => void;
+  skipChat?: boolean;
 }
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOptions) {
+export function usePublicChat({ alias, onConversationCreated, skipChat = false }: UsePublicChatOptions) {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOpt
 
   // 2. Load conversation history on mount (works for both auth and anon)
   useEffect(() => {
-    if (!profile || historyLoaded) return;
+    if (!profile || historyLoaded || skipChat) return;
     let cancelled = false;
 
     const loadHistory = async () => {
@@ -316,7 +317,7 @@ export function usePublicChat({ alias, onConversationCreated }: UsePublicChatOpt
 
   // Start WebSocket when profile is loaded and history has been fetched
   useEffect(() => {
-    if (!profile || !historyLoaded) return;
+    if (!profile || !historyLoaded || skipChat) return;
     connectWebSocket();
 
     return () => {

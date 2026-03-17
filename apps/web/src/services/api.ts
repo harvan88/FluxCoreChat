@@ -432,6 +432,26 @@ class ApiService {
     return this.request<{ sessions: KernelSession[] }>(`/kernel/sessions/active?${query.toString()}`);
   }
 
+  async getKernelConsoleSignals(
+    accountId: string,
+    params?: { factType?: string; sourceNamespace?: string; search?: string; limit?: number }
+  ): Promise<ApiResponse<any[]>> {
+    const query = new URLSearchParams();
+    if (params?.factType) query.set('factType', params.factType);
+    if (params?.sourceNamespace) query.set('sourceNamespace', params.sourceNamespace);
+    if (params?.search) query.set('search', params.search);
+    if (params?.limit) query.set('limit', String(params.limit));
+
+    const qs = query.toString();
+    const endpoint = `/kernel/console/signals${qs ? '?' + qs : ''}`;
+
+    return this.request<any[]>(endpoint, {
+      headers: {
+        'x-account-id': accountId,
+      },
+    });
+  }
+
   async getAgents(accountId: string): Promise<ApiResponse<any[]>> {
     return this.request<any[]>(`/fluxcore/agents?accountId=${encodeURIComponent(accountId)}`);
   }

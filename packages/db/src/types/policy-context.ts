@@ -103,10 +103,7 @@ export interface FluxPolicyContext {
     offHoursPolicy: OffHoursPolicy;
     contactRules: ContactRule[];
 
-    // ── Runtime ───────────────────────────────────────────────────────────────
-    /** ID of the registered RuntimeAdapter to invoke */
-    activeRuntimeId: string;
-
+    // ── Template authorization ──────────────────────────────────────────────────
     /** Template IDs authorized at the policy level */
     authorizedTemplates: string[];
 
@@ -131,6 +128,5 @@ export const FLUX_DEFAULT_POLICY: Omit<FluxPolicyContext, 'accountId' | 'contact
     turnWindowMaxMs: 60000,
     offHoursPolicy: { action: 'ignore' },
     contactRules: [],
-    activeRuntimeId: 'asistentes-local',
     authorizedTemplates: [],
 };

@@ -1,7 +1,7 @@
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, Evidence } from '../../core/types';
 import crypto from 'node:crypto';
-import { sql } from 'drizzle-orm';
+
 
 /**
  * ChatCore Reality Adapter (GATEWAY)
@@ -125,12 +125,24 @@ export class ChatCoreGatewayService {
             candidate.certifiedBy.signature = this.signCandidate(candidate);
             console.log(`[ChatCoreGateway] ✍️  Candidate signed: signature=${candidate.certifiedBy.signature.substring(0, 16)}...`);
 
-            // 6. Ingesta en Kernel (Soberanía)
             console.log(`[ChatCoreGateway] ➡️  Calling kernel.ingestSignal()...`);
             const seq = await kernel.ingestSignal(candidate);
 
             console.log(`[ChatCoreGateway] ✅ CERTIFY_INGRESS SUCCESS ==================`);
             console.log(`[ChatCoreGateway] 👁️ Certified ingress from ${params.userId || params.accountId}. Signal #${seq}`);
+
+            // 🎯 TELEMETRÍA (Fase 1): Ingreso Certificado
+            try {
+                const { coreEventBus } = await import('../../core/events');
+                coreEventBus.emit('telemetry:pipeline_step', {
+                    messageId: seq.toString(),
+                    conversationId: params.meta.conversationId || 'unknown',
+                    step: 'ingreso',
+                    status: 'success',
+                    timestamp: new Date().toISOString()
+                });
+            } catch (e) {}
+
             return { accepted: true, signalId: seq };
 
         } catch (error: any) {

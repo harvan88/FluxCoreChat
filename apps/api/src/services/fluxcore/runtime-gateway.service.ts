@@ -60,10 +60,36 @@ class RuntimeGatewayService {
             const durationMs = Date.now() - startTime;
             console.log(`[RuntimeGateway] ✅ Runtime "${runtime.displayName}" completed in ${durationMs}ms, returned ${actions.length} action(s)`);
 
+            // 🎯 TELEMETRÍA (Fase 1): Runtime éxito
+            try {
+                const { coreEventBus } = await import('../../core/events');
+                coreEventBus.emit('telemetry:pipeline_step', {
+                    messageId: String(input.policyContext.conversationId), // Reference ID
+                    conversationId: input.policyContext.conversationId,
+                    step: 'runtime',
+                    status: 'success',
+                    metadata: { runtimeId, latencyMs: durationMs },
+                    timestamp: new Date().toISOString()
+                });
+            } catch (e) {}
+
             return actions;
         } catch (error: any) {
             const durationMs = Date.now() - startTime;
             console.error(`[RuntimeGateway] ❌ Runtime "${runtime.displayName}" failed after ${durationMs}ms:`, error.message);
+
+            // 🎯 TELEMETRÍA (Fase 1): Runtime falló
+            try {
+                const { coreEventBus } = await import('../../core/events');
+                coreEventBus.emit('telemetry:pipeline_step', {
+                    messageId: String(input.policyContext.conversationId), // Reference ID
+                    conversationId: input.policyContext.conversationId,
+                    step: 'runtime',
+                    status: 'error',
+                    metadata: { runtimeId, errorDetail: error.message, latencyMs: durationMs },
+                    timestamp: new Date().toISOString()
+                });
+            } catch (e) {}
 
             return [{
                 type: 'no_action',

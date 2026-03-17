@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../services/api';
 import type { AccountDeletionLog, AccountOrphanReference } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 const MAX_LOGS = 500;
 
@@ -43,10 +44,7 @@ interface AccountDeletionMonitorState {
   setAuditPrefillAccountId: (accountId: string | null) => void;
 }
 
-const randomId = () =>
-  typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const randomId = () => generateUUID();
 
 const statusToType = (status: string | undefined): LogLevel => {
   const normalized = (status || '').toLowerCase();

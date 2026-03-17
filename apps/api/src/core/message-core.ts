@@ -56,7 +56,15 @@ export class MessageCore {
         generatedBy: envelope.generatedBy || 'human',
         metadata: envelope.meta || {} // 🔑 GUARDAR META COMPLETO CON VERDAD DEL MUNDO
       });
-      console.log(`[MessageCore] ✅ MENSAJE GUARDADO CON ID: ${message.id}`);
+      
+      // 🔥 TRACE: Verificar si el mensaje contiene audio
+      const hasAudio = envelope.content?.media?.some((m: any) => m.type === 'audio');
+      console.log(`[MessageCore] ✅ MENSAJE GUARDADO: ID=${message.id}, hasAudio=${hasAudio}, conversationId=${envelope.conversationId}`);
+      
+      if (hasAudio && envelope.content && envelope.content.media) {
+        const audioAssets = envelope.content.media.filter((m: any) => m.type === 'audio');
+        console.log(`[MessageCore] 🎵 AUDIO ASSETS EN MENSAJE:`, audioAssets.map((a: any) => ({ assetId: a.assetId, name: a.name, mimeType: a.mimeType })));
+      }
 
       // 2. 🔥 NUEVO: Encolar para certificación si es mensaje humano
       if (envelope.generatedBy !== 'ai' && envelope.generatedBy !== 'system') {
@@ -82,12 +90,12 @@ export class MessageCore {
                 requestId: envelope.meta?.requestId,
                 messageId: message.id, // 🔑 Agregar messageId para vincular
                 // 🔑 AGREGAR MÁS METADATA DE LA VERDAD DEL MUNDO
-                origin: envelope.meta?.origin || 'unknown',
-                driverId: envelope.meta?.driverId || 'chatcore/unknown',
-                entryPoint: envelope.meta?.entryPoint || 'api/unknown',
-                channel: envelope.meta?.channel || 'unknown', // 🔑 CHANNEL
-                source: envelope.meta?.source || 'human', // 🔑 SOURCE
-              }
+                origin: (envelope.meta as any)?.origin || 'unknown',
+                driverId: (envelope.meta as any)?.driverId || 'chatcore/unknown',
+                entryPoint: (envelope.meta as any)?.entryPoint || 'api/unknown',
+                channel: (envelope.meta as any)?.channel || 'unknown', // 🔑 CHANNEL
+                source: (envelope.meta as any)?.source || 'human', // 🔑 SOURCE
+              } as any
             });
             console.log(`[MessageCore] ✅ ENCOLADO EN OUTBOX CON META COMPLETO`);
           } catch (error) {
@@ -181,6 +189,19 @@ export class MessageCore {
       // R-02.1: Emitir evento para desacoplar lógica (IA, Analytics)
       console.log(`[FluxPipeline] 📩 RECV  conv=${envelope.conversationId.slice(0,7)} sender=${envelope.senderAccountId?.slice(0,7)} type=${envelope.type} by=${envelope.generatedBy||'human'} → target=${envelope.targetAccountId?.slice(0,7) ?? 'UNKNOWN'}`);
       coreEventBus.emit('core:message_received', { envelope, result });
+
+      // 🎯 TELEMETRÍA (Fase 1): Entrega al cliente
+      if (envelope.generatedBy === 'ai') {
+        try {
+          coreEventBus.emit('telemetry:pipeline_step', {
+            messageId: message.id,
+            conversationId: envelope.conversationId,
+            step: 'entrega',
+            status: 'success',
+            timestamp: new Date().toISOString()
+          });
+        } catch (e) {}
+      }
 
       return result;
     } catch (error: any) {

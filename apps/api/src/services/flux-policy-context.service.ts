@@ -168,15 +168,31 @@ class FluxPolicyContextService {
             authorizedTemplates,
             resolvedBusinessProfile,
             workDefinitions: [],
-            activeRuntimeId: assistant ? this.mapRuntimeId(assistant.runtime) : null,
         };
 
         console.log(`[FluxPolicyContext] ✅ REALIDAD DEFINIDA PARA CUENTA ${accountId}:`);
         console.log(`  - Modo: ${policyContext.mode}`);
         console.log(`  - Channel: ${policyContext.channel}`);
-        console.log(`  - Active Runtime: ${policyContext.activeRuntimeId}`);
         console.log(`  - Contact Rules: ${policyContext.contactRules.length} reglas`);
         console.log(`  - Authorized Templates: ${policyContext.authorizedTemplates.length} templates`);
+        
+        // 🎭 LOG DETALLADO DEL POLICY CONTEXT COMPLETO
+        console.log(`[FluxPolicyContext] 📋 POLICY CONTEXT COMPLETO:`);
+        console.log(`📋 accountId: ${policyContext.accountId}`);
+        console.log(`📋 contactId: ${policyContext.contactId}`);
+        console.log(`📋 conversationId: ${policyContext.conversationId}`);
+        console.log(`📋 channel: ${policyContext.channel}`);
+        console.log(`📋 mode: ${policyContext.mode}`);
+        console.log(`📋 responseDelayMs: ${policyContext.responseDelayMs}`);
+        console.log(`📋 turnWindowMs: ${policyContext.turnWindowMs}`);
+        console.log(`📋 turnWindowTypingMs: ${policyContext.turnWindowTypingMs}`);
+        console.log(`📋 turnWindowMaxMs: ${policyContext.turnWindowMaxMs}`);
+        console.log(`📋 offHoursPolicy:`, JSON.stringify(policyContext.offHoursPolicy, null, 2));
+        console.log(`📋 contactRules:`, JSON.stringify(policyContext.contactRules, null, 2));
+        console.log(`📋 authorizedTemplates:`, JSON.stringify(policyContext.authorizedTemplates, null, 2));
+        console.log(`📋 resolvedBusinessProfile:`, JSON.stringify(policyContext.resolvedBusinessProfile, null, 2));
+        console.log(`📋 workDefinitions:`, JSON.stringify(policyContext.workDefinitions, null, 2));
+        console.log(`[FluxPolicyContext] 📋 FIN POLICY CONTEXT DETALLADO`);
 
         const runtimeConfig: RuntimeConfig = assistant
             ? {
@@ -314,6 +330,7 @@ class FluxPolicyContextService {
                 username: accounts.username,
                 displayName: accounts.displayName,
                 profile: accounts.profile,
+                privateContext: accounts.privateContext,
                 avatarAssetId: accounts.avatarAssetId,
             })
             .from(accounts)
@@ -336,8 +353,8 @@ class FluxPolicyContextService {
         if (authorizedScopes.includes('location')) {
             profile.location = accountProfile.address || accountProfile.location || undefined;
         }
-        if (authorizedScopes.includes('businessHours')) {
-            profile.businessHours = accountProfile.businessHours || [];
+        if (authorizedScopes.includes('privateContext')) {
+            profile.privateContext = account.privateContext || undefined;
         }
 
         if (authorizedScopes.includes('avatar') && account.avatarAssetId) {

@@ -10,6 +10,7 @@
  */
 
 import { db } from '@fluxcore/db';
+import { coreEventBus } from '../core/events';
 import { 
     messageAssets, 
     templateAssets, 
@@ -115,6 +116,13 @@ export class AssetRelationsService {
             });
 
             console.log(`[AssetRelations] Asset ${assetId} linked to message ${messageId}`);
+
+            // 🎯 EMITIR EVENTO ASSET:LINKED
+            coreEventBus.emit('asset:linked', {
+                assetId,
+                messageId,
+                accountId,
+            });
 
             return {
                 success: true,

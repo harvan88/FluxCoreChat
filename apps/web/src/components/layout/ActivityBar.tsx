@@ -275,22 +275,25 @@ export function ActivityBar() {
           </div>
         )}
 
-        <button
-          onClick={handleOpenMonitoring}
-          className={clsx(
-            'w-full flex items-center gap-3 rounded-lg transition-all duration-200',
-            activityBarExpanded ? 'px-3 py-2.5' : 'px-0 py-2.5 justify-center',
-            activeActivity === 'monitoring'
-              ? 'bg-active text-primary'
-              : 'text-secondary hover:text-primary hover:bg-hover'
-          )}
-          title={!activityBarExpanded ? 'Monitoring Hub' : undefined}
-        >
-          <MonitoringIcon size={18} className="flex-shrink-0" />
-          {activityBarExpanded && (
-            <span className="text-sm font-medium truncate">Monitoring</span>
-          )}
-        </button>
+        {/* Monitoring Hub - Solo visible para Harvan */}
+        {selectedAccountId === '3e94f74e-e6a0-4794-bd66-16081ee3b02d' && (
+          <button
+            onClick={handleOpenMonitoring}
+            className={clsx(
+              'w-full flex items-center gap-3 rounded-lg transition-all duration-200',
+              activityBarExpanded ? 'px-3 py-2.5' : 'px-0 py-2.5 justify-center',
+              activeActivity === 'monitoring'
+                ? 'bg-active text-primary'
+                : 'text-secondary hover:text-primary hover:bg-hover'
+            )}
+            title={!activityBarExpanded ? 'Monitoring Hub' : undefined}
+          >
+            <MonitoringIcon size={18} className="flex-shrink-0" />
+            {activityBarExpanded && (
+              <span className="text-sm font-medium truncate">Monitoring</span>
+            )}
+          </button>
+        )}
 
         <button
           onClick={logout}

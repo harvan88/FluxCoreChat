@@ -7,6 +7,7 @@
 
 import { db, type LocalMessage, type SyncQueueItem } from '../index';
 import { createSyncQueueItem } from '../schema';
+import { generateUUID } from '../../utils/uuid';
 
 const buildContentSignature = (message: {
   senderAccountId?: string;
@@ -134,7 +135,7 @@ class SyncManager {
   ): Promise<LocalMessage> {
     // Create local message
     const localMessage: LocalMessage = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       conversationId,
       senderAccountId,
       content,

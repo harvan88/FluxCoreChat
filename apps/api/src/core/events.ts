@@ -5,10 +5,24 @@ import type { MessageEnvelope, ReceiveResult } from './types';
 export interface CoreEventMap {
     // Evento emitido cuando un mensaje ha sido persistido y procesado inicialmente
     'core:message_received': (payload: { envelope: MessageEnvelope; result: ReceiveResult }) => void;
+    // 🎯 NUEVO: Evento emitido cuando un mensaje es actualizado (ej: transcripción)
+    'core:message_updated': (payload: { 
+        messageId: string; 
+        conversationId: string; 
+        accountId: string; 
+        senderAccountId: string; 
+        oldContent: any; 
+        newContent: any; 
+        transcription?: string; 
+    }) => void;
     // Evento emitido cuando un medio (audio/imagen) ha sido procesado/enriquecido
     'media:enriched': (payload: { messageId: string; accountId: string; type: string; enrichment: any }) => void;
     // Evento emitido cuando un asset llega a estado ready y está listo para orquestación
     'asset:ready': (payload: { assetId: string; accountId: string; mimeType?: string | null; sizeBytes?: number | null; checksum?: string | null; metadata?: Record<string, unknown> | null }) => void;
+    // 🎯 NUEVO: Evento emitido cuando un asset se vincula a un mensaje
+    'asset:linked': (payload: { assetId: string; messageId: string; accountId: string }) => void;
+    // 🔥 NUEVO: Evento emitido cuando un asset ha sido transcrito exitosamente
+    'asset:transcription_completed': (payload: { assetId: string; accountId: string; transcription: string; language?: string; model: string; processedAt: Date }) => void;
     // Evento emitido cuando el pipeline de enriquecimiento falla para un asset
     'asset:enrichment_failed': (payload: { assetId: string; reason: string; metadata?: Record<string, unknown> | null }) => void;
 
@@ -34,6 +48,9 @@ export interface CoreEventMap {
     // ASSISTANT CONFIGURATION EVENTS (invalidate PolicyContext cache)
     'assistant.config.updated': (payload: { accountId: string; assistantId: string; change: 'activated' | 'updated' }) => void;
     'policy.config.updated': (payload: { accountId: string }) => void;
+
+    // 🎯 NUEVO: EVENTOS DE TELEMETRÍA (Pipeline Visual)
+    'telemetry:pipeline_step': (payload: import('./telemetry/telemetry.service').PipelineTelemetryEvent) => void;
 }
 
 export class CoreEventBus extends EventEmitter {

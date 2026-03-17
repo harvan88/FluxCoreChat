@@ -8,11 +8,13 @@ const VISITOR_ACTOR_KEY = 'fluxcore_visitor_actor_id';
  * The visitor_token is the provisional identity of an anonymous
  * widget visitor. It survives page reloads via localStorage.
  */
+import { generateUUID } from '../utils/uuid';
+
 export function getOrCreateVisitorToken(): string {
     const existing = localStorage.getItem(STORAGE_KEY);
     if (existing) return existing;
 
-    const token = crypto.randomUUID();
+    const token = generateUUID();
     localStorage.setItem(STORAGE_KEY, token);
     return token;
 }

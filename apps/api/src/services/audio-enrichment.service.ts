@@ -50,18 +50,21 @@ class AudioEnrichmentService {
 
         try {
             // 1. Descargar y Pre-procesar
+            console.log(`[AudioEnrichment] 🎧 Starting enrichment for message ${messageId}, asset ${assetId}`);
             const processedFile = await this.preprocess(audioUrl, assetId, mimeType);
             const normMsg = `[AudioEnrichment] ✅ Audio normalized/processed. Size: ${processedFile.size} bytes`;
             console.log(normMsg);
             logTrace(normMsg);
 
             // 2. Transcribir (OpenAI Whisper)
+            console.log(`[AudioEnrichment] 🤖 Sending to Whisper API...`);
             const transcriptionResult = await this.transcribe(processedFile);
             const transMsg = `[AudioEnrichment] 📝 Transcription obtained: "${transcriptionResult.transcription.substring(0, 50)}..."`;
             console.log(transMsg);
             logTrace(transMsg);
 
             // 3. Guardar enriquecimiento a nivel de asset (único por tipo)
+            console.log(`[AudioEnrichment] 💾 Saving transcription to asset_enrichments for asset ${assetId}`);
             await this.saveAssetEnrichment(assetId, 'audio_transcription', {
                 text: transcriptionResult.transcription,
                 language: transcriptionResult.language,
@@ -69,7 +72,18 @@ class AudioEnrichmentService {
                 processedAt: new Date(),
             });
 
-            // 4. Notificar al sistema (para dashboards/logs)
+            // 4. 🔥 NUEVO: Emitir evento de transcripción completada
+            console.log(`[AudioEnrichment] 📢 Emitting asset:transcription_completed for asset ${assetId}`);
+            coreEventBus.emit('asset:transcription_completed', {
+                assetId,
+                accountId,
+                transcription: transcriptionResult.transcription,
+                language: transcriptionResult.language,
+                model: 'whisper-1',
+                processedAt: new Date(),
+            });
+
+            // 5. Notificar al sistema (para dashboards/logs)
             coreEventBus.emit('media:enriched', {
                 messageId,
                 accountId,
@@ -79,6 +93,8 @@ class AudioEnrichmentService {
                     assetId,
                 }
             });
+
+            console.log(`[AudioEnrichment] ✅ COMPLETED enrichment for message ${messageId}, asset ${assetId}`);
 
             return {
                 ...transcriptionResult,
@@ -194,6 +210,8 @@ class AudioEnrichmentService {
     }
 
     private async saveAssetEnrichment(assetId: string, type: string, payload: Record<string, unknown>) {
+        console.log(`[AudioEnrichment] 💾 SAVING ENRICHMENT: assetId=${assetId}, type=${type}, payload=${JSON.stringify(payload).substring(0, 100)}...`);
+        
         await db.insert(assetEnrichments)
             .values({
                 assetId,
@@ -207,6 +225,8 @@ class AudioEnrichmentService {
                     createdAt: new Date(),
                 },
             });
+            
+        console.log(`[AudioEnrichment] ✅ ENRICHMENT SAVED SUCCESSFULLY: assetId=${assetId}, type=${type}`);
     }
 }
 

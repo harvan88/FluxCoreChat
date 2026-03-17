@@ -48,6 +48,7 @@ import { fluxcoreRoutes } from './routes/fluxcore.routes';
 import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
 import { fluxcoreAgentRoutes } from './routes/fluxcore-agents.routes';
 import { kernelSessionsRoutes } from './routes/kernel-sessions.routes';
+import { kernelConsoleRoutes } from './routes/kernel-console.routes';
 import { testRoutes } from './routes/test.routes';
 import { testChatCoreRoutes } from './routes/test-chatcore.routes';
 import { assetRelationsRoutes } from './routes/asset-relations.routes';
@@ -221,7 +222,7 @@ const elysiaApp = new Elysia()
     // Kernel context: extract headers as source of truth for all routes
     const headerAccountId = request.headers.get('x-account-id') || request.headers.get('x-accountid');
     const headerActorId = request.headers.get('x-user-id') || request.headers.get('x-actor-id');
-    
+
     return {
       kernelContext: {
         accountId: headerAccountId,
@@ -249,6 +250,7 @@ const elysiaApp = new Elysia()
       },
     })
   )
+  .use(publicProfileRoutes)
   .use(healthRoutes)
   .use(authRoutes)
   .use(accountsRoutes)
@@ -272,6 +274,7 @@ const elysiaApp = new Elysia()
   .use(fluxcoreRuntimeRoutes)
   .use(fluxcoreRoutes)
   .use(kernelSessionsRoutes)
+  .use(kernelConsoleRoutes)
   .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(testChatCoreRoutes)
@@ -279,7 +282,6 @@ const elysiaApp = new Elysia()
   .use(assetRelationsRoutes)
   .use(templatesRoutes)
   .use(ragConfigRoutes)
-  .use(publicProfileRoutes);
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: Server<WebSocketData>;
@@ -300,15 +302,15 @@ try {
         const authHeader = req.headers.get('authorization');
         let accountId: string | null = null;
         let userId: string | null = null;
-        
+
         // Priorizar accountId seleccionada del frontend
         const selectedAccountId = url.searchParams.get('accountId');
-        
+
         // Resolve identity from token (header or query param)
         const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
         const tokenFromQuery = url.searchParams.get('token');
         const token = tokenFromHeader || tokenFromQuery;
-        
+
         if (token) {
           const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'header' : 'query');
           userId = identity.userId;
@@ -317,7 +319,7 @@ try {
           accountId = selectedAccountId;
           console.log('[WebSocket] ⚠️ No token found in header or query params');
         }
-        
+
         if (selectedAccountId) {
           console.log('[WebSocket] 🎯 Using selected accountId from frontend:', selectedAccountId);
         }
@@ -379,7 +381,7 @@ try {
         // Skip API routes and known paths
         const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations',
           'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites',
-          'uploads', 'ws', 'swagger', 'health', 'app', 'fluxcore', 'works'];
+          'uploads', 'ws', 'swagger', 'health', 'app', 'fluxcore', 'works', 'public'];
 
         if (!reservedPaths.includes(alias)) {
           const sitesDir = path.join(process.cwd(), 'public', 'sites', alias);
@@ -448,16 +450,16 @@ try {
       if (url.pathname === '/ws') {
         console.log('[WebSocket] Upgrade request received (fallback)');
         console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
-        
+
         const authHeader = req.headers.get('authorization');
         let accountId: string | null = null;
         let userId: string | null = null;
-        
+
         const selectedAccountId = url.searchParams.get('accountId');
         const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
         const tokenFromQuery = url.searchParams.get('token');
         const token = tokenFromHeader || tokenFromQuery;
-        
+
         if (token) {
           const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'fallback-header' : 'fallback-query');
           userId = identity.userId;
@@ -466,7 +468,7 @@ try {
           accountId = selectedAccountId;
           console.log('[WebSocket] ⚠️ No token found in header or query params (fallback)');
         }
-        
+
         const success = server.upgrade(req, {
           data: {
             ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,

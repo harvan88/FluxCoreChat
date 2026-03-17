@@ -21,7 +21,7 @@
 import { db, fluxcoreCognitionQueue, fluxcoreActionAudit } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
 import type { ExecutionAction, ProposeWorkAction, OpenWorkAction, AdvanceWorkStateAction, RequestSlotAction, CloseWorkAction } from '../../core/fluxcore-types';
-import type { FluxPolicyContext } from '@fluxcore/db';
+import type { FluxPolicyContext, RuntimeConfig } from '@fluxcore/db';
 import { coreEventBus } from '../../core/events';
 import { workEngineService } from '../work-engine.service';
 
@@ -32,8 +32,14 @@ export interface ActionExecutionResult {
     error?: string;
 }
 
-class ActionExecutorService {
+export interface ExecutionContext {
+    turnId: number;
+    accountId: string;
+    conversationId: string;
+    stopPropagation?: boolean; // Nuevo campo para stop propagation
+}
 
+class ActionExecutorService {
     /**
      * Execute a batch of actions from a runtime invocation.
      * Marks the turn as processed in cognition_queue upon completion.
@@ -47,8 +53,9 @@ class ActionExecutorService {
             targetAccountId?: string;
             runtimeId: string;
             policyContext?: FluxPolicyContext;
+            runtimeConfig?: RuntimeConfig; // ✅ Nuevo: Propagar runtimeConfig completo
         }
-    ): Promise<ActionExecutionResult[]> {
+    ): Promise<{ results: ActionExecutionResult[]; executionContext: ExecutionContext }> {
         console.log(`[ActionExecutor] 🎬 EXECUTE START: ${actions.length} actions for turn ${params.turnId}`);
         console.log(`[ActionExecutor] 📋 PARAMS:`);
         console.log(`  - turnId: ${params.turnId}`);
@@ -59,8 +66,26 @@ class ActionExecutorService {
         console.log(`  - policyContext.mode: ${params.policyContext?.mode || 'undefined'}`);
         console.log(`[ActionExecutor] 📋 ACTIONS TO EXECUTE: ${actions.map(a => a.type).join(', ')}`);
         
+        // Detectar acciones de Fluxi/WES para stop propagation
+        const hasWesActions = actions.some(action => 
+            action.type.startsWith('wes:') || 
+            action.type === 'propose_work' ||
+            action.type === 'advance_work_state'
+        );
+
+        const executionContext: ExecutionContext = {
+            turnId: params.turnId,
+            accountId: params.accountId,
+            conversationId: params.conversationId,
+            stopPropagation: hasWesActions ? true : undefined
+        };
+
+        if (hasWesActions) {
+            console.log('[ActionExecutor] 🛑 WES actions detected - stopping propagation');
+        }
+        
         const results: ActionExecutionResult[] = [];
-        const { turnId, conversationId, accountId, targetAccountId, runtimeId, policyContext } = params;
+        const { turnId, conversationId, accountId, targetAccountId, runtimeId, policyContext, runtimeConfig } = params;
 
         for (const action of actions) {
             console.log(`[ActionExecutor] ⏳ Executing action: ${action.type}`);
@@ -81,7 +106,7 @@ class ActionExecutorService {
                 // H8: Tool authorization check
                 // if (action.type === 'call_tool' && policyContext) { ... }
 
-                const result = await this.executeOne(action, { conversationId, accountId, targetAccountId });
+                const result = await this.executeOne(action, { conversationId, accountId, targetAccountId, runtimeConfig, policyContext });
                 console.log(`[ActionExecutor] ✓ Action ${action.type} result: success=${result.success}${result.messageId ? ` messageId=${result.messageId.slice(0,8)}` : ''}${result.error ? ` error="${result.error}"` : ''}`);
                 results.push(result);
 
@@ -121,7 +146,11 @@ class ActionExecutorService {
         console.log(`[ActionExecutor] ✅ EXECUTE COMPLETE for turn ${turnId}: ${succeeded} succeeded, ${failed} failed`);
         console.log(`[ActionExecutor]   Results: ${results.map(r => `${r.action.type}=${r.success?'OK':'FAIL'}`).join(', ')}`);
 
-        return results;
+        // Retornar resultados con contexto de stop propagation
+        return {
+            results,
+            executionContext
+        };
     }
 
     /**
@@ -144,7 +173,13 @@ class ActionExecutorService {
      */
     private async executeOne(
         action: ExecutionAction,
-        context: { conversationId: string; accountId: string; targetAccountId?: string }
+        context: { 
+            conversationId: string; 
+            accountId: string; 
+            targetAccountId?: string;
+            runtimeConfig?: RuntimeConfig;
+            policyContext?: FluxPolicyContext;
+        }
     ): Promise<ActionExecutionResult> {
         switch (action.type) {
             case 'send_message':
@@ -195,7 +230,13 @@ class ActionExecutorService {
      */
     private async executeSendMessage(
         action: { type: 'send_message'; content: string; conversationId: string },
-        context: { conversationId: string; accountId: string; targetAccountId?: string }
+        context: { 
+            conversationId: string; 
+            accountId: string; 
+            targetAccountId?: string;
+            runtimeConfig?: RuntimeConfig;
+            policyContext?: FluxPolicyContext;
+        }
     ): Promise<ActionExecutionResult> {
         try {
             console.log(`[ActionExecutor] �→🔑 CERTIFYING AI RESPONSE VIA KERNEL:`);
@@ -206,12 +247,24 @@ class ActionExecutorService {
 
             const { cognitionGateway } = await import('./cognition-gateway.service');
 
+            // 🔥 VALIDACIÓN CRÍTICA - Error ruidoso si falta contexto
+            if (!context.runtimeConfig) {
+                const error = `executeSendMessage: runtimeConfig is required. Missing context propagation from CognitiveDispatcher. Conversation: ${action.conversationId}`;
+                console.error(`[ActionExecutor] ❌ ${error}`);
+                throw new Error(error);
+            }
+
             const certResult = await cognitionGateway.certifyAiResponse({
                 conversationId: action.conversationId,
                 accountId: context.accountId,
                 targetAccountId: context.targetAccountId || 'unknown',
                 content: { text: action.content },
                 turnId: 0, // Will be enriched by caller if needed
+                // ✅ Propagar datos reales del runtime
+                runtimeId: context.runtimeConfig.runtimeId || 'unknown',
+                model: context.runtimeConfig.model || 'unknown',
+                provider: context.runtimeConfig.provider || 'unknown',
+                policyContext: context.policyContext,
             });
 
             if (!certResult.accepted) {

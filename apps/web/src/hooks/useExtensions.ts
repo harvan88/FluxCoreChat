@@ -120,7 +120,7 @@ export function useExtensions(accountId: string | null) {
 
   // Cargar extensiones instaladas
   const loadInstalled = useCallback(async () => {
-    if (!accountId) {
+    if (!accountId || accountId === '' || accountId === 'undefined') {
       console.log('[useExtensions] No accountId, skipping load');
       return;
     }
@@ -274,13 +274,14 @@ export function useExtensions(accountId: string | null) {
   // Cargar datos iniciales
   useEffect(() => {
     loadAvailable();
-    loadInstalled();
+    if (accountId) {
+      loadInstalled();
+    }
   }, []);  // ✅ Sin dependencias para evitar loop infinito
 
   // Recargar cuando cambia el accountId
   useEffect(() => {
     if (accountId) {
-      loadAvailable();
       loadInstalled();
     }
   }, [accountId]);  // ✅ Solo dependencia de accountId

@@ -34,6 +34,8 @@ export class CognitionGatewayService {
         turnId: number;
         runtimeId?: string;
         model?: string;
+        provider?: string;      // ✅ Nuevo
+        policyContext?: any;    // ✅ Nuevo
     }): Promise<{ accepted: boolean; signalId?: number; reason?: string }> {
         try {
             console.log(`[CognitionGateway] 🧠 CERTIFY_AI_RESPONSE START`);
@@ -53,6 +55,13 @@ export class CognitionGatewayService {
                     turnId: params.turnId,
                     runtimeId: params.runtimeId || 'unknown',
                     model: params.model || 'unknown',
+                    provider: params.provider || 'unknown',
+                    // ✅ PolicyContext completo para trazabilidad
+                    policyContext: params.policyContext ? {
+                        accountId: params.policyContext.accountId,
+                        mode: params.policyContext.mode,
+                        authorizedTemplates: params.policyContext.authorizedTemplates?.length || 0,
+                    } : undefined,
                 },
                 generatedBy: 'ai',
                 generatedAt: new Date().toISOString(),
@@ -99,6 +108,18 @@ export class CognitionGatewayService {
             // 6. Ingesta en Kernel
             const seq = await kernel.ingestSignal(candidate);
             console.log(`[CognitionGateway] ✅ AI response certified as signal #${seq}`);
+
+            // 🎯 TELEMETRÍA (Fase 1): Respuesta certificada
+            try {
+                const { coreEventBus } = await import('../../core/events');
+                coreEventBus.emit('telemetry:pipeline_step', {
+                    messageId: seq.toString(),
+                    conversationId: params.conversationId,
+                    step: 'certificacion',
+                    status: 'success',
+                    timestamp: new Date().toISOString()
+                });
+            } catch (e) {}
 
             return { accepted: true, signalId: seq };
         } catch (error: any) {

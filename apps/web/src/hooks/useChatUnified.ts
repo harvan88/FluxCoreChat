@@ -8,7 +8,9 @@ import type { Message } from '../types';
 import { getOrCreateVisitorToken, setVisitorActorId } from '../modules/visitor-token';
 import { useAccountStore } from '../store/accountStore';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../utils/urls';
+
+const API_URL = getApiUrl();
 
 interface UseChatUnifiedOptions {
   conversationId?: string;
@@ -32,11 +34,11 @@ interface PublicProfileSession {
   publicToken: string;
 }
 
-export function useChatUnified({ 
-  conversationId, 
-  accountId, 
+export function useChatUnified({
+  conversationId,
+  accountId,
   publicAlias,
-  onNewMessage 
+  onNewMessage
 }: UseChatUnifiedOptions) {
   const activeActorId = useAccountStore((state) => state.activeActorId);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -44,7 +46,9 @@ export function useChatUnified({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publicSession, setPublicSession] = useState<PublicProfileSession | null>(null);
+  const publicSessionRef = useRef<PublicProfileSession | null>(null);
   const loadedRef = useRef(false);
+  const isLoadingRef = useRef(false);
   const pendingSignaturesRef = useRef<Map<string, string>>(new Map());
 
   const isPublicMode = !accountId && !!publicAlias;
@@ -55,36 +59,58 @@ export function useChatUnified({
   const myActorId = isPublicMode ? (publicSession?.visitorActorId || null) : (activeActorId || null);
 
   const normalizeMessages = useCallback((messageList: any[]): Message[] => {
-    return messageList.map((msg: any) => ({
-      ...msg,
-      content: typeof msg.content === 'string'
-        ? (msg.content.startsWith('{') ? JSON.parse(msg.content) : { text: msg.content })
-        : msg.content,
-    }));
+    return messageList.map((msg: any) => {
+      let content = msg.content;
+      if (typeof content === 'string') {
+        try {
+          content = content.startsWith('{') ? JSON.parse(content) : { text: content };
+        } catch {
+          content = { text: content };
+        }
+      } else if (!content) {
+        content = { text: '' };
+      }
+      
+      return {
+        ...msg,
+        content
+      };
+    });
   }, []);
 
   const ensurePublicSession = useCallback(async () => {
     if (!isPublicMode || !publicAlias) return null;
-    if (publicSession) return publicSession;
+    if (publicSessionRef.current) return publicSessionRef.current;
 
-    const visitorToken = getOrCreateVisitorToken();
-    const response = await fetch(
-      `${API_URL}/public/profiles/${encodeURIComponent(publicAlias)}/session?visitorToken=${encodeURIComponent(visitorToken)}`
-    );
+    console.log(`[useChatUnified] Incializando sesión para alias: ${publicAlias} en ${API_URL}`);
+    
+    try {
+      const visitorToken = getOrCreateVisitorToken();
+      const response = await fetch(
+        `${API_URL}/public/profiles/${encodeURIComponent(publicAlias)}/session?visitorToken=${encodeURIComponent(visitorToken)}`
+      );
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Error de sesión: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        throw new Error(result.message || 'Fallo al inicializar sesión');
+      }
+
+      console.log('[useChatUnified] Sesión inicializada:', result.data.visitorActorId);
+      setVisitorActorId(result.data.visitorActorId);
+      publicSessionRef.current = result.data;
+      setPublicSession(result.data);
+      return result.data as PublicProfileSession;
+    } catch (err: any) {
+      const msg = err.message;
+      console.error('[useChatUnified] Error en ensurePublicSession:', msg);
+      setError(`Conexión lenta o fallida: ${msg}`);
+      throw new Error(msg);
     }
-
-    const result = await response.json();
-    if (!result.success || !result.data) {
-      throw new Error(result.message || 'Failed to initialize public session');
-    }
-
-    setVisitorActorId(result.data.visitorActorId);
-    setPublicSession(result.data);
-    return result.data as PublicProfileSession;
-  }, [isPublicMode, publicAlias, publicSession]);
+  }, [isPublicMode, publicAlias]);
 
   const getToken = useCallback(async () => {
     if (isAuthenticatedMode) {
@@ -104,18 +130,28 @@ export function useChatUnified({
   }, [myActorId]);
 
   const buildSignature = useCallback((payload: {
-    content?: { text?: string } | null;
+    content?: { text?: string } | null | any;
     replyToId?: string | null;
     generatedBy?: Message['generatedBy'];
   }) => {
-    const text = (payload.content?.text ?? '').trim();
+    let text = '';
+    if (typeof payload.content === 'string') {
+      text = payload.content;
+    } else if (payload.content?.text) {
+      text = payload.content.text;
+    }
+
+    // Normalización agresiva para evitar fallos de firma
+    const normalizedText = text.trim().toLowerCase().replace(/\s+/g, ' ');
     const replyTo = payload.replyToId ?? '';
     const generatedBy = payload.generatedBy ?? 'human';
     const senderId = myActorId ?? accountId ?? 'unknown-actor';
-    return `${senderId}:${text}:${replyTo}:${generatedBy}`;
+    return `${senderId}:${normalizedText}:${replyTo}:${generatedBy}`;
   }, [myActorId, accountId]);
 
   const loadMessages = useCallback(async () => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -170,6 +206,7 @@ export function useChatUnified({
       console.error('[useChatUnified] Load messages error:', err);
       setError(err.message || 'Failed to load messages');
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
   }, [accountId, conversationId, ensurePublicSession, getToken, isAuthenticatedMode, normalizeMessages]);
@@ -236,21 +273,25 @@ export function useChatUnified({
       if (result.success) {
         const messageId = result.data?.messageId || result.messageId || tempId;
         pendingSignaturesRef.current.delete(signature);
-        setMessages(prev => prev.map((message) => (
-          message.id === tempId
-            ? { ...message, id: messageId, status: 'synced' }
-            : message
-        )));
+
+        setMessages(prev => {
+          // Si el mensaje ya llegó por WebSocket (mismo ID real), eliminamos el temporal
+          if (prev.some(m => m.id === messageId)) {
+            return prev.filter(m => m.id !== tempId);
+          }
+          // Si no ha llegado, actualizamos el temporal con el ID real
+          return prev.map(m => m.id === tempId ? { ...m, id: messageId, status: 'synced' } : m);
+        });
       } else {
         throw new Error(result.message || 'Failed to send message');
       }
     } catch (err: any) {
       console.error('[useChatUnified] Send message error:', err);
-      
+
       // Eliminar mensaje optimista en caso de error
       setMessages(prev => prev.filter(m => m.id !== tempId));
       pendingSignaturesRef.current.delete(signature);
-      
+
       setError(err.message || 'Failed to send message');
       throw err;
     } finally {
@@ -264,17 +305,34 @@ export function useChatUnified({
       replyToId: message.replyToId,
       generatedBy: message.generatedBy
     });
-    
-    const tempId = pendingSignaturesRef.current.get(signature);
-    if (tempId) {
-      setMessages(prev => prev.map(m => 
-        m.id === tempId ? { ...message } : m
-      ));
-      pendingSignaturesRef.current.delete(signature);
-    } else {
-      setMessages(prev => [...prev, message]);
-    }
-    
+
+    setMessages(prev => {
+      // 1. Verificar si el mensaje ya existe por ID
+      if (prev.some(m => m.id === message.id)) {
+        return prev.map(m => m.id === message.id ? { ...m, ...message, status: 'synced' } : m);
+      }
+
+      // 2. Intentar emparejar con un mensaje optimista vía firma
+      const tempId = pendingSignaturesRef.current.get(signature);
+      if (tempId) {
+        pendingSignaturesRef.current.delete(signature);
+        return prev.map(m => m.id === tempId ? { ...message, status: 'synced' } : m);
+      }
+
+      // 3. Fallback: Intentar emparejar con cualquier mensaje 'pending_backend' o 'outgoing' con el mismo contenido
+      const optimisticMatch = prev.find(m =>
+        (m.id.startsWith('temp-') || m.id.startsWith('local_')) &&
+        JSON.stringify(m.content) === JSON.stringify(message.content)
+      );
+
+      if (optimisticMatch) {
+        return prev.map(m => m.id === optimisticMatch.id ? { ...message, status: 'synced' } : m);
+      }
+
+      // 4. Si es un mensaje nuevo, añadir
+      return [...prev, { ...message, status: 'synced' }];
+    });
+
     onNewMessage?.(message);
   }, [buildSignature, onNewMessage]);
 
@@ -325,8 +383,10 @@ export function useChatUnified({
     setMessages([]);
     setError(null);
     setPublicSession(null);
+    publicSessionRef.current = null;
     pendingSignaturesRef.current.clear();
     loadedRef.current = false;
+    isLoadingRef.current = false;
   }, [conversationId, accountId, publicAlias]);
 
   useEffect(() => {
@@ -336,7 +396,7 @@ export function useChatUnified({
   }, [conversationId, isPublicMode, loadMessages]);
 
   const updateMessage = useCallback((messageId: string, updatedMessage: Partial<Message>) => {
-    setMessages(prev => prev.map(msg => 
+    setMessages(prev => prev.map(msg =>
       msg.id === messageId ? { ...msg, ...updatedMessage } : msg
     ));
   }, []);

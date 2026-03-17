@@ -125,18 +125,25 @@
    ============================================================================ */
 body {
   margin: 0;
+  padding: 0;
   min-width: 320px;
-  min-height: 100vh;
+  height: 100dvh;
+  height: -webkit-fill-available;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--bg-base);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden; /* Lock body scroll */
+  overscroll-behavior: none;
 }
 
 #root {
   width: 100%;
-  height: 100vh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ============================================================================

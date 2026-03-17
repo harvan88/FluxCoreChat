@@ -12,7 +12,8 @@ import { useUIStore } from '../store/uiStore';
 import { usePanelStore } from '../store/panelStore';
 import { clearAccountData, deleteAccountDatabase } from '../db';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
+import { getWsUrl } from '../utils/urls';
+const WS_URL = getWsUrl();
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 

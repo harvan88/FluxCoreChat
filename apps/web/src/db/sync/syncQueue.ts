@@ -5,6 +5,7 @@
  */
 
 import { db, type SyncQueueItem } from '../index';
+import { generateUUID } from '../../utils/uuid';
 
 /**
  * Sync Queue Manager
@@ -37,7 +38,7 @@ class SyncQueueManager {
     }
 
     // Add new
-    const id = crypto.randomUUID();
+    const id = generateUUID();
     await db.syncQueue.add({
       id,
       entityType,

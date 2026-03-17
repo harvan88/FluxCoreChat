@@ -34,6 +34,9 @@ import { ComponentPreviewGallery } from '../settings/ComponentPreviewGallery';
 import { MonitoringHub } from '../monitor/MonitoringHub';
 import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
 import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
+import { AccountOrphanExplorer } from '../monitor/AccountOrphanExplorer';
+import { KernelConsole } from '../monitor/KernelConsole';
+import { VisualPipeline } from '../monitor/VisualPipeline';
 
 // Extension imports (legacy - will be migrated to ViewRegistry)
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
@@ -638,6 +641,15 @@ function TabContent({ tab, containerId }: TabContentProps) {
       }
       if (view === 'assets') {
         return <AssetMonitoringPanel />;
+      }
+      if (view === 'orphans') {
+        return <AccountOrphanExplorer />;
+      }
+      if (view === 'kernel') {
+        return <KernelConsole />;
+      }
+      if (view === 'pipeline') {
+        return <VisualPipeline />;
       }
       return <MonitoringHub />;
     }

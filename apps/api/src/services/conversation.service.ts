@@ -64,10 +64,16 @@ export class ConversationService {
         }
       }
 
-      whereClause = and(
+      let visitorConditions = [
         eq(conversations.visitorToken, visitorToken),
         eq(conversations.channel, channel)
-      );
+      ];
+      
+      if (ownerAccountId) {
+        visitorConditions.push(eq(conversations.ownerAccountId, ownerAccountId));
+      }
+
+      whereClause = and(...visitorConditions);
     } else {
       throw new Error('Invalid conversation criteria: must provide relationshipId OR visitorToken');
     }

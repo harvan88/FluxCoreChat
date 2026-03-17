@@ -5,6 +5,8 @@
  * Basado en TOTEM PARTE 9.1 - Dual Source of Truth.
  */
 
+import { generateUUID } from '../utils/uuid';
+
 /**
  * Estado de sincronización de una entidad
  */
@@ -140,7 +142,7 @@ export function createLocalMessage(
   type: 'incoming' | 'outgoing' | 'system' = 'outgoing'
 ): LocalMessage {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     conversationId,
     senderAccountId,
     content,
@@ -163,7 +165,7 @@ export function createSyncQueueItem(
   payload: unknown
 ): SyncQueueItem {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     entityType,
     entityId,
     operation,
