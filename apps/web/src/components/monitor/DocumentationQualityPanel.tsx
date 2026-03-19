@@ -105,125 +105,38 @@ export function DocumentationQualityPanel() {
       setIsLoading(true);
       setError(null);
 
-      console.log('🔍 Cargando métricas en tiempo real desde archivos .md...');
+      console.log('[DocumentationQualityPanel] Fetching live metrics from backend...');
       
-      // ✅ NUEVO: Leer directamente los archivos .md del directorio de documentación
-      const docsResponse = await fetch('/api/docs/list');
+      // Llamar al nuevo endpoint en vivo
+      const response = await fetch('/api/fluxcore/documentation/quality');
       
-      if (!docsResponse.ok) {
-        throw new Error(`HTTP ${docsResponse.status}: No se pudo listar archivos de documentación`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: No se pudo cargar el reporte de validación en vivo`);
       }
 
-      const { files } = await docsResponse.json();
-      console.log(`📁 Encontrados ${files.length} archivos .md`);
+      const parsedMetrics: DocumentationMetrics = await response.json();
+      console.log('[DocumentationQualityPanel] Métricas recibidas:', parsedMetrics);
 
-      // ✅ NUEVO: Parsear cada archivo directamente para obtener métricas en tiempo real
-      const metrics = await calculateRealTimeMetrics(files);
-      
-      console.log('📊 Métricas calculadas en tiempo real:', metrics);
-      setMetrics(metrics);
-      
+      // Mapear los datos de la API a la interfaz del frontend
+      setMetrics({
+        ...parsedMetrics,
+        // Mantener la estructura topComponents como la espera la UI
+        topComponents: parsedMetrics.topComponents || [],
+        subsystems: [], // Pendiente: implementar lógica de subsistemas en backend
+        subsystemsDocumented: 0,
+        totalSubsystems: 4,
+        // Calcular cobertura para la UI
+        coveragePercentage: parsedMetrics.totalComponents > 0 
+          ? (parsedMetrics.documentedComponents / parsedMetrics.totalComponents) * 100 
+          : 0
+      } as any); // Temporal until we align the interfaces exactly
+
     } catch (err) {
       console.error('Error completo en loadMetrics:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // ✅ NUEVO: Calcular métricas directamente desde archivos .md
-  const calculateRealTimeMetrics = async (files: string[]): Promise<DocumentationMetrics> => {
-    let totalDocuments = files.length;
-    let wipDocs = 0;
-    let needsReviewDocs = 0;
-    let stableDocs = 0;
-    let documentsWithFrontmatter = 0;
-    let formatErrors = 0;
-    const issues: string[] = [];
-
-    // Procesar cada archivo
-    for (const filePath of files) {
-      try {
-        const contentResponse = await fetch(`/api/docs/content?file=${encodeURIComponent(filePath)}`);
-        
-        if (!contentResponse.ok) {
-          console.warn(`⚠️ No se pudo leer ${filePath}`);
-          continue;
-        }
-
-        const content = await contentResponse.text();
-        
-        // Parsear frontmatter YAML
-        const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-        
-        if (!frontmatterMatch) {
-          issues.push(`🚨 ${filePath}: Sin Frontmatter YAML`);
-          formatErrors++;
-          continue;
-        }
-
-        documentsWithFrontmatter++;
-        
-        // Parsear campos del frontmatter
-        const frontmatterText = frontmatterMatch[1];
-        const statusMatch = frontmatterText.match(/status:\s*["']?(wip|stable|needs_review|deprecated)["']?/);
-        const typeMatch = frontmatterText.match(/type:\s*["']?(core|subsystem|smart-component|ui-component)["']?/);
-        const locationMatch = frontmatterText.match(/location:\s*["']?([^"'\n]+)["']?/);
-        
-        const status = statusMatch ? statusMatch[1] : 'unknown';
-        const type = typeMatch ? typeMatch[1] : 'unknown';
-        const location = locationMatch ? locationMatch[1] : null;
-
-        // Contar por status
-        if (status === 'wip') wipDocs++;
-        else if (status === 'needs_review') needsReviewDocs++;
-        else if (status === 'stable') stableDocs++;
-
-        // Validaciones básicas
-        if (!statusMatch) {
-          issues.push(`🚨 ${filePath}: Frontmatter sin 'status'`);
-        }
-        if (!typeMatch) {
-          issues.push(`🚨 ${filePath}: Frontmatter sin 'type'`);
-        }
-        if (!location) {
-          issues.push(`🚨 ${filePath}: Frontmatter sin 'location'`);
-        }
-
-      } catch (err) {
-        console.error(`Error procesando ${filePath}:`, err);
-        issues.push(`❌ ${filePath}: Error al procesar archivo`);
-      }
-    }
-
-    // Calcular score basado en calidad
-    const score = totalDocuments > 0 
-      ? ((documentsWithFrontmatter * 40) + (stableDocs * 30) + (needsReviewDocs * 20) + (wipDocs * 10)) / totalDocuments
-      : 0;
-
-    return {
-      totalComponents: totalDocuments,
-      documentedComponents: documentsWithFrontmatter,
-      score: Math.min(100, Math.max(0, score)),
-      criticalIssues: formatErrors,
-      warnings: issues.filter(i => i.includes('⚠️')).length,
-      lastUpdated: new Date().toLocaleString(),
-      topComponents: [], // TODO: Implementar si se necesita
-      undocumentedComponents: [],
-      subsystems: [],
-      subsystemsDocumented: 0,
-      totalSubsystems: 0,
-      formatErrors: issues.map(issue => ({
-        component: issue.split(':')[0]?.trim() || 'Unknown',
-        error: issue.split(':').slice(1).join(':').trim(),
-        filePath: 'Unknown',
-        fullError: issue
-      })),
-      formatErrorsCount: formatErrors,
-      wipDocs,
-      needsReviewDocs,
-      stableDocs
-    };
   };
 
   useEffect(() => {

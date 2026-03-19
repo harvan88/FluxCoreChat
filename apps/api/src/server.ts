@@ -56,7 +56,6 @@ import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { publicProfileRoutes } from './routes/public-profile.routes';
 import { actorsRoutes } from './routes/actors.routes';
-import docsRoutes from './routes/docs.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
@@ -282,7 +281,6 @@ const elysiaApp = new Elysia()
   .use(assetRelationsRoutes)
   .use(templatesRoutes)
   .use(ragConfigRoutes)
-  .use(docsRoutes) // 🔥 NUEVO: Endpoints para leer documentación en tiempo real
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: Server<WebSocketData>;
