@@ -6,6 +6,64 @@ Esta guía captura los **principios fundamentales** para realizar refactoring se
 
 ---
 
+## 🏗️ **Contexto del Sistema - FluxCoreChat**
+
+### **Stack Tecnológico**
+
+#### **Backend**
+- **Runtime**: Bun (JavaScript/TypeScript)
+- **Framework**: Elysia (API REST)
+- **Base de Datos**: PostgreSQL con Drizzle ORM
+- **WebSocket**: Nativo con Elysia
+- **Arquitectura**: Monorepo con Turbo
+
+#### **Frontend**
+- **Framework**: React 18 con TypeScript
+- **Bundler**: Vite
+- **Estilos**: TailwindCSS + Design System canónico
+- **Estado**: React Hooks + Zustand
+- **Router**: React Router DOM
+
+#### **Estructura del Proyecto**
+```
+FluxCoreChat/
+├── apps/
+│   ├── api/          # Backend Elysia + Bun
+│   └── web/          # Frontend React + Vite
+├── packages/
+│   ├── db/           # Drizzle ORM + Schema
+│   ├── types/        # Tipos compartidos
+│   └── adapters/     # Adaptadores de canales
+└── extensions/       # Extensiones del sistema
+```
+
+### **Reglas de Desarrollo**
+
+#### **1. Build y Deploy**
+- **Solo el owner puede ejecutar**: `bun run build`
+- **Desarrollo**: `bun run dev` (solo para desarrollo local)
+- **Producción**: Siempre usar versión compilada
+
+#### **2. Sistema de Tipos Fuerte**
+- **Prohibido `any`**: Todo código debe estar fuertemente tipado
+- **Tipos explícitos**: Preferir tipos explícitos sobre inferidos
+- **Interfaces compartidas**: Usar `packages/types` para tipos comunes
+- **Validación en runtime**: Usar Zod o similar para validación
+
+#### **3. Manejo de Errores Estricto**
+- **Sin errores silenciosos**: Está prohibido ocultar errores
+- **Callbacks ruidosos**: Si un callback puede fallar, debe lanzar error
+- **Stack traces claros**: Incluir contexto específico en mensajes de error
+- **Fallbacks explícitos**: Si se usa fallback, debe loggearse el error original
+
+#### **4. Principios de Código**
+- **Inmutabilidad**: Preferir datos inmutables
+- **Pureza**: Funciones puras cuando sea posible
+- **Componentes atómicos**: Componentes pequeños y reutilizables
+- **Contratos claros**: Interfaces explícitas y documentadas
+
+---
+
 ## 🧠 **Filosofía Central**
 
 ### **El Principio de la Claridad Primera**
@@ -166,7 +224,68 @@ if (!data) {
 }
 ```
 
-### **2. Cambios Evolutivos vs Revolucionarios**
+#### **🔥 Regla FluxCoreChat: Callbacks Ruidosos**
+```typescript
+// Si un callback puede fallar, debe gritar
+type SafeCallback<T> = (data: T) => void | never;
+
+const processData = (data: unknown, callback: SafeCallback<ProcessedData>) => {
+  try {
+    const processed = validateAndProcess(data);
+    callback(processed); // Puede lanzar error, y eso está bien
+  } catch (error) {
+    console.error(`❌ Processing failed: ${error.message}`);
+    throw new Error(`Callback execution failed: ${error.message}`);
+  }
+};
+```
+
+### **2. Sistema de Tipos Fuerte**
+
+#### **❌ Mal: Uso de `any`**
+```typescript
+// Pierde toda seguridad de tipos
+function processData(data: any): any {
+  return data.value;
+}
+```
+
+#### **✅ Bien: Tipos Explícitos**
+```typescript
+// Tipos definidos y validados
+interface UserData {
+  id: string;
+  name: string;
+  email: string;
+}
+
+function processData(data: UserData): ProcessedResult {
+  if (!data.id || !data.name) {
+    throw new Error(`Invalid UserData: missing required fields`);
+  }
+  return {
+    userId: data.id,
+    displayName: data.name,
+    isValid: true
+  };
+}
+```
+
+#### **🔥 Regla FluxCoreChat: Tipos Compartidos**
+```typescript
+// En packages/types/src/index.ts
+export interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  timestamp: Date;
+}
+
+// En backend y frontend
+import { Message } from '@fluxcore/types';
+```
+
+### **3. Cambios Evolutivos vs Revolucionarios**
 
 #### **❌ Mal: Breaking Changes**
 - Eliminar funcionalidad existente
@@ -178,7 +297,7 @@ if (!data) {
 - Extender funcionalidad existente
 - Mantener backward compatibility
 
-### **3. Validación Proactiva vs Reactiva**
+### **4. Validación Proactiva vs Reactiva**
 
 #### **❌ Mal: Esperar al Final**
 - Hacer todos los cambios juntos

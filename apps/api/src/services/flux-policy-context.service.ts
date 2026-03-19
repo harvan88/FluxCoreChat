@@ -109,7 +109,7 @@ class FluxPolicyContextService {
 
         // 2. Asistente activo (fuente: fluxcore_assistants + relaciones)
         const assistantResult = await db.execute(sql`
-            SELECT id, name, account_id, runtime, status, model_config, 
+            SELECT id, name, account_id, runtime, status, model_config, timing_config,
                    external_id, authorized_data_scopes
             FROM fluxcore_assistants
             WHERE account_id = ${accountId} AND status = 'active'
@@ -122,6 +122,7 @@ class FluxPolicyContextService {
             runtime: assistantResult[0].runtime,
             status: assistantResult[0].status,
             modelConfig: assistantResult[0].model_config,
+            timingConfig: assistantResult[0].timing_config,
             externalId: assistantResult[0].external_id,
             authorizedDataScopes: assistantResult[0].authorized_data_scopes,
         } : null;
@@ -209,6 +210,9 @@ class FluxPolicyContextService {
                 provider: (assistant.modelConfig as any)?.provider,
                 model: (assistant.modelConfig as any)?.model,
                 temperature: (assistant.modelConfig as any)?.temperature,
+                tone: (assistant.modelConfig as any)?.tone || (assistant as any).timingConfig?.tone,
+                language: (assistant.modelConfig as any)?.language || (assistant as any).timingConfig?.language,
+                useEmojis: (assistant.modelConfig as any)?.useEmojis || (assistant as any).timingConfig?.useEmojis,
                 vectorStoreId: (assistant as any).vectorStores?.[0]?.vectorStoreId,
                 externalAssistantId: assistant.externalId ?? undefined,
                 authorizedTools: (assistant as any).tools?.map((t: any) => t.toolId) ?? [],

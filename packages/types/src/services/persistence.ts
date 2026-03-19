@@ -1,5 +1,8 @@
-import type { Message } from '../entities/message';
+import type { messages } from '@fluxcore/db';
 import type { MessageEnvelope } from './message-core';
+
+// Tipo derivado del schema
+type Message = typeof messages.$inferSelect;
 
 export interface IPersistenceService {
   /**

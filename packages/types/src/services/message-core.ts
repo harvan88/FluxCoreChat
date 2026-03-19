@@ -1,4 +1,9 @@
-import type { Message, MessageContent, MessageType } from '../entities/message';
+import type { messages } from '@fluxcore/db';
+
+// Tipos derivados del schema
+type Message = typeof messages.$inferSelect;
+type MessageContent = Message['content'];
+type MessageType = Message['type'];
 
 export interface MessageEnvelope {
   id: string;
