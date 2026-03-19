@@ -39,7 +39,7 @@ interface ComponentScore {
 }
 
 class DocumentationValidator {
-  private readonly basePath = 'docs/reconstruction-phase-1/exhaustive-mapping/01-ui-landscape';
+  private readonly basePath = 'docs/reconstruction-phase-1/exhaustive-mapping';
   private readonly componentsPath = 'apps/web/src';
   
   async validateAll(): Promise<ValidationResult> {
@@ -83,6 +83,8 @@ class DocumentationValidator {
       '*_ROUTING.md',        // APP_LAYOUT_ROUTING.md
       '*_SECTION.md',        // RAGCONFIGSECTION.md
       '*_DETAIL.md',         // ASSISTANTDETAIL.md
+      '*_COMPONENT.md',      // COPYBUTTON_COMPONENT.md
+      '*_STANDARD.md',       // AI_DOCUMENTATION_STANDARD.md
     ];
     
     let count = 0;
@@ -90,8 +92,9 @@ class DocumentationValidator {
     
     try {
       for (const pattern of additionalPatterns) {
+        // Usar búsqueda recursiva en todas las subcarpetas
         const result = execSync(
-          `cmd /c "dir /b "${this.basePath}\\${pattern}" 2>nul"`,
+          `cmd /c "dir /s /b "${this.basePath}\\${pattern}" 2>nul"`,
           { encoding: 'utf8', maxBuffer: 1024 * 1024 }
         );
         

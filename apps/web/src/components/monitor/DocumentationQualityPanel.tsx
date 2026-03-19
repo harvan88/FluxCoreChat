@@ -105,242 +105,125 @@ export function DocumentationQualityPanel() {
       setIsLoading(true);
       setError(null);
 
-      console.log('Iniciando carga de métricas...');
+      console.log('🔍 Cargando métricas en tiempo real desde archivos .md...');
       
-      // Leer el reporte de validación más reciente
-      const response = await fetch('/VALIDATION_REPORT.md');
+      // ✅ NUEVO: Leer directamente los archivos .md del directorio de documentación
+      const docsResponse = await fetch('/api/docs/list');
       
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: No se pudo cargar el reporte de validación`);
+      if (!docsResponse.ok) {
+        throw new Error(`HTTP ${docsResponse.status}: No se pudo listar archivos de documentación`);
       }
 
-      const reportContent = await response.text();
-      console.log('Reporte cargado, length:', reportContent.length);
+      const { files } = await docsResponse.json();
+      console.log(`📁 Encontrados ${files.length} archivos .md`);
+
+      // ✅ NUEVO: Parsear cada archivo directamente para obtener métricas en tiempo real
+      const metrics = await calculateRealTimeMetrics(files);
       
-      // 🔥 VALIDACIÓN BÁSICA: Si el reporte está vacío o corrupto
-      if (!reportContent || reportContent.length < 100) {
-        console.warn('⚠️ Reporte parece estar vacío o incompleto');
-        // No lanzar error - continuar con valores por defecto
-      }
+      console.log('📊 Métricas calculadas en tiempo real:', metrics);
+      setMetrics(metrics);
       
-      console.log('Primeras líneas:', reportContent.split('\n').slice(0, 5));
-      
-      // Parsear métricas del reporte - VERIFICADO CON TEXTO REAL
-      const scoreMatch = reportContent.match(/\*\*Score General:\*\* ([\d.]+)%/);
-      const totalMatch = reportContent.match(/\*\*Componentes totales:\*\* (\d+)/);
-      const documentedMatch = reportContent.match(/\*\*Componentes UI documentados:\*\* (\d+)/); // CORREGIDO: Verificado con reporte real
-      const criticalMatch = reportContent.match(/\*\*Issues críticos:\*\* (\d+)/);
-      const warningsMatch = reportContent.match(/\*\*Advertencias:\*\* (\d+)/);
-      const dateMatch = reportContent.match(/\*\*Fecha:\*\* (.+)/);
-      
-      // 🔥 NUEVO: Parsear errores de formato
-      const formatErrorsMatch = reportContent.match(/\*\*Documentos con formato inválido:\*\* (\d+)/);
-      const formatErrorsSection = reportContent.split('## 🚨 Documentos con Formato Inválido')[1]?.split('## ⚠️ Advertencias')[0];
-      
-      // 🔥 NUEVO: Parsear errores de formato específicos
-      const formatErrors = formatErrorsSection?.split('\n')
-        .filter(line => line.includes('🚨'))
-        .map(line => {
-          const match = line.match(/🚨 (.+?): (.+)/);
-          if (match) {
-            // Extraer información adicional del reporte
-            const component = match[1];
-            const error = match[2];
-            
-            // Buscar el archivo específico del componente
-            const componentFile = reportContent.split('\n')
-              .find(line => line.includes(`📄 Archivo:`) && line.includes(component));
-            
-            const filePath = componentFile ? componentFile.split('📄 Archivo:')[1]?.trim() : 'Desconocido';
-            
-            return { 
-              component, 
-              error, 
-              filePath,
-              fullError: line
-            };
-          }
-          return null;
-        })
-        .filter((item): item is { component: string; error: string; filePath: string; fullError: string } => item !== null) || [];
-      
-      // Parsear componentes top y no documentados
-      const topSection = reportContent.split('## 🏆 Top 10 Componentes')[1]?.split('## 🚨 Issues Críticos')[0];
-      const criticalSection = reportContent.split('## 🚨 Issues Críticos')[1]?.split('## 📈')[0];
-      
-      const topComponents = topSection?.split('\n')
-        .filter(line => line.includes('🏆'))
-        .map(line => {
-          const match = line.match(/🏆 (.+?): (\d+\.?\d*)%/);
-          return match ? { name: match[1], score: parseFloat(match[2]) } : null;
-        })
-        .filter((item): item is { name: string; score: number } => item !== null) || [];
-
-      const undocumentedComponents = criticalSection?.split('\n')
-        .filter(line => line.includes('❌') && line.includes(': Sin documentación'))
-        .map(line => {
-          const match = line.match(/❌ (.+?):/);
-          return match ? match[1] : null;
-        })
-        .filter((item): item is string => item !== null) || [];
-      
-      // Parsear subsistemas documentados
-      const subsystemsSection = reportContent.split('## 🎯 Subsistemas Completamente Documentados')[1]?.split('## 📈')[0];
-      const subsystemsMatch = reportContent.match(/Subsistemas documentados: (\d+)\/(\d+)/);
-      
-      // Si no se encuentra la sección de subsistemas, usar valores por defecto
-      const subsystems = subsystemsSection?.split('\n')
-        .filter(line => line.includes('✅'))
-        .map(line => {
-          // Formato: ✅ 🤖 Asistentes Subsystem - Configuraciones cognitivas - ⭐⭐⭐⭐⭐ - FluxCore - 2 críticos
-          const match = line.match(/✅ (.+?) - (.+?) - (.+?) - (.+?) - (.+?) - (.+?) - (.+?) - (.+?)/);
-          if (match) {
-            return { 
-              name: match[1], 
-              status: match[2], 
-              quality: match[3], 
-              domain: match[4] 
-            };
-          }
-          return null;
-        })
-        .filter((item): item is { name: string; status: string; quality: string; domain: string } => item !== null) || [];
-      
-      // Valores por defecto si no se encuentran subsistemas
-      const subsystemsDocumented = subsystemsMatch ? parseInt(subsystemsMatch[1]) : 0;
-      const totalSubsystems = subsystemsMatch ? parseInt(subsystemsMatch[2]) : 4;
-
-      // 🔥 NUEVO: Parsear métricas de Frontmatter (Estado)
-      const wipMatch = reportContent.match(/- 🚧 \*\*WIP \(Trabajo en progreso\):\*\* (\d+)/);
-      const needsReviewMatch = reportContent.match(/- 🚨 \*\*Necesita Revisión:\*\* (\d+)/);
-      const stableMatch = reportContent.match(/- ✅ \*\*Estable:\*\* (\d+)/);
-
-      // Parsear valores con fallbacks robustos
-      const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
-      const totalComponents = totalMatch ? parseInt(totalMatch[1]) : 0;
-      const documentedComponents = documentedMatch ? parseInt(documentedMatch[1]) : 0;
-      const criticalIssues = criticalMatch ? parseInt(criticalMatch[1]) : 0;
-      const warnings = warningsMatch ? parseInt(warningsMatch[1]) : 0;
-      const lastUpdated = dateMatch ? dateMatch[1] : 'Desconocido';
-      const formatErrorsCount = formatErrorsMatch ? parseInt(formatErrorsMatch[1]) : 0;
-      
-      const wipDocs = wipMatch ? parseInt(wipMatch[1]) : 0;
-      const needsReviewDocs = needsReviewMatch ? parseInt(needsReviewMatch[1]) : 0;
-      const stableDocs = stableMatch ? parseInt(stableMatch[1]) : 0;
-
-      console.log('Valores parseados:', { 
-        score, 
-        totalComponents, 
-        documentedComponents, 
-        criticalIssues, 
-        warnings, 
-        lastUpdated,
-        subsystemsDocumented,
-        totalSubsystems,
-        formatErrorsCount,
-        formatErrors: formatErrors.slice(0, 3)
-      });
-
-      // VALIDACIÓN EXPLÍCITA: Verificar que los valores son correctos
-      console.log('🔍 VALIDACIÓN - Reporte vs Parseo:');
-      console.log(`✅ Reporte dice: "Componentes UI documentados: 6"`);
-      console.log(`✅ Parseo obtuvo: ${documentedComponents}`);
-      console.log(`✅ Total componentes: ${totalComponents}`);
-      console.log(`✅ Coverage: ${((documentedComponents / totalComponents) * 100).toFixed(1)}%`);
-
-      // VALIDACIÓN DE ERRORES: Si el parsing falla, error ruidoso
-      if (documentedComponents === 0 && totalComponents > 0) {
-        console.error('🚨 ERROR DE PARSING - documentedComponents es 0 pero totalComponents > 0');
-        console.error('🔍 Buscando en el reporte...');
-        const lines = reportContent.split('\n');
-        const uiLine = lines.find(line => line.includes('Componentes UI documentados'));
-        console.error('📋 Línea encontrada:', uiLine);
-        throw new Error(`Parsing falló: No se pudo extraer "Componentes UI documentados". Línea encontrada: ${uiLine}`);
-      }
-
-      // 🔥 VALIDACIÓN DE ERRORES DE FORMATO: Si hay documentos inválidos, log informativo (no error)
-      if (formatErrorsCount > 0) {
-        console.log('📊 INFORMACIÓN - Documentos con formato inválido detectados');
-        console.log(`📊 Cantidad: ${formatErrorsCount} documentos`);
-        console.log(`🔍 Ejemplos:`, formatErrors.slice(0, 3));
-        console.log(`⚠️ ACCIÓN REQUERIDA: Corregir formato de documentos`);
-        // NO lanzar error - solo log informativo
-      }
-
-      // 🔥 VALIDACIÓN DE ERRORES CRÍTICOS: Solo errores reales deben lanzar excepciones
-      const criticalErrors = [
-        () => {
-          if (documentedComponents === 0 && totalComponents > 0) {
-            throw new Error(`Parsing falló: No se pudo extraer "Componentes UI documentados"`);
-          }
-        },
-        () => {
-          if (totalComponents === 0) {
-            throw new Error('Reporte inválido: No se encontraron componentes totales');
-          }
-        },
-        () => {
-          if (!reportContent.includes('## 📈 Resumen')) {
-            throw new Error('Formato de reporte inválido: Falta sección Resumen');
-          }
-        }
-      ];
-
-      // Ejecutar validaciones críticas con manejo de errores
-      for (const validation of criticalErrors) {
-        try {
-          validation();
-        } catch (err) {
-          console.error('🚨 ERROR CRÍTICO:', err);
-          // Solo lanzar errores que realmente rompan el sistema
-          throw err;
-        }
-      }
-
-      // VALIDACIÓN DE SUBSISTEMAS: Si los datos son inconsistentes, log informativo
-      if (subsystems.length === 0 && subsystemsDocumented > 0) {
-        console.log('� INFORMACIÓN - Subsistemas array vacío pero se reportan como documentados');
-        console.log(`🔍 subsystemsDocumented dice: ${subsystemsDocumented}`);
-        // NO lanzar error - solo log informativo
-      }
-
-      // VALIDACIÓN DE TOP COMPONENTES: Si hay inconsistencias, alerta
-      if (topComponents.length === 0 && documentedComponents > 0) {
-        console.warn('⚠️ ADVERTENCIA - No hay top components pero sí hay componentes documentados');
-        console.warn('🔍 Esto puede ser normal si ningún componente tiene buen score');
-      }
-
-      const parsedMetrics: DocumentationMetrics = {
-        score,
-        totalComponents,
-        documentedComponents,
-        criticalIssues,
-        warnings,
-        lastUpdated,
-        topComponents,
-        undocumentedComponents,
-        subsystems,
-        subsystemsDocumented,
-        totalSubsystems,
-        formatErrors,
-        formatErrorsCount,
-        wipDocs,
-        needsReviewDocs,
-        stableDocs
-      };
-
-      console.log('Métricas parseadas:', parsedMetrics);
-
-      setMetrics(parsedMetrics);
     } catch (err) {
       console.error('Error completo en loadMetrics:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ✅ NUEVO: Calcular métricas directamente desde archivos .md
+  const calculateRealTimeMetrics = async (files: string[]): Promise<DocumentationMetrics> => {
+    let totalDocuments = files.length;
+    let wipDocs = 0;
+    let needsReviewDocs = 0;
+    let stableDocs = 0;
+    let documentsWithFrontmatter = 0;
+    let formatErrors = 0;
+    const issues: string[] = [];
+
+    // Procesar cada archivo
+    for (const filePath of files) {
+      try {
+        const contentResponse = await fetch(`/api/docs/content?file=${encodeURIComponent(filePath)}`);
+        
+        if (!contentResponse.ok) {
+          console.warn(`⚠️ No se pudo leer ${filePath}`);
+          continue;
+        }
+
+        const content = await contentResponse.text();
+        
+        // Parsear frontmatter YAML
+        const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+        
+        if (!frontmatterMatch) {
+          issues.push(`🚨 ${filePath}: Sin Frontmatter YAML`);
+          formatErrors++;
+          continue;
+        }
+
+        documentsWithFrontmatter++;
+        
+        // Parsear campos del frontmatter
+        const frontmatterText = frontmatterMatch[1];
+        const statusMatch = frontmatterText.match(/status:\s*["']?(wip|stable|needs_review|deprecated)["']?/);
+        const typeMatch = frontmatterText.match(/type:\s*["']?(core|subsystem|smart-component|ui-component)["']?/);
+        const locationMatch = frontmatterText.match(/location:\s*["']?([^"'\n]+)["']?/);
+        
+        const status = statusMatch ? statusMatch[1] : 'unknown';
+        const type = typeMatch ? typeMatch[1] : 'unknown';
+        const location = locationMatch ? locationMatch[1] : null;
+
+        // Contar por status
+        if (status === 'wip') wipDocs++;
+        else if (status === 'needs_review') needsReviewDocs++;
+        else if (status === 'stable') stableDocs++;
+
+        // Validaciones básicas
+        if (!statusMatch) {
+          issues.push(`🚨 ${filePath}: Frontmatter sin 'status'`);
+        }
+        if (!typeMatch) {
+          issues.push(`🚨 ${filePath}: Frontmatter sin 'type'`);
+        }
+        if (!location) {
+          issues.push(`🚨 ${filePath}: Frontmatter sin 'location'`);
+        }
+
+      } catch (err) {
+        console.error(`Error procesando ${filePath}:`, err);
+        issues.push(`❌ ${filePath}: Error al procesar archivo`);
+      }
+    }
+
+    // Calcular score basado en calidad
+    const score = totalDocuments > 0 
+      ? ((documentsWithFrontmatter * 40) + (stableDocs * 30) + (needsReviewDocs * 20) + (wipDocs * 10)) / totalDocuments
+      : 0;
+
+    return {
+      totalComponents: totalDocuments,
+      documentedComponents: documentsWithFrontmatter,
+      score: Math.min(100, Math.max(0, score)),
+      criticalIssues: formatErrors,
+      warnings: issues.filter(i => i.includes('⚠️')).length,
+      lastUpdated: new Date().toLocaleString(),
+      topComponents: [], // TODO: Implementar si se necesita
+      undocumentedComponents: [],
+      subsystems: [],
+      subsystemsDocumented: 0,
+      totalSubsystems: 0,
+      formatErrors: issues.map(issue => ({
+        component: issue.split(':')[0]?.trim() || 'Unknown',
+        error: issue.split(':').slice(1).join(':').trim(),
+        filePath: 'Unknown',
+        fullError: issue
+      })),
+      formatErrorsCount: formatErrors,
+      wipDocs,
+      needsReviewDocs,
+      stableDocs
+    };
   };
 
   useEffect(() => {

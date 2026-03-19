@@ -56,6 +56,7 @@ import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { publicProfileRoutes } from './routes/public-profile.routes';
 import { actorsRoutes } from './routes/actors.routes';
+import docsRoutes from './routes/docs.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
@@ -281,6 +282,7 @@ const elysiaApp = new Elysia()
   .use(assetRelationsRoutes)
   .use(templatesRoutes)
   .use(ragConfigRoutes)
+  .use(docsRoutes) // 🔥 NUEVO: Endpoints para leer documentación en tiempo real
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: Server<WebSocketData>;
@@ -340,6 +342,37 @@ try {
         }
         console.error('[WebSocket] ❌ Upgrade failed');
         return new Response('WebSocket upgrade failed', { status: 400 });
+      }
+
+      // Serve public avatars permanently (sin autenticación)
+      if (url.pathname.startsWith('/avatars/')) {
+        const relativePath = url.pathname.replace(/^\/+avatars\/+/, '');
+        if (relativePath.includes('..')) {
+          return new Response('Invalid path', { status: 400 });
+        }
+
+        // Buscar en uploads/assets (ubicación real de avatares)
+        let filePath = path.join(process.cwd(), 'uploads', 'assets', relativePath);
+        if (!fs.existsSync(filePath)) {
+          const fallbackPath = path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets', relativePath);
+          if (fs.existsSync(fallbackPath)) {
+            filePath = fallbackPath;
+          }
+        }
+
+        if (!fs.existsSync(filePath)) {
+          return new Response('Avatar not found', { status: 404 });
+        }
+
+        const file = Bun.file(filePath);
+        const headers = {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Access-Control-Allow-Origin': '*',
+        };
+        if (file.type) headers['Content-Type'] = file.type;
+
+        console.log(`[Avatar] Serving public avatar: ${relativePath}`);
+        return new Response(file, { headers });
       }
 
       // Serve uploaded files statically
@@ -444,47 +477,7 @@ try {
 
     // Handler para HTTP - delega a Elysia
     fetch: async (req: Request, server: Server<WebSocketData>) => {
-      // Upgrade a WebSocket si es request de WS
       const url = new URL(req.url);
-      if (url.pathname === '/ws') {
-        console.log('[WebSocket] Upgrade request received (fallback)');
-        console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
-
-        const authHeader = req.headers.get('authorization');
-        let accountId: string | null = null;
-        let userId: string | null = null;
-
-        const selectedAccountId = url.searchParams.get('accountId');
-        const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-        const tokenFromQuery = url.searchParams.get('token');
-        const token = tokenFromHeader || tokenFromQuery;
-
-        if (token) {
-          const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'fallback-header' : 'fallback-query');
-          userId = identity.userId;
-          accountId = selectedAccountId || identity.accountId;
-        } else {
-          accountId = selectedAccountId;
-          console.log('[WebSocket] ⚠️ No token found in header or query params (fallback)');
-        }
-
-        const success = server.upgrade(req, {
-          data: {
-            ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,
-            userAgent: req.headers.get('user-agent'),
-            requestId: `ws-${Date.now()}-${accountId || 'anonymous'}`,
-            accountId: accountId,
-            userId: userId,
-          }
-        });
-        console.log('[WebSocket] Upgrade result:', success);
-        if (success) {
-          console.log('[WebSocket] ✅ Upgrade successful, returning undefined');
-          return; // Must return undefined (or nothing) for successful upgrade
-        }
-        console.error('[WebSocket] ❌ Upgrade failed');
-        return new Response('WebSocket upgrade failed', { status: 400 });
-      }
 
       // Serve uploaded files statically
       if (url.pathname.startsWith('/uploads/')) {
@@ -678,3 +671,4 @@ const handleShutdown = async (signal: NodeJS.Signals) => {
 });
 
 export type App = typeof elysiaApp;
+
