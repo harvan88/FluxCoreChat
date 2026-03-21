@@ -1,7 +1,7 @@
-/**
+﻿/**
  * FluxCore API Server
  * 
- * Servidor híbrido que combina:
+ * Servidor hÃ­brido que combina:
  * - Elysia para HTTP REST API
  * - Bun nativo para WebSocket
  * 
@@ -55,8 +55,8 @@ import { assetRelationsRoutes } from './routes/asset-relations.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { publicProfileRoutes } from './routes/public-profile.routes';
-import { documentationQualityRoutes } from './routes/fluxcore/documentation-quality.routes';
 import { actorsRoutes } from './routes/actors.routes';
+import { documentationQualityRoutes } from './routes/fluxcore/documentation-quality.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
@@ -117,12 +117,12 @@ async function resolveWebSocketIdentityFromToken(token: string, source: string):
     const payload = JSON.parse(atob(token.split('.')[1]));
 
     if (payload.type === 'public_profile' && typeof payload.ownerAccountId === 'string') {
-      console.log(`[WebSocket] ✅ AccountId resolved from public_profile token (${source}):`, payload.ownerAccountId);
+      console.log(`[WebSocket] âœ… AccountId resolved from public_profile token (${source}):`, payload.ownerAccountId);
       return { accountId: payload.ownerAccountId, userId: null };
     }
 
     const userId = payload.userId || payload.sub;
-    console.log(`[WebSocket] 🎯 UserId from token (${source}):`, userId);
+    console.log(`[WebSocket] ðŸŽ¯ UserId from token (${source}):`, userId);
 
     if (!userId) {
       return { accountId: null, userId: null };
@@ -136,14 +136,14 @@ async function resolveWebSocketIdentityFromToken(token: string, source: string):
       .limit(1);
 
     if (userAccounts.length > 0) {
-      console.log(`[WebSocket] ✅ AccountId resolved for user (${source}):`, userAccounts[0].id);
+      console.log(`[WebSocket] âœ… AccountId resolved for user (${source}):`, userAccounts[0].id);
       return { accountId: userAccounts[0].id, userId };
     }
 
-    console.log(`[WebSocket] ⚠️ No accounts found for user (${source}):`, userId);
+    console.log(`[WebSocket] âš ï¸ No accounts found for user (${source}):`, userId);
     return { accountId: null, userId };
   } catch (error) {
-    console.error(`[WebSocket] ❌ Error decoding token (${source}):`, error);
+    console.error(`[WebSocket] âŒ Error decoding token (${source}):`, error);
     return { accountId: null, userId: null };
   }
 }
@@ -164,20 +164,20 @@ if (fs.existsSync(rootEnvPath)) {
 
 const PORT = process.env.PORT || 3000;
 
-// Diagnóstico de variables de entorno para AI
-console.log('🔑 Environment check:');
+// DiagnÃ³stico de variables de entorno para AI
+console.log('ðŸ”‘ Environment check:');
 console.log('   OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? `exists (${process.env.OPENAI_API_KEY.substring(0, 10)}...)` : 'NOT SET');
 console.log('   GROQ_API_KEY:', process.env.GROQ_API_KEY ? `exists (${process.env.GROQ_API_KEY.substring(0, 10)}...)` : 'NOT SET');
 
 // Force IPv4 if needed for debugging
 const HOST = process.env.HOST || '0.0.0.0';
-console.log(`🔧 Server Configuration: HOST=${HOST}, PORT=${PORT}`);
+console.log(`ðŸ”§ Server Configuration: HOST=${HOST}, PORT=${PORT}`);
 
 const dnsOrder = process.env.FLUXCORE_DNS_ORDER;
 if ((process.env.NODE_ENV || 'development') !== 'production' && dnsOrder === 'ipv4first') {
   try {
     dns.setDefaultResultOrder('ipv4first');
-    console.log('🔧 DNS result order set to ipv4first (dev)');
+    console.log('ðŸ”§ DNS result order set to ipv4first (dev)');
   } catch {
     // ignore
   }
@@ -236,7 +236,7 @@ const elysiaApp = new Elysia()
         info: {
           title: 'FluxCore API',
           version: '0.2.0',
-          description: 'API para FluxCore - Sistema de mensajería universal extensible',
+          description: 'API para FluxCore - Sistema de mensajerÃ­a universal extensible',
         },
         tags: [
           { name: 'Health', description: 'Health check endpoints' },
@@ -257,11 +257,11 @@ const elysiaApp = new Elysia()
   .use(accountAvatarRoutes)
   .use(relationshipsRoutes)
   .use(conversationsRoutes)
-  .use(templatesRoutes)
-  .use(ragConfigRoutes)
-  .use(publicProfileRoutes)
-  .use(documentationQualityRoutes)
+  .use(messagesRoutes)
   .use(actorsRoutes)
+  .use(documentationQualityRoutes)
+  .use(contactsRoutes)
+  .use(automationRoutes)
   .use(adaptersRoutes)
   .use(extensionRoutes)
   .use(aiRoutes)
@@ -276,12 +276,15 @@ const elysiaApp = new Elysia()
   .use(fluxcoreRoutes)
   .use(kernelSessionsRoutes)
   .use(kernelConsoleRoutes)
+  .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(testChatCoreRoutes)
   .use(assetsRoutes)
   .use(assetRelationsRoutes)
+  .use(templatesRoutes)
+  .use(ragConfigRoutes)
 
-// Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
+// Servidor hÃ­brido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: Server<WebSocketData>;
 try {
   server = Bun.serve({
@@ -315,11 +318,11 @@ try {
           accountId = selectedAccountId || identity.accountId;
         } else {
           accountId = selectedAccountId;
-          console.log('[WebSocket] ⚠️ No token found in header or query params');
+          console.log('[WebSocket] âš ï¸ No token found in header or query params');
         }
 
         if (selectedAccountId) {
-          console.log('[WebSocket] 🎯 Using selected accountId from frontend:', selectedAccountId);
+          console.log('[WebSocket] ðŸŽ¯ Using selected accountId from frontend:', selectedAccountId);
         }
 
         const success = server.upgrade(req, {
@@ -334,42 +337,11 @@ try {
 
         console.log('[WebSocket] Upgrade result:', success);
         if (success) {
-          console.log('[WebSocket] ✅ Upgrade successful, returning undefined');
+          console.log('[WebSocket] âœ… Upgrade successful, returning undefined');
           return; // Must return undefined (or nothing) for successful upgrade
         }
-        console.error('[WebSocket] ❌ Upgrade failed');
+        console.error('[WebSocket] âŒ Upgrade failed');
         return new Response('WebSocket upgrade failed', { status: 400 });
-      }
-
-      // Serve public avatars permanently (sin autenticación)
-      if (url.pathname.startsWith('/avatars/')) {
-        const relativePath = url.pathname.replace(/^\/+avatars\/+/, '');
-        if (relativePath.includes('..')) {
-          return new Response('Invalid path', { status: 400 });
-        }
-
-        // Buscar en uploads/assets (ubicación real de avatares)
-        let filePath = path.join(process.cwd(), 'uploads', 'assets', relativePath);
-        if (!fs.existsSync(filePath)) {
-          const fallbackPath = path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets', relativePath);
-          if (fs.existsSync(fallbackPath)) {
-            filePath = fallbackPath;
-          }
-        }
-
-        if (!fs.existsSync(filePath)) {
-          return new Response('Avatar not found', { status: 404 });
-        }
-
-        const file = Bun.file(filePath);
-        const headers = {
-          'Cache-Control': 'public, max-age=31536000, immutable',
-          'Access-Control-Allow-Origin': '*',
-        };
-        if (file.type) headers['Content-Type'] = file.type;
-
-        console.log(`[Avatar] Serving public avatar: ${relativePath}`);
-        return new Response(file, { headers });
       }
 
       // Serve uploaded files statically
@@ -474,7 +446,47 @@ try {
 
     // Handler para HTTP - delega a Elysia
     fetch: async (req: Request, server: Server<WebSocketData>) => {
+      // Upgrade a WebSocket si es request de WS
       const url = new URL(req.url);
+      if (url.pathname === '/ws') {
+        console.log('[WebSocket] Upgrade request received (fallback)');
+        console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
+
+        const authHeader = req.headers.get('authorization');
+        let accountId: string | null = null;
+        let userId: string | null = null;
+
+        const selectedAccountId = url.searchParams.get('accountId');
+        const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+        const tokenFromQuery = url.searchParams.get('token');
+        const token = tokenFromHeader || tokenFromQuery;
+
+        if (token) {
+          const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'fallback-header' : 'fallback-query');
+          userId = identity.userId;
+          accountId = selectedAccountId || identity.accountId;
+        } else {
+          accountId = selectedAccountId;
+          console.log('[WebSocket] âš ï¸ No token found in header or query params (fallback)');
+        }
+
+        const success = server.upgrade(req, {
+          data: {
+            ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,
+            userAgent: req.headers.get('user-agent'),
+            requestId: `ws-${Date.now()}-${accountId || 'anonymous'}`,
+            accountId: accountId,
+            userId: userId,
+          }
+        });
+        console.log('[WebSocket] Upgrade result:', success);
+        if (success) {
+          console.log('[WebSocket] âœ… Upgrade successful, returning undefined');
+          return; // Must return undefined (or nothing) for successful upgrade
+        }
+        console.error('[WebSocket] âŒ Upgrade failed');
+        return new Response('WebSocket upgrade failed', { status: 400 });
+      }
 
       // Serve uploaded files statically
       if (url.pathname.startsWith('/uploads/')) {
@@ -574,26 +586,26 @@ try {
 }
 
 if (!server) {
-  console.error('❌ Failed to start server: Could not bind to port ' + PORT);
+  console.error('âŒ Failed to start server: Could not bind to port ' + PORT);
   process.exit(1);
 }
 
 // Global error handlers to catch startup crashes
 process.on('uncaughtException', (err) => {
-  console.error('🔥 UNCAUGHT EXCEPTION:', err);
+  console.error('ðŸ”¥ UNCAUGHT EXCEPTION:', err);
 });
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('🔥 UNHANDLED REJECTION:', reason);
+  console.error('ðŸ”¥ UNHANDLED REJECTION:', reason);
 });
 
-console.log(`🚀 FluxCore API running at http://localhost:${server.port}`);
-console.log(`📚 Swagger docs at http://localhost:${server.port}/swagger`);
-console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
+console.log(`ðŸš€ FluxCore API running at http://localhost:${server.port}`);
+console.log(`ðŸ“š Swagger docs at http://localhost:${server.port}/swagger`);
+console.log(`ðŸ”Œ WebSocket at ws://localhost:${server.port}/ws`);
 
 // Start Kernel Runtime components with error protection
 (async () => {
   try {
-    console.log('⚙️ Starting Kernel components...');
+    console.log('âš™ï¸ Starting Kernel components...');
 
     console.log('   - Kernel Dispatcher');
     await kernelDispatcher.start();
@@ -617,9 +629,9 @@ console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
     console.log('   - CognitionWorker (Always ON)');
     cognitionWorker.start();
 
-    console.log('✅ Kernel & Services started successfully');
+    console.log('âœ… Kernel & Services started successfully');
   } catch (error) {
-    console.error('❌ CRITICAL ERROR during Kernel startup:', error);
+    console.error('âŒ CRITICAL ERROR during Kernel startup:', error);
     console.error(error);
   }
 })();
@@ -638,18 +650,18 @@ if (useAccountDeletionQueue) {
     await stopAccountDeletionQueue();
     await closeRedisConnection();
   });
-  console.log('🧹 AccountDeletion processing running on BullMQ queue');
+  console.log('ðŸ§¹ AccountDeletion processing running on BullMQ queue');
 } else {
   accountDeletionWorker.start();
   addCleanupTask(() => accountDeletionWorker.stop());
   addCleanupTask(() => wesScheduler.stop());
   addCleanupTask(() => cognitionWorker.stop());
-  console.log('🧹 AccountDeletion processing running on interval worker');
+  console.log('ðŸ§¹ AccountDeletion processing running on interval worker');
 }
 
-// Iniciar ChatCore Outbox Worker para certificación en Kernel
+// Iniciar ChatCore Outbox Worker para certificaciÃ³n en Kernel
 chatCoreOutboxService.startWorker();
-console.log('📮 ChatCore Outbox worker started for Kernel certification');
+console.log('ðŸ“® ChatCore Outbox worker started for Kernel certification');
 
 const handleShutdown = async (signal: NodeJS.Signals) => {
   console.log(`[shutdown] received ${signal}, cleaning up...`);
@@ -668,4 +680,3 @@ const handleShutdown = async (signal: NodeJS.Signals) => {
 });
 
 export type App = typeof elysiaApp;
-
