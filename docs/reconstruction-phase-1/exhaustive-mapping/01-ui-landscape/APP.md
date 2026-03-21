@@ -1,7 +1,7 @@
 ---
 id: "app-router"
 type: "core"
-status: "wip"
+status: "stable"
 criticality: "high"
 location: "apps/web/src/App.tsx"
 ---

@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "validate-docs": "bun scripts/validate-documentation-coverage.ts",
+    "check-doc-quality": "bun scripts/validate-documentation-coverage.ts"
+  }
+}

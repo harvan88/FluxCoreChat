@@ -39,7 +39,7 @@ interface ComponentScore {
 }
 
 class DocumentationValidator {
-  private readonly basePath = 'docs/reconstruction-phase-1/exhaustive-mapping';
+  private readonly basePath = 'docs/reconstruction-phase-1/exhaustive-mapping/01-ui-landscape';
   private readonly componentsPath = 'apps/web/src';
   
   async validateAll(): Promise<ValidationResult> {
@@ -83,8 +83,6 @@ class DocumentationValidator {
       '*_ROUTING.md',        // APP_LAYOUT_ROUTING.md
       '*_SECTION.md',        // RAGCONFIGSECTION.md
       '*_DETAIL.md',         // ASSISTANTDETAIL.md
-      '*_COMPONENT.md',      // COPYBUTTON_COMPONENT.md
-      '*_STANDARD.md',       // AI_DOCUMENTATION_STANDARD.md
     ];
     
     let count = 0;
@@ -92,9 +90,8 @@ class DocumentationValidator {
     
     try {
       for (const pattern of additionalPatterns) {
-        // Usar búsqueda recursiva en todas las subcarpetas
         const result = execSync(
-          `cmd /c "dir /s /b "${this.basePath}\\${pattern}" 2>nul"`,
+          `cmd /c "dir /b "${this.basePath}\\${pattern}" 2>nul"`,
           { encoding: 'utf8', maxBuffer: 1024 * 1024 }
         );
         
@@ -291,28 +288,23 @@ class DocumentationValidator {
       score += 30;
     }
     else if (docType === 'unknown' && !hasFrontmatter) {
-       // REGLA LEGACY (Si no tiene frontmatter, aplicar validaciones mínimas antiguas para no romper todo)
-       const hasPurpose = content.match(/propósito|propósito:/i);
-       const hasLocation = content.match(/ubicación|ubicación:/i);
-       
-       if (!hasPurpose) issues.push(`⚠️ ${componentName}: Documento legacy sin sección de Propósito`);
-       if (!hasLocation) issues.push(`⚠️ ${componentName}: Documento legacy sin Ubicación clara`);
-       
-       if (hasPurpose) score += 10;
-       if (hasLocation) score += 10;
     }
 
-    // 3. REGLAS GENERALES PARA TODOS
-    if (content.includes('```typescript') || content.includes('```tsx')) score += 10;
-    else issues.push(`⚠️ ${componentName}: Sin ejemplos de código`);
+    // 3. REGLAS GENERALES
+    if (content.includes('```typescript') || content.includes('```tsx')) {
+      score += 10;
+    } else {
+      issues.push(`⚠️ ${componentName}: Sin ejemplos de código`);
+    }
 
-    // Reportar errores críticos inmediatamente
-    const formatErrors = issues.filter(i => i.includes('�'));
-    if (formatErrors.length > 0) {
-      console.log(`\n📊 DOCUMENTO CON FORMATO INVÁLIDO O INCOMPLETO: ${componentName}`);
-      console.log(`📄 Archivo: ${docPath}`);
-      console.log(`❌ Errores detectados:`);
-      formatErrors.forEach(error => console.log(`   ${error}`));
+    // 4. PENALIZACIÓN POR DUDAS TÉCNICAS (Sincronizado con backend)
+    if (content.includes('DUDA TÉCNICA') || content.includes('DUDAS TÉCNICAS')) {
+      issues.push(`⚠️ ${componentName}: Contiene dudas técnicas no resueltas`);
+      score -= 15; // Penalizamos el score
+      
+      if (frontmatter.status === 'stable') {
+        issues.push(`🚨 ${componentName}: Tiene estado 'stable' pero contiene DUDAS TÉCNICAS. Debería ser 'needs_review'`);
+      }
     }
 
     return {

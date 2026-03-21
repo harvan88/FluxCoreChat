@@ -1,18 +1,18 @@
-import { Router } from 'express';
+import { Elysia } from 'elysia';
 import { documentationQualityService } from '../../services/fluxcore/documentation-quality.service';
 
-export const documentationQualityRoutes = Router();
+export const documentationQualityRoutes = new Elysia({ prefix: '/fluxcore/documentation' });
 
 /**
  * GET /fluxcore/documentation/quality
  * Retorna las métricas de calidad de documentación en tiempo real
  */
-documentationQualityRoutes.get('/quality', async (req, res) => {
+documentationQualityRoutes.get('/quality', async () => {
   try {
     const metrics = await documentationQualityService.getQualityMetrics();
-    res.json(metrics);
+    return metrics;
   } catch (error) {
     console.error('[DocumentationQualityRoute] Error:', error);
-    res.status(500).json({ error: 'Failed to generate documentation metrics' });
+    return { error: 'Failed to generate documentation metrics' };
   }
 });

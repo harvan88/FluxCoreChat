@@ -53,6 +53,8 @@ export type { SliderInputProps } from './SliderInput';
 export { Switch } from './Switch';
 export type { SwitchProps } from './Switch';
 
+export { CopyButton } from './CopyButton';
+
 export { ToastStack } from './ToastStack';
 
 // Sidebar components

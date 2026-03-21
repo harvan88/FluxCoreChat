@@ -147,6 +147,17 @@ export interface RuntimeInput {
      * Does NOT include raw signal evidence.
      */
     conversationHistory: ConversationMessage[];
+
+    /**
+     * Services interface for tool execution (Canon §4.15)
+     * Runtimes use these services instead of direct infrastructure access.
+     */
+    services: {
+        getAvailableTools(): Promise<string[]>;
+        executeTool(toolId: string, params: any): Promise<any>;
+        getToolDefinition(toolId: string): Promise<any>;
+        isAuthorized(toolId: string): Promise<boolean>;
+    };
 }
 
 /**

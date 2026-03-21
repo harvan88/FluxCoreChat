@@ -12,23 +12,24 @@
 
 | # | Tema | Documento Fuente | Dominio | Riesgo | Estado |
 |---|------|------------------|---------|--------|--------|
-| **T3** | Avatar Access (URLs públicas) | `AVATAR_ACCESS_ANALYSIS.md` | Assets / UX | 🟢 Bajo | ✅ **COMPLETADO** |
-| **T1** | Arquitectura de Pilares del Runtime | `RUNTIME_RESPONSIBILITIES_MATRIX.md` | FluxCore cognitivo | 🔴 Alto | 🔄 En diseño |
+| **T3** | Avatar Access (URLs públicas) | `AVATAR_ACCESS_ANALYSIS.md` | Assets / UX | 🟢 Bajo | ✅ **COMPLETADO** (2026-03-19) |
+| **T1** | Packages Types Refactoring | `PLAN_REFACTORING_PACKAGES_TYPES.md` | Tipos / Schema | 🟢 Bajo | ✅ **COMPLETADO** (2026-03-19) |
+| **T1** | Arquitectura de Pilares del Runtime | `PILLAR_ARCHITECTURE.md` | FluxCore cognitivo | 🔴 Alto | 🔄 En diseño |
 | **T2** | Runtime Pipeline + Signal Hub | `RUNTIME_PIPELINE_MANIFESTO.md` | Telemetría / Extensibilidad | 🟡 Medio | ⏳ Espera T1 |
 
 ---
 
-## 📐 Orden Lógico: T3 → T1 → T2
+## 📐 Orden Lógico: T3 → T1(Packages) → T1(Pilares) → T2
 
 ### ¿Por qué este orden?
 
 ```
-T3 (Avatar)     ──→  T1 (Pilares del Runtime)  ──→  T2 (Pipeline + Signal Hub)
-│                    │                              │
-│ Independiente      │ Refactoring estructural      │ Se construye SOBRE T1
-│ Sin dependencias   │ Limpia acceso a pilares      │ Necesita el runtime limpio
-│ Victoria rápida    │ es el corazón del cambio     │ para observarlo correctamente
-└────────────────    └──────────────────────────    └──────────────────────────
+T3 (Avatar)     ──→  T1 (Packages Types)  ──→  T1 (Pilares del Runtime)  ──→  T2 (Pipeline + Signal Hub)
+│                    │                              │                              │
+│ Independiente      │ Limpieza de tipos            │ Refactoring estructural      │ Se construye SOBRE T1
+│ Sin dependencias   │ Sin impacto en runtime       │ Limpia acceso a pilares      │ Necesita el runtime limpio
+│ Victoria rápida    │ Victoria rápida              │ es el corazón del cambio     │ para observarlo correctamente
+└────────────────    └──────────────────────────    └──────────────────────────    └──────────────────────────
 ```
 
 ---
@@ -37,6 +38,13 @@ T3 (Avatar)     ──→  T1 (Pilares del Runtime)  ──→  T2 (Pipeline + S
 
 Implementado: URLs públicas directas (Modelo WhatsApp) en `account-avatar.presenter.ts`.  
 Resultado: Avatars visibles en ConversationsList y perfiles públicos.
+
+---
+
+## ✅ Tema 1: Packages Types Refactoring — COMPLETADO
+
+Limpiados tipos duplicados en `packages/types`.  
+Resultado: Schema DB como fuente de verdad única, eliminados tipos no utilizados.
 
 ---
 

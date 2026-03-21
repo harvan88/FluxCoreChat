@@ -1,7 +1,7 @@
 ---
 id: "template-manager"
 type: "smart-component"
-status: "wip"
+status: "stable"
 criticality: "medium"
 location: "apps/web/src/components/templates/TemplateManager.tsx"
 ---

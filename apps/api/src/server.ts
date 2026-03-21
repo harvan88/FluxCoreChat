@@ -55,6 +55,7 @@ import { assetRelationsRoutes } from './routes/asset-relations.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { publicProfileRoutes } from './routes/public-profile.routes';
+import { documentationQualityRoutes } from './routes/fluxcore/documentation-quality.routes';
 import { actorsRoutes } from './routes/actors.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
@@ -256,10 +257,11 @@ const elysiaApp = new Elysia()
   .use(accountAvatarRoutes)
   .use(relationshipsRoutes)
   .use(conversationsRoutes)
-  .use(messagesRoutes)
+  .use(templatesRoutes)
+  .use(ragConfigRoutes)
+  .use(publicProfileRoutes)
+  .use(documentationQualityRoutes)
   .use(actorsRoutes)
-  .use(contactsRoutes)
-  .use(automationRoutes)
   .use(adaptersRoutes)
   .use(extensionRoutes)
   .use(aiRoutes)
@@ -274,13 +276,10 @@ const elysiaApp = new Elysia()
   .use(fluxcoreRoutes)
   .use(kernelSessionsRoutes)
   .use(kernelConsoleRoutes)
-  .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(testChatCoreRoutes)
   .use(assetsRoutes)
   .use(assetRelationsRoutes)
-  .use(templatesRoutes)
-  .use(ragConfigRoutes)
 
 // Servidor híbrido: HTTP (Elysia) + WebSocket (Bun nativo)
 let server: Server<WebSocketData>;

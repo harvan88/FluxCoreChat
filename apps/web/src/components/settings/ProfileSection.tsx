@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useProfile } from '../../hooks/useProfile';
 import { usePanelStore } from '../../store/panelStore';
-import { Button, Input, Card, Textarea } from '../ui';
+import { Button, Input, Card, Textarea, CopyButton } from '../ui';
 import { Switch } from '../ui/Switch';
 import { AvatarUpload } from '../profile/AvatarUpload';
 import { IdCopyable } from '../fluxcore/detail/IdCopyable';
@@ -59,7 +59,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const aliasCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [copySuccess, setCopySuccess] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -197,29 +196,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     navigator.clipboard.writeText(privateContext);
   };
 
-  // Handle copy public URL
-  const handleCopyPublicUrl = async () => {
-    if (alias && alias.length >= 3) {
-      const publicUrl = `meetgar.com/p/${alias}`;
-      try {
-        await navigator.clipboard.writeText(publicUrl);
-        setCopySuccess(true);
-        setTimeout(() => setCopySuccess(false), 2000);
-      } catch (err) {
-        console.error('[ProfileSection] Error copying to clipboard:', err);
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = publicUrl;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        setCopySuccess(true);
-        setTimeout(() => setCopySuccess(false), 2000);
-      }
-    }
-  };
-
   // Handle download context
   const handleDownloadContext = () => {
     const blob = new Blob([privateContext], { type: 'text/plain' });
@@ -309,19 +285,30 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                   {(aliasStatus === 'taken' || aliasStatus === 'reserved') && <XCircle size={16} className="text-red-500" />}
                   {aliasStatus === 'invalid' && <AlertCircle size={16} className="text-amber-500" />}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCopyPublicUrl}
+                <CopyButton 
+                  text={alias}
                   disabled={!alias || alias.length < 3}
-                  className={`p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    copySuccess 
-                      ? 'text-green-500 bg-green-500/10' 
-                      : 'text-muted hover:text-primary hover:bg-hover'
-                  }`}
-                  title={copySuccess ? "¡Copiado!" : "Copiar enlace público"}
-                >
-                  {copySuccess ? <Check size={14} /> : <Copy size={14} />}
-                </button>
+                  title="Copiar alias"
+                  size="sm"
+                  className="ml-2"
+                  debug={process.env.NODE_ENV === 'development'}
+                  onError={(error) => {
+                    console.error('[ProfileSection] Error al copiar alias:', {
+                      error,
+                      message: error.message,
+                      stack: error.stack,
+                      alias: alias,
+                      aliasLength: alias?.length || 0
+                    });
+                    // Opcional: Mostrar toast al usuario
+                    // toast.error('No se pudo copiar el alias');
+                  }}
+                  onSuccess={() => {
+                    console.log('[ProfileSection] Alias copiado exitosamente');
+                    // Opcional: Mostrar confirmación al usuario
+                    // toast.success('Alias copiado');
+                  }}
+                />
               </div>
             </div>
             {aliasMessage && (
@@ -336,7 +323,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
               </p>
             )}
             <p className="text-[11px] text-muted">
-              Este será tu enlace público. Las personas podrán visitarte y enviarte mensajes directamente.
+              Este será tu alias público. Las personas podrán usarlo para encontrarte.
             </p>
           </div>
 

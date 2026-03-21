@@ -92,6 +92,9 @@ export interface ModelConfig {
     topP: number;
     maxTokens?: number;
     responseFormat?: string;
+    tone?: 'formal' | 'casual' | 'neutral';
+    useEmojis?: boolean;
+    language?: string;
 }
 
 /** Configuración de timing de respuestas */
@@ -99,9 +102,6 @@ export interface TimingConfig {
     responseDelaySeconds: number;
     smartDelay: boolean;
     mode?: 'auto' | 'suggest' | 'off';
-    tone?: 'formal' | 'casual' | 'neutral';
-    useEmojis?: boolean;
-    language?: string;
 }
 
 // ============================================================================

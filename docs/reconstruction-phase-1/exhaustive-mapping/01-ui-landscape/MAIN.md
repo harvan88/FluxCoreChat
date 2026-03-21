@@ -36,7 +36,21 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 ---
 
-## 🔄 2. Flujos Principales
+## � 2. Dependencias
+
+### 2.1 Dependencias que consume:
+- **React 18:** Para renderizado concurrente y hooks
+- **React DOM:** Para montar en el DOM real
+- **React Router:** Para contexto de routing (`BrowserRouter`)
+
+### 2.2 Quién depende de él:
+- **Vite Bundle:** Lo usa como entry point principal
+- **index.html:** Contiene el `div#root` donde se monta
+- **App.tsx:** Es montado dentro del `BrowserRouter` proporcionado
+
+---
+
+## �🔄 3. Flujos Principales
 
 ### 🔄 2.1 Bootstrap de la aplicación
 

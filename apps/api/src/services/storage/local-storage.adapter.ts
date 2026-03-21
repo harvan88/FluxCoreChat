@@ -152,6 +152,44 @@ export class LocalStorageAdapter implements IStorageAdapter {
     }
 
     /**
+     * Generar URL pública permanente para avatares
+     * @param key Ruta del archivo
+     */
+    async getPublicUrl(key: string): Promise<string> {
+        console.log(`${DEBUG_PREFIX} Public URL requested: ${key}`);
+        
+        // VALIDACIÓN EXPLÍCITA: No aceptar keys vacíos o inválidos
+        if (!key || typeof key !== 'string' || key.trim().length === 0) {
+            const error = `Invalid storage key for public URL: ${key}. Expected non-empty string.`;
+            console.error(`${DEBUG_PREFIX} ❌ ${error}`);
+            throw new Error(error);
+        }
+
+        // VALIDACIÓN EXPLÍCITA: Detectar intento de path traversal
+        if (key.includes('..') || key.includes('\\')) {
+            const error = `Path traversal attempt detected in public URL request: ${key}`;
+            console.error(`${DEBUG_PREFIX} ❌ SECURITY: ${error}`);
+            throw new Error(error);
+        }
+
+        // VALIDACIÓN EXPLÍCITA: Verificar que el archivo existe
+        const fullPath = this.getFullPath(key);
+        const fileExists = await this.exists(key);
+        
+        if (!fileExists) {
+            const error = `Avatar file not found for public URL: ${key} (full path: ${fullPath})`;
+            console.error(`${DEBUG_PREFIX} ❌ ${error}`);
+            throw new Error(error);
+        }
+
+        // GENERACIÓN DE URL PÚBLICA
+        const publicUrl = `${this.baseUrl.replace('/uploads/assets', '/avatars')}/${key}`;
+        
+        console.log(`${DEBUG_PREFIX} ✅ Public URL generated successfully: ${key} → ${publicUrl}`);
+        return publicUrl;
+    }
+
+    /**
      * Verificar firma de URL
      */
     verifySignedUrl(key: string, expires: string, signature: string): boolean {

@@ -40,7 +40,7 @@ export default defineConfig({
       },
       workbox: {
         // FC-702: Caching strategy
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,md}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/localhost:3000\/api\/.*/i,
@@ -73,6 +73,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+    },
+    // Configuración para servir archivos .md como texto plano
+    fs: {
+      strict: false,
     },
   },
   build: {

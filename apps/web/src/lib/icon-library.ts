@@ -76,6 +76,8 @@ export {
 
   File as FileIcon,
 
+  FileText as DocumentationIcon,
+
   ShieldAlert as ShieldAlertIcon,
 
   Flag as FlagIcon,

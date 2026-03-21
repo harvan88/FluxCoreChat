@@ -37,6 +37,7 @@ import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
 import { AccountOrphanExplorer } from '../monitor/AccountOrphanExplorer';
 import { KernelConsole } from '../monitor/KernelConsole';
 import { VisualPipeline } from '../monitor/VisualPipeline';
+import { DocumentationQualityPanel } from '../monitor/DocumentationQualityPanel';
 
 // Extension imports (legacy - will be migrated to ViewRegistry)
 import { WebsiteBuilderPanel } from '../extensions/WebsiteBuilderPanel';
@@ -660,6 +661,9 @@ function TabContent({ tab, containerId }: TabContentProps) {
       }
       if (view === 'pipeline') {
         return <VisualPipeline />;
+      }
+      if (view === 'documentation') {
+        return <DocumentationQualityPanel />;
       }
       return <MonitoringHub />;
     }

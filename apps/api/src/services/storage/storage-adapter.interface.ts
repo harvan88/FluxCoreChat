@@ -77,6 +77,12 @@ export interface IStorageAdapter {
     getSignedUrl(key: string, options: SignedUrlOptions): Promise<string>;
 
     /**
+     * Generar URL pública permanente para avatares
+     * @param key Ruta del archivo
+     */
+    getPublicUrl(key: string): Promise<string>;
+
+    /**
      * Verificar si un archivo existe
      * @param key Ruta del archivo
      */

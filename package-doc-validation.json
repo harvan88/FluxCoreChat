@@ -1,0 +1,10 @@
+{
+  "name": "documentation-validation",
+  "scripts": {
+    "validate-docs": "bun scripts/validate-documentation-coverage.ts",
+    "check-doc-quality": "bun scripts/documentation-quality-check.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

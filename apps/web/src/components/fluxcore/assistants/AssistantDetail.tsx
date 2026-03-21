@@ -493,8 +493,8 @@ export function AssistantDetail({
                             <div className="relative">
                                 <select
                                     className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                                    value={assistant.timingConfig.tone ?? 'neutral'}
-                                    onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, tone: e.target.value as 'formal' | 'casual' | 'neutral' } }, 'immediate')}
+                                    value={assistant.modelConfig.tone ?? 'neutral'}
+                                    onChange={(e) => onUpdate({ modelConfig: { ...assistant.modelConfig, tone: e.target.value as 'formal' | 'casual' | 'neutral' } }, 'immediate')}
                                 >
                                     <option value="neutral">Neutral</option>
                                     <option value="formal">Formal</option>
@@ -508,8 +508,8 @@ export function AssistantDetail({
                             <div className="relative">
                                 <select
                                     className="w-full bg-input border border-subtle rounded px-3 py-2 text-primary appearance-none pr-8"
-                                    value={assistant.timingConfig.language ?? 'es'}
-                                    onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, language: e.target.value } }, 'immediate')}
+                                    value={assistant.modelConfig.language ?? 'es'}
+                                    onChange={(e) => onUpdate({ modelConfig: { ...assistant.modelConfig, language: e.target.value } }, 'immediate')}
                                 >
                                     <option value="es">Español</option>
                                     <option value="en">Inglés</option>
@@ -522,8 +522,8 @@ export function AssistantDetail({
                         <Checkbox
                             label="Usar emojis"
                             description="El asistente puede incluir emojis en sus respuestas"
-                            checked={assistant.timingConfig.useEmojis ?? false}
-                            onChange={(e) => onUpdate({ timingConfig: { ...assistant.timingConfig, useEmojis: e.target.checked } }, 'immediate')}
+                            checked={assistant.modelConfig.useEmojis ?? false}
+                            onChange={(e) => onUpdate({ modelConfig: { ...assistant.modelConfig, useEmojis: e.target.checked } }, 'immediate')}
                         />
                     </div>
                 </CollapsibleSection>

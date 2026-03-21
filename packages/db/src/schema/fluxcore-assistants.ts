@@ -17,6 +17,9 @@ export interface AssistantModelConfig {
   temperature: number;        // 0.0 - 2.0
   topP: number;               // 0.0 - 1.0
   responseFormat: 'text' | 'json';
+  tone?: string;              // 'formal' | 'casual' | 'neutral'
+  language?: string;          // 'es' | 'en' | 'pt' | 'fr'
+  useEmojis?: boolean;        // true/false
 }
 
 /**

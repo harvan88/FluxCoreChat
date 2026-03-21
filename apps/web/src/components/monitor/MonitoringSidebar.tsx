@@ -6,6 +6,7 @@ import {
   AlertTriangleIcon,
   HardDriveIcon,
   CreditsIcon,
+  DocumentationIcon,
 } from '../../lib/icon-library';
 import { usePanelStore } from '../../store/panelStore';
 import { useAccountDeletionMonitorStore } from '../../store/accountDeletionMonitorStore';
@@ -37,10 +38,11 @@ export function MonitoringSidebar() {
     if (view === 'pipeline') return 'monitoring-pipeline';
     if (view === 'orphans') return 'monitoring-orphans';
     if (view === 'assets') return 'monitoring-assets';
+    if (view === 'documentation') return 'monitoring-documentation';
     return 'monitoring-hub';
   })();
 
-  const openMonitoringTab = (identity: string, view: 'hub' | 'audit' | 'orphans' | 'kernel' | 'assets', title: string, icon: string) => {
+  const openMonitoringTab = (identity: string, view: 'hub' | 'audit' | 'orphans' | 'kernel' | 'assets' | 'documentation', title: string, icon: string) => {
     openTab('dashboard', {
       type: 'monitoring',
       identity,
@@ -100,6 +102,14 @@ export function MonitoringSidebar() {
     title: 'Asset Monitoring',
     description: 'Logs de uploads, descargas y políticas de assets.',
     onClick: () => openMonitoringTab('monitoring-assets', 'assets' as any, 'Asset Monitoring', 'HardDrive'),
+  },
+  {
+    id: 'monitoring-documentation',
+    identity: 'monitoring-documentation',
+    icon: <DocumentationIcon size={18} />,
+    title: 'Documentation Quality',
+    description: 'Métricas de calidad y cobertura de documentación del sistema.',
+    onClick: () => openMonitoringTab('monitoring-documentation', 'documentation' as any, 'Documentation Quality', 'FileText'),
   },
 ];
 

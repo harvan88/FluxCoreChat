@@ -42,6 +42,10 @@ const DEFAULT_POLICIES: Record<string, { ttlSeconds: number; contexts: string[] 
         ttlSeconds: 86400, // 24 horas
         contexts: ['preview:web', 'download:web'],
     },
+    public_profile_avatar: {
+        ttlSeconds: 31536000, // 1 año (URLs públicas persistentes)
+        contexts: ['preview:web', 'download:web', 'public:profile'],
+    },
     workspace_asset: {
         ttlSeconds: 3600,
         contexts: ['download:web', 'preview:web', 'download:api'],
