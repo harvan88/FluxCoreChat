@@ -4,13 +4,14 @@ import { db, sql } from '@fluxcore/db';
  * Script para describir la estructura de una tabla
  */
 async function describeTable() {
-  console.log('🔍 Describing fluxcore_projector_cursors table...');
+  const tableName = process.argv[2] || 'fluxcore_projector_cursors';
+  console.log(`🔍 Describing ${tableName} table...`);
 
   try {
     const result = await db.execute(sql`
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns 
-      WHERE table_name = 'fluxcore_projector_cursors'
+      WHERE table_name = ${tableName}
         AND table_schema = 'public'
       ORDER BY ordinal_position
     `);

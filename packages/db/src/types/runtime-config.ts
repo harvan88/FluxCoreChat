@@ -53,6 +53,15 @@ export interface RuntimeConfig {
     /** Tool IDs authorized by the operator for this assistant */
     authorizedTools: string[];
 
+    /** Style: Tone (formal, casual, neutral) */
+    tone?: string;
+
+    /** Style: Preferred language */
+    language?: string;
+
+    /** Style: Whether to use emojis in responses */
+    useEmojis?: boolean;
+
     /** WorkDefinitions resolved for Fluxi runtime */
     workDefinitions?: WorkDefinition[];
 }
