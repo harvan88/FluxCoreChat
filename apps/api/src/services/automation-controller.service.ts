@@ -102,6 +102,25 @@ class AutomationControllerService {
   }
 
   /**
+   * 🆕 Obtener el modo global del account (relationshipId = NULL)
+   */
+  async getGlobalRule(accountId: string): Promise<AutomationRule | null> {
+    const [globalRule] = await db
+      .select()
+      .from(automationRules)
+      .where(
+        and(
+          eq(automationRules.accountId, accountId),
+          isNull(automationRules.relationshipId),
+          eq(automationRules.enabled, true)
+        )
+      )
+      .limit(1);
+
+    return globalRule || null;
+  }
+
+  /**
    * Obtener la regla efectiva (relationship-specific o global)
    */
   async getEffectiveRule(

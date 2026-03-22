@@ -159,6 +159,114 @@ Esta metodología está diseñada para refactoring seguro en sistemas críticos 
 - [ ] Las estructuras fueron confirmadas con pruebas
 - [ ] Los flujos fueron validados extremo a extremo
 
+### 🚨 **LECCIONES APRENDIDAS - CASO DE ESTUDIO: AI RESPONSE PUBLIC PROFILE**
+
+#### **❌ Problemas que Retrasaron la Solución (8+ horas):**
+
+**1. Suposición sobre Formato de Datos (4 horas perdidas)**
+- **Error:** Asumí que `visitorToken` empezaba con `"visitor_"`
+- **Realidad:** Los `visitorToken` son UUIDs aleatorios (`f337fb1f-6719-48d8-8b2b-7128408cc289`)
+- **Impacto:** Mi código de detección nunca se ejecutó
+- **Solución:** Verificar formato real con `SELECT visitor_token FROM conversations WHERE visitor_token IS NOT NULL`
+
+**2. Múltiples Fuentes de Verdad Confusas (2 horas perdidas)**
+- **Error:** Asumí que `fluxcore_account_policies` era la fuente principal
+- **Realidad:** `automation_rules` es la fuente de verdad para modos (relationship + global)
+- **Impacto:** Intenté hackear `fluxcore_account_policies` en lugar de usar la arquitectura correcta
+- **Solución:** Mapear jerarquía completa: `automation_rules.relationship > automation_rules.global > fluxcore_account_policies`
+
+**3. Incomprensión del Schema de BD (1.5 horas perdidas)**
+- **Error:** Asumí que podía usar `visitorToken` como `relationshipId` en `automation_rules`
+- **Realidad:** `relationshipId` tiene FK constraint a `relationships.id` (UUIDs válidos)
+- **Impacto:** Intenté soluciones que violaban la integridad referencial
+- **Solución:** Entender que `relationshipId = NULL` representa configuración global
+
+**4. Falta de Validación Directa (1 hora perdida)**
+- **Error:** Confíe en tests simulados en lugar de verificar datos reales
+- **Realidad:** Los tests usaban `visitor_test_123` pero el sistema usaba UUIDs reales
+- **Impacto:** Los tests pasaban pero el código real fallaba
+- **Solución:** Siempre validar con datos reales del sistema en producción
+
+#### **🎯 Patrones de Error Identificados:**
+
+**Pattern 1: Suposición de Formato**
+```
+❌ Asumir: "visitorToken empieza con 'visitor_'"
+✅ Validar: "SELECT visitor_token FROM conversations LIMIT 1"
+```
+
+**Pattern 2: Suposición de Arquitectura**
+```
+❌ Asumir: "fluxcore_account_policies controla todo"
+✅ Mapear: "automation_rules > fluxcore_account_policies"
+```
+
+**Pattern 3: Suposición de Schema**
+```
+❌ Asumir: "puedo guardar visitorToken en relationshipId"
+✅ Verificar: "DESCRIBE automation_rules" y probar FK constraints
+```
+
+**Pattern 4: Confianza en Tests Aislados**
+```
+❌ Confiar: "test con visitor_test_123 funciona"
+✅ Validar: "test con visitorToken real de BD"
+```
+
+#### **🛡️ Estrategias de Prevención:**
+
+**1. Verificación de Formato Siempre Primero**
+```typescript
+// ❌ NO HACER
+if (contactId.startsWith('visitor_')) { ... }
+
+// ✅ HACER
+console.log('DEBUG: contactId format:', contactId);
+const formatData = await db.select().from(conversations).where(...);
+```
+
+**2. Mapeo Completo de Jerarquía**
+```typescript
+// ❌ NO AsumIR
+console.log('Usando fluxcore_account_policies');
+
+// ✅ MAPEAR
+console.log('Jerarquía: automation_rules.relationship > automation_rules.global > fluxcore_account_policies');
+```
+
+**3. Validación de Constraints con Tests Directos**
+```typescript
+// ❌ NO AsumIR
+await db.insert(automationRules).values({ relationshipId: visitorToken });
+
+// ✅ PROBAR
+try {
+  await db.insert(automationRules).values({ relationshipId: visitorToken });
+} catch (error) {
+  console.log('FK constraint confirmed:', error.message);
+}
+```
+
+**4. Tests con Datos Reales**
+```typescript
+// ❌ NO USAR
+const testToken = 'visitor_test_123';
+
+// ✅ USAR
+const [realConv] = await db.select().from(conversations).limit(1);
+const testToken = realConv.visitorToken;
+```
+
+#### **📋 Checklist de Validación Crítica:**
+
+- [ ] **Formato de datos verificado con SELECT real**
+- [ ] **Jerarquía de fuentes de verdad mapeada completamente**
+- [ ] **Constraints de base de datos probadas con INSERT/ERROR**
+- [ ] **Tests ejecutados con datos reales de producción**
+- [ ] **Logs del sistema real analizados, no solo tests**
+- [ ] **Cada suposición tiene evidencia objetiva**
+- [ ] **No hay "debería funcionar" sin "verifiqué que funciona"**
+
 ### Fase 2: Planificación Estructurada
 **Objetivo:** Convertir el conocimiento completo en un plan ejecutable.
 

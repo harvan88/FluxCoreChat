@@ -77,9 +77,14 @@ class CognitiveDispatcherService {
 
             // 2. Resolve PolicyContext + RuntimeConfig (Unified in v8.3)
             console.log(`[CognitiveDispatcher] Step 2: Resolving PolicyContext + RuntimeConfig...`);
+            
+            // 🆕 PASAR VISITOR TOKEN COMO FALLBACK PARA VISITANTES
+            const contactId = conversation?.relationshipId || conversation?.visitorToken || '';
+            console.log(`[CognitiveDispatcher] 🎯 ContactId resolved: ${contactId} (relationshipId: ${conversation?.relationshipId}, visitorToken: ${conversation?.visitorToken})`);
+            
             const { policyContext, runtimeConfig } = await fluxPolicyContextService.resolveContext(
                 accountId,
-                conversation?.relationshipId || '',
+                contactId,
                 (conversation as any)?.channel || 'web'
             );
             policyContext.conversationId = conversationId;

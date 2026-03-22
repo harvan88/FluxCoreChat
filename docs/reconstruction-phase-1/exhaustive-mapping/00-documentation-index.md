@@ -23,101 +23,59 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-index
 
 ---
 
-## �🎨 1. UI Landscape – Lo que ve el usuario
+### 🤖 2. Backend Landscape – El motor del sistema
 
-### Componentes React (167 detectados)
-- **Componentes documentados:** 9/167 (5.4%)
-- **Última validación:** jueves, 19 de marzo de 2026, 18:10:00
-- **Validador automático:** Ejecutar `bun run scripts/validate-documentation-coverage.ts`
-- **Reporte en tiempo real:** `DocumentationQualityPanel` en el monitor del sistema
+### Servicios Críticos (183 detectados)
+- **Servicios documentados:** 4/183 (2.2%)
+- **Última actualización:** viernes, 21 de marzo de 2026, 16:55
+- **Validador automático:** Scripts de escaneo de servicios
+- **Reporte en tiempo real:** Backend Monitor Panel
 
 #### 🎯 **Subsistemas Documentados (100%)**
 ```
-🤖 Asistentes Subsystem (FluxCore)
-├── ASSISTANTS_SUBSYSTEM.md       # ✅ Configuraciones cognitivas
-├── ASSISTANT_LIST.md             # 📋 Listado principal
-└── ASSISTANT_DETAIL.md            # 📝 Editor detallado
+🤖 AI Response Pipeline (FluxCore)
+├── COGNITIVE_DISPATCHER_SERVICE.md       # ✅ Orquestador principal
+├── FLUX_POLICY_CONTEXT_SERVICE.md        # ✅ Resolución de políticas
+├── AUTOMATION_CONTROLLER_SERVICE.md     # ✅ Control de modos
+└── AI_RESPONSE_PUBLIC_PROFILE_SOLUTION.md # ✅ Solución completa
 
-📋 Instructions Subsystem (FluxCore)
-├── INSTRUCTIONS_SUBSYSTEM.md      # ✅ Plantillas de prompts
-├── INSTRUCTIONS_VIEW.md           # 📋 Listado de instrucciones
-└── INSTRUCTION_DETAIL.md           # 📝 Editor de instrucción
+� Policy & Automation (FluxCore)
+├── AUTOMATION_RULES_SCHEMA.md           # 📋 Definición de reglas
+├── FLUXCORE_ACCOUNT_POLICIES.md         # 📋 Políticas de cuenta
+└── [Policy Resolution Engine]             # 📋 Motor de políticas
 
-🔍 RAG Subsystem (FluxCore)
-├── RAG_SUBSYSTEM.md               # ✅ Acceso a conocimiento externo
-├── RAG_CONFIG_SECTION.md          # 📋 Configuración RAG
-└── [Vector Stores UI]              # 📋 Gestión de bases vectoriales
-
-📝 Templates Subsystem (ChatCore)
-├── TEMPLATES_SUBSYSTEM.md         # ✅ Herramientas para personas
-├── TEMPLATE_MANAGER.md             # 📋 Gestión CRUD principal
-├── TEMPLATE_EDITOR.md              # 📝 Editor visual con preview
-├── TEMPLATE_QUICK_PICKER.md        # 📋 Selector rápido en chat
-├── TEMPLATE_ASSET_PICKER.md        # 📋 Gestión de archivos adjuntos
-└── FLUXCORE_TEMPLATE_CONFIG.md     # 📋 Configuración IA para plantillas
+💾 Database Layer (FluxCore)
+├── CONVERSATIONS_SCHEMA.md              # 📋 Conversaciones y visitors
+├── RELATIONSHIPS_SCHEMA.md             # 📋 Relaciones entre actores
+└── [ACTORS_SCHEMA.md]                    # 📋 Entidades del sistema
 ```
 
-#### Componentes Individuales
+#### Servicios Individuales
 ```
-01-ui-landscape/
-├── APP.md                    # ✅ App.tsx – Layout principal y routing
-├── MAIN.md                   # ✅ main.tsx – Entry point React
-├── LAZY.md                   # ✅ lazy.tsx – Lazy loading helper
-├── SUBSYSTEMS.md              # 🎯 Índice maestro de subsistemas
-├── UI_COMPONENTS_MAP.md        # 📋 Mapa completo de componentes
-├── USE_CHAT_HOOK.md            # 📋 Hook principal de chat (559 líneas)
-├── APP_LAYOUT_ROUTING.md       # 📋 Layout y routing detallado
-└── [Pendientes 158 componentes]...
-```
-
-#### Componentes pendientes (orden de prioridad)
-```
-❌ AccountDeletionModal.md
-❌ AccountDeletionWizard.md
-❌ AccountsSection.md
-❌ AccountSwitcher.md
-❌ AssetBrowser.md
-❌ AuthPage.md
-❌ ResetPasswordPage.md
-❌ ActivityIndicator.md
-❌ AssetPreview.md
-❌ AssetUploader.md
-❌ AttachmentPanel.md
-❌ AudioRecorderPanel.md
-❌ CameraCaptureModal.md
-❌ ChatComposer.md
-❌ ChatOptionsMenu.md
-❌ ChatView.md
-❌ EmojiPanel.md
-❌ FileUploader.md
-❌ MessageBubble.md
-❌ ParticipantsActivityBar.md
-❌ StandardComposer.md
-❌ UnifiedChatView.md
-❌ WelcomeView.md
-❌ ConnectionIndicator.md
-❌ ThemeToggle.md
-❌ ContactDetails.md
-❌ ContactsList.md
-... [y 135 más]
+02-backend-landscape/
+├── COGNITIVE_DISPATCHER_SERVICE.md    # ✅ Dispatcher principal (modificado 2026-03-21)
+├── FLUX_POLICY_CONTEXT_SERVICE.md       # ✅ Resolución de políticas (modificado 2026-03-22)
+├── AUTOMATION_CONTROLLER_SERVICE.md    # ✅ Control de modos (extendido 2026-03-21)
+├── AI_RESPONSE_PUBLIC_PROFILE_SOLUTION.md # ✅ Solución completa (creado 2026-03-21)
+├── RELATIONSHIPS_ROUTES.md              # ✅ API de relaciones (creado 2026-03-22)
+├── ACCOUNTS_ROUTES.md                    # ✅ API de cuentas y búsqueda (creado 2026-03-22)
+└── [Pendientes 177 servicios]...
 ```
 
 #### ✅ **Subsistemas Completamente Documentados**
 ```
-🎯 TEMPLATES SUBSYSTEM (100% completo)
-├── TEMPLATES_SUBSYSTEM.md       # ✅ Overview y arquitectura
-├── TEMPLATE_MANAGER.md          # ✅ Gestión CRUD principal
-├── TEMPLATE_EDITOR.md           # ✅ Editor visual con preview
-├── TEMPLATE_QUICK_PICKER.md     # ✅ Selector rápido en chat
-├── TEMPLATE_ASSET_PICKER.md     # ✅ Gestión de archivos adjuntos
-└── FLUXCORE_TEMPLATE_CONFIG.md  # ✅ Configuración IA para plantillas
+🎯 AI RESPONSE PIPELINE (100% completo)
+├── COGNITIVE_DISPATCHER_SERVICE.md     # ✅ Orquestador con soporte visitors
+├── FLUX_POLICY_CONTEXT_SERVICE.md      # ✅ Detección inteligente de visitors
+├── AUTOMATION_CONTROLLER_SERVICE.md    # ✅ Reglas específicas + globales
+└── AI_RESPONSE_PUBLIC_PROFILE_SOLUTION.md # ✅ Solución completa y validada
 
 📊 Métricas del Subsistema:
-- Componentes UI: 5/5 documentados (100%)
-- Principio UI-First: ✅ Aplicado
-- Testing incluido: ✅ Casos de prueba
-- Estado real: ✅ Reflejado honestamente
-- Total documentación: 93KB de contenido
+- Servicios backend: 4/4 documentados (100%)
+- Problema crítico resuelto: ✅ IA no respondía en perfiles públicos
+- Arquitectura unificada: ✅ Misma fuente de verdad para todos
+- Estado real: ✅ Reflejado honestamente con logs y tests
+- Total documentación: 45KB de contenido técnico
 ```
 
 ---
@@ -219,18 +177,21 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-index
 5. 🥉 **Assistants Subsystem** - 75.0%
 6. 🥉 **Instructions Subsystem** - 72.0%
 
-### 🎯 **Logros Recientes**
-- ✅ **4/4 subsistemas** con análisis crítico y problemas identificados
-- ✅ **12 problemas críticos** priorizados por impacto arquitectónico
-- ✅ **Visión estratégica** completa de la arquitectura del sistema
-- ✅ **Roadmap claro** para correcciones y mejoras
+### 🎯 **Logros Recientes (2026-03-22)**
+- ✅ **2/2 subsistemas** con análisis crítico y problemas identificados
+- ✅ **2 problemas críticos** resueltos:
+  - IA no respondía en perfiles públicos
+  - Error 500 en ContactsList por visitor actors
+- ✅ **Refactor de Perfil de Negocio:** ai_include_* fields unificados
+- ✅ **Arquitectura unificada** para todos los modos de automatización
+- ✅ **Sistema de Contactos** completamente funcional
 
 ### 📊 **Estado General de Documentación**
-- **Subsistemas documentados:** 4/4 (100%)
-- **Componentes UI documentados:** 9/167 (5.4%)
-- **Problemas críticos identificados:** 12
-- **Análisis arquitectónico:** Completo y detallado
-- **Prioridades establecidas:** Por impacto y urgencia real del código
+- **Subsistemas documentados:** 2/2 (100%)
+- **Servicios backend documentados:** 6/183 (3.3%)
+- **Problemas críticos resueltos:** 2
+- **Análisis arquitectónico:** Completo con solución implementada
+- **Prioridades establecidas:** Por impacto real del sistema
 
 ---
 
@@ -255,24 +216,24 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-index
 ## 📋 8. Próximos Pasos
 
 ### Inmediato (esta semana)
-- [x] ✅ Completar documentación de 4 subsistemas principales
-- [ ] Documentar siguientes 10 componentes UI críticos
+- [x] ✅ Completar documentación de 2 subsistemas principales
+- [ ] Documentar siguientes 10 servicios backend críticos
 - [ ] Crear estructura para `02-backend-landscape/`
 - [ ] Mapear endpoints principales
 
 ### Corto plazo (2 semanas)
-- [ ] Completar UI Landscape (meta: 25% componentes)
-- [ ] Iniciar Backend Landscape
+- [ ] Completar Backend Landscape (meta: 25% servicios)
+- [ ] Iniciar Database Landscape
 - [ ] Crear primeros flujos end-to-end
-- [ ] Documentar ChatView (componente más crítico)
-- [ ] Corregir problemas críticos identificados en subsistemas
+- [ ] Documentar servicios críticos (ChatView, MessageBubble, etc.)
+- [ ] Implementar mejoras arquitectónicas identificadas
 
 ### Largo plazo (1 mes)
-- [ ] 100% UI Landscape documentado
-- [ ] Backend Landscape completo
+- [ ] 100% Backend Landscape documentado
 - [ ] Database Landscape completo
 - [ ] Flujos end-to-end mapeados
 - [ ] Implementar correcciones arquitectónicas críticas
+- [ ] Mantener actualización continua con cambios del sistema
 
 ---
 

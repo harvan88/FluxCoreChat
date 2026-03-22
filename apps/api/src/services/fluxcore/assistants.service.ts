@@ -280,6 +280,20 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
 
         let externalId = assistantData.externalId;
 
+        // FIX: Sincronizar el modo inicial si es el primer asistente (válido para ambos flujos)
+        const syncPolicyMode = async (tx: any, accountId: string, timingConfig: any) => {
+            if (timingConfig && timingConfig.mode) {
+                const mode = timingConfig.mode;
+                await tx
+                    .insert(fluxcoreAccountPolicies)
+                    .values({ accountId, mode, updatedAt: new Date() } as any)
+                    .onConflictDoUpdate({
+                        target: fluxcoreAccountPolicies.accountId,
+                        set: { mode, updatedAt: new Date() } as any,
+                    });
+            }
+        };
+
         // FLUJO OPENAI
         if (assistantData.runtime === 'openai') {
             const openaiVectorStoreExternalIds: string[] = [];
@@ -318,6 +332,8 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
                 .insert(fluxcoreAssistants)
                 .values(insertValues)
                 .returning();
+
+            await syncPolicyMode(tx, assistantData.accountId as string, assistantData.timingConfig);
 
             if (vectorStoreIds && vectorStoreIds.length > 0) {
                 const openaiVsIds = await tx
@@ -359,6 +375,8 @@ export async function createAssistant(data: CreateAssistantDTO): Promise<Fluxcor
             .insert(fluxcoreAssistants)
             .values(localInsertValues)
             .returning();
+
+        await syncPolicyMode(tx, assistantData.accountId as string, assistantData.timingConfig);
 
         if (instructionIds && instructionIds.length > 0) {
             await tx.insert(fluxcoreAssistantInstructions).values(
@@ -464,6 +482,18 @@ export async function updateAssistant(
             .returning();
 
         if (!assistant) return null;
+
+        // FIX: Sincronizar el modo a la tabla de políticas de la cuenta (única fuente de verdad para el dispatcher)
+        if (assistantData.timingConfig && (assistantData.timingConfig as any).mode) {
+            const mode = (assistantData.timingConfig as any).mode;
+            await tx
+                .insert(fluxcoreAccountPolicies)
+                .values({ accountId, mode, updatedAt: new Date() } as any)
+                .onConflictDoUpdate({
+                    target: fluxcoreAccountPolicies.accountId,
+                    set: { mode, updatedAt: new Date() } as any,
+                });
+        }
 
         // FLUJO OPENAI
         if (assistant.runtime === 'openai' && assistant.externalId) {

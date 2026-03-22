@@ -86,12 +86,16 @@ export const fluxcoreAssistants = pgTable('fluxcore_assistants', {
   accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
+  externalId: varchar('external_id', { length: 255 }), // ID de OpenAI/Anthropic si aplica
   
-  // Runtime Configuration
-  runtimeType: varchar('runtime_type', { length: 20 }).notNull().default('local'),
-  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  // Estado
+  status: varchar('status', { length: 20 }).notNull().default('draft'), // 'draft', 'production', 'disabled'
+  runtime: varchar('runtime', { length: 20 }).notNull().default('local'), // 'local', 'openai'
   
-  // Model Configuration (⚠️ CRÍTICO: tone, language, useEmojis aquí)
+  // NOTA: Las instrucciones y vector stores ahora están en tablas de relación N:M
+  // fluxcore_assistant_instructions y fluxcore_assistant_vector_stores
+  
+  // Configuración del proveedor IA
   modelConfig: jsonb('model_config').$type<AssistantModelConfig & { 
     tone?: string; 
     language?: string; 
@@ -104,17 +108,27 @@ export const fluxcoreAssistants = pgTable('fluxcore_assistants', {
     responseFormat: 'text',
   }).notNull(),
   
-  // Timing Configuration (⚠️ CRÍTICO: UI guarda tone aquí incorrectamente)
+  // Configuración de timing
   timingConfig: jsonb('timing_config').$type<AssistantTimingConfig>().default({
-    responseDelaySeconds: 0,
-    smartDelay: false,
-    mode: 'off',
+    responseDelaySeconds: 2,
+    smartDelay: true,
   }).notNull(),
+  
+  // Metadata
+  sizeBytes: integer('size_bytes').default(0),
+  tokensUsed: integer('tokens_used').default(0),
+  lastModifiedBy: varchar('last_modified_by', { length: 255 }),
   
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 ```
+
+**🗑️ ELIMINACIÓN RECIENTE (2026-03-22):**
+- **Campo eliminado:** `authorizedDataScopes` (array de TEXT)
+- **Motivo:** Código muerto - no se usaba en `resolveBusinessProfile()`
+- **Alternativa:** Control de visibilidad mediante `ai_include_*` fields en tabla `accounts`
+- **Impacto:** CERO funcional - simplificación del schema
 
 **⚠️ INCONSISTENCIA CRÍTICA IDENTIFICADA Y CORREGIDA:**
 - **Schema define:** `tone`, `language`, `useEmojis` en `modelConfig` ✅
@@ -673,17 +687,22 @@ templates (1) ──→ (N) template_assets
 
 ## 🚨 Problemas Críticos Identificados
 
-### 1. **✅ Inconsistencia UI vs Schema en Asistentes CORREGIDA**
+### 1. **✅ Código Muerto Eliminado - authorizedDataScopes**
+- **Problema:** `authorizedDataScopes` existía en schema pero no se usaba en `resolveBusinessProfile()`
+- **Solución:** Eliminado completamente de DB, schema y código (2026-03-22)
+- **Estado:** ✅ RESUELTO - Schema simplificado, sin impacto funcional
+
+### 2. **✅ Inconsistencia UI vs Schema en Asistentes CORREGIDA**
 - **Problema:** UI guardaba `tone`, `language`, `useEmojis` en `timingConfig` pero schema los define en `modelConfig`
 - **Solución:** UI modificado para guardar en `modelConfig` - ahora alineado
 - **Estado:** ✅ RESUELTO - Datos guardados en ubicación correcta
 
-### 2. **Relación N:M Implementada Parcialmente**
+### 3. **Relación N:M Implementada Parcialmente**
 - **Problema:** Schema soporta múltiples instrucciones por asistente pero UI solo usa la primera
 - **Impacto:** Funcionalidad del schema no aprovechada
 - **Decisión requerida:** Habilitar múltiples en UI o simplificar schema
 
-### 3. **Configuración RAG Inconsistente**
+### 4. **Configuración RAG Inconsistente**
 - **Problema:** UI range 0.1-0.7 vs schema default históricamente 0.700 (demasiado alto)
 - **Impacto:** Retrieval ineficaz si se usan valores altos
 - **Estado:** Parcialmente corregido a 0.300
@@ -694,6 +713,9 @@ templates (1) ──→ (N) template_assets
 
 - **Total de tablas:** 15 tablas principales
 - **Tablas puente:** 4 (relaciones N:M)
-- **Schemas con problemas:** 2 (assistants, rag-configurations)
+- **Schemas con problemas:** 2 (assistants N:M parcial, rag-configurations)
+- **Problemas resueltos:** 2 (authorizedDataScopes eliminado, UI vs Schema alineado)
 - **Relaciones documentadas:** 100%
 - **Índices definidos:** Completo con convenciones consistentes
+
+**Última actualización:** 2026-03-22 - Eliminación de campo código muerto (authorizedDataScopes)

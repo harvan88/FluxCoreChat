@@ -70,9 +70,6 @@ export const fluxcoreAssistants = pgTable('fluxcore_assistants', {
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-
-  // Scopes de datos autorizados para el asistente (Canon v8.3 §4.14)
-  authorizedDataScopes: text('authorized_data_scopes').array().notNull().default([]),
 });
 
 export type FluxcoreAssistant = typeof fluxcoreAssistants.$inferSelect;

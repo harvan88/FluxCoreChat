@@ -100,17 +100,34 @@ class FluxPolicyContextService {
         // Prioridad: Relationship (automation_rules) > Account (fluxcore_account_policies)
         let resolvedMode = policyData.mode;
         if (contactId) {
-            const relationshipMode = await automationController.getRelationshipMode(accountId, contactId);
-            if (relationshipMode) {
-                console.log(`[FluxPolicyContext] 🎯 EXCEPCIÓN ENCONTRADA: Usando modo '${relationshipMode}' para la relación ${contactId}`);
-                resolvedMode = relationshipMode;
+            // 🆕 DETECTAR SI ES VISITOR TOKEN (UUID sin relationshipId)
+            const isVisitorToken = !contactId.includes('-') || 
+                                (contactId.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contactId));
+            
+            if (isVisitorToken) {
+                console.log(`[FluxPolicyContext] 🎯 VISITOR DETECTED: ${contactId} - buscando regla global`);
+                // 🆕 VISITORS: Solo usar regla global (no pueden tener reglas específicas)
+                const globalRule = await automationController.getGlobalRule(accountId);
+                if (globalRule) {
+                    console.log(`[FluxPolicyContext] 🎯 REGLA GLOBAL ENCONTRADA: Usando modo '${globalRule.mode}' para visitor ${contactId}`);
+                    resolvedMode = globalRule.mode;
+                } else {
+                    console.log(`[FluxPolicyContext] 🎯 SIN REGLA GLOBAL: Usando modo de cuenta '${policyData.mode}'`);
+                }
+            } else {
+                // Lógica existente para relationships
+                const relationshipMode = await automationController.getRelationshipMode(accountId, contactId);
+                if (relationshipMode) {
+                    console.log(`[FluxPolicyContext] 🎯 EXCEPCIÓN ENCONTRADA: Usando modo '${relationshipMode}' para la relación ${contactId}`);
+                    resolvedMode = relationshipMode;
+                }
             }
         }
 
         // 2. Asistente activo (fuente: fluxcore_assistants + relaciones)
         const assistantResult = await db.execute(sql`
-            SELECT id, name, account_id, runtime, status, model_config, timing_config,
-                   external_id, authorized_data_scopes
+            SELECT id, name, account_id, runtime, status, model_config, 
+                   external_id
             FROM fluxcore_assistants
             WHERE account_id = ${accountId} AND status = 'active'
             LIMIT 1
@@ -122,9 +139,7 @@ class FluxPolicyContextService {
             runtime: assistantResult[0].runtime,
             status: assistantResult[0].status,
             modelConfig: assistantResult[0].model_config,
-            timingConfig: assistantResult[0].timing_config,
             externalId: assistantResult[0].external_id,
-            authorizedDataScopes: assistantResult[0].authorized_data_scopes,
         } : null;
 
         // Fetch instructions separately
@@ -147,7 +162,7 @@ class FluxPolicyContextService {
 
         // 3. Perfil del negocio â€” SOLO campos en authorized_data_scopes
         const resolvedBusinessProfile = assistant
-            ? await this.resolveBusinessProfile(accountId, (assistant as any).authorizedDataScopes ?? [])
+            ? await this.resolveBusinessProfile(accountId)
             : {};
 
         // 4. Reglas del contacto (solo notas con allow_automated_use)
@@ -210,9 +225,6 @@ class FluxPolicyContextService {
                 provider: (assistant.modelConfig as any)?.provider,
                 model: (assistant.modelConfig as any)?.model,
                 temperature: (assistant.modelConfig as any)?.temperature,
-                tone: (assistant.modelConfig as any)?.tone || (assistant as any).timingConfig?.tone,
-                language: (assistant.modelConfig as any)?.language || (assistant as any).timingConfig?.language,
-                useEmojis: (assistant.modelConfig as any)?.useEmojis || (assistant as any).timingConfig?.useEmojis,
                 vectorStoreId: (assistant as any).vectorStores?.[0]?.vectorStoreId,
                 externalAssistantId: assistant.externalId ?? undefined,
                 authorizedTools: (assistant as any).tools?.map((t: any) => t.toolId) ?? [],
@@ -327,12 +339,15 @@ class FluxPolicyContextService {
         }
     }
 
+    /**
+     * Visibilidad controlada por ai_include_* en la tabla accounts.
+     * Control granular por asistente (authorized_data_scopes) removido 
+     * como simplificación consciente — reimplementar si se requiere 
+     * multi-asistente con permisos distintos por asistente.
+     */
     private async resolveBusinessProfile(
         accountId: string,
-        authorizedScopes: string[],
     ): Promise<FluxPolicyContext['resolvedBusinessProfile']> {
-        if (authorizedScopes.length === 0) return {};
-
         const [account] = await db
             .select({
                 id: accounts.id,
@@ -341,6 +356,9 @@ class FluxPolicyContextService {
                 profile: accounts.profile,
                 privateContext: accounts.privateContext,
                 avatarAssetId: accounts.avatarAssetId,
+                aiIncludeName: accounts.aiIncludeName,
+                aiIncludeBio: accounts.aiIncludeBio,
+                aiIncludePrivateContext: accounts.aiIncludePrivateContext,
             })
             .from(accounts)
             .where(eq(accounts.id, accountId))
@@ -350,23 +368,17 @@ class FluxPolicyContextService {
         const profile: Record<string, unknown> = {};
         const accountProfile = (account.profile || {}) as any;
 
-        if (authorizedScopes.includes('displayName')) {
+        if (account.aiIncludeName) {
             profile.displayName = account.displayName || account.username;
         }
-        if (authorizedScopes.includes('bio')) {
+        if (account.aiIncludeBio) {
             profile.bio = accountProfile.bio || undefined;
         }
-        if (authorizedScopes.includes('website')) {
-            profile.website = accountProfile.website || undefined;
-        }
-        if (authorizedScopes.includes('location')) {
-            profile.location = accountProfile.address || accountProfile.location || undefined;
-        }
-        if (authorizedScopes.includes('privateContext')) {
+        if (account.aiIncludePrivateContext) {
             profile.privateContext = account.privateContext || undefined;
         }
 
-        if (authorizedScopes.includes('avatar') && account.avatarAssetId) {
+        if (account.avatarAssetId) {
             const signed = await assetPolicyService.signAsset({
                 assetId: account.avatarAssetId,
                 actorId: accountId,
