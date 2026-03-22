@@ -1,8 +1,6 @@
 import type { Account } from '@fluxcore/db';
 import type { SignAssetParams } from '../services/asset-policy.service';
 import { assetPolicyService } from '../services/asset-policy.service';
-import { getStorageAdapter } from '../services/storage/storage-adapter.factory';
-import { generateStorageKey } from '../services/storage/storage-adapter.interface';
 
 export type PresentedAccount = Account & {
   profile: Record<string, any> & {
@@ -20,8 +18,15 @@ interface AvatarPresentationContext {
 const DEFAULT_CONTEXT: Required<Pick<AvatarPresentationContext, 'actorType' | 'action' | 'channel'>> = {
   actorType: 'user',
   action: 'preview',
-  channel: 'unknown',
+  channel: 'web' as const,
 };
+
+// ✅ Default avatar URL dentro del contrato del sistema
+function getDefaultAvatarUrl(): string {
+  // Por ahora, retornamos null para que el Avatar component use iniciales
+  // En el futuro podría ser un asset system default
+  return null as any;
+}
 
 export async function presentAccountWithAvatar(
   account: Account,
@@ -35,91 +40,66 @@ export async function presentAccountWithAvatar(
   }
 
   try {
-    // NUEVO: Intentar usar URL pública permanente primero
-    const storage = getStorageAdapter();
-    const storageKey = generateStorageKey(account.id, account.avatarAssetId);
-    
-    console.log('[AvatarPresenter] Attempting public URL generation', {
-      accountId: account.id,
-      avatarAssetId: account.avatarAssetId,
-      storageKey,
+    // ✅ ARQUITECTURA CORRECTA: Usar AssetPolicy como única fuente de verdad
+    const signed = await assetPolicyService.signAsset({
+      assetId: account.avatarAssetId,
+      actorId: ctx.actorId,
+      actorType: ctx.actorType ?? DEFAULT_CONTEXT.actorType,
+      context: {
+        action: ctx.action ?? DEFAULT_CONTEXT.action,
+        channel: ctx.channel ?? DEFAULT_CONTEXT.channel,
+      },
     });
 
-    const publicUrl = await storage.getPublicUrl(storageKey);
+    if (!signed?.url) {
+      console.warn('[AvatarPresenter] ❌ AssetPolicy.signAsset() returned no URL', {
+        accountId: account.id,
+        avatarAssetId: account.avatarAssetId,
+      });
+      
+      // ✅ MANEJO EXPLÍCITO: Default controlado sin violar contrato
+      return {
+        ...account,
+        profile: {
+          ...normalizeProfile(account.profile),
+          avatarUrl: getDefaultAvatarUrl(), // Dentro del contrato del sistema
+        },
+      };
+    }
 
-    // ÉXITO: URL pública generada correctamente
-    console.log('[AvatarPresenter] ✅ Public URL SUCCESS', {
+    console.log('[AvatarPresenter] ✅ AssetPolicy URL SUCCESS', {
       accountId: account.id,
       avatarAssetId: account.avatarAssetId,
-      publicUrl,
+      signedUrl: signed.url,
+      ttlSeconds: signed.ttlSeconds,
     });
 
     return {
       ...account,
       profile: {
         ...normalizeProfile(account.profile),
-        avatarUrl: publicUrl,
+        avatarUrl: signed.url, // ✅ Única fuente de verdad
       },
     };
-  } catch (publicUrlError) {
-    // FALLBACK EXPLÍCITO: Error público documentado
-    console.warn('[AvatarPresenter] ⚠️ Public URL FAILED - Falling back to signed URL', {
+  } catch (error) {
+    // ✅ MANEJO EXPLÍCITO: Sin fallback silencioso que viola el contrato
+    console.error('[AvatarPresenter] ❌ AssetPolicy.signAsset() FAILED', {
       accountId: account.id,
       avatarAssetId: account.avatarAssetId,
-      publicUrlError: publicUrlError.message,
-      fallbackReason: 'Server route /avatars/ not available or file not found',
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
 
-    try {
-      const signed = await assetPolicyService.signAsset({
-        assetId: account.avatarAssetId,
-        actorId: ctx.actorId,
-        actorType: ctx.actorType ?? DEFAULT_CONTEXT.actorType,
-        context: {
-          action: ctx.action ?? DEFAULT_CONTEXT.action,
-          channel: ctx.channel ?? DEFAULT_CONTEXT.channel,
-        },
-      });
-
-      if (!signed) {
-        console.error('[AvatarPresenter] ❌ Fallback FAILED - No signed URL generated', {
-          accountId: account.id,
-          avatarAssetId: account.avatarAssetId,
-        });
-        return {
-          ...account,
-          profile: normalizeProfile(account.profile),
-        };
-      }
-
-      console.log('[AvatarPresenter] ✅ Fallback SUCCESS - Using signed URL', {
-        accountId: account.id,
-        avatarAssetId: account.avatarAssetId,
-        signedUrl: signed.url,
-        ttlSeconds: signed.ttlSeconds,
-      });
-
-      return {
-        ...account,
-        profile: {
-          ...normalizeProfile(account.profile),
-          avatarUrl: signed.url,
-        },
-      };
-    } catch (fallbackError) {
-      // ERROR FINAL: Ambos métodos fallaron
-      console.error('[AvatarPresenter] ❌ COMPLETE FAILURE - No avatar URL available', {
-        accountId: account.id,
-        avatarAssetId: account.avatarAssetId,
-        publicUrlError: publicUrlError.message,
-        fallbackError: fallbackError.message,
-      });
-
-      return {
-        ...account,
-        profile: normalizeProfile(account.profile),
-      };
-    }
+    // ✅ OPCIÓN A: Error explícito (recomendado)
+    throw new Error(`Cannot resolve avatar URL for account ${account.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    // ✅ OPCIÓN B: Default controlado (alternativa)
+    // return {
+    //   ...account,
+    //   profile: {
+    //     ...normalizeProfile(account.profile),
+    //     avatarUrl: getDefaultAvatarUrl(),
+    //   },
+    // };
   }
 }
 

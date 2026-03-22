@@ -40,7 +40,7 @@ const DEFAULT_POLICIES: Record<string, { ttlSeconds: number; contexts: string[] 
     },
     profile_avatar: {
         ttlSeconds: 86400, // 24 horas
-        contexts: ['preview:web', 'download:web'],
+        contexts: ['preview:web', 'download:web', 'preview:kernel'],
     },
     public_profile_avatar: {
         ttlSeconds: 31536000, // 1 año (URLs públicas persistentes)
@@ -121,19 +121,23 @@ export class AssetPolicyService {
             
             ttlSeconds = accountPolicy.defaultTtlSeconds;
         } else {
-            // Política por defecto: debe tener contexts y ttlSeconds válidos
-            if (!policy || !policy.contexts) {
-                throw new Error(`[AssetPolicy] CRITICAL: Default policy for scope '${asset.scope}' has no contexts property`);
+            // Política por defecto: debe tener ttlSeconds válidos
+            if (!policy) {
+                throw new Error(`[AssetPolicy] CRITICAL: No default policy found for scope '${asset.scope}'`);
             }
             if (!('ttlSeconds' in policy)) {
                 throw new Error(`[AssetPolicy] CRITICAL: Default policy for scope '${asset.scope}' missing ttlSeconds property`);
             }
-            allowedContexts = policy.contexts;
-            ttlSeconds = (policy as any).ttlSeconds;
+            // Usar política por defecto del sistema
+            const defaultPolicy = this.getDefaultPolicy(asset.scope);
+            allowedContexts = defaultPolicy.contexts;
+            ttlSeconds = defaultPolicy.ttlSeconds;
         }
         
         if (!allowedContexts.includes(contextString) && !allowedContexts.includes('*')) {
             console.log(`${DEBUG_PREFIX} Access denied: context ${contextString} not allowed`);
+        console.log(`${DEBUG_PREFIX} Available contexts:`, allowedContexts);
+        console.log(`${DEBUG_PREFIX} Asset scope: ${asset.scope}`);
             return { 
                 allowed: false, 
                 ttlSeconds: 0, 

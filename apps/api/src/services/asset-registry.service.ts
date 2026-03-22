@@ -13,6 +13,7 @@ import { assetGatewayService } from './asset-gateway.service';
 
 const DEBUG_PREFIX = '[AssetRegistry]';
 const DEFAULT_RETENTION_DAYS = 30;
+const CHECKSUM_LENGTH = 16;
 
 export interface CreateAssetFromUploadParams {
     sessionId: string;
@@ -130,12 +131,21 @@ export class AssetRegistryService {
         // Vincular sesión al asset
         await assetGatewayService.linkAssetToSession(sessionId, asset.id);
 
-        // Mover a ubicación final
-        const finalStorageKey = generateStorageKey(accountId, asset.id, 1);
+        // Mover a ubicación final (Content-Addressable Storage global)
+        const checksum16 = checksumSHA256.substring(0, CHECKSUM_LENGTH);
+        const shard1 = checksum16.slice(0, 2);
+        const shard2 = checksum16.slice(2, 4);
+        const finalStorageKey = `assets/avatars/${shard1}/${shard2}/${checksum16}`;
         const storage = getStorageAdapter();
 
         try {
             await storage.move(tempStorageKey, finalStorageKey);
+
+            // 🔧 FIX: Verificar que el archivo exista realmente después del move
+            const exists = await storage.exists(finalStorageKey);
+            if (!exists) {
+              throw new Error(`File does not exist after move: ${finalStorageKey}`);
+            }
 
             await db.update(assets)
                 .set({ storageKey: finalStorageKey, updatedAt: new Date() })
@@ -144,7 +154,9 @@ export class AssetRegistryService {
             console.log(`${DEBUG_PREFIX} Asset moved to final location: ${finalStorageKey}`);
         } catch (error) {
             console.error(`${DEBUG_PREFIX} Failed to move asset:`, error);
-            // El asset sigue siendo válido en ubicación temporal
+            // 🔧 FIX: Si el move falla, no marcar como ready y lanzar error
+            await this.updateStatus(asset.id, 'failed');
+            throw new Error(`Failed to move asset to final location: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
 
         // Marcar como ready (en producción, esto sería después de validación antivirus)

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FluxCore API Server
  * 
  * Servidor hÃ­brido que combina:
@@ -76,6 +76,8 @@ import { cognitionWorker } from './workers/cognition-worker';
 import { chatCoreOutboxService } from './services/chatcore-outbox.service';
 import * as path from 'path';
 import * as fs from 'fs';
+
+const CHECKSUM_LENGTH = 16;
 
 const rootEnvPath = path.resolve(__dirname, '../../../.env');
 
@@ -372,6 +374,107 @@ try {
         return new Response(file, { headers });
       }
 
+      // Serve global avatars (Content-Addressable Storage)
+      if (url.pathname.startsWith('/avatars/')) {
+        const checksum = url.pathname.replace(/^\/avatars\//, '');
+
+        console.log('[AVATAR DEBUG]');
+        console.log('checksum:', checksum);
+        console.log('length:', checksum.length);
+
+        if (!new RegExp(`^[a-f0-9]{${CHECKSUM_LENGTH}}$`).test(checksum)) {
+          console.log('VALIDATION FAILED - expected length:', CHECKSUM_LENGTH);
+          return new Response('Invalid checksum', { status: 400 });
+        }
+
+        const shard1 = checksum.slice(0, 2);
+        const shard2 = checksum.slice(2, 4);
+
+        console.log('shard1:', shard1);
+        console.log('shard2:', shard2);
+
+        // Buscar con posibles extensiones y rutas
+        const possiblePaths = [
+          // Ruta esperada (con sharding completo)
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.jpg`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.jpeg`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.png`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.webp`),
+          // Rutas legacy (sin shard2)
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.jpg`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.jpeg`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.png`),
+          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.webp`),
+        ];
+
+        console.log('POSSIBLE PATHS:');
+        possiblePaths.forEach((path, i) => {
+          console.log(`${i}:`, path, 'exists:', fs.existsSync(path));
+        });
+
+        let foundPath = null;
+        for (const testPath of possiblePaths) {
+          if (fs.existsSync(testPath)) {
+            foundPath = testPath;
+            break;
+          }
+        }
+
+        console.log('FOUND PATH:', foundPath);
+
+        if (!foundPath) {
+          return new Response('Avatar not found', { status: 404 });
+        }
+
+        const avatarFile = Bun.file(foundPath);
+
+        // 🔧 FIX: Resolver Content-Type desde DB usando checksum
+        let contentType = avatarFile.type || 'application/octet-stream';
+        
+        if (!contentType || contentType === 'application/octet-stream') {
+          try {
+            // Buscar asset por checksum para obtener mimeType correcto
+            const { db, assets } = await import('@fluxcore/db');
+            const { eq, like } = await import('drizzle-orm');
+            
+            // Buscar por checksum que comience con los 16 caracteres
+            const [asset] = await db.select({ mimeType: assets.mimeType })
+              .from(assets)
+              .where(like(assets.checksumSHA256, `${checksum}%`))
+              .limit(1);
+            
+            if (asset?.mimeType) {
+              contentType = asset.mimeType;
+              console.log('[AVATAR DEBUG] Content-Type from DB:', contentType);
+            } else {
+              // Fallback a extensión del path encontrado
+              const ext = foundPath.split('.').pop()?.toLowerCase();
+              const mimeByExt = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg', 
+                'png': 'image/png',
+                'webp': 'image/webp',
+                'gif': 'image/gif'
+              };
+              contentType = mimeByExt[ext as keyof typeof mimeByExt] || 'image/jpeg';
+              console.log('[AVATAR DEBUG] Content-Type from extension:', contentType);
+            }
+          } catch (error) {
+            console.error('[AVATAR DEBUG] Error resolving Content-Type:', error);
+            contentType = 'image/jpeg'; // Último fallback
+          }
+        }
+
+        return new Response(avatarFile, {
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        });
+      }
+
       // Serve public websites (Karen extension)
       // Check if path matches /{alias} or /{alias}/*
       const publicSiteMatch = url.pathname.match(/^\/([a-zA-Z0-9_-]+)(\/.*)?$/);
@@ -439,150 +542,9 @@ try {
       },
     },
   });
-} catch {
-  server = Bun.serve({
-    hostname: '0.0.0.0',
-    port: PORT,
-
-    // Handler para HTTP - delega a Elysia
-    fetch: async (req: Request, server: Server<WebSocketData>) => {
-      // Upgrade a WebSocket si es request de WS
-      const url = new URL(req.url);
-      if (url.pathname === '/ws') {
-        console.log('[WebSocket] Upgrade request received (fallback)');
-        console.log('[WebSocket] Headers:', Object.fromEntries(req.headers.entries()));
-
-        const authHeader = req.headers.get('authorization');
-        let accountId: string | null = null;
-        let userId: string | null = null;
-
-        const selectedAccountId = url.searchParams.get('accountId');
-        const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-        const tokenFromQuery = url.searchParams.get('token');
-        const token = tokenFromHeader || tokenFromQuery;
-
-        if (token) {
-          const identity = await resolveWebSocketIdentityFromToken(token, tokenFromHeader ? 'fallback-header' : 'fallback-query');
-          userId = identity.userId;
-          accountId = selectedAccountId || identity.accountId;
-        } else {
-          accountId = selectedAccountId;
-          console.log('[WebSocket] âš ï¸ No token found in header or query params (fallback)');
-        }
-
-        const success = server.upgrade(req, {
-          data: {
-            ip: req.headers.get('x-forwarded-for') || server.requestIP(req)?.address,
-            userAgent: req.headers.get('user-agent'),
-            requestId: `ws-${Date.now()}-${accountId || 'anonymous'}`,
-            accountId: accountId,
-            userId: userId,
-          }
-        });
-        console.log('[WebSocket] Upgrade result:', success);
-        if (success) {
-          console.log('[WebSocket] âœ… Upgrade successful, returning undefined');
-          return; // Must return undefined (or nothing) for successful upgrade
-        }
-        console.error('[WebSocket] âŒ Upgrade failed');
-        return new Response('WebSocket upgrade failed', { status: 400 });
-      }
-
-      // Serve uploaded files statically
-      if (url.pathname.startsWith('/uploads/')) {
-        const relativePath = url.pathname.replace(/^\/+/, '');
-        if (relativePath.includes('..')) {
-          return new Response('Invalid path', { status: 400 });
-        }
-
-        let filePath = path.join(process.cwd(), relativePath);
-        if (!fs.existsSync(filePath)) {
-          const fallbackPath = path.join(process.cwd(), 'apps', 'api', relativePath);
-          if (fs.existsSync(fallbackPath)) {
-            filePath = fallbackPath;
-          }
-        }
-
-        if (!fs.existsSync(filePath)) {
-          return new Response('Not Found', { status: 404 });
-        }
-
-        const file = Bun.file(filePath);
-        const headers: Record<string, string> = {};
-        if (file.type) {
-          headers['Content-Type'] = file.type;
-        }
-
-        return new Response(file, { headers });
-      }
-
-      // Serve public websites (Karen extension)
-      // Check if path matches /{alias} or /{alias}/*
-      const publicSiteMatch = url.pathname.match(/^\/([a-zA-Z0-9_-]+)(\/.*)?$/);
-      if (publicSiteMatch) {
-        const alias = publicSiteMatch[1];
-        const subPath = publicSiteMatch[2] || '/';
-
-        // Skip API routes and known paths
-        const reservedPaths = ['api', 'auth', 'accounts', 'relationships', 'conversations',
-          'messages', 'contacts', 'automation', 'adapters', 'extensions', 'ai', 'internal', 'websites',
-          'uploads', 'ws', 'swagger', 'health', 'app', 'fluxcore', 'works'];
-
-        if (!reservedPaths.includes(alias)) {
-          const sitesDir = path.join(process.cwd(), 'public', 'sites', alias);
-
-          // Determine file path
-          let filePath: string;
-          if (subPath === '/' || subPath === '') {
-            filePath = path.join(sitesDir, 'index.html');
-          } else {
-            // Try exact path first, then path/index.html
-            const exactPath = path.join(sitesDir, subPath);
-            const indexPath = path.join(sitesDir, subPath, 'index.html');
-
-            if (fs.existsSync(exactPath) && fs.statSync(exactPath).isFile()) {
-              filePath = exactPath;
-            } else {
-              filePath = indexPath;
-            }
-          }
-
-          // Check if file exists
-          if (fs.existsSync(filePath)) {
-            const file = Bun.file(filePath);
-            const contentType = filePath.endsWith('.html') ? 'text/html' :
-              filePath.endsWith('.css') ? 'text/css' :
-                filePath.endsWith('.js') ? 'application/javascript' :
-                  filePath.endsWith('.xml') ? 'application/xml' :
-                    'text/plain';
-
-            return new Response(file, {
-              headers: {
-                'Content-Type': contentType,
-                'Cache-Control': 'public, max-age=3600',
-              },
-            });
-          }
-        }
-      }
-
-      // Delegar a Elysia para HTTP
-      return elysiaApp.handle(req);
-    },
-
-    // Handler para WebSocket
-    websocket: {
-      async message(ws, message) {
-        await handleWSMessage(ws, message);
-      },
-      open(ws) {
-        handleWSOpen(ws);
-      },
-      close(ws) {
-        handleWSClose(ws);
-      },
-    },
-  });
+} catch (error) {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 }
 
 if (!server) {
