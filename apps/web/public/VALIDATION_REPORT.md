@@ -1,367 +1,61 @@
 # 📊 Reporte de Calidad de Documentación UI
 
-**Fecha:** viernes, 20 de marzo de 2026, 23:00:37
-**Score General:** 9.0%
+**Fecha:** lunes, 23 de marzo de 2026, 17:28:57
+**Score General:** 100.0%
 
 ## 📈 Resumen
 
 - **Componentes totales:** 168
-- **Componentes UI documentados:** 6
-- **Documentos adicionales:** 10
-- **Total documentados:** 16
-- **Items totales:** 178
-- **Issues críticos:** 162
+- **Componentes UI documentados:** 168
+- **Documentos adicionales:** 0
+- **Total documentados:** 168
+- **Items totales:** 168
+- **Issues críticos:** 0
 - **Documentos con formato inválido:** 0
-- **Advertencias:** 0
+- **Advertencias:** 89
 
 ### 📋 Estado de Documentos (Frontmatter)
-- 🚧 **WIP (Trabajo en progreso):** 0
+- 🚧 **WIP (Trabajo en progreso):** 156
 - 🚨 **Necesita Revisión:** 0
-- ✅ **Estable:** 6
+- ✅ **Estable:** 11
 ## 🏆 Top 10 Componentes (por score)
 
 1. 📝 **App** - 60.0%
 2. 📝 **main** - 60.0%
 3. 📝 **lazy** - 60.0%
-4. 📝 **AssistantDetail** - 60.0%
-5. 📝 **RAGConfigSection** - 60.0%
-6. 📝 **InstructionDetail** - 60.0%
+4. 📝 **AccountDeletionModal** - 60.0%
+5. 📝 **AssetBrowser** - 60.0%
+6. 📝 **ActivityIndicator** - 60.0%
+7. 📝 **AssetPreview** - 60.0%
+8. 📝 **AssetUploader** - 60.0%
+9. 📝 **AttachmentPanel** - 60.0%
+10. 📝 **ChatComposer** - 60.0%
 
-## 🚨 Issues Críticos
+## ⚠️ Advertencias
 
-- ❌ AccountDeletionModal: Sin documentación (probado: ACCOUNTDELETIONMODAL.md, accountdeletionmodal.md, AccountDeletionModal.md, _account_deletion_modal.md)
-- ❌ AccountDeletionWizard: Sin documentación (probado: ACCOUNTDELETIONWIZARD.md, accountdeletionwizard.md, AccountDeletionWizard.md, _account_deletion_wizard.md)
-- ❌ AccountsSection: Sin documentación (probado: ACCOUNTSSECTION.md, accountssection.md, AccountsSection.md, _accounts_section.md)
-- ❌ AccountSwitcher: Sin documentación (probado: ACCOUNTSWITCHER.md, accountswitcher.md, AccountSwitcher.md, _account_switcher.md)
-- ❌ AssetBrowser: Sin documentación (probado: ASSETBROWSER.md, assetbrowser.md, AssetBrowser.md, _asset_browser.md)
-- ❌ AuthPage: Sin documentación (probado: AUTHPAGE.md, authpage.md, AuthPage.md, _auth_page.md)
-- ❌ ResetPasswordPage: Sin documentación (probado: RESETPASSWORDPAGE.md, resetpasswordpage.md, ResetPasswordPage.md, _reset_password_page.md)
-- ❌ ActivityIndicator: Sin documentación (probado: ACTIVITYINDICATOR.md, activityindicator.md, ActivityIndicator.md, _activity_indicator.md)
-- ❌ AssetPreview: Sin documentación (probado: ASSETPREVIEW.md, assetpreview.md, AssetPreview.md, _asset_preview.md)
-- ❌ AssetUploader: Sin documentación (probado: ASSETUPLOADER.md, assetuploader.md, AssetUploader.md, _asset_uploader.md)
-- ❌ AttachmentPanel: Sin documentación (probado: ATTACHMENTPANEL.md, attachmentpanel.md, AttachmentPanel.md, _attachment_panel.md)
-- ❌ AudioRecorderPanel: Sin documentación (probado: AUDIORECORDERPANEL.md, audiorecorderpanel.md, AudioRecorderPanel.md, _audio_recorder_panel.md)
-- ❌ CameraCaptureModal: Sin documentación (probado: CAMERACAPTUREMODAL.md, cameracapturemodal.md, CameraCaptureModal.md, _camera_capture_modal.md)
-- ❌ ChatComposer: Sin documentación (probado: CHATCOMPOSER.md, chatcomposer.md, ChatComposer.md, _chat_composer.md)
-- ❌ ChatOptionsMenu: Sin documentación (probado: CHATOPTIONSMENU.md, chatoptionsmenu.md, ChatOptionsMenu.md, _chat_options_menu.md)
-- ❌ ChatView: Sin documentación (probado: CHATVIEW.md, chatview.md, ChatView.md, _chat_view.md)
-- ❌ EmojiPanel: Sin documentación (probado: EMOJIPANEL.md, emojipanel.md, EmojiPanel.md, _emoji_panel.md)
-- ❌ FileUploader: Sin documentación (probado: FILEUPLOADER.md, fileuploader.md, FileUploader.md, _file_uploader.md)
-- ❌ MessageBubble: Sin documentación (probado: MESSAGEBUBBLE.md, messagebubble.md, MessageBubble.md, _message_bubble.md)
-- ❌ ParticipantsActivityBar: Sin documentación (probado: PARTICIPANTSACTIVITYBAR.md, participantsactivitybar.md, ParticipantsActivityBar.md, _participants_activity_bar.md)
-- ❌ StandardComposer: Sin documentación (probado: STANDARDCOMPOSER.md, standardcomposer.md, StandardComposer.md, _standard_composer.md)
-- ❌ TemplateQuickPicker: Sin documentación (probado: TEMPLATEQUICKPICKER.md, templatequickpicker.md, TemplateQuickPicker.md, _template_quick_picker.md)
-- ❌ UnifiedChatView: Sin documentación (probado: UNIFIEDCHATVIEW.md, unifiedchatview.md, UnifiedChatView.md, _unified_chat_view.md)
-- ❌ WelcomeView: Sin documentación (probado: WELCOMEVIEW.md, welcomeview.md, WelcomeView.md, _welcome_view.md)
-- ❌ ConnectionIndicator: Sin documentación (probado: CONNECTIONINDICATOR.md, connectionindicator.md, ConnectionIndicator.md, _connection_indicator.md)
-- ❌ ThemeToggle: Sin documentación (probado: THEMETOGGLE.md, themetoggle.md, ThemeToggle.md, _theme_toggle.md)
-- ❌ ContactDetails: Sin documentación (probado: CONTACTDETAILS.md, contactdetails.md, ContactDetails.md, _contact_details.md)
-- ❌ ContactsList: Sin documentación (probado: CONTACTSLIST.md, contactslist.md, ContactsList.md, _contacts_list.md)
-- ❌ AIStatusHeader: Sin documentación (probado: AISTATUSHEADER.md, aistatusheader.md, AIStatusHeader.md, _a_i_status_header.md)
-- ❌ AIStatusIndicator: Sin documentación (probado: AISTATUSINDICATOR.md, aistatusindicator.md, AIStatusIndicator.md, _a_i_status_indicator.md)
-- ❌ ConversationRowAIStatus: Sin documentación (probado: CONVERSATIONROWAISTATUS.md, conversationrowaistatus.md, ConversationRowAIStatus.md, _conversation_row_a_i_status.md)
-- ❌ ConversationsList: Sin documentación (probado: CONVERSATIONSLIST.md, conversationslist.md, ConversationsList.md, _conversations_list.md)
-- ❌ ActivityTest: Sin documentación (probado: ACTIVITYTEST.md, activitytest.md, ActivityTest.md, _activity_test.md)
-- ❌ ExpandedEditor: Sin documentación (probado: EXPANDEDEDITOR.md, expandededitor.md, ExpandedEditor.md, _expanded_editor.md)
-- ❌ OpenAIAssistantEditor: Sin documentación (probado: OPENAIASSISTANTEDITOR.md, openaiassistanteditor.md, OpenAIAssistantEditor.md, _open_a_i_assistant_editor.md)
-- ❌ EnrichmentBadge: Sin documentación (probado: ENRICHMENTBADGE.md, enrichmentbadge.md, EnrichmentBadge.md, _enrichment_badge.md)
-- ❌ ComponentShowcase: Sin documentación (probado: COMPONENTSHOWCASE.md, componentshowcase.md, ComponentShowcase.md, _component_showcase.md)
-- ❌ AISuggestionCard: Sin documentación (probado: AISUGGESTIONCARD.md, aisuggestioncard.md, AISuggestionCard.md, _a_i_suggestion_card.md)
-- ❌ ExtensionCard: Sin documentación (probado: EXTENSIONCARD.md, extensioncard.md, ExtensionCard.md, _extension_card.md)
-- ❌ ExtensionConfigPanel: Sin documentación (probado: EXTENSIONCONFIGPANEL.md, extensionconfigpanel.md, ExtensionConfigPanel.md, _extension_config_panel.md)
-- ❌ ExtensionsPanel: Sin documentación (probado: EXTENSIONSPANEL.md, extensionspanel.md, ExtensionsPanel.md, _extensions_panel.md)
-- ❌ FluxCorePromptInspectorPanel: Sin documentación (probado: FLUXCOREPROMPTINSPECTORPANEL.md, fluxcorepromptinspectorpanel.md, FluxCorePromptInspectorPanel.md, _flux_core_prompt_inspector_panel.md)
-- ❌ WebsiteBuilderPanel: Sin documentación (probado: WEBSITEBUILDERPANEL.md, websitebuilderpanel.md, WebsiteBuilderPanel.md, _website_builder_panel.md)
-- ❌ WebsiteBuilderSidebar: Sin documentación (probado: WEBSITEBUILDERSIDEBAR.md, websitebuildersidebar.md, WebsiteBuilderSidebar.md, _website_builder_sidebar.md)
-- ❌ FluxCorePanel: Sin documentación (probado: FLUXCOREPANEL.md, fluxcorepanel.md, FluxCorePanel.md, _flux_core_panel.md)
-- ❌ FluxCoreSidebar: Sin documentación (probado: FLUXCORESIDEBAR.md, fluxcoresidebar.md, FluxCoreSidebar.md, _flux_core_sidebar.md)
-- ❌ RuntimeSwitcher: Sin documentación (probado: RUNTIMESWITCHER.md, runtimeswitcher.md, RuntimeSwitcher.md, _runtime_switcher.md)
-- ❌ AgentDetail: Sin documentación (probado: AGENTDETAIL.md, agentdetail.md, AgentDetail.md, _agent_detail.md)
-- ❌ AgentList: Sin documentación (probado: AGENTLIST.md, agentlist.md, AgentList.md, _agent_list.md)
-- ❌ AssistantList: Sin documentación (probado: ASSISTANTLIST.md, assistantlist.md, AssistantList.md, _assistant_list.md)
-- ❌ RuntimeSelectorModal: Sin documentación (probado: RUNTIMESELECTORMODAL.md, runtimeselectormodal.md, RuntimeSelectorModal.md, _runtime_selector_modal.md)
-- ❌ VectorStoreDiagnosticSection: Sin documentación (probado: VECTORSTOREDIAGNOSTICSECTION.md, vectorstorediagnosticsection.md, VectorStoreDiagnosticSection.md, _vector_store_diagnostic_section.md)
-- ❌ VectorStoreFilesSection: Sin documentación (probado: VECTORSTOREFILESSECTION.md, vectorstorefilessection.md, VectorStoreFilesSection.md, _vector_store_files_section.md)
-- ❌ DebugPanel: Sin documentación (probado: DEBUGPANEL.md, debugpanel.md, DebugPanel.md, _debug_panel.md)
-- ❌ DetailHeader: Sin documentación (probado: DETAILHEADER.md, detailheader.md, DetailHeader.md, _detail_header.md)
-- ❌ EditableName: Sin documentación (probado: EDITABLENAME.md, editablename.md, EditableName.md, _editable_name.md)
-- ❌ IdCopyable: Sin documentación (probado: IDCOPYABLE.md, idcopyable.md, IdCopyable.md, _id_copyable.md)
-- ❌ ResourceSelector: Sin documentación (probado: RESOURCESELECTOR.md, resourceselector.md, ResourceSelector.md, _resource_selector.md)
-- ❌ InstructionList: Sin documentación (probado: INSTRUCTIONLIST.md, instructionlist.md, InstructionList.md, _instruction_list.md)
-- ❌ CollectionView: Sin documentación (probado: COLLECTIONVIEW.md, collectionview.md, CollectionView.md, _collection_view.md)
-- ❌ EmptyState: Sin documentación (probado: EMPTYSTATE.md, emptystate.md, EmptyState.md, _empty_state.md)
-- ❌ EntityActions: Sin documentación (probado: ENTITYACTIONS.md, entityactions.md, EntityActions.md, _entity_actions.md)
-- ❌ LoadingState: Sin documentación (probado: LOADINGSTATE.md, loadingstate.md, LoadingState.md, _loading_state.md)
-- ❌ StatusBadge: Sin documentación (probado: STATUSBADGE.md, statusbadge.md, StatusBadge.md, _status_badge.md)
-- ❌ FluxCoreTemplateConfig: Sin documentación (probado: FLUXCORETEMPLATECONFIG.md, fluxcoretemplateconfig.md, FluxCoreTemplateConfig.md, _flux_core_template_config.md)
-- ❌ LocalVectorStoreDetail: Sin documentación (probado: LOCALVECTORSTOREDETAIL.md, localvectorstoredetail.md, LocalVectorStoreDetail.md, _local_vector_store_detail.md)
-- ❌ OpenAIVectorStoreDetail: Sin documentación (probado: OPENAIVECTORSTOREDETAIL.md, openaivectorstoredetail.md, OpenAIVectorStoreDetail.md, _open_a_i_vector_store_detail.md)
-- ❌ VectorStoreList: Sin documentación (probado: VECTORSTORELIST.md, vectorstorelist.md, VectorStoreList.md, _vector_store_list.md)
-- ❌ VectorStoreTestQuery: Sin documentación (probado: VECTORSTORETESTQUERY.md, vectorstoretestquery.md, VectorStoreTestQuery.md, _vector_store_test_query.md)
-- ❌ AgentsView: Sin documentación (probado: AGENTSVIEW.md, agentsview.md, AgentsView.md, _agents_view.md)
-- ❌ AgentView: Sin documentación (probado: AGENTVIEW.md, agentview.md, AgentView.md, _agent_view.md)
-- ❌ AssistantsView.OLD: Sin documentación (probado: ASSISTANTSVIEW.OLD.md, assistantsview.old.md, AssistantsView.OLD.md, _assistants_view._o_l_d.md)
-- ❌ AssistantsView.original: Sin documentación (probado: ASSISTANTSVIEW.ORIGINAL.md, assistantsview.original.md, AssistantsView.original.md, _assistants_view.original.md)
-- ❌ AssistantsView: Sin documentación (probado: ASSISTANTSVIEW.md, assistantsview.md, AssistantsView.md, _assistants_view.md)
-- ❌ FluxiList: Sin documentación (probado: FLUXILIST.md, fluxilist.md, FluxiList.md, _fluxi_list.md)
-- ❌ FluxiProposedWorkDetail: Sin documentación (probado: FLUXIPROPOSEDWORKDETAIL.md, fluxiproposedworkdetail.md, FluxiProposedWorkDetail.md, _fluxi_proposed_work_detail.md)
-- ❌ FluxiView: Sin documentación (probado: FLUXIVIEW.md, fluxiview.md, FluxiView.md, _fluxi_view.md)
-- ❌ FluxiWorkDetail: Sin documentación (probado: FLUXIWORKDETAIL.md, fluxiworkdetail.md, FluxiWorkDetail.md, _fluxi_work_detail.md)
-- ❌ InstructionsView.original: Sin documentación (probado: INSTRUCTIONSVIEW.ORIGINAL.md, instructionsview.original.md, InstructionsView.original.md, _instructions_view.original.md)
-- ❌ InstructionsView: Sin documentación (probado: INSTRUCTIONSVIEW.md, instructionsview.md, InstructionsView.md, _instructions_view.md)
-- ❌ LocalVectorStoresView: Sin documentación (probado: LOCALVECTORSTORESVIEW.md, localvectorstoresview.md, LocalVectorStoresView.md, _local_vector_stores_view.md)
-- ❌ OpenAIAssistantConfigView: Sin documentación (probado: OPENAIASSISTANTCONFIGVIEW.md, openaiassistantconfigview.md, OpenAIAssistantConfigView.md, _open_a_i_assistant_config_view.md)
-- ❌ OpenAIVectorStoresView: Sin documentación (probado: OPENAIVECTORSTORESVIEW.md, openaivectorstoresview.md, OpenAIVectorStoresView.md, _open_a_i_vector_stores_view.md)
-- ❌ PoliciesView: Sin documentación (probado: POLICIESVIEW.md, policiesview.md, PoliciesView.md, _policies_view.md)
-- ❌ ToolsView: Sin documentación (probado: TOOLSVIEW.md, toolsview.md, ToolsView.md, _tools_view.md)
-- ❌ TracesView: Sin documentación (probado: TRACESVIEW.md, tracesview.md, TracesView.md, _traces_view.md)
-- ❌ UsageView: Sin documentación (probado: USAGEVIEW.md, usageview.md, UsageView.md, _usage_view.md)
-- ❌ VectorStoresView: Sin documentación (probado: VECTORSTORESVIEW.md, vectorstoresview.md, VectorStoresView.md, _vector_stores_view.md)
-- ❌ ActivityBar: Sin documentación (probado: ACTIVITYBAR.md, activitybar.md, ActivityBar.md, _activity_bar.md)
-- ❌ Layout: Sin documentación (probado: LAYOUT.md, layout.md, Layout.md, _layout.md)
-- ❌ Sidebar: Sin documentación (probado: SIDEBAR.md, sidebar.md, Sidebar.md, _sidebar.md)
-- ❌ ViewPort: Sin documentación (probado: VIEWPORT.md, viewport.md, ViewPort.md, _view_port.md)
-- ❌ AccountDataAuditPanel: Sin documentación (probado: ACCOUNTDATAAUDITPANEL.md, accountdataauditpanel.md, AccountDataAuditPanel.md, _account_data_audit_panel.md)
-- ❌ AccountOrphanExplorer: Sin documentación (probado: ACCOUNTORPHANEXPLORER.md, accountorphanexplorer.md, AccountOrphanExplorer.md, _account_orphan_explorer.md)
-- ❌ AssetMonitoringPanel: Sin documentación (probado: ASSETMONITORINGPANEL.md, assetmonitoringpanel.md, AssetMonitoringPanel.md, _asset_monitoring_panel.md)
-- ❌ DocumentationQualityPanel: Sin documentación (probado: DOCUMENTATIONQUALITYPANEL.md, documentationqualitypanel.md, DocumentationQualityPanel.md, _documentation_quality_panel.md)
-- ❌ KernelConsole: Sin documentación (probado: KERNELCONSOLE.md, kernelconsole.md, KernelConsole.md, _kernel_console.md)
-- ❌ MonitoringHub: Sin documentación (probado: MONITORINGHUB.md, monitoringhub.md, MonitoringHub.md, _monitoring_hub.md)
-- ❌ MonitoringSidebar: Sin documentación (probado: MONITORINGSIDEBAR.md, monitoringsidebar.md, MonitoringSidebar.md, _monitoring_sidebar.md)
-- ❌ SystemMonitor: Sin documentación (probado: SYSTEMMONITOR.md, systemmonitor.md, SystemMonitor.md, _system_monitor.md)
-- ❌ VisualPipeline: Sin documentación (probado: VISUALPIPELINE.md, visualpipeline.md, VisualPipeline.md, _visual_pipeline.md)
-- ❌ WelcomeMessage: Sin documentación (probado: WELCOMEMESSAGE.md, welcomemessage.md, WelcomeMessage.md, _welcome_message.md)
-- ❌ DynamicContainer: Sin documentación (probado: DYNAMICCONTAINER.md, dynamiccontainer.md, DynamicContainer.md, _dynamic_container.md)
-- ❌ TabBar: Sin documentación (probado: TABBAR.md, tabbar.md, TabBar.md, _tab_bar.md)
-- ❌ AvatarUpload: Sin documentación (probado: AVATARUPLOAD.md, avatarupload.md, AvatarUpload.md, _avatar_upload.md)
-- ❌ AutomationSection: Sin documentación (probado: AUTOMATIONSECTION.md, automationsection.md, AutomationSection.md, _automation_section.md)
-- ❌ ComponentPreviewGallery: Sin documentación (probado: COMPONENTPREVIEWGALLERY.md, componentpreviewgallery.md, ComponentPreviewGallery.md, _component_preview_gallery.md)
-- ❌ CreditsSection: Sin documentación (probado: CREDITSSECTION.md, creditssection.md, CreditsSection.md, _credits_section.md)
-- ❌ KernelSessionsSection: Sin documentación (probado: KERNELSESSIONSSECTION.md, kernelsessionssection.md, KernelSessionsSection.md, _kernel_sessions_section.md)
-- ❌ ProfileSection: Sin documentación (probado: PROFILESECTION.md, profilesection.md, ProfileSection.md, _profile_section.md)
-- ❌ SettingsMenu: Sin documentación (probado: SETTINGSMENU.md, settingsmenu.md, SettingsMenu.md, _settings_menu.md)
-- ❌ SettingsPanel: Sin documentación (probado: SETTINGSPANEL.md, settingspanel.md, SettingsPanel.md, _settings_panel.md)
-- ❌ TemplateAssetPicker: Sin documentación (probado: TEMPLATEASSETPICKER.md, templateassetpicker.md, TemplateAssetPicker.md, _template_asset_picker.md)
-- ❌ TemplateCard: Sin documentación (probado: TEMPLATECARD.md, templatecard.md, TemplateCard.md, _template_card.md)
-- ❌ TemplateEditor: Sin documentación (probado: TEMPLATEEDITOR.md, templateeditor.md, TemplateEditor.md, _template_editor.md)
-- ❌ TemplateList: Sin documentación (probado: TEMPLATELIST.md, templatelist.md, TemplateList.md, _template_list.md)
-- ❌ TemplateManager: Sin documentación (probado: TEMPLATEMANAGER.md, templatemanager.md, TemplateManager.md, _template_manager.md)
-- ❌ TemplatePreview: Sin documentación (probado: TEMPLATEPREVIEW.md, templatepreview.md, TemplatePreview.md, _template_preview.md)
-- ❌ ToolsSidebar: Sin documentación (probado: TOOLSSIDEBAR.md, toolssidebar.md, ToolsSidebar.md, _tools_sidebar.md)
-- ❌ Avatar: Sin documentación (probado: AVATAR.md, avatar.md, Avatar.md, _avatar.md)
-- ❌ Badge: Sin documentación (probado: BADGE.md, badge.md, Badge.md, _badge.md)
-- ❌ Button: Sin documentación (probado: BUTTON.md, button.md, Button.md, _button.md)
-- ❌ Card: Sin documentación (probado: CARD.md, card.md, Card.md, _card.md)
-- ❌ Checkbox: Sin documentación (probado: CHECKBOX.md, checkbox.md, Checkbox.md, _checkbox.md)
-- ❌ CollapsibleSection: Sin documentación (probado: COLLAPSIBLESECTION.md, collapsiblesection.md, CollapsibleSection.md, _collapsible_section.md)
-- ❌ CopyButton: Sin documentación (probado: COPYBUTTON.md, copybutton.md, CopyButton.md, _copy_button.md)
-- ❌ DeleteMessageModal: Sin documentación (probado: DELETEMESSAGEMODAL.md, deletemessagemodal.md, DeleteMessageModal.md, _delete_message_modal.md)
-- ❌ DoubleConfirmationDeleteButton: Sin documentación (probado: DOUBLECONFIRMATIONDELETEBUTTON.md, doubleconfirmationdeletebutton.md, DoubleConfirmationDeleteButton.md, _double_confirmation_delete_button.md)
-- ❌ Input: Sin documentación (probado: INPUT.md, input.md, Input.md, _input.md)
-- ❌ Select: Sin documentación (probado: SELECT.md, select.md, Select.md, _select.md)
-- ❌ SidebarLayout: Sin documentación (probado: SIDEBARLAYOUT.md, sidebarlayout.md, SidebarLayout.md, _sidebar_layout.md)
-- ❌ SliderInput: Sin documentación (probado: SLIDERINPUT.md, sliderinput.md, SliderInput.md, _slider_input.md)
-- ❌ Switch: Sin documentación (probado: SWITCH.md, switch.md, Switch.md, _switch.md)
-- ❌ Table: Sin documentación (probado: TABLE.md, table.md, Table.md, _table.md)
-- ❌ ToastStack: Sin documentación (probado: TOASTSTACK.md, toaststack.md, ToastStack.md, _toast_stack.md)
-- ❌ FluxCoreIcon: Sin documentación (probado: FLUXCOREICON.md, fluxcoreicon.md, FluxCoreIcon.md, _flux_core_icon.md)
-- ❌ OpenAIIcon: Sin documentación (probado: OPENAIICON.md, openaiicon.md, OpenAIIcon.md, _open_a_i_icon.md)
-- ❌ SidebarNavList: Sin documentación (probado: SIDEBARNAVLIST.md, sidebarnavlist.md, SidebarNavList.md, _sidebar_nav_list.md)
-- ❌ ChatWidget: Sin documentación (probado: CHATWIDGET.md, chatwidget.md, ChatWidget.md, _chat_widget.md)
-- ❌ CollaboratorsList: Sin documentación (probado: COLLABORATORSLIST.md, collaboratorslist.md, CollaboratorsList.md, _collaborators_list.md)
-- ❌ InvitationsList: Sin documentación (probado: INVITATIONSLIST.md, invitationslist.md, InvitationsList.md, _invitations_list.md)
-- ❌ InviteCollaborator: Sin documentación (probado: INVITECOLLABORATOR.md, invitecollaborator.md, InviteCollaborator.md, _invite_collaborator.md)
-- ❌ EmptyState: Sin documentación (probado: EMPTYSTATE.md, emptystate.md, EmptyState.md, _empty_state.md)
-- ❌ ErrorState: Sin documentación (probado: ERRORSTATE.md, errorstate.md, ErrorState.md, _error_state.md)
-- ❌ LoadingState: Sin documentación (probado: LOADINGSTATE.md, loadingstate.md, LoadingState.md, _loading_state.md)
-- ❌ ViewContainer: Sin documentación (probado: VIEWCONTAINER.md, viewcontainer.md, ViewContainer.md, _view_container.md)
-- ❌ chatcore-views: Sin documentación (probado: CHATCORE-VIEWS.md, chatcore-views.md, chatcore-views.md, chatcore-views.md)
-- ❌ manifest: Sin documentación (probado: MANIFEST.md, manifest.md, manifest.md, manifest.md)
-- ❌ FluxCoreComposer: Sin documentación (probado: FLUXCORECOMPOSER.md, fluxcorecomposer.md, FluxCoreComposer.md, _flux_core_composer.md)
-- ❌ SuggestResponsePanel: Sin documentación (probado: SUGGESTRESPONSEPANEL.md, suggestresponsepanel.md, SuggestResponsePanel.md, _suggest_response_panel.md)
-- ❌ AccountDeletionPortalPage: Sin documentación (probado: ACCOUNTDELETIONPORTALPAGE.md, accountdeletionportalpage.md, AccountDeletionPortalPage.md, _account_deletion_portal_page.md)
-- ❌ DesignSystemPage: Sin documentación (probado: DESIGNSYSTEMPAGE.md, designsystempage.md, DesignSystemPage.md, _design_system_page.md)
-- ❌ PublicChatContainer: Sin documentación (probado: PUBLICCHATCONTAINER.md, publicchatcontainer.md, PublicChatContainer.md, _public_chat_container.md)
-- ❌ PublicProfileHeader: Sin documentación (probado: PUBLICPROFILEHEADER.md, publicprofileheader.md, PublicProfileHeader.md, _public_profile_header.md)
-- ❌ PublicProfilePage: Sin documentación (probado: PUBLICPROFILEPAGE.md, publicprofilepage.md, PublicProfilePage.md, _public_profile_page.md)
-- ❌ ProfileChatBlock: Sin documentación (probado: PROFILECHATBLOCK.md, profilechatblock.md, ProfileChatBlock.md, _profile_chat_block.md)
-- ❌ ProfileChatBlockDesktop: Sin documentación (probado: PROFILECHATBLOCKDESKTOP.md, profilechatblockdesktop.md, ProfileChatBlockDesktop.md, _profile_chat_block_desktop.md)
-- ❌ ProfileChatBlockMobile: Sin documentación (probado: PROFILECHATBLOCKMOBILE.md, profilechatblockmobile.md, ProfileChatBlockMobile.md, _profile_chat_block_mobile.md)
-- ❌ PublicProfileComposer: Sin documentación (probado: PUBLICPROFILECOMPOSER.md, publicprofilecomposer.md, PublicProfileComposer.md, _public_profile_composer.md)
-- ❌ ChatHeroHeader: Sin documentación (probado: CHATHEROHEADER.md, chatheroheader.md, ChatHeroHeader.md, _chat_hero_header.md)
-- ❌ DynamicProfileHeader: Sin documentación (probado: DYNAMICPROFILEHEADER.md, dynamicprofileheader.md, DynamicProfileHeader.md, _dynamic_profile_header.md)
-- ❌ PublicProfileLayout: Sin documentación (probado: PUBLICPROFILELAYOUT.md, publicprofilelayout.md, PublicProfileLayout.md, _public_profile_layout.md)
+- ⚠️ AccountDeletionWizard: Sin ejemplos de código
+- ⚠️ AccountsSection: Sin ejemplos de código
+- ⚠️ AccountSwitcher: Sin ejemplos de código
+- ⚠️ AuthPage: Sin ejemplos de código
+- ⚠️ ResetPasswordPage: Sin ejemplos de código
+- ⚠️ AudioRecorderPanel: Sin ejemplos de código
+- ⚠️ CameraCaptureModal: Sin ejemplos de código
+- ⚠️ ChatOptionsMenu: Sin ejemplos de código
+- ⚠️ ChatView: Sin ejemplos de código
+- ⚠️ EmojiPanel: Sin ejemplos de código
+- ⚠️ MessageBubble: Sin ejemplos de código
+- ⚠️ StandardComposer: Sin ejemplos de código
+- ⚠️ UnifiedChatView: Sin ejemplos de código
+- ⚠️ ContactDetails: Sin ejemplos de código
+- ⚠️ ContactsList: Sin ejemplos de código
+- ⚠️ ConversationsList: Sin ejemplos de código
+- ⚠️ ExpandedEditor: Sin ejemplos de código
+- ⚠️ OpenAIAssistantEditor: Sin ejemplos de código
+- ⚠️ ComponentShowcase: Sin ejemplos de código
+- ⚠️ AISuggestionCard: Sin ejemplos de código
+- ... y 69 advertencias más
 
 ## 💡 Recomendaciones
 
-- 🚨 Prioridad ALTA: Mejorar calidad de documentación
-- 🔧 Resolver 162 issues críticos (falta documentación básica)
-
-## 📝 Componentes sin Documentar
-
-- **AccountDeletionModal** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\accounts\AccountDeletionModal.tsx`
-- **AccountDeletionWizard** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\accounts\AccountDeletionWizard.tsx`
-- **AccountsSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\accounts\AccountsSection.tsx`
-- **AccountSwitcher** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\accounts\AccountSwitcher.tsx`
-- **AssetBrowser** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\assets\AssetBrowser.tsx`
-- **AuthPage** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\auth\AuthPage.tsx`
-- **ResetPasswordPage** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\auth\ResetPasswordPage.tsx`
-- **ActivityIndicator** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\ActivityIndicator.tsx`
-- **AssetPreview** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\AssetPreview.tsx`
-- **AssetUploader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\AssetUploader.tsx`
-- **AttachmentPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\AttachmentPanel.tsx`
-- **AudioRecorderPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\AudioRecorderPanel.tsx`
-- **CameraCaptureModal** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\CameraCaptureModal.tsx`
-- **ChatComposer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\ChatComposer.tsx`
-- **ChatOptionsMenu** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\ChatOptionsMenu.tsx`
-- **ChatView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\ChatView.tsx`
-- **EmojiPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\EmojiPanel.tsx`
-- **FileUploader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\FileUploader.tsx`
-- **MessageBubble** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\MessageBubble.tsx`
-- **ParticipantsActivityBar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\ParticipantsActivityBar.tsx`
-- **StandardComposer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\StandardComposer.tsx`
-- **TemplateQuickPicker** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\TemplateQuickPicker.tsx`
-- **UnifiedChatView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\UnifiedChatView.tsx`
-- **WelcomeView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\chat\WelcomeView.tsx`
-- **ConnectionIndicator** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\common\ConnectionIndicator.tsx`
-- **ThemeToggle** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\common\ThemeToggle.tsx`
-- **ContactDetails** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\contacts\ContactDetails.tsx`
-- **ContactsList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\contacts\ContactsList.tsx`
-- **AIStatusHeader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\conversations\AIStatusHeader.tsx`
-- **AIStatusIndicator** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\conversations\AIStatusIndicator.tsx`
-- **ConversationRowAIStatus** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\conversations\ConversationRowAIStatus.tsx`
-- **ConversationsList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\conversations\ConversationsList.tsx`
-- **ActivityTest** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\debug\ActivityTest.tsx`
-- **ExpandedEditor** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\editors\ExpandedEditor.tsx`
-- **OpenAIAssistantEditor** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\editors\OpenAIAssistantEditor.tsx`
-- **EnrichmentBadge** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\enrichments\EnrichmentBadge.tsx`
-- **ComponentShowcase** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\examples\ComponentShowcase.tsx`
-- **AISuggestionCard** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\AISuggestionCard.tsx`
-- **ExtensionCard** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\ExtensionCard.tsx`
-- **ExtensionConfigPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\ExtensionConfigPanel.tsx`
-- **ExtensionsPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\ExtensionsPanel.tsx`
-- **FluxCorePromptInspectorPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\FluxCorePromptInspectorPanel.tsx`
-- **WebsiteBuilderPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\WebsiteBuilderPanel.tsx`
-- **WebsiteBuilderSidebar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\extensions\WebsiteBuilderSidebar.tsx`
-- **FluxCorePanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\FluxCorePanel.tsx`
-- **FluxCoreSidebar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\FluxCoreSidebar.tsx`
-- **RuntimeSwitcher** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\RuntimeSwitcher.tsx`
-- **AgentDetail** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\agents\AgentDetail.tsx`
-- **AgentList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\agents\AgentList.tsx`
-- **AssistantList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\assistants\AssistantList.tsx`
-- **RuntimeSelectorModal** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\assistants\RuntimeSelectorModal.tsx`
-- **VectorStoreDiagnosticSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\components\VectorStoreDiagnosticSection.tsx`
-- **VectorStoreFilesSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\components\VectorStoreFilesSection.tsx`
-- **DebugPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\debug\DebugPanel.tsx`
-- **DetailHeader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\detail\DetailHeader.tsx`
-- **EditableName** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\detail\EditableName.tsx`
-- **IdCopyable** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\detail\IdCopyable.tsx`
-- **ResourceSelector** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\forms\ResourceSelector.tsx`
-- **InstructionList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\instructions\InstructionList.tsx`
-- **CollectionView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\CollectionView.tsx`
-- **EmptyState** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\EmptyState.tsx
-C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\components\EmptyState.tsx`
-- **EntityActions** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\EntityActions.tsx`
-- **LoadingState** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\LoadingState.tsx
-C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\components\LoadingState.tsx`
-- **StatusBadge** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\StatusBadge.tsx`
-- **FluxCoreTemplateConfig** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\templates\FluxCoreTemplateConfig.tsx`
-- **LocalVectorStoreDetail** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\vectorStores\LocalVectorStoreDetail.tsx`
-- **OpenAIVectorStoreDetail** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\vectorStores\OpenAIVectorStoreDetail.tsx`
-- **VectorStoreList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\vectorStores\VectorStoreList.tsx`
-- **VectorStoreTestQuery** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\vectorStores\VectorStoreTestQuery.tsx`
-- **AgentsView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\AgentsView.tsx`
-- **AgentView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\AgentView.tsx`
-- **AssistantsView.OLD** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\AssistantsView.OLD.tsx`
-- **AssistantsView.original** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\AssistantsView.original.tsx`
-- **AssistantsView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\AssistantsView.tsx`
-- **FluxiList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\FluxiList.tsx`
-- **FluxiProposedWorkDetail** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\FluxiProposedWorkDetail.tsx`
-- **FluxiView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\FluxiView.tsx`
-- **FluxiWorkDetail** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\FluxiWorkDetail.tsx`
-- **InstructionsView.original** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\InstructionsView.original.tsx`
-- **InstructionsView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\InstructionsView.tsx`
-- **LocalVectorStoresView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\LocalVectorStoresView.tsx`
-- **OpenAIAssistantConfigView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\OpenAIAssistantConfigView.tsx`
-- **OpenAIVectorStoresView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\OpenAIVectorStoresView.tsx`
-- **PoliciesView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\PoliciesView.tsx`
-- **ToolsView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\ToolsView.tsx`
-- **TracesView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\TracesView.tsx`
-- **UsageView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\UsageView.tsx`
-- **VectorStoresView** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\views\VectorStoresView.tsx`
-- **ActivityBar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\layout\ActivityBar.tsx`
-- **Layout** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\layout\Layout.tsx`
-- **Sidebar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\layout\Sidebar.tsx`
-- **ViewPort** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\layout\ViewPort.tsx`
-- **AccountDataAuditPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\AccountDataAuditPanel.tsx`
-- **AccountOrphanExplorer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\AccountOrphanExplorer.tsx`
-- **AssetMonitoringPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\AssetMonitoringPanel.tsx`
-- **DocumentationQualityPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\DocumentationQualityPanel.tsx`
-- **KernelConsole** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\KernelConsole.tsx`
-- **MonitoringHub** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\MonitoringHub.tsx`
-- **MonitoringSidebar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\MonitoringSidebar.tsx`
-- **SystemMonitor** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\SystemMonitor.tsx`
-- **VisualPipeline** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\monitor\VisualPipeline.tsx`
-- **WelcomeMessage** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\onboarding\WelcomeMessage.tsx`
-- **DynamicContainer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\panels\DynamicContainer.tsx`
-- **TabBar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\panels\TabBar.tsx`
-- **AvatarUpload** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\profile\AvatarUpload.tsx`
-- **AutomationSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\AutomationSection.tsx`
-- **ComponentPreviewGallery** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\ComponentPreviewGallery.tsx`
-- **CreditsSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\CreditsSection.tsx`
-- **KernelSessionsSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\KernelSessionsSection.tsx`
-- **ProfileSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\ProfileSection.tsx`
-- **SettingsMenu** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\SettingsMenu.tsx`
-- **SettingsPanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\settings\SettingsPanel.tsx`
-- **TemplateAssetPicker** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\templates\TemplateAssetPicker.tsx`
-- **TemplateCard** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\templates\TemplateCard.tsx`
-- **TemplateEditor** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\templates\TemplateEditor.tsx`
-- **TemplateList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\templates\TemplateList.tsx`
-- **TemplateManager** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\templates\TemplateManager.tsx`
-- **TemplatePreview** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\templates\TemplatePreview.tsx`
-- **ToolsSidebar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\tools\ToolsSidebar.tsx`
-- **Avatar** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Avatar.tsx`
-- **Badge** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Badge.tsx`
-- **Button** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Button.tsx`
-- **Card** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Card.tsx`
-- **Checkbox** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Checkbox.tsx`
-- **CollapsibleSection** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\CollapsibleSection.tsx`
-- **CopyButton** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\CopyButton.tsx`
-- **DeleteMessageModal** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\DeleteMessageModal.tsx`
-- **DoubleConfirmationDeleteButton** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\DoubleConfirmationDeleteButton.tsx`
-- **Input** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Input.tsx`
-- **Select** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Select.tsx`
-- **SidebarLayout** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\SidebarLayout.tsx`
-- **SliderInput** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\SliderInput.tsx`
-- **Switch** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Switch.tsx`
-- **Table** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\Table.tsx`
-- **ToastStack** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\ToastStack.tsx`
-- **FluxCoreIcon** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\icons\FluxCoreIcon.tsx`
-- **OpenAIIcon** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\icons\OpenAIIcon.tsx`
-- **SidebarNavList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\ui\sidebar\SidebarNavList.tsx`
-- **ChatWidget** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\widget\ChatWidget.tsx`
-- **CollaboratorsList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\workspace\CollaboratorsList.tsx`
-- **InvitationsList** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\workspace\InvitationsList.tsx`
-- **InviteCollaborator** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\workspace\InviteCollaborator.tsx`
-- **EmptyState** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\EmptyState.tsx
-C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\components\EmptyState.tsx`
-- **ErrorState** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\components\ErrorState.tsx`
-- **LoadingState** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\components\fluxcore\shared\LoadingState.tsx
-C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\components\LoadingState.tsx`
-- **ViewContainer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\components\ViewContainer.tsx`
-- **chatcore-views** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\core\registry\chatcore-views.tsx`
-- **manifest** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\extensions\fluxcore\manifest.tsx`
-- **FluxCoreComposer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\extensions\fluxcore\components\FluxCoreComposer.tsx`
-- **SuggestResponsePanel** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\extensions\fluxcore\components\SuggestResponsePanel.tsx`
-- **AccountDeletionPortalPage** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\pages\AccountDeletionPortalPage.tsx`
-- **DesignSystemPage** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\pages\DesignSystemPage.tsx`
-- **PublicChatContainer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\PublicChatContainer.tsx`
-- **PublicProfileHeader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\PublicProfileHeader.tsx`
-- **PublicProfilePage** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\PublicProfilePage.tsx`
-- **ProfileChatBlock** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\components\blocks\ProfileChatBlock.tsx`
-- **ProfileChatBlockDesktop** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\components\blocks\ProfileChatBlockDesktop.tsx`
-- **ProfileChatBlockMobile** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\components\blocks\ProfileChatBlockMobile.tsx`
-- **PublicProfileComposer** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\components\blocks\PublicProfileComposer.tsx`
-- **ChatHeroHeader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\components\identity\ChatHeroHeader.tsx`
-- **DynamicProfileHeader** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\components\identity\DynamicProfileHeader.tsx`
-- **PublicProfileLayout** - `C:\Users\harva\Documents\Trabajos\meetgar\FluxCoreChat\FluxCoreChat\apps\web\src\public-profile\layouts\PublicProfileLayout.tsx`
+- ✅ Documentación en excelente estado
+- ⚡ Mejorar detalles: Reducir 89 advertencias

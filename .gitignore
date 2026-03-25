@@ -19,7 +19,7 @@ out/
 
 # Environment variables
 .env
-
+.env.example
 # Logs
 logs/
 *.log

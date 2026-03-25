@@ -89,16 +89,6 @@ export * from './ai-suggestions';
 // FluxCore Agent Architecture
 // export * from './fluxcore-agent-assistants'; // Ya existe en fluxcore-agents.ts
 export * from './fluxcore-agents';
-// Comentados temporalmente hasta que se creen los archivos
-// export * from './fluxcore-decision-events';
-// export * from './fluxcore-external-effect-claims';
-// export * from './fluxcore-external-effects';
-// export * from './fluxcore-proposed-works';
-// export * from './fluxcore-semantic-contexts';
-// export * from './fluxcore-work-definitions';
-// export * from './fluxcore-work-events';
-// export * from './fluxcore-work-slots';
-// export * from './fluxcore-works';
 
 // WES System - Usar el schema consolidado
 export * from './wes';
@@ -106,25 +96,15 @@ export * from './wes';
 // FluxCore Runtime
 export * from './account-runtime-config';
 export * from './fluxcore-account-policies';
-// Comentados temporalmente hasta que se creen los archivos
-// export * from './fluxcore-account-actor-contexts';
 
 // FluxCore Identity System
-// Comentados temporalmente hasta que se creen los archivos
-// export * from './fluxcore-actors';
-// export * from './fluxcore-actor-identity-links';
-// export * from './fluxcore-actor-address-links';
-// export * from './fluxcore-addresses';
+// All identity tables are now in fluxcore-identity.ts
 
 // FluxCore Kernel
-// Comentados temporalmente hasta que se creen los archivos
-// export * from './fluxcore-fact-types';
 export { fluxcoreOutbox, type FluxCoreOutbox, type NewFluxCoreOutbox } from './fluxcore-outbox';
 export { fluxcoreProjectorCursors, type FluxCoreProjectorCursors, type NewFluxCoreProjectorCursors } from './fluxcore-projector-cursors';
 export { fluxcoreProjectorErrors, type FluxCoreProjectorErrors, type NewFluxCoreProjectorErrors } from './fluxcore-projector-errors';
-// export * from './fluxcore-reality-adapters';
-// export * from './fluxcore-signals';
-// export * from './fluxcore-cognition-queue';
+export * from './fluxcore-cognition-queue';
 export { fluxcoreActionAudit, type FluxcoreActionAudit, type NewFluxcoreActionAudit } from './fluxcore-action-audit';
 
 // Ontología de Identidad (Projector Space)
@@ -134,3 +114,6 @@ export { fluxcoreSessionProjection } from './fluxcore-session-projection';
 // Kernel Journal — RFC-0001 (Sovereign Reality)
 export * from './fluxcore-journal';
 export * from './fluxcore-cognition';
+
+// Notification System
+export * from './signals';

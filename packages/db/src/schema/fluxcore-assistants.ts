@@ -28,6 +28,7 @@ export interface AssistantModelConfig {
 export interface AssistantTimingConfig {
   responseDelaySeconds: number;
   smartDelay: boolean;
+  mode?: 'auto' | 'suggest' | 'off';
 }
 
 export const fluxcoreAssistants = pgTable('fluxcore_assistants', {

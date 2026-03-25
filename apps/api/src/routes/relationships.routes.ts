@@ -40,7 +40,12 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
               : rel.actorAId;
             const otherAccountId = await resolveAccountId(otherActorId);
 
-            const otherAccount = otherAccountId ? await accountService.getAccountById(otherAccountId) : null;
+            // Skip visitor actors (no accountId)
+            if (!otherAccountId) {
+              return null;
+            }
+
+            const otherAccount = await accountService.getAccountById(otherAccountId);
             const presentedAccount = await presentAccountWithAvatar(otherAccount, { actorId: user.id });
 
             return {
@@ -53,7 +58,10 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
           })
         );
 
-        return { success: true, data: enrichedRelationships };
+        // Filter out null results (visitor actors)
+        const validRelationships = enrichedRelationships.filter(rel => rel !== null);
+
+        return { success: true, data: validRelationships };
       }
 
       // Fallback: Get all accounts of the user (deprecated behavior)
@@ -81,7 +89,12 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
             : rel.actorAId;
           const otherAccountId = await resolveAccountId(otherActorId);
 
-          const otherAccount = otherAccountId ? await accountService.getAccountById(otherAccountId) : null;
+          // Skip visitor actors (no accountId)
+          if (!otherAccountId) {
+            return null;
+          }
+
+          const otherAccount = await accountService.getAccountById(otherAccountId);
           const presentedAccount = await presentAccountWithAvatar(otherAccount, { actorId: user.id });
 
           return {
@@ -94,7 +107,10 @@ export const relationshipsRoutes = new Elysia({ prefix: '/relationships' })
         })
       );
 
-      return { success: true, data: enrichedRelationships };
+      // Filter out null results (visitor actors)
+      const validRelationships = enrichedRelationships.filter(rel => rel !== null);
+
+      return { success: true, data: validRelationships };
     },
     {
       isAuthenticated: true,

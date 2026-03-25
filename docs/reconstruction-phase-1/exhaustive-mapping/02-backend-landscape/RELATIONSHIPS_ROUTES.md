@@ -1,10 +1,13 @@
 ---
-id: "relationships-routes"
-type: "backend"
-status: "stable"
-criticality: "high"
-location: "apps/api/src/routes/relationships.routes.ts"
+id: relationships-routes
+type: backend
+status: stable
+criticality: high
+location: apps/api/src/routes/relationships.routes.ts
 ---
+
+## 🎯 Propósito
+(Texto pendiente)
 
 # 🔗 Relationships Routes
 
@@ -185,3 +188,16 @@ Frontend ContactsList
 - ✅ **Avatares:** URLs firmadas generadas
 
 **Última actualización:** 2026-03-22 - Corrección de visitor actors implementada
+
+
+## 🔗 Capa 2: Conexiones e Interdependencias
+
+### 📦 Dependencias (LO QUE CONSUME)
+- `../middleware/auth.middleware`
+- `../services/relationship.service`
+- `../utils/account-avatar.presenter`
+- `../utils/actor-resolver`
+
+### 🔄 Dependientes (QUIÉN LO CONSUME)
+- `apps/api/src/index.ts`
+- `apps/api/src/server.ts`

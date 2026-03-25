@@ -1,10 +1,13 @@
 ---
-id: "accounts-routes"
-type: "backend"
-status: "stable"
-criticality: "medium"
-location: "apps/api/src/routes/accounts.routes.ts"
+id: accounts-routes
+type: backend
+status: stable
+criticality: medium
+location: apps/api/src/routes/accounts.routes.ts
 ---
+
+## 🎯 Propósito
+(Texto pendiente)
 
 # 👤 Accounts Routes
 
@@ -232,3 +235,17 @@ Usuario hace click en "Agregar contacto"
 - **ContactsList:** Flujo completo de agregar contactos
 - **ProfileSection:** Edición de perfil de usuario
 - **FluxCore Policy Context:** Usa ai_include_* para prompts
+
+
+## 🔗 Capa 2: Conexiones e Interdependencias
+
+### 📦 Dependencias (LO QUE CONSUME)
+- `../middleware/auth.middleware`
+- `../services/account.service`
+- `../utils/account-avatar.presenter`
+- `../services/account-deletion.service`
+- `../middleware/account-deletion-auth`
+
+### 🔄 Dependientes (QUIÉN LO CONSUME)
+- `apps/api/src/index.ts`
+- `apps/api/src/server.ts`

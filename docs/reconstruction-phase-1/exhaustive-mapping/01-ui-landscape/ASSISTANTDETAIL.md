@@ -1,9 +1,9 @@
 ---
-id: "assistant-detail"
-type: "smart-component"
-status: "stable"
-criticality: "high"
-location: "apps/web/src/components/fluxcore/assistants/AssistantDetail.tsx"
+id: assistant-detail
+type: smart-component
+status: stable
+criticality: high
+location: apps/web/src/components/fluxcore/assistants/AssistantDetail.tsx
 ---
 
 # ASSISTANTDETAIL.md
@@ -293,3 +293,16 @@ describe('AssistantDetail', () => {
 - `/api/fluxcore/assistants` - Endpoints de asistentes
 - `/api/fluxcore/assistants/:id/mode` - Cambio de modo
 - `fluxcore-assistants` table - Schema de base de datos
+
+
+## 🔗 Capa 2: Conexiones e Interdependencias
+
+### 📦 Dependencias (LO QUE CONSUME)
+- `../../ui`
+- `../../ui/DoubleConfirmationDeleteButton`
+
+### 🔄 Dependientes (QUIÉN LO CONSUME)
+- *No hay consumidores detectados o es un entry point*
+
+## 📦 Estado y Datos
+(Texto pendiente)
