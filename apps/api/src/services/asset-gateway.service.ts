@@ -54,6 +54,14 @@ export class AssetGatewayService {
 
         const allowedMimeTypes = params.allowedMimeTypes || DEFAULT_ALLOWED_MIME_TYPES;
 
+        // Validar uploadedBy como UUID válido o null
+        if (params.uploadedBy) {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            if (!uuidRegex.test(params.uploadedBy)) {
+                throw new Error(`Invalid uploadedBy: "${params.uploadedBy}". Expected valid UUID or null.`);
+            }
+        }
+
         console.log(`${DEBUG_PREFIX} Session created: accountId=${params.accountId}, expiresAt=${expiresAt.toISOString()}`);
 
         const [session] = await db.insert(assetUploadSessions).values({

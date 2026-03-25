@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 24/03/2026, 15:52
+**Última Actualización:** 25/03/2026, 12:46
 
 ---
 
@@ -29,9 +29,9 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📈 **MÉTRICAS PRINCIPALES**
 
 ### **Calidad General**
-- **Score Promedio:** 49.4%
-- **Índice de Confianza:** 93.8%
-- **Total Documentos Analizados:** 370
+- **Score Promedio:** 49.3%
+- **Índice de Confianza:** 93.0%
+- **Total Documentos Analizados:** 371
 
 ### **Cobertura del Sistema**
 - **Cobertura UI:** 98.8% (161/163)
@@ -42,14 +42,14 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🔍 **ANÁLISIS POR ESTADOS**
 
 ### **Documentos Estables (Completos)**
-- **Cantidad:** 349
-- **Porcentaje del Total:** 94.3%
-- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDataAuditPanel.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountOrphanExplorer.md, AccountsSection.md (+339 más)
+- **Cantidad:** 347
+- **Porcentaje del Total:** 93.5%
+- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDataAuditPanel.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountOrphanExplorer.md, AccountsSection.md (+337 más)
 
 ### **Documentos en Revisión (Con Dudas)**
-- **Cantidad:** 0
-- **Porcentaje del Total:** 0.0%
-- **Lista:** 
+- **Cantidad:** 2
+- **Porcentaje del Total:** 0.5%
+- **Lista:** account-avatar.routes.md, asset-gateway.service.md
 
 ### **Documentos WIP (Incompletos)**
 - **Cantidad:** 1
@@ -78,15 +78,18 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## ⚠️ **INCIDENCIAS DETECTADAS**
 
 ### **Errores Críticos**
-- **Total:** 3
+- **Total:** 7
 - **Tipos Comunes:** Contiene, Inconsistencia, Falta
-- **Componentes Afectados:** documentation-quality.service.md, documentation-quality.service.md, environment-variables.md
+- **Componentes Afectados:** account-avatar.routes.md, asset-gateway.service.md, documentation-quality.service.md, documentation-quality.service.md, environment-variables.md (+2 más)
 
 ### **Advertencias**
-- **Total:** 0
-- **Tipos Comunes:** 
+- **Total:** 4
+- **Tipos Comunes:** Documento, Sin
 - **Detalle:** 
-- 
+- account-avatar.routes.md: Documento con dudas técnicas (correctamente marcado como needs_review)
+- asset-gateway.service.md: Documento con dudas técnicas (correctamente marcado como needs_review)
+- prompt documentador.md: Sin sección de propósito
+- prompt documentador.md: Sin ejemplos de código
 
 ---
 
@@ -99,7 +102,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ### **Eficiencia de Documentación**
 - **Documentos por Día:** Calculado en tiempo real
-- **Tasa de Completitud:** 94.3%
+- **Tasa de Completitud:** 93.5%
 - **Tiempo Promedio por Documento:** Variable según complejidad
 
 ---
@@ -108,22 +111,22 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ### **Prioridades Inmediatas**
 1. **Documentar Backend:** Los 0 componentes sin documentación
-2. **Resolver Dudas:** Los 0 documentos con preguntas técnicas
+2. **Resolver Dudas:** Los 2 documentos con preguntas técnicas
 3. **Completar WIP:** Los 1 documentos incompletos
 
 ### **Estrategia Sugerida**
 1. **Foco en Backend:** 100.0% de cobertura necesita mejora
-2. **Revisión Técnica:** Resolver dudas en 0 documentos
-3. **Mantenimiento:** Mantener 49.4% de calidad promedio
+2. **Revisión Técnica:** Resolver dudas en 2 documentos
+3. **Mantenimiento:** Mantener 49.3% de calidad promedio
 
 ---
 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 24/3/2026
-- **Cambios:** Actualizado con 370 documentos analizados
-- **Impacto:** 3 errores críticos detectados
+- **Fecha:** 25/3/2026
+- **Cambios:** Actualizado con 371 documentos analizados
+- **Impacto:** 7 errores críticos detectados
 
 ### **Tendencias**
 - **Mejora en Calidad:** 📉 Necesita atención
@@ -161,8 +164,8 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 - **Total Componentes UI:** 163
 - **Total Componentes Backend:** 174
-- **Ratio Documentación/Componente:** 109.8
-- **Eficiencia del Sistema:** 97.5%
+- **Ratio Documentación/Componente:** 110.1
+- **Eficiencia del Sistema:** 97.3%
 
 ---
 
@@ -172,7 +175,7 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 ```markdown
 Basado en el Snapshot:
 - Cobertura Backend: 100.0%
-- Errores Críticos: 3
+- Errores Críticos: 7
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```
 

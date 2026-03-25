@@ -2,22 +2,28 @@ import { Elysia, t } from 'elysia';
 import { accountService } from '../services/account.service';
 import { assetGatewayService } from '../services/asset-gateway.service';
 import { assetRegistryService } from '../services/asset-registry.service';
+import { authMiddleware } from '../middleware/auth.middleware';
 
-interface KernelContext {
-  accountId?: string;
-  actorId?: string;
-}
 
 const AVATAR_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export const accountAvatarRoutes = new Elysia({ prefix: '/api/accounts' })
+  .use(authMiddleware)
+  .guard({
+    isAuthenticated: true,
+  })
   .post(
     '/:accountId/avatar/upload-session',
-    async ({ params, kernelContext, body, set }: { params: { accountId: string }; kernelContext: KernelContext; body: any; set: any }) => {
+    async ({ params, user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
       try {
         const { accountId } = params;
-        const uploadedBy = kernelContext.actorId;
+        const uploadedBy = user.id; // ← UUID garantizado por JWT
 
         const session = await assetGatewayService.createUploadSession({
           accountId,
@@ -26,6 +32,7 @@ export const accountAvatarRoutes = new Elysia({ prefix: '/api/accounts' })
           maxSizeBytes: AVATAR_MAX_SIZE_BYTES,
           fileName: body?.fileName,
           mimeType: body?.mimeType,
+          totalBytes: body?.sizeBytes,
           ttlMinutes: 15,
         });
 
@@ -54,6 +61,7 @@ export const accountAvatarRoutes = new Elysia({ prefix: '/api/accounts' })
         t.Object({
           fileName: t.Optional(t.String()),
           mimeType: t.Optional(t.String()),
+          sizeBytes: t.Optional(t.Number()),
         })
       ),
     }
@@ -61,10 +69,15 @@ export const accountAvatarRoutes = new Elysia({ prefix: '/api/accounts' })
 
   .post(
     '/:accountId/avatar/upload/:sessionId/commit',
-    async ({ params, kernelContext, set }: { params: { accountId: string; sessionId: string }; kernelContext: KernelContext; set: any }) => {
+    async ({ params, user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
       try {
         const { accountId, sessionId } = params;
-        const uploadedBy = kernelContext.actorId;
+        const uploadedBy = user.id; // ← UUID garantizado por JWT
 
         const result = await assetRegistryService.createFromUpload({
           sessionId,
@@ -112,12 +125,17 @@ export const accountAvatarRoutes = new Elysia({ prefix: '/api/accounts' })
 
   .patch(
     '/:accountId/avatar',
-    async ({ params, body }) => {
+    async ({ params, body, user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
       try {
         const { accountId } = params;
         const { avatarAssetId } = body;
 
-        console.log('[AccountAvatarRoutes] Updating avatar:', { accountId, avatarAssetId });
+        console.log('[AccountAvatarRoutes] Updating avatar:', { accountId, avatarAssetId, uploadedBy: user.id });
 
         const updatedAccount = await accountService.updateAccountAvatar(accountId, avatarAssetId);
         

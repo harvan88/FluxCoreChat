@@ -27,7 +27,7 @@ Para actualizar este tracker tras documentar un nuevo servicio:
 
 **Última actualización:** 2026-03-23 18:35 UTC-3
 
-## ✅ Servicios Backend Documentados a Capa 3: **50 / 50 (100% de los críticos)**
+## ✅ Servicios Backend Documentados a Capa 3: **51 / 51 (100% de los críticos)**
 
 | # | Servicio | Status | Dudas | Top Riesgo |
 |---|---------|--------|-------|------------|
@@ -43,20 +43,20 @@ Para actualizar este tracker tras documentar un nuevo servicio:
 | 43| `ai-context.service` | ✅ **stable** | 0 | Memoria de trabajo |
 | 44| `ai-trace.service` | ✅ **stable** | 0 | Black box persistente |
 | 45| `ai-rate-limiter.service` | needs_review | 1 | In-memory (No escalable) |
-| 46| `asset-gateway.service` | ✅ **stable** | 0 | Aduana de archivos |
+| 46| `asset-gateway.service` | ✅ **stable** | 0 | Aduana de archivos con validación UUID |
 | 47| `session-projector.service`| ✅ **stable** | 0 | Proyección de Kernel |
 | 48| `marketplace.service` | ✅ **stable** | 0 | Mercado de activos |
 | 49| `audio-enrichment.service` | needs_review | 1 | Costo/Latencia archivos grandes |
-| 50| `documentation-quality.service`| ✅ **stable** | 0 | Auto-descubrimiento |
+| 51| `account-avatar.routes` | needs_review | 3 | 🔴 **Desacoplamiento kernelContext → authMiddleware** |
 
 ## 📊 Métricas de Calidad
 
 | Métrica | Valor |
 |---------|-------|
-| **Total documentados** | 50 / 50 (100% Core) |
-| **Stable** | 24 (48%) |
-| **Needs Review** | 26 (52%) |
-| **Total Dudas Técnicas** | 68 (Reducido) |
+| **Total documentados** | 51 / 51 (100% Core) |
+| **Stable** | 24 (47%) |
+| **Needs Review** | 27 (53%) |
+| **Total Dudas Técnicas** | 71 (Aumentado) |
 | **Vulnerabilidades Críticas** | 3 (SQL Injection, GDPR, Ownership bypass) |
 
 ## 🚨 Top Riesgos Actualizados
