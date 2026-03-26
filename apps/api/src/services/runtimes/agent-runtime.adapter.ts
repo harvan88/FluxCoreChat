@@ -8,8 +8,10 @@ import { executeFlow } from '../agent-runtime/engine';
 import type { ExecutorDependencies } from '../agent-runtime/agent-types';
 import type { RuntimeAdapter, RuntimeHandleInput, ExecutionResult, ExecutionAction } from '../runtime-gateway.service';
 import { aiService } from '../ai.service';
+import { aiTemplateService } from '../ai-template.service';
+import { createCapabilityDeps } from '../capability-deps-factory.service';
+import { createCapabilityExecutionService } from '../capability-execution.service';
 import { retrievalService } from '../retrieval.service';
-import { aiToolService } from '../ai-tools.service';
 import { runtimeConfigService } from '../runtime-config.service';
 
 export class AgentRuntimeAdapter implements RuntimeAdapter {
@@ -83,29 +85,26 @@ export class AgentRuntimeAdapter implements RuntimeAdapter {
             },
 
             executeTool: async (params) => {
-                 // Adapt to aiToolService signature
-                 // ToolCall expectations in aiToolService are specific (OpenAI style)
-                 const output = await aiToolService.executeTool(
-                     {
-                         id: 'agent-call-' + Date.now(),
-                         type: 'function',
-                         function: {
-                             name: params.toolName,
-                             arguments: JSON.stringify(params.input)
-                         }
-                     },
+                 const capabilityExecution = createCapabilityExecutionService(createCapabilityDeps());
+
+                 const authorizedTemplates = await aiTemplateService.getAvailableTemplates(params.accountId);
+                 const execution = await capabilityExecution.executeTool(
+                     params.toolName,
+                     params.input,
                      {
                          accountId: params.accountId,
-                         conversationId: envelope.conversationId
+                         conversationId: envelope.conversationId,
+                         userMessage: typeof envelope.content?.text === 'string' ? envelope.content.text : '',
+                         vectorStoreIds: params.input?.vectorStoreIds,
+                         authorizedTemplates: authorizedTemplates.map((template: any) => template.id),
                      }
                  );
-                 
-                 // aiToolService returns a JSON string, usually.
-                 try {
-                     return { output: JSON.parse(output) };
-                 } catch {
-                     return { output };
+
+                 if (execution.outcome === 'error') {
+                     return { output: { error: execution.message } };
                  }
+
+                 return { output: execution.data ?? { outcome: execution.outcome, message: execution.message } };
             }
         };
 

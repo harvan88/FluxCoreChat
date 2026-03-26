@@ -3,11 +3,11 @@ import { db } from '@fluxcore/db';
 import { sql } from 'drizzle-orm';
 import crypto from 'node:crypto'; // Import crypto
 import { fluxcoreService } from '../services/fluxcore.service';
+import { capabilityExtraInstructionsService } from '../services/capability-extra-instructions.service';
 import { retrievalService } from '../services/retrieval.service';
 import { ragConfigService } from '../services/rag-config.service';
 import { aiTemplateService } from '../services/ai-template.service';
 import { PromptBuilder } from '../../../../extensions/fluxcore-asistentes/src/prompt-builder';
-import { buildExtraInstructions } from '../../../../extensions/fluxcore-asistentes/src/prompt-utils';
 
 export const fluxcoreRuntimeRoutes = new Elysia({ prefix: '/fluxcore/runtime' })
   .get('/test-trigger', async ({ query, set }) => {
@@ -99,7 +99,7 @@ export const fluxcoreRuntimeRoutes = new Elysia({ prefix: '/fluxcore/runtime' })
         return { success: false, message: 'Assistant does not belong to specified account' };
       }
       const hasKnowledgeBase = Array.isArray(composition.vectorStores) && composition.vectorStores.length > 0;
-      const extraInstructions = buildExtraInstructions({
+      const extraInstructions = capabilityExtraInstructionsService.buildExtraInstructions({
         instructions: composition.instructions,
         includeSearchKnowledge: hasKnowledgeBase,
       });

@@ -1,39 +1,41 @@
 ---
 id: "asistentes-openai-runtime"
-type: "cognitive-runtime"
+type: "core"
 status: "stable"
 criticality: "high"
 location: "apps/api/src/services/fluxcore/runtimes/asistentes-openai.runtime.ts"
 layers:
   discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "OpenAI Sync Service, Policy Context, Runtime Config" }
+  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "runAssistantWithMessages (openai-sync), CapabilityOpenAIOfferService, RuntimeStyleService, RuntimeInstructionContextService" }
   subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Motor Cognitivo Remoto (OpenAI Assistants API)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Thread Formatting, Instructions Override, Run Monitoring" }
+  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Thread Formatting, Instructions Override, Platform Capability Consumption" }
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 🧠 AsistentesOpenAIRuntime (v8.3)
 
-## 🎯 Propósito
-Implementa la integración con la API de **OpenAI Assistants**. A diferencia del runtime local, este delega la gestión de estados, hilos (`threads`) y búsqueda de archivos (`vector stores`) a la infraestructura de OpenAI, ofreciendo una experiencia de "Asistente como Servicio".
+## 🎯 Propósito (Canon §4.11)
+Implementa la integración con la API de OpenAI Assistants. A diferencia del runtime local, este delega la gestión de estados, hilos (`threads`) y búsqueda de archivos (`vector stores`) a la infraestructura de OpenAI, pero bajo la gobernanza estricta de la plataforma FluxCore.
 
-## 🏗️ Flujo de Operación
-1. **Identidad:** Requiere un `externalAssistantId` (asst_xxx) configurado en el `RuntimeConfig` de la cuenta.
-2. **Contexto Dinámico:** Inyecta las directivas del `PolicyContext` de FluxCore como instrucciones adicionales (`instructionsOverride`), forzando a OpenAI a respetar el tono y las reglas locales de la empresa.
-3. **Sincronización:** Utiliza `openaiSyncService` para orquestar la creación de runs y la espera de respuestas de forma eficiente y segura.
+## 🏗️ Arquitectura "Gobernanza Local"
+A partir de la v8.3, el runtime de OpenAI consume capacidades mediadas:
+1. **Oferta Centralizada:** Utiliza el `capabilityOpenAIOfferService` para decidir qué herramientas (`tools`) enviar a OpenAI basándose en la configuración de la plataforma FluxCore.
+2. **Override de Instrucciones:** Inyecta las directivas del `PolicyContext` resuelto (tono, idioma, reglas de contacto) como instrucciones adicionales, forzando al modelo remoto a seguir la soberanía de negocio local.
+3. **Consumo de Herramientas:** Aunque OpenAI orqueste los `runs`, las herramientas propuestas por la plataforma (como `send_template`) son mapeadas y filtradas para asegurar paridad con el runtime local.
 
-## 🛡️ Invariantes de Diseño
-- **Independencia:** Nunca funciona como fallback del runtime local; son caminos de ejecución paralelos y exclusivos.
-- **Sandboxing:** No realiza accesos directos a la DB de FluxCore, cumpliendo con el Canon v8.0 de seguridad de runtimes.
+## 🚥 Invariantes y Seguridad
+- **Aislamiento de Datos:** No realiza accesos directos a la DB (Canon Inv. 10).
+- **Mediación de Efectos:** Los resultados del runtime (textos y acciones de herramientas) se transforman en `ExecutionAction[]` para su procesamiento mediado por el `ActionExecutor`.
+- **Independencia:** Funciona como una ruta de ejecución paralela y exclusiva al runtime local.
 
-## 💡 Ventajas
-Permite utilizar las capacidades avanzadas de OpenAI (como Code Interpreter o su RAG nativo) de forma transparente dentro de la interfaz de chat de FluxCore, manteniendo el control de políticas en el lado del Kernel de FluxCore.
+## 🧱 Dependencias
+- **Depende de:** `openai-sync.service.ts`, `capability-openai-offer.service.ts`, `runtime-style.service.ts`, `runtime-instruction-context.service.ts`.
+- **Es usado por:** `runtime-gateway.service.ts`.
 
 ## 💡 Ejemplo de Uso
 ```typescript
-// El adaptador/runtime se registra en el sistema
-import { runtime } from 'apps/api/src/services/fluxcore/runtimes/asistentes-openai.runtime.ts';
+import { asistentesOpenAIRuntime } from './services/fluxcore/runtimes/asistentes-openai.runtime';
 
-// Invocado por el RuntimeGateway según la configuración de cuenta
-const actions = await runtime.handleMessage(runtimeInput);
+// Invocado por el RuntimeGateway
+const actions = await asistentesOpenAIRuntime.handleMessage(input);
 ```

@@ -5,6 +5,7 @@ export type PipelineNodeStep = 'ingreso' | 'proyeccion' | 'worker' | 'dispatcher
 export interface PipelineTelemetryEvent {
   messageId: string;               
   conversationId: string;          
+  accountId?: string;
   step: PipelineNodeStep;          
   status: 'pending' | 'processing' | 'success' | 'error';
   metadata?: {
@@ -21,6 +22,7 @@ export interface PipelineTelemetryEvent {
 export function emitTelemetry(
   messageId: string,
   conversationId: string,
+  accountId: string | undefined,
   step: PipelineNodeStep,
   status: 'pending' | 'processing' | 'success' | 'error',
   metadata?: PipelineTelemetryEvent['metadata']
@@ -29,6 +31,7 @@ export function emitTelemetry(
     const payload: PipelineTelemetryEvent = {
       messageId,
       conversationId,
+      accountId,
       step,
       status,
       timestamp: new Date().toISOString(),

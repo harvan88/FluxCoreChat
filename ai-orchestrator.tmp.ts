@@ -476,14 +476,14 @@ class AIOrchestratorService {
                         };
                     },
                     executeTool: async (params) => {
-                        const { aiToolService } = await import('./ai-tools.service');
+                        const { capabilityOpenAICompatService } = await import('./apps/api/src/services/capability-openai-compat.service');
                         const toolCall = {
                             id: `agent-tool-${Date.now()}`,
                             type: 'function' as const,
                             function: { name: params.toolName, arguments: JSON.stringify(params.input) },
                         };
                         try {
-                            const result = await aiToolService.executeTool(toolCall, {
+                            const result = await capabilityOpenAICompatService.executeToolCall(toolCall, {
                                 accountId: params.accountId,
                                 conversationId,
                             });

@@ -16,6 +16,8 @@
 
 import type { FluxPolicyContext, ConversationMessage } from '@fluxcore/db';
 import type { RuntimeConfig } from '@fluxcore/db';
+import type { AuthorizedRuntimeContext } from '../../core/fluxcore-types';
+import { runtimeInstructionContextService } from './runtime-instruction-context.service';
 
 export interface BuiltPrompt {
     systemPrompt: string;
@@ -26,26 +28,31 @@ class PromptBuilderService {
 
     build(params: {
         policyContext: FluxPolicyContext;
+        authorizedContext?: AuthorizedRuntimeContext;
         runtimeConfig: RuntimeConfig;
         conversationHistory: ConversationMessage[];
     }): BuiltPrompt {
-        const { policyContext, runtimeConfig, conversationHistory } = params;
+        const { policyContext, authorizedContext, runtimeConfig, conversationHistory } = params;
 
         const sections: string[] = [];
 
         // ── Section 1: Business Identity (resolvedBusinessProfile) ───────────
-        sections.push(this.buildIdentitySection(policyContext));
+        sections.push(this.buildIdentitySection(policyContext, authorizedContext));
 
         // ── Section 2: PolicyContext Directives — PRIORITY — Voice of Business ─
-        sections.push(this.buildPolicySection(policyContext));
+        sections.push(this.buildPolicySection(policyContext, authorizedContext, runtimeConfig));
 
         // ── Section 3: RuntimeConfig Instructions ─────────────────────────────
-        if (runtimeConfig.instructions) {
-            sections.push(`## Instrucciones del Asistente\n\n${runtimeConfig.instructions}`);
+        const instructionsSection = runtimeInstructionContextService.buildAuthorizedInstructionsSection({
+            instructions: authorizedContext?.instructions ?? runtimeConfig.instructions,
+            title: '## Instrucciones del Asistente',
+        });
+        if (instructionsSection) {
+            sections.push(instructionsSection);
         }
 
         // ── Section 4: Knowledge from resolvedBusinessProfile ─────────────────
-        const knowledgeSection = this.buildKnowledgeSection(policyContext);
+        const knowledgeSection = this.buildKnowledgeSection(policyContext, authorizedContext);
         if (knowledgeSection) {
             sections.push(knowledgeSection);
         }
@@ -60,12 +67,19 @@ class PromptBuilderService {
         return { systemPrompt, messages };
     }
 
-    private buildIdentitySection(policyContext: FluxPolicyContext): string {
-        const { resolvedBusinessProfile } = policyContext;
+    private buildIdentitySection(
+        policyContext: FluxPolicyContext,
+        authorizedContext?: AuthorizedRuntimeContext
+    ): string {
+        const resolvedBusinessProfile = authorizedContext?.businessProfile ?? policyContext.resolvedBusinessProfile;
         const lines = [`## Identidad`];
 
         const name = resolvedBusinessProfile.displayName || 'Asistente Virtual';
         lines.push(`Eres el asistente virtual de **${name}**.`);
+
+        if (authorizedContext?.responder.assistantName) {
+            lines.push(`Respondes como **${authorizedContext.responder.assistantName}** dentro de FluxCore.`);
+        }
 
         if (resolvedBusinessProfile.bio) {
             lines.push(resolvedBusinessProfile.bio as string);
@@ -77,41 +91,29 @@ class PromptBuilderService {
         return lines.join('\n');
     }
 
-    private buildPolicySection(policyContext: FluxPolicyContext): string {
-        const { tone, useEmojis, language, contactRules } = policyContext;
-        const lines = [`## Directivas de Atención`];
-
-        const toneMap: Record<string, string> = {
-            formal: 'formal y profesional',
-            casual: 'casual y relajado',
-            neutral: 'neutro y claro',
-        };
-        lines.push(`- **Tono:** ${toneMap[tone] || tone}`);
-        lines.push(`- **Emojis:** ${useEmojis ? 'Puedes usar emojis de forma moderada' : 'No uses emojis'}`);
-        lines.push(`- **Idioma:** Responde siempre en ${language}`);
-
-        const notes = contactRules.filter(r => r.type === 'note');
-        const preferences = contactRules.filter(r => r.type === 'preference');
-        const rules = contactRules.filter(r => r.type === 'rule');
-
-        if (notes.length > 0) {
-            lines.push(`\n### Notas del Contacto`);
-            notes.forEach(n => lines.push(`- ${n.content}`));
-        }
-        if (preferences.length > 0) {
-            lines.push(`\n### Preferencias del Contacto`);
-            preferences.forEach(p => lines.push(`- ${p.content}`));
-        }
-        if (rules.length > 0) {
-            lines.push(`\n### Reglas para este Contacto`);
-            rules.forEach(r => lines.push(`- ${r.content}`));
-        }
-
-        return lines.join('\n');
+    private buildPolicySection(
+        policyContext: FluxPolicyContext,
+        authorizedContext: AuthorizedRuntimeContext | undefined,
+        runtimeConfig: RuntimeConfig
+    ): string {
+        return runtimeInstructionContextService.buildAttentionSection({
+            runtimeConfig,
+            contactRules: authorizedContext?.contactRules ?? policyContext.contactRules,
+            title: '## Directivas de Atención',
+            tonePrefix: '- **Tono:** ',
+            emojiPrefix: '- **Emojis:** ',
+            languagePrefix: '- **Idioma:** Responde siempre en ',
+            notesHeading: '### Notas del Contacto',
+            preferencesHeading: '### Preferencias del Contacto',
+            rulesHeading: '### Reglas para este Contacto',
+        });
     }
 
-    private buildKnowledgeSection(policyContext: FluxPolicyContext): string | null {
-        const { resolvedBusinessProfile } = policyContext;
+    private buildKnowledgeSection(
+        policyContext: FluxPolicyContext,
+        authorizedContext?: AuthorizedRuntimeContext
+    ): string | null {
+        const resolvedBusinessProfile = authorizedContext?.businessProfile ?? policyContext.resolvedBusinessProfile;
         const parts: string[] = [];
 
         const templates = resolvedBusinessProfile.templates as Array<{

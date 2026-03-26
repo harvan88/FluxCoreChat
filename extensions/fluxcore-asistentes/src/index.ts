@@ -6,10 +6,11 @@
  */
 
 import crypto from 'node:crypto';
+import { capabilityExtraInstructionsService } from '../../../apps/api/src/services/capability-extra-instructions.service';
+import { capabilityOpenAIOfferService } from '../../../apps/api/src/services/capability-openai-offer.service';
+import { capabilityOpenAIToolResponseService } from '../../../apps/api/src/services/capability-openai-tool-response.service';
 import { PromptBuilder, type ContextData, type BuiltPrompt } from './prompt-builder';
 import { OpenAICompatibleClient, AIClientError, type AIErrorType, type OpenAIToolDef, type OpenAIToolCall, type OpenAIChatMessage } from './openai-compatible-client';
-import { ToolRegistry } from './tools/registry';
-import { buildExtraInstructions } from './prompt-utils';
 
 export interface FluxCoreConfig {
   enabled: boolean;
@@ -641,7 +642,7 @@ export class FluxCoreExtension {
 
       // Construir el prompt
       const hasKnowledgeBase = vectorStoreIds && vectorStoreIds.length > 0;
-      const extraInstructions = buildExtraInstructions({
+      const extraInstructions = capabilityExtraInstructionsService.buildExtraInstructions({
         instructions: active?.instructions,
         includeSearchKnowledge: !!hasKnowledgeBase,
       });
@@ -650,15 +651,15 @@ export class FluxCoreExtension {
       const hasTemplatesTool = Array.isArray(active?.tools)
         ? active!.tools.some((tool: any) => tool?.slug === 'templates' && tool?.connectionStatus !== 'error')
         : false;
-      const toolRegistry = new ToolRegistry({
+      const toolDeps = {
         fetchRagContext: this.fetchRAGContext.bind(this),
         listTemplates: this.listAuthorizedTemplates.bind(this),
         sendTemplate: this.sendTemplateTool.bind(this),
-      });
-      const llmTools = toolRegistry.getToolsForAssistant({
+      };
+      const llmTools = capabilityOpenAIOfferService.listToolsForLegacyOffer({
         hasKnowledgeBase: !!hasKnowledgeBase,
         hasTemplatesTool,
-      });
+      }) as OpenAIToolDef[];
       const toolsForRequest = llmTools.length > 0 ? llmTools : undefined;
 
       // Build prompt WITHOUT ragContext — the model will request it via tool if needed
@@ -779,12 +780,16 @@ export class FluxCoreExtension {
 
           for (const toolCall of response.toolCalls) {
             const toolStartedAt = Date.now();
-            const toolResponse = await toolRegistry.executeToolCall(toolCall, {
-              accountId: recipientAccountId,
-              conversationId: event.conversationId,
-              eventContent: event.content,
-              vectorStoreIds,
-            });
+            const toolResponse = await capabilityOpenAIToolResponseService.executeToolCall(
+              toolCall,
+              {
+                accountId: recipientAccountId,
+                conversationId: event.conversationId,
+                eventContent: event.content,
+                vectorStoreIds,
+              },
+              toolDeps,
+            );
             const toolDurationMs = Date.now() - toolStartedAt;
 
             toolMessages.push(toolResponse.message);

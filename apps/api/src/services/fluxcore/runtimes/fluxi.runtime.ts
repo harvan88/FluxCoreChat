@@ -91,7 +91,7 @@ export class FluxiRuntime implements RuntimeAdapter {
 
         // ── Phase 2: No active work → interpret for new transactional intent ──
         if (workDefinitions.length === 0) {
-            return [{ type: 'no_action', reason: 'No WorkDefinitions configured for this account' }];
+            return this.respondConversationally(messageText, conversationId, runtimeConfig);
         }
 
         return this.interpretAndPropose(messageText, conversationId, workDefinitions, runtimeConfig);
@@ -161,7 +161,7 @@ Formato: [{"path": "slot.path", "value": "valor_extraído", "evidence": "texto e
 
         } catch (error: any) {
             console.error(`[FluxiRuntime] Slot extraction failed for work ${workId}:`, error.message);
-            return [{ type: 'no_action', reason: `Slot extraction error: ${error.message}` }];
+            return this.respondConversationally(messageText, conversationId, runtimeConfig);
         }
     }
 
@@ -213,12 +213,16 @@ Si NO hay intención transaccional clara, responde exactamente: null`;
             const analysis = this.parseInterpretationResult(result.content, workDefinitions);
 
             if (!analysis) {
-                return [{ type: 'no_action', reason: 'No transactional intent detected by WES Interpreter' }];
+                return this.respondConversationally(messageText, conversationId, runtimeConfig);
             }
 
             // Phase 3: Gate — verify minimum binding attribute evidence
             if (analysis.candidateSlots.length === 0) {
-                return [{ type: 'no_action', reason: 'ProposedWork rejected: no candidate slots with evidence' }];
+                return [{
+                    type: 'send_message',
+                    conversationId,
+                    content: `Entiendo lo que quieres hacer, pero necesito un poco más de información para convertirlo en una acción operativa. ¿Me das más detalle?`,
+                }];
             }
 
             // Gate passed — return propose_work action
@@ -234,8 +238,56 @@ Si NO hay intención transaccional clara, responde exactamente: null`;
 
         } catch (error: any) {
             console.error(`[FluxiRuntime] Interpretation failed:`, error.message);
-            return [{ type: 'no_action', reason: `WES Interpreter error: ${error.message}` }];
+            return this.respondConversationally(messageText, conversationId, runtimeConfig);
         }
+    }
+
+    private async respondConversationally(
+        messageText: string,
+        conversationId: string,
+        runtimeConfig: RuntimeInput['runtimeConfig']
+    ): Promise<ExecutionAction[]> {
+        const normalized = messageText.trim().toLowerCase();
+        if (['hola', 'buenas', 'buen día', 'buen dia', 'hello', 'hi'].includes(normalized)) {
+            return [{
+                type: 'send_message',
+                conversationId,
+                content: 'Hola. Soy Fluxi. Puedo ayudarte tanto con consultas simples como con gestiones operativas. ¿Qué necesitas?',
+            }];
+        }
+
+        try {
+            const result = await llmClient.complete({
+                provider: runtimeConfig.provider ?? 'groq',
+                model: runtimeConfig.model ?? 'llama-3.1-8b-instant',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'Eres Fluxi, un runtime soberano operativo. Debes responder siempre al usuario, incluso si el mensaje no abre un work transaccional. Responde breve, útil y natural. No derives al usuario a otro asistente. Si falta información para operar, explícalo y guía el siguiente paso.',
+                    },
+                    { role: 'user', content: messageText },
+                ],
+                maxTokens: Math.min(runtimeConfig.maxTokens ?? 256, 256),
+                temperature: 0.3,
+            });
+
+            const responseText = result.content?.trim();
+            if (responseText) {
+                return [{
+                    type: 'send_message',
+                    conversationId,
+                    content: responseText,
+                }];
+            }
+        } catch (error: any) {
+            console.warn('[FluxiRuntime] Conversational fallback failed:', error.message);
+        }
+
+        return [{
+            type: 'send_message',
+            conversationId,
+            content: 'Puedo ayudarte con información general y también con acciones operativas. Si quieres, cuéntame qué necesitas y lo resolvemos paso a paso.',
+        }];
     }
 
     private parseSlotExtractionResult(content: string): Array<{

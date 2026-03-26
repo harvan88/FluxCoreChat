@@ -66,63 +66,7 @@ class FluxPolicyContextService {
         console.log(`📋 CONTACT ID: ${contactId}`);
         console.log(`📋 CHANNEL: ${channel}`);
         
-        // CACHE DISABLED: Always reload from DB
-        this.clearAccountCache(accountId);
-
-        // 1. Política de la cuenta (fuente: fluxcore_account_policies)
-        const policyResult = await db.execute(sql`
-            SELECT account_id, mode, response_delay_ms, turn_window_ms, 
-                   turn_window_typing_ms, turn_window_max_ms, off_hours_policy
-            FROM fluxcore_account_policies
-            WHERE account_id = ${accountId}
-            LIMIT 1
-        `) as any;
-        const policy = policyResult[0] ? {
-            accountId: policyResult[0].account_id,
-            mode: policyResult[0].mode,
-            responseDelayMs: policyResult[0].response_delay_ms,
-            turnWindowMs: policyResult[0].turn_window_ms,
-            turnWindowTypingMs: policyResult[0].turn_window_typing_ms,
-            turnWindowMaxMs: policyResult[0].turn_window_max_ms,
-            offHoursPolicy: policyResult[0].off_hours_policy,
-        } : null;
-        
-        console.log(`[FluxPolicyContext] 📋 POLÍTICA ENCONTRADA:`);
-        console.log(`  - Modo: ${policy?.mode || 'default'}`);
-        console.log(`  - Response Delay: ${policy?.responseDelayMs || 'default'}ms`);
-        
-        let policyData = policy;
-        if (!policyData) {
-            policyData = await this.createDefaultPolicy(accountId);
-        }
-
-        // 1.1 Resolución Jerárquica del Modo (The Resolve Chain)
-        // Prioridad: Relationship (automation_rules) > Account (fluxcore_account_policies)
-        let resolvedMode = policyData.mode;
-        if (contactId) {
-            // 🆕 DETECTAR SI ES VISITOR TOKEN (UUID sin relationshipId)
-            const isVisitorToken = !contactId.includes('-') || 
-                                (contactId.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contactId));
-            
-            if (isVisitorToken) {
-                console.log(`[FluxPolicyContext] 🎯 VISITOR DETECTED: ${contactId} - buscando regla global`);
-                // 🆕 VISITORS: Solo usar regla global (no pueden tener reglas específicas)
-                const globalRule = await automationController.getGlobalRule(accountId);
-                if (globalRule) {
-                    console.log(`[FluxPolicyContext] 🎯 REGLA GLOBAL ENCONTRADA: Usando modo '${globalRule.mode}' para visitor ${contactId}`);
-                    resolvedMode = globalRule.mode;
-                } else {
-                    console.log(`[FluxPolicyContext] 🎯 SIN REGLA GLOBAL: Usando modo de cuenta '${policyData.mode}'`);
-                }
-            } else {
-                // Lógica existente para relationships
-                const relationshipMode = await automationController.getRelationshipMode(accountId, contactId);
-                if (relationshipMode) {
-                    console.log(`[FluxPolicyContext] 🎯 EXCEPCIÓN ENCONTRADA: Usando modo '${relationshipMode}' para la relación ${contactId}`);
-                    resolvedMode = relationshipMode;
-                }
-            }
-        }
+        const policyContext = await this.resolvePolicyOnly(accountId, contactId, channel);
 
         // 2. Asistente activo (fuente: fluxcore_assistants + relaciones)
         const assistantResult = await db.execute(sql`
@@ -159,37 +103,6 @@ class FluxPolicyContextService {
                 }));
             })()
             : [];
-
-        // 3. Perfil del negocio â€” SOLO campos en authorized_data_scopes
-        const resolvedBusinessProfile = assistant
-            ? await this.resolveBusinessProfile(accountId)
-            : {};
-
-        // 4. Reglas del contacto (solo notas con allow_automated_use)
-        const contactRules = await this.resolveContactRules(contactId);
-
-        // 5. Plantillas autorizadas
-        const authorizedTemplates = await this.resolveAuthorizedTemplates(accountId);
-
-        // 6. Contexto Fluxi si está activo
-        await this.resolveFluxiContext(accountId);
-
-        const policyContext: FluxPolicyContext = {
-            accountId,
-            contactId,
-            conversationId: '', // Added if required by FluxPolicyContext type
-            channel,
-            mode: resolvedMode as any,
-            responseDelayMs: policyData.responseDelayMs,
-            turnWindowMs: policyData.turnWindowMs,
-            turnWindowTypingMs: policyData.turnWindowTypingMs,
-            turnWindowMaxMs: policyData.turnWindowMaxMs,
-            offHoursPolicy: policyData.offHoursPolicy,
-            contactRules,
-            authorizedTemplates,
-            resolvedBusinessProfile,
-            workDefinitions: [],
-        };
 
         console.log(`[FluxPolicyContext] ✅ REALIDAD DEFINIDA PARA CUENTA ${accountId}:`);
         console.log(`  - Modo: ${policyContext.mode}`);
@@ -248,9 +161,19 @@ class FluxPolicyContextService {
         // 🔑 MEJORA: Usar channel proporcionado con fallback inteligente
         const { accountId, conversationId, contactId, relationshipId, channel } = params;
         const resolvedChannel = channel || await this.inferChannelFromContext(params);
-        const { policyContext } = await this.resolveContext(accountId, contactId || relationshipId || '', resolvedChannel);
+        const policyContext = await this.resolvePolicyOnly(accountId, contactId || relationshipId || '', resolvedChannel);
         policyContext.conversationId = conversationId;
         return policyContext;
+    }
+
+    async resolvePolicyContext(params: {
+        accountId: string;
+        conversationId: string;
+        contactId?: string;
+        relationshipId?: string;
+        channel?: string;
+    }): Promise<FluxPolicyContext> {
+        return this.resolve(params);
     }
 
     /**
@@ -308,6 +231,85 @@ class FluxPolicyContextService {
         // Último fallback
         console.warn('[FluxPolicyContext] ⚠️ Could not infer channel - using unknown');
         return 'unknown';
+    }
+
+    private async resolvePolicyOnly(
+        accountId: string,
+        contactId: string,
+        channel: string,
+    ): Promise<FluxPolicyContext> {
+        this.clearAccountCache(accountId);
+
+        const policyResult = await db.execute(sql`
+            SELECT account_id, mode, response_delay_ms, turn_window_ms,
+                   turn_window_typing_ms, turn_window_max_ms, off_hours_policy
+            FROM fluxcore_account_policies
+            WHERE account_id = ${accountId}
+            LIMIT 1
+        `) as any;
+
+        const policy = policyResult[0] ? {
+            accountId: policyResult[0].account_id,
+            mode: policyResult[0].mode,
+            responseDelayMs: policyResult[0].response_delay_ms,
+            turnWindowMs: policyResult[0].turn_window_ms,
+            turnWindowTypingMs: policyResult[0].turn_window_typing_ms,
+            turnWindowMaxMs: policyResult[0].turn_window_max_ms,
+            offHoursPolicy: policyResult[0].off_hours_policy,
+        } : null;
+
+        console.log(`[FluxPolicyContext] 📋 POLÍTICA ENCONTRADA:`);
+        console.log(`  - Modo: ${policy?.mode || 'default'}`);
+        console.log(`  - Response Delay: ${policy?.responseDelayMs || 'default'}ms`);
+
+        let policyData = policy;
+        if (!policyData) {
+            policyData = await this.createDefaultPolicy(accountId);
+        }
+
+        let resolvedMode = policyData.mode;
+        if (contactId) {
+            const isVisitorToken = !contactId.includes('-') ||
+                (contactId.length === 36 && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contactId));
+
+            if (isVisitorToken) {
+                console.log(`[FluxPolicyContext] 🎯 VISITOR DETECTED: ${contactId} - buscando regla global`);
+                const globalRule = await automationController.getGlobalRule(accountId);
+                if (globalRule) {
+                    console.log(`[FluxPolicyContext] 🎯 REGLA GLOBAL ENCONTRADA: Usando modo '${globalRule.mode}' para visitor ${contactId}`);
+                    resolvedMode = globalRule.mode;
+                } else {
+                    console.log(`[FluxPolicyContext] 🎯 SIN REGLA GLOBAL: Usando modo de cuenta '${policyData.mode}'`);
+                }
+            } else {
+                const relationshipMode = await automationController.getRelationshipMode(accountId, contactId);
+                if (relationshipMode) {
+                    console.log(`[FluxPolicyContext] 🎯 EXCEPCIÓN ENCONTRADA: Usando modo '${relationshipMode}' para la relación ${contactId}`);
+                    resolvedMode = relationshipMode;
+                }
+            }
+        }
+
+        const resolvedBusinessProfile = await this.resolveBusinessProfile(accountId);
+        const contactRules = await this.resolveContactRules(contactId);
+        const authorizedTemplates = await this.resolveAuthorizedTemplates(accountId);
+
+        return {
+            accountId,
+            contactId,
+            conversationId: '',
+            channel,
+            mode: resolvedMode as any,
+            responseDelayMs: policyData.responseDelayMs,
+            turnWindowMs: policyData.turnWindowMs,
+            turnWindowTypingMs: policyData.turnWindowTypingMs,
+            turnWindowMaxMs: policyData.turnWindowMaxMs,
+            offHoursPolicy: policyData.offHoursPolicy,
+            contactRules,
+            authorizedTemplates,
+            resolvedBusinessProfile,
+            workDefinitions: [],
+        };
     }
 
     private async resolveContactRules(relationshipId?: string): Promise<import('@fluxcore/db').ContactRule[]> {
@@ -499,8 +501,10 @@ class FluxPolicyContextService {
     }
 
     private async resolveAuthorizedTemplates(accountId: string): Promise<string[]> {
-        // Implementation based on fluxcore_template_settings if needed
-        return [];
+        // Load authorized templates from fluxcore_template_settings
+        const { fluxCoreTemplateSettingsService } = await import('./fluxcore/template-settings.service');
+        const authorizedTemplates = await fluxCoreTemplateSettingsService.listAuthorizedTemplates(accountId);
+        return authorizedTemplates.map(t => t.id);
     }
 }
 

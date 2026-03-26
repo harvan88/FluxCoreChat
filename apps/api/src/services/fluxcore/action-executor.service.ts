@@ -24,6 +24,7 @@ import type { ExecutionAction, ProposeWorkAction, OpenWorkAction, AdvanceWorkSta
 import type { FluxPolicyContext, RuntimeConfig } from '@fluxcore/db';
 import { coreEventBus } from '../../core/events';
 import { workEngineService } from '../work-engine.service';
+import { templateService } from '../template.service';
 
 export interface ActionExecutionResult {
     action: ExecutionAction;
@@ -188,7 +189,7 @@ class ActionExecutorService {
                 return this.executeSendMessage(action, context);
 
             case 'send_template':
-                return this.executeSendTemplate(action);
+                return this.executeSendTemplate(action, context.accountId);
 
             case 'start_typing':
                 return this.executeStartTyping(action);
@@ -284,20 +285,32 @@ class ActionExecutorService {
 
     /**
      * Send a template through ChatCore.
-     * DEUDA: Integrate with templateService for proper rendering.
+     * Consolidates v8.3 command mediation logic.
      */
     private async executeSendTemplate(
-        action: { type: 'send_template'; templateId: string; conversationId: string; variables?: Record<string, string> }
+        action: { type: 'send_template'; templateId: string; conversationId: string; variables?: Record<string, string> },
+        accountId: string
     ): Promise<ActionExecutionResult> {
         try {
-            // TODO H3: Call templateService.render(templateId, variables) and then send
-            console.log(`[ActionExecutor] 📋 Template "${action.templateId}" would be sent to conversation ${action.conversationId}`);
+            console.log(`[ActionExecutor] 📋 Executing template send: ${action.templateId} for account ${accountId}`);
+
+            const result = await templateService.executeTemplate({
+                templateId: action.templateId,
+                accountId,
+                conversationId: action.conversationId,
+                variables: action.variables || {},
+                generatedBy: 'ai',
+            });
+
+            console.log(`[ActionExecutor] ✅ Template ${action.templateId} sent. MessageId: ${result.messageId}`);
 
             return {
                 action,
                 success: true,
+                messageId: result.messageId,
             };
         } catch (error: any) {
+            console.error(`[ActionExecutor] ❌ Template send failed:`, error.message);
             return { action, success: false, error: error.message };
         }
     }

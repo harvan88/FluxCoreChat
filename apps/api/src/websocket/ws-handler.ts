@@ -66,12 +66,34 @@ import { coreEventBus } from '../core/events';
 // Escuchar eventos de telemetría y enviarlos SOLO a la Kernel Console
 coreEventBus.on('telemetry:pipeline_step', (payload) => {
   if (kernelConsoleSubscriptions.size === 0) return;
+
   const message = JSON.stringify({
     type: 'telemetry:pipeline_step',
     payload: payload
   });
+
   for (const ws of kernelConsoleSubscriptions) {
     try {
+      const socketAccountId = ws.data?.accountId;
+      if (!socketAccountId) {
+        kernelConsoleSubscriptions.delete(ws);
+        continue;
+      }
+
+      const telemetryConversationId = ws.data?.telemetryConversationId;
+      if (telemetryConversationId) {
+        if (payload.conversationId !== telemetryConversationId) {
+          continue;
+        }
+
+        ws.send(message);
+        continue;
+      }
+
+      if (payload.accountId && payload.accountId !== socketAccountId) {
+        continue;
+      }
+
       ws.send(message);
     } catch {
       kernelConsoleSubscriptions.delete(ws);
@@ -170,15 +192,33 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
       case 'subscribe_telemetry':
         // Fase 2: Pista Controlada de WebSocket
         console.log(`[ws-handler] 📡 Petición de suscripción a telemetría. Role: ${data.role}`);
-        if (data.role === 'kernel_console') {
+
+        if (data.role === 'kernel_console' && ws.data?.userId && ws.data?.accountId) {
+          let telemetryConversationId: string | null = null;
+
+          if (data.conversationId) {
+            const { conversationParticipantService } = await import('../services/conversation-participant.service');
+            const participants = await conversationParticipantService.getActiveParticipants(data.conversationId);
+            const isParticipant = participants.some((participant) => participant.accountId === ws.data?.accountId);
+
+            if (!isParticipant) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Acceso denegado a telemetría de esta conversación' }));
+              break;
+            }
+
+            telemetryConversationId = data.conversationId;
+          }
+
+          ws.data.telemetryConversationId = telemetryConversationId;
           kernelConsoleSubscriptions.add(ws);
-          ws.send(JSON.stringify({ type: 'subscribed_telemetry', status: 'success' }));
+          ws.send(JSON.stringify({ type: 'subscribed_telemetry', status: 'success', conversationId: telemetryConversationId }));
         } else {
           ws.send(JSON.stringify({ type: 'error', message: 'Acceso denegado a telemetría' }));
         }
         break;
 
       case 'unsubscribe_telemetry':
+        ws.data.telemetryConversationId = null;
         kernelConsoleSubscriptions.delete(ws);
         ws.send(JSON.stringify({ type: 'unsubscribed_telemetry', status: 'success' }));
         break;
@@ -508,6 +548,7 @@ export function handleWSClose(ws: any): void {
   }
 
   // Limpiar suscripciones de telemetría
+  ws.data.telemetryConversationId = null;
   kernelConsoleSubscriptions.delete(ws);
 }
 
@@ -515,6 +556,20 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
   const subs = relationshipSubscriptions.get(relationshipId);
   if (subs) {
     const message = JSON.stringify(payload);
+    
+    // 🔥 IGNORAR user_activity_state que no tiene propiedades de mensaje
+    if (payload.type === 'user_activity_state') {
+      console.log(`[WebSocket] 🔄 Broadcasting activity state (no message filtering)`);
+      subs.forEach(ws => {
+        try {
+          ws.send(message);
+        } catch (e) {
+          subs.delete(ws);
+        }
+      });
+      return;
+    }
+    
     console.log(`[WebSocket] 🔍 Broadcasting to ${subs.size} subscribers in relationship ${relationshipId}`);
     console.log(`[WebSocket] 📋 Payload:`, {
       senderAccountId: payload.data?.senderAccountId,

@@ -1,43 +1,42 @@
 ---
 id: "asistentes-local-runtime"
-type: "cognitive-runtime"
+type: "core"
 status: "stable"
 criticality: "critical"
 location: "apps/api/src/services/fluxcore/runtimes/asistentes-local.runtime.ts"
 layers:
   discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "LLM Client, RAG Context, Template Registry, Prompt Builder" }
+  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "LLM Client, CapabilityLocalRuntimeToolsService, CreateCapabilityDeps, Prompt Builder" }
   subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Motor Cognitivo Soberano (Local LLM)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Multi-round Tool Calling, RAG Injection, Template Authorization" }
+  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Multi-round Tool Calling, Platform Capability Consumption, Template Authorization" }
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 🧠 AsistentesLocalRuntime (v8.3)
 
-## 🎯 Propósito
-Es el motor de IA por defecto de FluxCore. A diferencia de OpenAI, este runtime utiliza modelos Open Source (vía Groq o proveedores locales) para procesar mensajes. Implementa la soberanía cognitiva asegurando que la lógica de negocio y los datos no salgan del ecosistema controlado si así se configura.
+## 🎯 Propósito (Canon §4.10)
+Es el motor de IA soberano de FluxCore. Implementa la ejecución de modelos de lenguaje (vía Groq u OpenAI) siguiendo un flujo determinista y mediado por la plataforma. Su diseño garantiza que el runtime sea un consumidor puro de capacidades, sin lógica de herramientas interna.
 
-## 🛠️ Capacidades (Tools)
-1. **`search_knowledge`**: Implementa RAG (Retrieval Augmented Generation). Consulta la base de conocimientos propia del negocio para inyectar hechos reales en la respuesta de la IA.
-2. **`send_template`**: Permite a la IA decidir enviar una plantilla oficial en lugar de redactar un texto libre, garantizando cumplimiento normativo.
+## 🏗️ Arquitectura "Plataforma Primero"
+A partir de la v8.3, el runtime local ya no define sus propias herramientas. En su lugar:
+1. Recibe el `RuntimeInput` con los servicios de plataforma ya inyectados.
+2. Consulta al `capabilityLocalRuntimeToolsService` para obtener la lista de herramientas autorizadas (`LLMTool[]`).
+3. Ejecuta las llamadas a herramientas generadas por el LLM delegando la lógica al servicio de puente de la plataforma.
+4. Soporta hasta 2 rondas de llamadas (`MAX_TOOL_ROUNDS`) para flujos complejos (RAG -> Respuesta).
 
-## 🔄 Ciclo de Ejecución
-- **Bucle de Herramientas:** Soporta hasta 2 rondas de llamadas a herramientas (`MAX_TOOL_ROUNDS`). La IA puede decidir buscar información, analizarla y luego responder.
-- **Invariante de Seguridad:** No tiene acceso directo a la Base de Datos. Todo el contexto llega inyectado en el `RuntimeInput`.
-- **Prevalencia de Políticas:** Las reglas definidas en el `PolicyContext` (Tono, Idioma, Emojis) tienen prioridad absoluta sobre el prompt del sistema.
+## 🚥 Invariantes y Seguridad
+- **Aislamiento de Datos:** No tiene acceso directo a la DB (Canon Inv. 10).
+- **Mediación de Efectos:** Nunca ejecuta efectos secundarios directamente (ej. enviar mensaje); siempre devuelve `ExecutionAction[]` para ser procesados por el `ActionExecutor`.
+- **Autorización Granular:** Solo expone las herramientas y plantillas marcadas como autorizadas en el `PolicyContext`.
 
-## ⚡ Performance y Resiliencia
-- **LLM Client Integration:** Utiliza `llmClient` para manejar reintentos y fallbacks automáticos entre modelos si el proveedor principal falla.
-- **RAG Fetch:** Realiza llamadas internas HTTP al gateway de RAG para mantener el aislamiento de procesos.
-
-## 💡 Innovación v8.3
-Introduce la autorización granular de plantillas: la IA solo puede enviar lo que el humano ha marcado como "Autorizado para IA" en el Registry.
+## 🧱 Dependencias
+- **Depende de:** `llm-client.service.ts`, `capability-local-runtime-tools.service.ts`, `capability-deps-factory.service.ts`, `prompt-builder.service.ts`.
+- **Es usado por:** `runtime-gateway.service.ts`.
 
 ## 💡 Ejemplo de Uso
 ```typescript
-// El adaptador/runtime se registra en el sistema
-import { runtime } from 'apps/api/src/services/fluxcore/runtimes/asistentes-local.runtime.ts';
+import { asistentesLocalRuntime } from './services/fluxcore/runtimes/asistentes-local.runtime';
 
-// Invocado por el RuntimeGateway según la configuración de cuenta
-const actions = await runtime.handleMessage(runtimeInput);
+// Invocado por el RuntimeGateway
+const actions = await asistentesLocalRuntime.handleMessage(input);
 ```

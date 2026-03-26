@@ -22,6 +22,7 @@ interface WebSocketData {
   requestId?: string | null;
   accountId?: string | null;
   userId?: string | null;
+  telemetryConversationId?: string | null;
 }
 
 import { healthRoutes } from './routes/health';

@@ -19,7 +19,11 @@ out/
 
 # Environment variables
 .env
-.env.example
+.env.local
+.env.development
+.env.test
+.env.production
+
 # Logs
 logs/
 *.log

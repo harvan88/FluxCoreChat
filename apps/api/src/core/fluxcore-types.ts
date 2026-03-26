@@ -119,6 +119,39 @@ export interface CloseWorkAction {
     replyMessage?: string;
 }
 
+export interface AuthorizedRuntimeContext {
+    accountId: string;
+    conversationId: string;
+    channel: string;
+    businessProfile: FluxPolicyContext['resolvedBusinessProfile'];
+    contactRules: FluxPolicyContext['contactRules'];
+    authorizedTemplates: string[];
+    instructions?: string;
+    responder: {
+        runtimeId: string;
+        assistantId?: string;
+        assistantName?: string;
+    };
+    activeWork?: FluxPolicyContext['activeWork'];
+    workDefinitions?: FluxPolicyContext['workDefinitions'];
+}
+
+export interface RuntimeToolExecutionResult {
+    outcome: 'success' | 'not_found' | 'error';
+    data?: {
+        action?: ExecutionAction;
+        [key: string]: any;
+    };
+    message?: string;
+}
+
+export interface RuntimeServices {
+    getAvailableTools(): Promise<string[]>;
+    executeTool(toolId: string, params: any): Promise<RuntimeToolExecutionResult>;
+    getToolDefinition(toolId: string): Promise<any>;
+    isAuthorized(toolId: string): Promise<boolean>;
+}
+
 // ---------------------------------------------------------------------------
 // Runtime Contract — The Interface All Runtimes Must Implement
 // ---------------------------------------------------------------------------
@@ -138,6 +171,9 @@ export interface RuntimeInput {
     /** Business governance policy resolved for this account + contact */
     policyContext: FluxPolicyContext;
 
+    /** Operator-authorized business and responder context shared across runtimes */
+    authorizedContext: AuthorizedRuntimeContext;
+
     /** Technical configuration of the active runtime for this account */
     runtimeConfig: RuntimeConfig;
 
@@ -152,12 +188,7 @@ export interface RuntimeInput {
      * Services interface for tool execution (Canon §4.15)
      * Runtimes use these services instead of direct infrastructure access.
      */
-    services: {
-        getAvailableTools(): Promise<string[]>;
-        executeTool(toolId: string, params: any): Promise<any>;
-        getToolDefinition(toolId: string): Promise<any>;
-        isAuthorized(toolId: string): Promise<boolean>;
-    };
+    services: RuntimeServices;
 }
 
 /**

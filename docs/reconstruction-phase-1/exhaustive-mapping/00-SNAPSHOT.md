@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 25/03/2026, 12:46
+**Última Actualización:** 26/03/2026, 17:20
 
 ---
 
@@ -29,22 +29,22 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📈 **MÉTRICAS PRINCIPALES**
 
 ### **Calidad General**
-- **Score Promedio:** 49.3%
-- **Índice de Confianza:** 93.0%
-- **Total Documentos Analizados:** 371
+- **Score Promedio:** 49.9%
+- **Índice de Confianza:** 93.2%
+- **Total Documentos Analizados:** 381
 
 ### **Cobertura del Sistema**
 - **Cobertura UI:** 98.8% (161/163)
-- **Cobertura Backend:** 100.0% (174/174)
+- **Cobertura Backend:** 97.4% (184/189)
 
 ---
 
 ## 🔍 **ANÁLISIS POR ESTADOS**
 
 ### **Documentos Estables (Completos)**
-- **Cantidad:** 347
-- **Porcentaje del Total:** 93.5%
-- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDataAuditPanel.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountOrphanExplorer.md, AccountsSection.md (+337 más)
+- **Cantidad:** 357
+- **Porcentaje del Total:** 93.7%
+- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDataAuditPanel.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountOrphanExplorer.md, AccountsSection.md (+347 más)
 
 ### **Documentos en Revisión (Con Dudas)**
 - **Cantidad:** 2
@@ -61,10 +61,14 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🚨 **COMPONENTES SIN DOCUMENTAR**
 
 ### **Backend Crítico**
-- **Total:** 0
-- **Porcentaje:** 0.0%
+- **Total:** 5
+- **Porcentaje:** 2.6%
 - **Lista Prioritaria:**
-- 
+- services/capability-extra-instructions.service.ts
+- services/capability-instruction.service.ts
+- services/capability-openai-tool-response.service.ts
+- services/runtime-composition.service.ts
+- services/runtime-selection.service.ts
 
 ### **UI Components**
 - **Total:** 2
@@ -96,13 +100,13 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📊 **ANÁLISIS MATEMÁTICO**
 
 ### **Distribución por Tipo**
-- **Core/Subsystem:** 174 documentos
+- **Core/Subsystem:** 184 documentos
 - **Smart Components:** 161 documentos  
 - **UI Components:** 161 documentos
 
 ### **Eficiencia de Documentación**
 - **Documentos por Día:** Calculado en tiempo real
-- **Tasa de Completitud:** 93.5%
+- **Tasa de Completitud:** 93.7%
 - **Tiempo Promedio por Documento:** Variable según complejidad
 
 ---
@@ -110,22 +114,22 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🎯 **RECOMENDACIONES PARA LA IA**
 
 ### **Prioridades Inmediatas**
-1. **Documentar Backend:** Los 0 componentes sin documentación
+1. **Documentar Backend:** Los 5 componentes sin documentación
 2. **Resolver Dudas:** Los 2 documentos con preguntas técnicas
 3. **Completar WIP:** Los 1 documentos incompletos
 
 ### **Estrategia Sugerida**
-1. **Foco en Backend:** 100.0% de cobertura necesita mejora
+1. **Foco en Backend:** 97.4% de cobertura necesita mejora
 2. **Revisión Técnica:** Resolver dudas en 2 documentos
-3. **Mantenimiento:** Mantener 49.3% de calidad promedio
+3. **Mantenimiento:** Mantener 49.9% de calidad promedio
 
 ---
 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 25/3/2026
-- **Cambios:** Actualizado con 371 documentos analizados
+- **Fecha:** 26/3/2026
+- **Cambios:** Actualizado con 381 documentos analizados
 - **Impacto:** 7 errores críticos detectados
 
 ### **Tendencias**
@@ -141,7 +145,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ### **Consistencia de Datos**
 - **Validación UI:** ✅ Válido
 - **Validación Backend:** ✅ Válido
-- **Detalles Genuinos:** UI [Refs/Real]: 161/163 (Huérfanos: 0) | Backend [Refs/Real]: 174/174 (Huérfanos: 0)
+- **Detalles Genuinos:** UI [Refs/Real]: 161/163 (Huérfanos: 0) | Backend [Refs/Real]: 184/189 (Huérfanos: 0)
 
 ---
 
@@ -163,9 +167,9 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🔧 **METADATOS DEL SISTEMA**
 
 - **Total Componentes UI:** 163
-- **Total Componentes Backend:** 174
-- **Ratio Documentación/Componente:** 110.1
-- **Eficiencia del Sistema:** 97.3%
+- **Total Componentes Backend:** 189
+- **Ratio Documentación/Componente:** 108.2
+- **Eficiencia del Sistema:** 96.4%
 
 ---
 
@@ -174,7 +178,7 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 
 ```markdown
 Basado en el Snapshot:
-- Cobertura Backend: 100.0%
+- Cobertura Backend: 97.4%
 - Errores Críticos: 7
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```

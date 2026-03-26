@@ -43,6 +43,11 @@ La regla principal es:
   - future chat tools
   - conectores externos
 
+- **La adopción en runtimes ocurre después de consolidar la plataforma común**
+  - primero se cierra contrato, registro, offer y mediación compartida
+  - recién después se adapta `asistentes-local`, `asistentes-openai` o futuros runtimes para consumir esa base
+  - los runtimes sirven como referencia de extracción mientras la plataforma siga en consolidación
+
 - **Ningún runtime ejecuta side effects externos directamente**
   - el runtime decide
   - la plataforma media la ejecución mediante `ExecutionAction[]`

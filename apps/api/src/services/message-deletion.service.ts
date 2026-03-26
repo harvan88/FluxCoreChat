@@ -353,12 +353,17 @@ class MessageDeletionService {
       conditions.push(lt(messages.createdAt, cursor));
     }
 
-    return await db
+    const { desc } = await import('drizzle-orm');
+
+    // 🔧 FIX: Obtener los N más recientes (DESC) y luego invertir.
+    const rows = await db
       .select()
       .from(messages)
       .where(and(...conditions))
-      .orderBy(messages.createdAt)
+      .orderBy(desc(messages.createdAt))
       .limit(limit);
+
+    return rows.reverse(); // Invertir para entrega cronológica
   }
 
   /**

@@ -53,7 +53,7 @@ JWT_EXPIRES_IN=7d
 CORS_ORIGIN=https://your-domain.com
 
 # Groq AI (opcional)
-GROQ_API_KEY=gsk_xxxxx
+GROQ_API_KEY=[REDACTED]
 
 # WhatsApp Business (opcional)
 WHATSAPP_PHONE_NUMBER_ID=123456789

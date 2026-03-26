@@ -104,7 +104,6 @@ export * from './fluxcore-account-policies';
 export { fluxcoreOutbox, type FluxCoreOutbox, type NewFluxCoreOutbox } from './fluxcore-outbox';
 export { fluxcoreProjectorCursors, type FluxCoreProjectorCursors, type NewFluxCoreProjectorCursors } from './fluxcore-projector-cursors';
 export { fluxcoreProjectorErrors, type FluxCoreProjectorErrors, type NewFluxCoreProjectorErrors } from './fluxcore-projector-errors';
-export * from './fluxcore-cognition-queue';
 export { fluxcoreActionAudit, type FluxcoreActionAudit, type NewFluxcoreActionAudit } from './fluxcore-action-audit';
 
 // Ontología de Identidad (Projector Space)

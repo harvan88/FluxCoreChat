@@ -8,32 +8,33 @@ layers:
   discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
   connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "ConversationService, MessageService, AccountService, ChatCoreWebchatGateway" }
   subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "API de Ciclo de Vida de Conversaciones" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Conversation listing with account filtering, Message retrieval with cursor-pagination, Visitor conversion to real relationship, Chat clearing (actor-based), Conversation archival/soft-delete" }
+  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Conversation listing with account filtering, Message retrieval with cursor-pagination, Visitor conversion to real relationship, Pagination fix" }
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # ⚙️ Conversations Routes
 
 ## 🎯 Propósito
-Las `Conversations Routes` son el núcleo de la navegación en FluxCore. Gestionan el ciclo de vida de los hilos de chat, desde que se inician (por un humano o un visitante anónimo) hasta que se archivan o se eliminan, controlando la visibilidad de los mensajes para cada participante.
+Las `Conversations Routes` gestionan el ciclo de vida de los hilos de chat, desde que se inician hasta que se archivan o se eliminan, controlando la visibilidad de los mensajes para cada participante.
 
-## 🚥 Navegación Eficiente
--   **Cursor-Based Pagination**: El endpoint de mensajes utiliza un cursor temporal para cargar el historial, permitiendo un scroll infinito suave y evitando el rendimiento degradado de los offsets tradicionales.
--   **Filtrado por Cuenta**: Soporta el modo multi-cuenta, permitiendo listar conversaciones de una cuenta específica o de todas las cuentas pertenecientes al usuario.
+## 🚥 Navegación y Paginación (Fix v8.3)
+Implementa un sistema de **Cursor-Based Pagination** para el historial de mensajes:
+-   **Endpoint**: `GET /api/conversations/:id/messages`
+-   **Lógica Corregida**: Se ajustó el valor del `nextCursor` devuelto en la respuesta. 
+    - **Antes**: Apuntaba al mensaje más reciente del batch recibido.
+    - **Ahora**: Apunta al mensaje más antiguo (`messages[0].createdAt`), permitiendo que el scroll infinito cargue correctamente los bloques de mensajes anteriores en el tiempo.
 
 ## 🧬 Conversión de Visitantes
-Incluye el endpoint crítico `/convert-visitor`, que maneja la transición de un usuario que chatea anónimamente en la web hacia una identidad real autenticada. Este proceso certifica el vínculo de identidad y migra el historial previo hacia la nueva relación soberana.
+Maneja la transición de un usuario anónimo (webflow) hacia una identidad autenticada, migrando el historial previo y certificando el nuevo vínculo de identidad soberana.
 
 ## 🛡️ Privacidad y Visibilidad
-Implementa una lógica de visibilidad basada en el actor:
--   **Clear Chat**: Permite ocultar el historial para un participante sin afectar lo que ve el otro (borrado asimétrico).
--   **Status Checks**: Valida en cada paso que el usuario tiene acceso legítimo a la conversación solicitada, ya sea como propietario o como participante activo.
+-   **Status Checks**: Valida en cada paso que el usuario tiene acceso legítimo.
+-   **Asymmetric Clear**: Permite que un actor oculte su historial individual sin afectar al otro usuario de la misma conversación (mediante la integración con `MessageDeletionService`).
 
 ## 💡 Ejemplo de Uso
 ```typescript
-// Registrar rutas en el servidor Express/Hono
-import { setupRoutes } from './conversations.routes';
+import { conversationsRouter } from './routes/conversations.routes';
 
-// Las rutas se registran automáticamente al iniciar el servidor
-app.use('/api/conversations', router);
+// Endpoint típico de mensajes con cursor
+// GET /api/conversations/:id/messages?limit=50&cursor=2024-03-26T12:00:00Z
 ```

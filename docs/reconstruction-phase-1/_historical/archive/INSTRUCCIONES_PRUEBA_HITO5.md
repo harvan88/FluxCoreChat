@@ -17,7 +17,7 @@
 
 ### 1.2 Configurar Variable de Entorno
 ```powershell
-$env:GROQ_API_KEY = "gsk_your_api_key_here"
+$env:GROQ_API_KEY = "[REDACTED]"
 ```
 
 > **Nota**: Sin API Key, las pruebas funcionan pero no generan respuestas reales.

@@ -18,7 +18,8 @@
 
 import OpenAI from 'openai';
 import type { AssistantModelConfig } from '@fluxcore/db';
-import { aiToolService } from './ai-tools.service';
+import { capabilityOpenAICompatService } from './capability-openai-compat.service';
+import { ExecutionAction } from '../core/fluxcore-types';
 
 let openaiClient: OpenAI | null = null;
 
@@ -208,7 +209,7 @@ export async function createOpenAIAssistant(params: CreateOpenAIAssistantParams)
   }
 
   // Add functional tools
-  const coreTools = aiToolService.getTools();
+  const coreTools = capabilityOpenAICompatService.listTools();
   coreTools.forEach(t => tools.push(t));
 
   const assistant = await client.beta.assistants.create({
@@ -268,7 +269,7 @@ export async function updateOpenAIAssistant(params: UpdateOpenAIAssistantParams)
     }
 
     // Maintain functional tools
-    const coreTools = aiToolService.getTools();
+    const coreTools = capabilityOpenAICompatService.listTools();
     coreTools.forEach(t => tools.push(t));
 
     if (tools.length > 0) {
@@ -277,7 +278,7 @@ export async function updateOpenAIAssistant(params: UpdateOpenAIAssistantParams)
   } else {
     // Even if vector stores aren't updated, ensure tools are present
     const tools: any[] = [];
-    const coreTools = aiToolService.getTools();
+    const coreTools = capabilityOpenAICompatService.listTools();
     coreTools.forEach(t => tools.push(t));
     if (tools.length > 0) updateData.tools = tools;
   }
@@ -583,6 +584,8 @@ export interface CreateThreadAndRunParams {
   // Context for tool execution
   accountId: string;
   conversationId: string;
+  vectorStoreIds?: string[];
+  authorizedTemplates?: string[];
 }
 
 export interface AssistantRunResult {
@@ -596,6 +599,7 @@ export interface AssistantRunResult {
   threadId?: string;
   runId?: string;
   error?: string;
+  actions?: ExecutionAction[];
 }
 
 /**
@@ -654,13 +658,19 @@ export async function runAssistantWithMessages(
       run.id,
       60000,
       params.traceId,
-      { accountId: params.accountId, conversationId: params.conversationId } // Context for tools
+      {
+        accountId: params.accountId,
+        conversationId: params.conversationId,
+        vectorStoreIds: params.vectorStoreIds,
+        authorizedTemplates: params.authorizedTemplates,
+      } // Context for tools
     );
 
     console.log(`${tracePrefix} Run finished`, {
       threadId: thread.id,
       runId: run.id,
       status: completedRun?.status,
+      actionsCount: completedRun?.actions?.length || 0,
       elapsedMs: Date.now() - start,
       lastError: completedRun?.last_error?.message,
     });
@@ -672,6 +682,7 @@ export async function runAssistantWithMessages(
         threadId: thread.id,
         runId: run.id,
         error: `Run terminó con estado: ${completedRun.status}${completedRun.last_error ? ` - ${completedRun.last_error.message}` : ''}`,
+        actions: completedRun.actions || [],
       };
     }
 
@@ -712,6 +723,7 @@ export async function runAssistantWithMessages(
       content: responseContent,
       threadId: thread.id,
       runId: run.id,
+      actions: completedRun.actions || [],
       usage: completedRun.usage ? {
         promptTokens: completedRun.usage.prompt_tokens,
         completionTokens: completedRun.usage.completion_tokens,
@@ -741,13 +753,19 @@ async function waitForRunCompletion(
   runId: string,
   maxWaitMs: number = 60000,
   traceId?: string,
-  context?: { accountId: string; conversationId: string }
+  context?: {
+    accountId: string;
+    conversationId: string;
+    vectorStoreIds?: string[];
+    authorizedTemplates?: string[];
+  }
 ): Promise<any> {
   const tracePrefix = traceId ? `[openai-sync][${traceId}]` : '[openai-sync]';
   const startTime = Date.now();
   let pollInterval = 500; // Empezar con 500ms
   const maxPollInterval = 2000; // Máximo 2 segundos
   let polls = 0;
+  const actions: ExecutionAction[] = [];
 
   while (Date.now() - startTime < maxWaitMs) {
     let run: any;
@@ -767,9 +785,10 @@ async function waitForRunCompletion(
         runId,
         status: run.status,
         polls,
+        actionsCount: actions.length,
         elapsedMs: Date.now() - startTime,
       });
-      return run;
+      return { ...run, actions };
     }
 
     // Handle required actions (Tool Calls)
@@ -783,11 +802,14 @@ async function waitForRunCompletion(
 
       if (context) {
         for (const toolCall of toolCalls) {
-          const output = await aiToolService.executeTool(toolCall, context);
+          const { result, actions: toolActions } = await capabilityOpenAICompatService.executeToolCall(toolCall, context);
           toolOutputs.push({
             tool_call_id: toolCall.id,
-            output
+            output: result
           });
+          if (toolActions.length > 0) {
+            actions.push(...toolActions);
+          }
         }
 
         if (toolOutputs.length > 0) {

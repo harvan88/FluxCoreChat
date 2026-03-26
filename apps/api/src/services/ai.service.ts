@@ -140,46 +140,17 @@ class AIService {
         // Inject runtime services (replaces HTTP self-calls with direct in-process calls)
         if (typeof ext?.setRuntimeServices === 'function') {
           const { fluxcoreService } = await import('./fluxcore.service');
-          const { retrievalService } = await import('./retrieval.service');
-          const { aiTemplateService } = await import('./ai-template.service');
+          const { createCapabilityDeps } = await import('./capability-deps-factory.service');
 
           ext.setRuntimeServices({
             resolveActiveAssistant: (accountId: string) =>
               fluxcoreService.resolveActiveAssistant(accountId),
-
-            fetchRagContext: async (accountId: string, query: string, vectorStoreIds?: string[]) => {
-              let vsIds = vectorStoreIds;
-              if (!vsIds || vsIds.length === 0) {
+            ...createCapabilityDeps({
+              resolveVectorStoreIds: async (accountId: string) => {
                 const composition = await fluxcoreService.resolveActiveAssistant(accountId);
-                if (composition?.vectorStores) {
-                  vsIds = composition.vectorStores.map((vs: any) => vs.id);
-                }
-              }
-              if (!vsIds || vsIds.length === 0) return null;
-              const result = await retrievalService.buildContext(query, vsIds, accountId, { topK: 5, maxTokens: 2000 });
-              if (!result) return null;
-              return {
-                context: result.context || '',
-                sources: result.sources || [],
-                totalTokens: result.totalTokens || 0,
-                chunksUsed: result.chunksUsed || 0,
-                vectorStoreIds: vsIds,
-              };
-            },
-
-            listTemplates: async (accountId: string) => {
-              const templates = await aiTemplateService.getAvailableTemplates(accountId);
-              return templates.map((t: any) => ({
-                id: t.id,
-                name: t.name,
-                category: t.category,
-                variables: t.variables?.map((v: any) => v.name) || [],
-                instructions: t.aiUsageInstructions || null,
-              }));
-            },
-
-            sendTemplate: (params: any) =>
-              aiTemplateService.sendAuthorizedTemplate(params),
+                return composition?.vectorStores?.map((vs: any) => vs.id);
+              },
+            }),
           });
         }
 

@@ -269,6 +269,7 @@ export class ChatProjector extends BaseProjector {
                 coreEventBus.emit('telemetry:pipeline_step', {
                     messageId: String(signal.sequenceNumber),
                     conversationId,
+                    accountId,
                     step: 'proyeccion',
                     status: 'success',
                     timestamp: new Date().toISOString()

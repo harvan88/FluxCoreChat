@@ -22,10 +22,12 @@ import type { ConversationMessage } from '@fluxcore/db';
 import { eq, desc } from 'drizzle-orm';
 import type { RuntimeInput, ExecutionAction } from '../../core/fluxcore-types';
 import { fluxPolicyContextService } from '../flux-policy-context.service';
+import { runtimeSelectionService } from '../runtime-selection.service';
+import { runtimeCompositionService } from '../runtime-composition.service';
 import { runtimeGateway } from './runtime-gateway.service';
 import { actionExecutor } from './action-executor.service';
 import { accountLabelService } from '../account-label.service';
-import { createFluxiRuntimeConfig } from './fluxi-dependency-injection';
+import { runtimeInputFactoryService } from './runtime-input-factory.service';
 
 const MAX_HISTORY_MESSAGES = 50;
 
@@ -82,29 +84,33 @@ class CognitiveDispatcherService {
             const contactId = conversation?.relationshipId || conversation?.visitorToken || '';
             console.log(`[CognitiveDispatcher] 🎯 ContactId resolved: ${contactId} (relationshipId: ${conversation?.relationshipId}, visitorToken: ${conversation?.visitorToken})`);
             
-            const { policyContext, runtimeConfig } = await fluxPolicyContextService.resolveContext(
+            const policyContext = await fluxPolicyContextService.resolvePolicyContext({
                 accountId,
+                conversationId,
                 contactId,
-                (conversation as any)?.channel || 'web'
-            );
-            policyContext.conversationId = conversationId;
+                channel: (conversation as any)?.channel || 'web',
+            });
             const accountLabel = await accountLabelService.getLabel(accountId);
+            const runtimeSelection = await runtimeSelectionService.resolve(accountId);
             console.log(`[CognitiveDispatcher] ✓ Context resolved: mode=${policyContext.mode}`);
+            console.log(`[CognitiveDispatcher] ✓ RuntimeSelection resolved: strategy=${runtimeSelection.strategy} state=${runtimeSelection.state} activeRuntimeId=${runtimeSelection.activeRuntimeId}`);
 
             // 3. Automation mode gate (governed by PolicyContext)
             console.log(`[FluxPipeline] 📋 POLICY mode=${policyContext.mode} account=${accountLabel} (${accountId.slice(0, 7)})`);
-            if (policyContext.mode === 'off') {
-                console.log(`[FluxPipeline] ⛔ OFF   account=${accountLabel} (${accountId.slice(0, 7)}) → automation disabled`);
+            if (policyContext.mode === 'off' || runtimeSelection.state === 'inactive') {
+                const reason = policyContext.mode === 'off'
+                    ? 'Automation mode is off'
+                    : (runtimeSelection.reason || 'Runtime strategy is inactive');
+                console.log(`[FluxPipeline] ⛔ STOP  account=${accountLabel} (${accountId.slice(0, 7)}) → ${reason}`);
                 // CRITICAL: Close the turn so it doesn't block future messages
                 await actionExecutor.closeTurn(turnId, accountId);
                 return {
-                    actions: [{ type: 'no_action', reason: 'Automation mode is off' }],
+                    actions: [{ type: 'no_action', reason }],
                     runtimeUsed: 'none',
                     durationMs: Date.now() - startTime,
                     success: true,
                 };
             }
-            console.log(`[FluxPipeline] 🤖 ASSIST id=${runtimeConfig.assistantId?.slice(0, 8) ?? 'DEFAULT'} name="${runtimeConfig.assistantName ?? 'fallback'}" model=${runtimeConfig.provider ?? 'groq'}/${runtimeConfig.model ?? 'llama-3.1-8b-instant'} instr=${runtimeConfig.instructions ? Math.round(runtimeConfig.instructions.length / 4) + ' tkn' : 'NONE'} rag=${runtimeConfig.vectorStoreIds?.length ?? 0}`);
 
             // 5. Fetch + convert conversation history to semantic ConversationMessage[]
             const rawHistory = await db
@@ -150,74 +156,24 @@ class CognitiveDispatcherService {
 
             try {
                 // 7. Build RuntimeInput (Canon §4.5: complete pre-resolved context)
-                // CORRECTO: Respetar selección del usuario desde RuntimeSwitcher
-                const { runtimeConfigService } = await import('../runtime-config.service');
-                const runtimeConfig = await runtimeConfigService.getRuntime(accountId);
-                const userSelection = runtimeConfig.activeRuntimeId;
-                
-                // Mapeo CORRECTO según selección del usuario
-                let runtimeId: string;
-                if (userSelection === '@fluxcore/fluxi') {
-                    // Usuario seleccionó FLUXI → runtime directo
-                    runtimeId = '@fluxcore/fluxi';
-                } else if (userSelection === '@fluxcore/asistentes') {
-                    // Usuario seleccionó ASISTENTES → usar asistente activo
-                    const { fluxcoreService } = await import('../fluxcore.service');
-                    const activeAssistant = await fluxcoreService.resolveActiveAssistant(accountId);
-                    if (activeAssistant?.assistant?.runtime) {
-                        const runtime = activeAssistant.assistant.runtime;
-                        const map: Record<string, string> = {
-                            'local': 'asistentes-local',
-                            'openai': 'asistentes-openai',
-                        };
-                        runtimeId = map[runtime] ?? runtime;
-                    } else {
-                        runtimeId = 'asistentes-local'; // Default seguro
-                    }
-                } else {
-                    // Default para cualquier otro caso
-                    runtimeId = 'asistentes-local';
-                }
-                
-                console.log(`[CognitiveDispatcher] User selection: ${userSelection} → Runtime: ${runtimeId}`);
-                
-                // 🔧 FIX: Enriquecer runtimeConfig con datos de ExecutionPlan para trazas
-                let enrichedRuntimeConfig: any = runtimeConfig;
-                if (runtimeId !== '@fluxcore/fluxi') {
-                    // Para runtimes de asistentes, obtener model/provider del ExecutionPlan
-                    try {
-                        const { resolveExecutionPlan } = await import('../ai-execution-plan.service');
-                        const executionPlan = await resolveExecutionPlan(accountId, conversationId);
-                        if (executionPlan.canExecute) {
-                            enrichedRuntimeConfig = {
-                                ...runtimeConfig,
-                                runtimeId,
-                                model: executionPlan.model,
-                                provider: executionPlan.provider,
-                            };
-                            console.log(`[CognitiveDispatcher] ✅ RuntimeConfig enriched: model=${executionPlan.model}, provider=${executionPlan.provider}`);
-                        }
-                    } catch (error) {
-                        console.warn(`[CognitiveDispatcher] ⚠️ Could not enrich runtimeConfig with ExecutionPlan:`, error);
-                    }
-                } else {
-                    // Para FLUXI, añadir runtimeId directamente
-                    enrichedRuntimeConfig = {
-                        ...runtimeConfig,
-                        runtimeId,
-                        model: 'fluxi',
-                        provider: 'fluxi',
-                    };
-                    console.log(`[CognitiveDispatcher] ✅ FLUXI RuntimeConfig enriched: runtimeId=${runtimeId}`);
-                }
-                
-                const input: RuntimeInput = {
+                const { runtimeId, runtimeConfig: enrichedRuntimeConfig } = await runtimeCompositionService.resolve({
+                    accountId,
+                    conversationId,
+                    selection: runtimeSelection,
+                });
+
+                console.log(`[CognitiveDispatcher] Runtime selection: ${runtimeSelection.activeRuntimeId} → Runtime: ${runtimeId}`);
+                console.log(`[FluxPipeline] 🤖 ASSIST id=${enrichedRuntimeConfig.assistantId?.slice(0, 8) ?? 'DEFAULT'} name="${enrichedRuntimeConfig.assistantName ?? 'fallback'}" model=${enrichedRuntimeConfig.provider ?? 'groq'}/${enrichedRuntimeConfig.model ?? 'llama-3.1-8b-instant'} instr=${enrichedRuntimeConfig.instructions ? Math.round(enrichedRuntimeConfig.instructions.length / 4) + ' tkn' : 'NONE'} rag=${enrichedRuntimeConfig.vectorStoreIds?.length ?? 0}`);
+
+                const input: RuntimeInput = await runtimeInputFactoryService.build({
+                    accountId,
+                    conversationId,
+                    runtimeId,
                     policyContext,
-                    runtimeConfig: runtimeId === '@fluxcore/fluxi' 
-                        ? { ...enrichedRuntimeConfig, ...createFluxiRuntimeConfig(accountId) }
-                        : enrichedRuntimeConfig,
+                    runtimeConfig: enrichedRuntimeConfig,
                     conversationHistory,
-                };
+                    lastUserMessage: lastMsg?.content,
+                });
 
                 // 8. Invoke runtime via gateway
                 console.log(`[CognitiveDispatcher] Step 8: Invoking runtime '${runtimeId}'...`);
@@ -269,9 +225,10 @@ class CognitiveDispatcherService {
                         coreEventBus.emit('telemetry:pipeline_step', {
                             messageId: String(params.lastSignalSeq || turnId),
                             conversationId,
+                            accountId,
                             step: 'dispatcher',
                             status: 'success',
-                            metadata: { runtimeId, mode: 'suggest' },
+                            metadata: { runtimeId },
                             timestamp: new Date().toISOString()
                         });
                     } catch (e) {}
@@ -331,6 +288,7 @@ class CognitiveDispatcherService {
                     coreEventBus.emit('telemetry:pipeline_step', {
                         messageId: String(params.lastSignalSeq || turnId),
                         conversationId,
+                        accountId,
                         step: 'dispatcher',
                         status: 'success',
                         metadata: { runtimeId },

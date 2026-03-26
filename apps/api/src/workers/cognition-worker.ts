@@ -155,6 +155,7 @@ class CognitionWorkerService {
             coreEventBus.emit('telemetry:pipeline_step', {
                 messageId: String(entry.last_signal_seq),
                 conversationId: entry.conversation_id,
+                accountId: entry.account_id,
                 step: 'worker',
                 status: 'processing',
                 timestamp: new Date().toISOString()
@@ -206,6 +207,7 @@ class CognitionWorkerService {
                     coreEventBus.emit('telemetry:pipeline_step', {
                         messageId: String(entry.last_signal_seq),
                         conversationId: entry.conversation_id,
+                        accountId: entry.account_id,
                         step: 'worker',
                         status: 'success',
                         timestamp: new Date().toISOString()
@@ -239,6 +241,7 @@ class CognitionWorkerService {
                     coreEventBus.emit('telemetry:pipeline_step', {
                         messageId: String(entry.last_signal_seq),
                         conversationId: entry.conversation_id,
+                        accountId: entry.account_id,
                         step: 'worker',
                         status: 'error',
                         metadata: { errorDetail: errorMsg },

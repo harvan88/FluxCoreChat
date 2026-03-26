@@ -137,6 +137,7 @@ export class ChatCoreGatewayService {
                 coreEventBus.emit('telemetry:pipeline_step', {
                     messageId: seq.toString(),
                     conversationId: params.meta.conversationId || 'unknown',
+                    accountId: params.accountId,
                     step: 'ingreso',
                     status: 'success',
                     timestamp: new Date().toISOString()

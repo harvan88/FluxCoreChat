@@ -172,8 +172,8 @@ export const conversationsRoutes = new Elysia({ prefix: '/conversations' })
           viewerRole // 🔥 Incluir viewerRole para debug
         }));
         
-        // 🆕 Devolver el cursor del último mensaje para la siguiente página
-        const nextCursor = messagesWithPerspective.length > 0 ? messagesWithPerspective[messagesWithPerspective.length - 1].createdAt : null;
+        // 🔧 FIX: Cursor para "cargar más antiguos" debe ser el createdAt del primer mensaje (más antiguo del batch)
+        const nextCursor = messagesWithPerspective.length > 0 ? messagesWithPerspective[0].createdAt : null;
         
         return { 
           success: true, 

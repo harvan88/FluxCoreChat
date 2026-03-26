@@ -79,7 +79,7 @@ POST   /ai/suggestion/:id/edit       - Editar y aprobar
 ### Variables de Entorno
 
 ```env
-GROQ_API_KEY=gsk_your_api_key_here
+GROQ_API_KEY=[REDACTED]
 ```
 
 ### Configuración por Cuenta

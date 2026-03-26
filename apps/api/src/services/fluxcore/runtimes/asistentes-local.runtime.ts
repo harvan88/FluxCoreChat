@@ -17,64 +17,14 @@
  */
 
 import type { RuntimeAdapter, RuntimeInput, ExecutionAction } from '../../../core/fluxcore-types';
-import type { LLMMessage, LLMTool, LLMToolCall } from '../llm-client.service';
+import type { LLMMessage } from '../llm-client.service';
+import { createCapabilityDeps } from '../../capability-deps-factory.service';
+import { capabilityLocalRuntimeToolsService } from '../../capability-local-runtime-tools.service';
 import { promptBuilder } from '../prompt-builder.service';
 import { llmClient } from '../llm-client.service';
 
 const MAX_TOOL_ROUNDS = 2;
-const API_PORT = process.env.PORT || 3000;
-
-// ─── Tool definitions ───────────────────────────────────────────────────────
-
-const SEARCH_KNOWLEDGE_TOOL: LLMTool = {
-    type: 'function',
-    function: {
-        name: 'search_knowledge',
-        description: 'Search the knowledge base for relevant information to answer the user\'s question. Use this when the user asks something that may be in the business\'s documentation, catalog, or FAQs.',
-        parameters: {
-            type: 'object',
-            properties: {
-                query: {
-                    type: 'string',
-                    description: 'The search query, formulated as a question or topic based on the user\'s message.',
-                },
-            },
-            required: ['query'],
-        },
-    },
-};
-
-const SEND_TEMPLATE_TOOL: LLMTool = {
-    type: 'function',
-    function: {
-        name: 'send_template',
-        description: 'Send a predefined message template to the user instead of a free-text response. Use this when a greeting, promotional, or procedural template is more appropriate than a custom response.',
-        parameters: {
-            type: 'object',
-            properties: {
-                templateId: {
-                    type: 'string',
-                    description: 'The ID of the template to send.',
-                },
-                variables: {
-                    type: 'object',
-                    description: 'Optional variable values for the template placeholders.',
-                    additionalProperties: { type: 'string' },
-                },
-            },
-            required: ['templateId'],
-        },
-    },
-};
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-interface TemplateAction {
-    type: 'send_template';
-    templateId: string;
-    conversationId: string;
-    variables: Record<string, string>;
-}
+const ASISTENTES_LOCAL_TOOL_NAMES = ['search_knowledge', 'send_template'];
 
 // ─── Runtime ────────────────────────────────────────────────────────────────
 
@@ -83,7 +33,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
     readonly displayName = 'Asistentes Local (v8.3)';
 
     async handleMessage(input: RuntimeInput): Promise<ExecutionAction[]> {
-        const { policyContext, runtimeConfig, conversationHistory } = input;
+        const { policyContext, authorizedContext, runtimeConfig, conversationHistory } = input;
 
         // 1. Guard: mode gate
         if (policyContext.mode === 'off') {
@@ -101,22 +51,27 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         const model = runtimeConfig.model ?? 'llama-3.1-8b-instant';
         const maxTokens = runtimeConfig.maxTokens ?? 1024;
         const temperature = runtimeConfig.temperature ?? 0.7;
-        const hasRAG = (runtimeConfig.vectorStoreIds?.length ?? 0) > 0;
-        const hasTemplates = policyContext.authorizedTemplates.length > 0;
 
         // 3. Build prompt
         const { systemPrompt, messages } = promptBuilder.build({
             policyContext,
+            authorizedContext,
             runtimeConfig,
             conversationHistory,
         });
 
         // 4. Decide which tools to offer
-        const tools: LLMTool[] = [];
-        if (hasRAG) tools.push(SEARCH_KNOWLEDGE_TOOL);
-        if (hasTemplates) tools.push(SEND_TEMPLATE_TOOL);
+        const tools = capabilityLocalRuntimeToolsService.listTools({
+            runtimeConfig,
+            authorizedContext,
+            allowedToolNames: ASISTENTES_LOCAL_TOOL_NAMES,
+        });
 
-        console.log(`[AsistentesLocal] → ${provider}/${model} | RAG:${hasRAG} Templates:${hasTemplates} | account:${policyContext.accountId}`);
+        const capabilityExecutionDeps = createCapabilityDeps({
+            enableTemplateSend: false,
+        });
+
+        console.log(`[AsistentesLocal] → ${provider}/${model} | Tools:${tools.length} | account:${authorizedContext.accountId}`);
 
         // 5. Tool call loop (max MAX_TOOL_ROUNDS rounds)
         let currentMessages: LLMMessage[] = [
@@ -163,12 +118,19 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
                 // Execute each tool call
                 for (const toolCall of result.toolCalls) {
-                    const toolResult = await this.executeTool(toolCall, {
-                        accountId: policyContext.accountId,
-                        conversationId: policyContext.conversationId,
-                        vectorStoreIds: runtimeConfig.vectorStoreIds,
-                        authorizedTemplates: policyContext.authorizedTemplates,
-                        userMessage: lastMessage.content,
+                    const toolResult = await capabilityLocalRuntimeToolsService.executeTool({
+                        toolCall,
+                        runtimeConfig,
+                        authorizedContext,
+                        allowedToolNames: ASISTENTES_LOCAL_TOOL_NAMES,
+                        deps: capabilityExecutionDeps,
+                        executionContext: {
+                            accountId: authorizedContext.accountId,
+                            conversationId: authorizedContext.conversationId,
+                            vectorStoreIds: runtimeConfig.vectorStoreIds,
+                            authorizedTemplates: authorizedContext.authorizedTemplates,
+                            userMessage: lastMessage.content,
+                        },
                     });
 
                     // If send_template was called → return immediately as action
@@ -194,85 +156,6 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             console.error(`[AsistentesLocal] ❌ LLM call failed:`, error.message);
             return [{ type: 'no_action', reason: `LLM error: ${error.message}` }];
         }
-    }
-
-    // ─── Tool executors ──────────────────────────────────────────────────────
-
-    private async executeTool(
-        toolCall: LLMToolCall,
-        ctx: {
-            accountId: string;
-            conversationId: string;
-            vectorStoreIds?: string[];
-            authorizedTemplates: string[];
-            userMessage: string;
-        }
-    ): Promise<{ content: string; templateAction?: TemplateAction }> {
-        const name = toolCall.function.name;
-        let args: Record<string, any> = {};
-        try { args = JSON.parse(toolCall.function.arguments); } catch { /* ignored */ }
-
-        if (name === 'search_knowledge') {
-            return this.executeSearchKnowledge(args.query ?? ctx.userMessage, ctx.accountId, ctx.vectorStoreIds);
-        }
-
-        if (name === 'send_template') {
-            return this.executeSendTemplate(args, ctx);
-        }
-
-        return { content: JSON.stringify({ error: `Unknown tool: ${name}` }) };
-    }
-
-    private async executeSearchKnowledge(
-        query: string,
-        accountId: string,
-        vectorStoreIds?: string[]
-    ): Promise<{ content: string }> {
-        try {
-            const response = await fetch(`http://localhost:${API_PORT}/fluxcore/runtime/rag-context`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accountId, query, vectorStoreIds, options: { topK: 5, maxTokens: 2000 } }),
-            });
-
-            if (!response.ok) {
-                return { content: JSON.stringify({ error: 'Knowledge base unavailable' }) };
-            }
-
-            const data = await response.json() as any;
-            if (data.success && data.data?.context) {
-                console.log(`[AsistentesLocal] RAG: ${data.data.chunksUsed ?? '?'} chunks for query: "${query}"`);
-                return { content: data.data.context };
-            }
-            return { content: JSON.stringify({ message: 'No relevant information found' }) };
-        } catch (err: any) {
-            console.warn(`[AsistentesLocal] RAG fetch failed:`, err.message);
-            return { content: JSON.stringify({ error: 'Knowledge base error' }) };
-        }
-    }
-
-    private async executeSendTemplate(
-        args: { templateId?: string; variables?: Record<string, string> },
-        ctx: { conversationId: string; authorizedTemplates: string[] }
-    ): Promise<{ content: string; templateAction?: TemplateAction }> {
-        const templateId = args.templateId;
-        if (!templateId) {
-            return { content: JSON.stringify({ error: 'templateId is required' }) };
-        }
-
-        if (!ctx.authorizedTemplates.includes(templateId)) {
-            return { content: JSON.stringify({ error: `Template ${templateId} is not authorized` }) };
-        }
-
-        return {
-            content: JSON.stringify({ status: 'queued', templateId }),
-            templateAction: {
-                type: 'send_template',
-                templateId,
-                conversationId: ctx.conversationId,
-                variables: args.variables ?? {},
-            },
-        };
     }
 }
 

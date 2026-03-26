@@ -6,7 +6,7 @@
  */
 
 import { runAssistantWithMessages } from '../../../apps/api/src/services/openai-sync.service';
-import { buildExtraInstructions } from '../../fluxcore-asistentes/src/prompt-utils';
+import { capabilityExtraInstructionsService } from '../../../apps/api/src/services/capability-extra-instructions.service';
 import type { FluxPolicyContext } from '@fluxcore/db';
 
 export interface MessageEvent {
@@ -89,7 +89,7 @@ export class OpenAIAssistantsRuntime {
 
         // Build consolidated system prompt (instructions + knowledge/tool directives)
         const hasKnowledgeBase = Array.isArray(composition.vectorStores) && composition.vectorStores.length > 0;
-        const extraInstructions = buildExtraInstructions({
+        const extraInstructions = capabilityExtraInstructionsService.buildExtraInstructions({
             instructions: composition.instructions,
             includeSearchKnowledge: hasKnowledgeBase,
         });
@@ -115,8 +115,8 @@ export class OpenAIAssistantsRuntime {
         const systemPromptText = systemPromptSections.join('\n\n');
 
         // Load tools from Host (via dynamic import for now, eventually via registry)
-        const { aiToolService: toolService } = await import('../../../apps/api/src/services/ai-tools.service');
-        const runtimeTools = toolService.getTools();
+        const { capabilityOpenAICompatService } = await import('../../../apps/api/src/services/capability-openai-compat.service');
+        const runtimeTools = capabilityOpenAICompatService.listTools();
 
         // Execute
         const result = await runAssistantWithMessages({

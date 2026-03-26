@@ -117,6 +117,7 @@ export class CognitionGatewayService {
                 coreEventBus.emit('telemetry:pipeline_step', {
                     messageId: String(params.triggerSignalId || seq),
                     conversationId: params.conversationId,
+                    accountId: params.accountId,
                     step: 'certificacion',
                     status: 'success',
                     metadata: { 

@@ -39,20 +39,30 @@ Incluye componentes presentacionales (`ui-component`) y componentes con lógica 
 
 ---
 
-## ⚙️ 2. Backend Landscape — Servicios y Rutas (180 docs)
+⚙️ 2. Backend Landscape — Servicios y Rutas (190+ docs)
 
 **Ubicación:** `02-backend-landscape/`
 **Nomenclatura:** `kebab-case.md` (basado en convención Node/Bun)
-**Estado:** Fase 2 completada (~95% de servicios y rutas mapeados).
+**Estado:** ✅ Fase 2 COMPLETADA y Consolidada (v8.3).
 
 ### Subsistemas Críticos Documentados:
+
 ```
 🤖 AI Response Pipeline (FluxCore)
 ├── cognitive-dispatcher.service.md
-├── flux-policy-context.service.md
+├── runtime-input-factory.service.md
 ├── runtime-gateway.service.md
 ├── action-executor.service.md
 └── cognition-worker.md
+
+🛠️ Capabilities Platform (v8.3 Canon)
+├── capability-registry.service.md
+├── capability-offer.service.md
+├── capability-translation.service.md
+├── capability-execution.service.md
+├── capability-deps-factory.service.md
+├── capability-argument-normalizer.service.md
+└── capability-openai-compat.service.md
 
 🧠 Kernel Architecture
 ├── kernel.md
@@ -60,10 +70,10 @@ Incluye componentes presentacionales (`ui-component`) y componentes con lógica 
 ├── chat-projector.md
 └── projector-runner.md
 
-🔌 Runtime Adapters
+🔌 Runtime Adapters (Consumidores)
 ├── fluxi.runtime.md
-├── asistentes-local.runtime.md
-└── asistentes-openai.runtime.md
+├── asistentes-local.runtime.md (Consumidor Caps)
+└── asistentes-openai.runtime.md (Consumidor Caps)
 ```
 
 ---

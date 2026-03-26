@@ -66,6 +66,7 @@ class RuntimeGatewayService {
                 coreEventBus.emit('telemetry:pipeline_step', {
                     messageId: String(triggerSignalId || input.policyContext.conversationId), // Reference ID
                     conversationId: input.policyContext.conversationId,
+                    accountId: input.policyContext.accountId,
                     step: 'runtime',
                     status: 'success',
                     metadata: { runtimeId, latencyMs: durationMs },
@@ -84,6 +85,7 @@ class RuntimeGatewayService {
                 coreEventBus.emit('telemetry:pipeline_step', {
                     messageId: String(triggerSignalId || input.policyContext.conversationId), // Reference ID
                     conversationId: input.policyContext.conversationId,
+                    accountId: input.policyContext.accountId,
                     step: 'runtime',
                     status: 'error',
                     metadata: { runtimeId, errorDetail: error.message, latencyMs: durationMs },

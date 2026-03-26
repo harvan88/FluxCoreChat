@@ -124,25 +124,42 @@ export class MessageCore {
 
         // 5. Notificar via WebSocket
         if (conversation.relationshipId) {
-          this.broadcastToRelationshipSubscribers(conversation.relationshipId, {
+          console.log(`[MessageCore] 🔍 DEBUGGING BROADCAST:`);
+          console.log(`  - envelope.senderAccountId: ${envelope.senderAccountId}`);
+          console.log(`  - envelope.targetAccountId: ${envelope.targetAccountId}`);
+          console.log(`  - message.id: ${message.id}`);
+          console.log(`  - message.senderAccountId: ${message.senderAccountId}`);
+          console.log(`  - message keys:`, Object.keys(message));
+          
+          const broadcastPayload = {
             type: 'message:new',
             data: {
               ...message,
+              // Sobrescribir explícitamente propiedades críticas
               conversationId: envelope.conversationId,
               senderAccountId: envelope.senderAccountId,
-              targetAccountId: envelope.targetAccountId, // 🔥 CRÍTICO: Incluir target para filtrado
+              targetAccountId: envelope.targetAccountId,
               content: envelope.content,
             },
+          };
+          
+          console.log(`[MessageCore] 📋 BROADCAST PAYLOAD:`, {
+            'data.senderAccountId': broadcastPayload.data.senderAccountId,
+            'data.targetAccountId': broadcastPayload.data.targetAccountId,
+            'data.id': broadcastPayload.data.id,
           });
+          
+          this.broadcastToRelationshipSubscribers(conversation.relationshipId, broadcastPayload);
         }
 
         this.broadcastToConversationSubscribers(envelope.conversationId, {
           type: 'message:new',
           data: {
             ...message,
+            // Sobrescribir explícitamente propiedades críticas
             conversationId: envelope.conversationId,
             senderAccountId: envelope.senderAccountId,
-            targetAccountId: envelope.targetAccountId, // 🔥 CRÍTICO: Incluir target para filtrado
+            targetAccountId: envelope.targetAccountId,
             content: envelope.content,
           },
         });
@@ -196,6 +213,7 @@ export class MessageCore {
           coreEventBus.emit('telemetry:pipeline_step', {
             messageId: String(envelope.triggerSignalId || message.id),
             conversationId: envelope.conversationId,
+            accountId: envelope.senderAccountId || envelope.targetAccountId,
             step: 'entrega',
             status: 'success',
             timestamp: new Date().toISOString()

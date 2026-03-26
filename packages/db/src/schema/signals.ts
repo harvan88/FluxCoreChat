@@ -4,7 +4,8 @@
  */
 
 import { pgTable, text, timestamp, jsonb, boolean, index, uuid, integer, pgEnum } from 'drizzle-orm/pg-core';
-import { accounts, users } from './core-schema';
+import { accounts } from './accounts';
+import { users } from './users';
 
 // Enums para tipos y prioridades
 export const signalTypeEnum = pgEnum('signal_type', [

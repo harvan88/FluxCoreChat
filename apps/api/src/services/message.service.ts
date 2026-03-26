@@ -95,12 +95,16 @@ export class MessageService {
       conditions.push(lt(messages.createdAt, cursor));
     }
     
-    return await db
+    // 🔧 FIX: Obtener los N más recientes (DESC) y luego invertir para orden cronológico.
+    // Antes se usaba ASC+LIMIT que siempre devolvía los más antiguos.
+    const rows = await db
       .select()
       .from(messages)
       .where(and(...conditions))
-      .orderBy(messages.createdAt)  // ✅ Orden cronológico: antiguos primero, recientes al final
+      .orderBy(desc(messages.createdAt))
       .limit(limit);
+
+    return rows.reverse(); // Invertir para entrega cronológica (antiguos primero)
   }
 
   async updateMessage(

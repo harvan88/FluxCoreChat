@@ -31,16 +31,21 @@ const PIPELINE_ORDER = [
 
 export function VisualPipeline() {
     const selectedAccountId = useUIStore((state) => state.selectedAccountId);
+    const activeConversationId = useUIStore((state) => state.activeConversationId);
+    const selectedConversationId = useUIStore((state) => state.selectedConversationId);
     const token = useAuthStore((state) => state.token);
     const pushToast = useUIStore((state) => state.pushToast);
     
     const [traces, setTraces] = useState<Record<string, PipelineTrace>>({});
     const [isConnected, setIsConnected] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const telemetryConversationId = activeConversationId || selectedConversationId;
     
     // Conexión WebSocket para recibir telemetría
     useEffect(() => {
         if (!selectedAccountId) return;
+
+        setTraces({});
         
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
         const wsBase = apiUrl.replace(/^http/, 'ws');
@@ -54,7 +59,8 @@ export function VisualPipeline() {
             setIsConnected(true);
             ws.send(JSON.stringify({
                 type: 'subscribe_telemetry',
-                role: 'kernel_console'
+                role: 'kernel_console',
+                conversationId: telemetryConversationId
             }));
         };
         
@@ -63,6 +69,10 @@ export function VisualPipeline() {
                 const data = JSON.parse(event.data);
                 if (data.type === 'telemetry:pipeline_step') {
                     const payload = data.payload;
+                    if (telemetryConversationId && payload.conversationId !== telemetryConversationId) {
+                        return;
+                    }
+
                     const messageId = payload.messageId;
                     if (!messageId) return;
 
@@ -89,7 +99,7 @@ export function VisualPipeline() {
                                         step: payload.step,
                                         status: payload.status,
                                         metadata: payload.metadata,
-                                        error: payload.error,
+                                        error: payload.error || payload.metadata?.errorDetail,
                                         timestamp: payload.timestamp || new Date().toISOString()
                                     }
                                 }
@@ -108,7 +118,7 @@ export function VisualPipeline() {
         return () => {
             ws.close();
         };
-    }, [selectedAccountId, token]);
+    }, [selectedAccountId, token, telemetryConversationId]);
 
     // Fallback para copiar cuando navigator.clipboard no está disponible
     const copyViaFallback = useCallback((content: string) => {
@@ -356,10 +366,10 @@ export function VisualPipeline() {
                                                 </div>
                                             )}
                                             
-                                            {trace.steps['runtime']?.metadata?.latency && (
+                                            {trace.steps['runtime']?.metadata?.latencyMs && (
                                                 <div className="flex items-center gap-2 text-yellow-400 bg-yellow-500/5 px-2 py-1 rounded border border-yellow-500/10">
                                                     <span className="text-muted">Latency:</span>
-                                                    <span>{trace.steps['runtime'].metadata.latency}ms</span>
+                                                    <span>{trace.steps['runtime'].metadata.latencyMs}ms</span>
                                                 </div>
                                             )}
                                         </div>
