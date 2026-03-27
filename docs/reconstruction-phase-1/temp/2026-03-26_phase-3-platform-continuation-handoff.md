@@ -341,3 +341,23 @@ Queda registrado que la prioridad operativa correcta para continuar FluxCore es:
 - consolidar primero la plataforma comÃºn de capabilities y contexto autorizado
 - usar los runtimes actuales como referencia de extracciÃ³n, no como destino de nuevos parches funcionales
 - abrir adopciÃ³n runtime solo cuando la plataforma ya sea una fuente de verdad suficientemente estable
+
+---
+
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en `docs/reconstruction-phase-1/exhaustive-mapping/`. 
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (`DocumentationQualityPanel`) es el único juez de la cobertura real.
+
+---
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en docs/reconstruction-phase-1/exhaustive-mapping/.
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (DocumentationQualityPanel) es el único juez de la cobertura real.
+---

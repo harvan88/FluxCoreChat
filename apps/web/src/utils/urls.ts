@@ -38,3 +38,21 @@ export const getWsUrl = () => {
     
     return 'ws://localhost:3000/ws';
 };
+
+export const fixLocalhostUrl = (url: string | null | undefined): string | null | undefined => {
+    if (!url || typeof window === 'undefined') return url;
+    
+    const { hostname } = window.location;
+    
+    // Si estamos en una red local y la URL apunta a localhost, sustituimos
+    const isLocalIp = /^192\.168\./.test(hostname) || 
+                      /^10\./.test(hostname) || 
+                      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+
+    if ((isLocalIp || hostname === 'localhost') && url.includes('localhost:3000')) {
+        // Usamos la IP actual desde window.location para que coincida con el servidor API
+        return url.replace('localhost:3000', `${hostname}:3000`);
+    }
+    
+    return url;
+};

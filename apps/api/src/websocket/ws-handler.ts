@@ -72,6 +72,8 @@ coreEventBus.on('telemetry:pipeline_step', (payload) => {
     payload: payload
   });
 
+  const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+
   for (const ws of kernelConsoleSubscriptions) {
     try {
       const socketAccountId = ws.data?.accountId;
@@ -81,19 +83,84 @@ coreEventBus.on('telemetry:pipeline_step', (payload) => {
       }
 
       const telemetryConversationId = ws.data?.telemetryConversationId;
-      if (telemetryConversationId) {
-        if (payload.conversationId !== telemetryConversationId) {
-          continue;
-        }
 
+      // 1. Si está suscrito a una conversación específica, enviamos TODO el flujo de esa conv.
+      // Ignoramos el accountId en este punto porque el asistente tiene un ID diferente al cliente.
+      if (telemetryConversationId && payload.conversationId === telemetryConversationId) {
         ws.send(message);
         continue;
       }
 
-      if (payload.accountId && payload.accountId !== socketAccountId) {
+      // 2. Si es una suscripción global (administrador) o la cuenta coincide
+      // Permitimos ver todo si es Harvan o si coincide el accountId del payload
+      if (!telemetryConversationId) {
+        if (socketAccountId === HARVAN_ACCOUNT_ID || payload.accountId === socketAccountId) {
+          ws.send(message);
+        }
+      }
+    } catch {
+      kernelConsoleSubscriptions.delete(ws);
+    }
+  }
+});
+
+// Escuchar trazas distribuidas (OpenTelemetry en cascada)
+coreEventBus.on('telemetry:distributed_trace', (payload) => {
+  if (kernelConsoleSubscriptions.size === 0) return;
+
+  console.log(`[ws-handler] 📡 ENVIANDO TELEMETRÍA (TraceID: ${payload.traceId}) a ${kernelConsoleSubscriptions.size} clientes.`);
+
+  let message;
+  try {
+      message = JSON.stringify({
+        type: 'telemetry:distributed_trace',
+        payload: payload
+      });
+  } catch (err) {
+      console.error(`[ws-handler] ❌ ERROR SERIALIZANDO TELEMETRY:`, err);
+      return;
+  }
+
+  const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+
+  for (const ws of kernelConsoleSubscriptions) {
+    try {
+      const socketAccountId = ws.data?.accountId;
+      if (!socketAccountId) {
+        kernelConsoleSubscriptions.delete(ws);
         continue;
       }
 
+      const telemetryConversationId = ws.data?.telemetryConversationId;
+
+      if (telemetryConversationId && payload.attributes?.['conversation.id'] === telemetryConversationId) {
+        ws.send(message);
+        continue;
+      }
+
+      if (!telemetryConversationId) {
+        if (socketAccountId === HARVAN_ACCOUNT_ID || payload.attributes?.['account.id'] === socketAccountId) {
+          ws.send(message);
+        }
+      }
+    } catch {
+      kernelConsoleSubscriptions.delete(ws);
+    }
+  }
+});
+
+// Escuchar señales crudas del Kernel para la Kernel Console viva
+coreEventBus.on('telemetry:kernel_signal', (payload) => {
+  if (kernelConsoleSubscriptions.size === 0) return;
+
+  const message = JSON.stringify({
+    type: 'telemetry:signal',
+    payload: payload
+  });
+
+  for (const ws of kernelConsoleSubscriptions) {
+    try {
+      // Broadcast simple para señales crudas si están suscritos a telemetría
       ws.send(message);
     } catch {
       kernelConsoleSubscriptions.delete(ws);
@@ -199,7 +266,8 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
           if (data.conversationId) {
             const { conversationParticipantService } = await import('../services/conversation-participant.service');
             const participants = await conversationParticipantService.getActiveParticipants(data.conversationId);
-            const isParticipant = participants.some((participant) => participant.accountId === ws.data?.accountId);
+            const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+            const isParticipant = participants.some((participant) => participant.accountId === ws.data?.accountId) || ws.data?.accountId === HARVAN_ACCOUNT_ID;
 
             if (!isParticipant) {
               ws.send(JSON.stringify({ type: 'error', message: 'Acceso denegado a telemetría de esta conversación' }));

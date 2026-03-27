@@ -6,12 +6,13 @@
  */
 
 import { memo } from 'react';
-import { FileText, Copy, Clock, Hash, Pencil, Sparkles } from 'lucide-react';
+import { FileText, Copy, Clock, Hash, Pencil, Sparkles, Bug } from 'lucide-react';
 import clsx from 'clsx';
 import { Badge } from '../ui/Badge';
 import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
 import type { Template } from './types';
 import { TEMPLATE_CATEGORIES } from './types';
+import { useAuthStore } from '../../store/authStore';
 
 interface TemplateCardProps {
   template: Template;
@@ -30,6 +31,7 @@ function TemplateCardComponent({
   onDelete,
   onDuplicate,
 }: TemplateCardProps) {
+  const { user } = useAuthStore();
   const categoryLabel = TEMPLATE_CATEGORIES.find(c => c.value === template.category)?.label || template.category;
 
   const formatDate = (dateStr: string) => {
@@ -39,6 +41,66 @@ function TemplateCardComponent({
       month: 'short',
       year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     });
+  };
+
+  const copyTemplateData = async () => {
+    try {
+      const templateData = {
+        id: template.id,
+        name: template.name,
+        content: template.content,
+        variables: template.variables,
+        tags: template.tags,
+        category: template.category,
+        isActive: template.isActive,
+        allowAutomatedUse: template.allowAutomatedUse,
+        authorizeForAI: template.authorizeForAI,
+        aiUsageInstructions: template.aiUsageInstructions,
+        usageCount: template.usageCount,
+        assets: template.assets,
+        accountId: template.accountId,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt,
+      };
+      
+      await navigator.clipboard.writeText(JSON.stringify(templateData, null, 2));
+      console.log('Template data copied to clipboard successfully');
+      console.log('Copied data:', templateData);
+    } catch (err) {
+      console.error('Failed to copy template data:', err);
+      
+      // Fallback: create textarea and copy manually
+      try {
+        const templateData = {
+          id: template.id,
+          name: template.name,
+          content: template.content,
+          variables: template.variables,
+          tags: template.tags,
+          category: template.category,
+          isActive: template.isActive,
+          allowAutomatedUse: template.allowAutomatedUse,
+          authorizeForAI: template.authorizeForAI,
+          aiUsageInstructions: template.aiUsageInstructions,
+          usageCount: template.usageCount,
+          assets: template.assets,
+          accountId: template.accountId,
+          createdAt: template.createdAt,
+          updatedAt: template.updatedAt,
+        };
+        
+        const textarea = document.createElement('textarea');
+        textarea.value = JSON.stringify(templateData, null, 2);
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        console.log('Template data copied to clipboard (fallback method)');
+      } catch (fallbackErr) {
+        console.error('Fallback also failed:', fallbackErr);
+      }
+    }
   };
 
   return (
@@ -146,6 +208,18 @@ function TemplateCardComponent({
           >
             <Copy size={14} />
           </button>
+          {(import.meta.env.DEV || user?.email === 'harvan@hotmail.es') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                copyTemplateData();
+              }}
+              className="p-1 text-muted hover:text-primary rounded hover:bg-elevated transition-colors"
+              title="Copiar datos como JSON (debug)"
+            >
+              <Bug size={14} />
+            </button>
+          )}
           <DoubleConfirmationDeleteButton
             onConfirm={onDelete}
             size={14}

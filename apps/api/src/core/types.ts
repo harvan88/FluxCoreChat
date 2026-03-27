@@ -101,7 +101,8 @@ export type PhysicalFactType =
     | 'SYSTEM_TIMER_ELAPSED'
     | 'CONNECTION_EVENT_OBSERVED'
     | 'chatcore.message.received'
-    | 'AI_RESPONSE_GENERATED'; // Nuevo: Para mutaciones estructurales de ChatCore
+    | 'AI_RESPONSE_GENERATED'
+    | 'COGNITIVE_STEP_OBSERVED'; // Para persistencia de trazas del dispatcher/runtime
 
 /**
  * KernelCandidateSignal: the ONLY input the Kernel accepts.

@@ -28,6 +28,9 @@ import { runtimeGateway } from './runtime-gateway.service';
 import { actionExecutor } from './action-executor.service';
 import { accountLabelService } from '../account-label.service';
 import { runtimeInputFactoryService } from './runtime-input-factory.service';
+import { kernel } from '../../core/kernel';
+import type { KernelCandidateSignal, Evidence } from '../../core/types';
+import crypto from 'node:crypto';
 
 const MAX_HISTORY_MESSAGES = 50;
 
@@ -94,6 +97,48 @@ class CognitiveDispatcherService {
             const runtimeSelection = await runtimeSelectionService.resolve(accountId);
             console.log(`[CognitiveDispatcher] ✓ Context resolved: mode=${policyContext.mode}`);
             console.log(`[CognitiveDispatcher] ✓ RuntimeSelection resolved: strategy=${runtimeSelection.strategy} state=${runtimeSelection.state} activeRuntimeId=${runtimeSelection.activeRuntimeId}`);
+
+            // 🎯 REALIDAD (Soberanía): Certificar Contexto Resuelto
+            try {
+                const evidence: Evidence = {
+                    raw: { 
+                        runtimeId: runtimeSelection.activeRuntimeId,
+                        strategy: runtimeSelection.strategy,
+                        mode: policyContext.mode,
+                        injectedContext: {
+                            authorizedTemplates: policyContext.authorizedTemplates?.length || 0,
+                            contactRules: policyContext.contactRules?.length || 0,
+                            businessProfile: !!policyContext.resolvedBusinessProfile,
+                            templateList: (policyContext.resolvedBusinessProfile as any).templates?.map((t: any) => t.name) || []
+                        }
+                    },
+                    format: 'json',
+                    provenance: {
+                        driverId: 'fluxcore/cognition',
+                        externalId: `disp-${params.lastSignalSeq || Date.now()}`,
+                        entryPoint: 'cognitive-dispatcher',
+                    },
+                    claimedOccurredAt: new Date().toISOString(),
+                };
+
+                const candidate: KernelCandidateSignal = {
+                    factType: 'COGNITIVE_STEP_OBSERVED',
+                    source: { namespace: '@fluxcore/cognition', key: 'dispatcher' },
+                    subject: { namespace: '@fluxcore/cognition', key: accountId },
+                    evidence,
+                    certifiedBy: {
+                        adapterId: 'cognitive-gateway',
+                        adapterVersion: '1.0.0',
+                        signature: ''
+                    }
+                };
+                
+                // Deterministic signature (dummy for now as per system design for internal gateways)
+                candidate.certifiedBy.signature = crypto.createHash('sha256').update(JSON.stringify(candidate)).digest('hex');
+                await kernel.ingestSignal(candidate);
+            } catch (e) {
+                console.error(`[CognitiveDispatcher] Failed to certify dispatcher step:`, e);
+            }
 
             // 3. Automation mode gate (governed by PolicyContext)
             console.log(`[FluxPipeline] 📋 POLICY mode=${policyContext.mode} account=${accountLabel} (${accountId.slice(0, 7)})`);
@@ -175,17 +220,24 @@ class CognitiveDispatcherService {
                     lastUserMessage: lastMsg?.content,
                 });
 
-                // 8. Invoke runtime via gateway
+                // 8. Invoke runtime via gateway (AHORA TOTALMENTE VISIBLE)
                 console.log(`[CognitiveDispatcher] Step 8: Invoking runtime '${runtimeId}'...`);
-                console.log(`[CognitiveDispatcher] 📤 RUNTIME INPUT:`);
-                console.log(`  - policyContext.mode: ${input.policyContext.mode}`);
-                console.log(`  - runtimeConfig.assistantId: ${input.runtimeConfig.assistantId?.slice(0,8) || 'none'}`);
-                console.log(`  - runtimeConfig.model: ${input.runtimeConfig.model || 'default'}`);
-                console.log(`  - runtimeConfig.provider: ${input.runtimeConfig.provider || 'default'}`);
-                console.log(`  - conversationHistory.length: ${input.conversationHistory.length}`);
-                console.log(`  - last message role: ${input.conversationHistory[input.conversationHistory.length-1]?.role || 'none'}`);
                 
-                const actions = await runtimeGateway.invoke(runtimeId, input, params.lastSignalSeq || undefined);
+                // 🎯 TELEMETRÍA OPENTELEMETRY: Captura del Payload Crudo (Plantillas + Historial)
+                const { trackCognitiveStep } = await import('../../telemetry/tracer');
+                
+                const actions = await trackCognitiveStep(
+                    'IA_RUNTIME_INVOCATION',
+                    {
+                        'account.id': accountId,
+                        'conversation.id': conversationId,
+                        'model': input.runtimeConfig.model || 'unknown_model'
+                    },
+                    input, // ESTE ES EL PAYLOAD GIGANTE CON PLANTILLAS
+                    async () => {
+                        return await runtimeGateway.invoke(runtimeId, input, params.lastSignalSeq || undefined);
+                    }
+                );
                 
                 console.log(`[CognitiveDispatcher] 📥 RUNTIME RETURNED ${actions.length} actions:`);
                 actions.forEach((action, i) => {

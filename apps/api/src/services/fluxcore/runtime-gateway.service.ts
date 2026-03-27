@@ -13,6 +13,9 @@
  */
 
 import type { RuntimeAdapter, RuntimeInput, ExecutionAction } from '../../core/fluxcore-types';
+import { kernel } from '../../core/kernel';
+import type { KernelCandidateSignal, Evidence } from '../../core/types';
+import crypto from 'node:crypto';
 
 class RuntimeGatewayService {
     private runtimes = new Map<string, RuntimeAdapter>();
@@ -60,19 +63,41 @@ class RuntimeGatewayService {
             const durationMs = Date.now() - startTime;
             console.log(`[RuntimeGateway] ✅ Runtime "${runtime.displayName}" completed in ${durationMs}ms, returned ${actions.length} action(s)`);
 
-            // 🎯 TELEMETRÍA (Fase 1): Runtime éxito
+            // 🎯 REALIDAD (Soberanía): Certificar Ejecución Exitosa
             try {
-                const { coreEventBus } = await import('../../core/events');
-                coreEventBus.emit('telemetry:pipeline_step', {
-                    messageId: String(triggerSignalId || input.policyContext.conversationId), // Reference ID
-                    conversationId: input.policyContext.conversationId,
-                    accountId: input.policyContext.accountId,
-                    step: 'runtime',
-                    status: 'success',
-                    metadata: { runtimeId, latencyMs: durationMs },
-                    timestamp: new Date().toISOString()
-                });
-            } catch (e) {}
+                const evidence: Evidence = {
+                    raw: { 
+                        runtimeId, 
+                        latencyMs: durationMs,
+                        actionCount: actions.length,
+                        results: actions.map(a => ({ type: a.type, summary: (a as any).content?.slice(0, 50) }))
+                    },
+                    format: 'json',
+                    provenance: {
+                        driverId: 'fluxcore/cognition',
+                        externalId: `run-${triggerSignalId || Date.now()}`,
+                        entryPoint: `runtime/${runtimeId}`,
+                    },
+                    claimedOccurredAt: new Date().toISOString(),
+                };
+
+                const candidate: KernelCandidateSignal = {
+                    factType: 'COGNITIVE_STEP_OBSERVED',
+                    source: { namespace: '@fluxcore/cognition', key: runtimeId },
+                    subject: { namespace: '@fluxcore/cognition', key: input.policyContext.conversationId },
+                    evidence,
+                    certifiedBy: {
+                        adapterId: 'runtime-gateway',
+                        adapterVersion: '1.0.0',
+                        signature: ''
+                    }
+                };
+
+                candidate.certifiedBy.signature = crypto.createHash('sha256').update(JSON.stringify(candidate)).digest('hex');
+                await kernel.ingestSignal(candidate);
+            } catch (e) {
+                console.error(`[RuntimeGateway] Failed to certify runtime step:`, e);
+            }
 
             return actions;
         } catch (error: any) {

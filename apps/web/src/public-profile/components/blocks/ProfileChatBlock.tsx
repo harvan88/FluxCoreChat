@@ -62,18 +62,13 @@ export function ProfileChatBlock({
 
     const {
         upload: uploadAssetRequest,
-        status: assetUploadStatus,
-        progress: assetProgress,
         error: uploadError,
-        reset: resetUpload,
     } = useAssetUpload({
         accountId,
         allowedMimeTypes: SUPPORTED_MIME_TYPES,
         maxSizeBytes: 50 * 1024 * 1024,
     });
 
-    const isUploadingAttachment = assetUploadStatus === 'creating_session' || assetUploadStatus === 'uploading' || assetUploadStatus === 'committing';
-    const uploadProgress = assetProgress?.percentage ?? 0;
     const shouldUseRealtime = isAuthenticatedMode || (isPublicMode && !!publicSession?.publicToken && !!resolvedConversationId);
 
     const { subscribeConversation, unsubscribeConversation } = useWebSocket({
@@ -163,7 +158,7 @@ export function ProfileChatBlock({
         }
     }, [message, sendMessage, isLoading, resolvedConversationId, shouldUseRealtime, isPublicMode, accountId, publicSession]);
 
-    const uploadAssetForComposer = useCallback(async ({ file }: { file: File }) => {
+    const uploadAssetForComposer = useCallback(async ({ file }: { file: File; type: 'image' | 'document' | 'video' }) => {
         const asset = await uploadAssetRequest(file);
         return {
             success: !!asset,
@@ -173,7 +168,7 @@ export function ProfileChatBlock({
     }, [uploadAssetRequest, uploadError]);
 
     // Hook para obtener dimensiones reales del viewport y altura del input
-    const [viewportDimensions, setViewportDimensions] = useState({
+    const [viewportDimensions] = useState({
         height: window.innerHeight,
         width: window.innerWidth
     });
@@ -222,7 +217,7 @@ export function ProfileChatBlock({
                                 isSending={isSending}
                                 onSend={handleSend}
                                 accountId={accountId}
-                                uploadAsset={uploadAssetRequest}
+                                uploadAsset={uploadAssetForComposer}
                                 uploadAudio={uploadAssetForComposer}
                                 onUserActivity={() => {}}
                             />
@@ -270,7 +265,9 @@ export function ProfileChatBlock({
                                     message={msg}
                                     isOwn={getMessageOwnership(msg)}
                                     isAI={msg.generatedBy === 'ai'}
-                                    viewerAccountId={accountId}
+                                    viewerAccountId={accountId || publicSession?.ownerAccountId || profile.id}
+                                    viewerActorId={isPublicMode ? publicSession?.visitorActorId : undefined}
+                                    viewerActorType={isPublicMode ? 'visitor' : 'user'}
                                 />
                             </div>
                         ))}

@@ -37,7 +37,8 @@ export const actorTypeEnum = pgEnum('asset_actor_type', [
     'user',         // Usuario humano
     'assistant',    // Asistente IA
     'system',       // Sistema (workers, cron, etc.)
-    'api'           // API externa
+    'api',          // API externa
+    'visitor'       // Visitante de perfil público
 ]);
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -104,7 +105,7 @@ export type AuditAction =
     | 'state_changed' | 'dedup_applied' | 'deleted' | 'purged'
     | 'archived' | 'restored' | 'access_denied' | 'policy_evaluated'
     | 'metadata_updated' | 'linked' | 'unlinked';
-export type ActorType = 'user' | 'assistant' | 'system' | 'api';
+export type ActorType = 'user' | 'assistant' | 'system' | 'api' | 'visitor';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Interfaces de Servicio

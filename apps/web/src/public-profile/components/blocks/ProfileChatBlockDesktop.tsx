@@ -43,6 +43,7 @@ export function ProfileChatBlockDesktop({
         onClearUploadError,
         getMessageOwnership,
         isPublicMode,
+        publicSession,
         error,
     } = useUnifiedChat({ alias, conversationId, accountId });
 
@@ -98,7 +99,9 @@ export function ProfileChatBlockDesktop({
                                     message={msg}
                                     isOwn={getMessageOwnership(msg)}
                                     isAI={msg.generatedBy === 'ai'}
-                                    viewerAccountId={accountId}
+                                    viewerAccountId={accountId || publicSession?.ownerAccountId || profile.id}
+                                    viewerActorId={isPublicMode ? publicSession?.visitorActorId : undefined}
+                                    viewerActorType={isPublicMode ? 'visitor' : 'user'}
                                 />
                             </div>
                         ))}

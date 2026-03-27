@@ -19,17 +19,36 @@ const DEBUG_PREFIX = '[AssetAudit]';
 
 export class AssetAuditService {
     /**
+     * Helper para sanitizar UUIDs y evitar errores de Postgres
+     */
+    private sanitizeUuid(id: string | null | undefined): string | null {
+        if (!id || typeof id !== 'string' || id.trim() === '') return null;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            console.warn(`${DEBUG_PREFIX} Invalid UUID detected: "${id}". Using null.`);
+            return null;
+        }
+        return id;
+    }
+
+    /**
      * Registrar evento de auditoría (inmutable)
      */
     async logEvent(params: LogAuditEventParams): Promise<AssetAuditLog> {
+        // Sanitización preventiva para evitar PostgresError: invalid input syntax for type uuid
+        const assetId = this.sanitizeUuid(params.assetId);
+        const actorId = this.sanitizeUuid(params.actorId);
+        const accountId = this.sanitizeUuid(params.accountId);
+        const sessionId = this.sanitizeUuid(params.sessionId);
+
         const [log] = await db.insert(assetAuditLogs).values({
-            assetId: params.assetId,
-            sessionId: params.sessionId,
+            assetId,
+            sessionId,
             action: params.action,
-            actorId: params.actorId,
-            actorType: params.actorType || 'system',
+            actorId,
+            actorType: (params.actorType as any) === 'visitor' ? 'visitor' : (params.actorType || 'system'),
             context: params.context,
-            accountId: params.accountId,
+            accountId,
             metadata: params.metadata ? JSON.stringify(params.metadata) : null,
             ipAddress: params.ipAddress,
             userAgent: params.userAgent,
@@ -37,7 +56,7 @@ export class AssetAuditService {
             errorMessage: params.errorMessage,
         }).returning();
 
-        console.log(`${DEBUG_PREFIX} Event logged: action=${params.action}, assetId=${params.assetId || 'N/A'}, actor=${params.actorId || 'system'}`);
+        console.log(`${DEBUG_PREFIX} Event logged: action=${params.action}, assetId=${assetId || 'N/A'}, actor=${actorId || 'system'} (${params.actorType || 'system'})`);
 
         return log;
     }
@@ -120,7 +139,7 @@ export class AssetAuditService {
     async logDownload(params: {
         assetId: string;
         actorId: string;
-        actorType: 'user' | 'assistant' | 'system';
+        actorType: 'user' | 'assistant' | 'system' | 'visitor';
         context: string;
         accountId: string;
         ipAddress?: string;
@@ -144,7 +163,7 @@ export class AssetAuditService {
     async logUrlSigned(params: {
         assetId: string;
         actorId: string;
-        actorType: 'user' | 'assistant' | 'system';
+        actorType: 'user' | 'assistant' | 'system' | 'visitor';
         context: string;
         ttlSeconds: number;
         accountId: string;
@@ -246,7 +265,7 @@ export class AssetAuditService {
     async logAccessDenied(params: {
         assetId: string;
         actorId: string;
-        actorType: 'user' | 'assistant' | 'system';
+        actorType: 'user' | 'assistant' | 'system' | 'visitor';
         context: string;
         reason: string;
         accountId?: string;

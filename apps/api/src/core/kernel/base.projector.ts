@@ -60,6 +60,41 @@ export abstract class BaseProjector {
                 try {
                     // Canon Invariant: cursor update and projection write are atomic.
                     await db.transaction(async (tx) => {
+                        // 🎯 REALIDAD (Soberanía): Certificar Proyección
+                        try {
+                            const { kernel } = await import('../kernel');
+                            const evidence = {
+                                raw: { 
+                                    projector: this.projectorName,
+                                    triggerSignalId: signal.sequenceNumber 
+                                },
+                                format: 'json',
+                                provenance: {
+                                    driverId: 'kernel/projector',
+                                    externalId: `proj-${this.projectorName}-${signal.sequenceNumber}`,
+                                    entryPoint: this.projectorName,
+                                },
+                                claimedOccurredAt: new Date().toISOString(),
+                            };
+
+                            const candidate = {
+                                factType: 'COGNITIVE_STEP_OBSERVED',
+                                source: { namespace: '@kernel/projector', key: this.projectorName },
+                                subject: { namespace: signal.sourceNamespace, key: signal.sourceKey },
+                                evidence,
+                                certifiedBy: {
+                                    adapterId: 'kernel-projector-adapter',
+                                    adapterVersion: '1.0.0',
+                                    signature: ''
+                                }
+                            };
+                            
+                            // Emisión directa al kernel (bypass circular dependecy if any via internal call)
+                            await kernel.ingestSignal(candidate as any);
+                        } catch (e) {
+                            console.error(`[BaseProjector:${this.projectorName}] Telemetry error:`, e);
+                        }
+
                         await this.project(signal, tx);
                         await this.updateCursor(signal.sequenceNumber, tx);
                     });

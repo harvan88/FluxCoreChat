@@ -28,6 +28,8 @@ interface MessageBubbleProps {
   isSelected?: boolean;
   onSelectionToggle?: (messageId: string, selected: boolean) => void;
   onSelectionModeToggle?: (messageId: string) => void;
+  viewerActorId?: string;
+  viewerActorType?: 'user' | 'assistant' | 'system' | 'visitor';
 }
 
 export function MessageBubble({
@@ -44,6 +46,8 @@ export function MessageBubble({
   isSelected = false,
   onSelectionToggle,
   onSelectionModeToggle,
+  viewerActorId,
+  viewerActorType,
 }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [showOptionsButton, setShowOptionsButton] = useState(false);
@@ -256,13 +260,15 @@ export function MessageBubble({
               const sizeBytes = m.sizeBytes ?? 0;
 
               const renderAsset = () => {
-                if (!m.assetId || !viewerAccountId) return null;
+                if (!m.assetId) return null;
 
                 const preview = (
                   <AssetPreview
                     key={key}
                     assetId={m.assetId}
-                    accountId={viewerAccountId}
+                    accountId={viewerAccountId || ''}
+                    viewerActorId={viewerActorId}
+                    viewerActorType={viewerActorType}
                     name={fallbackName}
                     mimeType={m.mimeType || 'application/octet-stream'}
                     sizeBytes={sizeBytes}

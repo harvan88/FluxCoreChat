@@ -27,7 +27,9 @@ import type {
   UpdateTemplateInput,
 } from '../components/templates/types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../utils/urls';
+
+const API_URL = getApiUrl();
 
 class ApiService {
   private token: string | null = null;
@@ -1119,7 +1121,7 @@ class ApiService {
     accountId: string,
     params: {
       actorId: string;
-      actorType?: 'user' | 'assistant' | 'system';
+      actorType?: 'user' | 'assistant' | 'system' | 'visitor';
       action?: string;
       channel?: string;
       disposition?: 'inline' | 'attachment';

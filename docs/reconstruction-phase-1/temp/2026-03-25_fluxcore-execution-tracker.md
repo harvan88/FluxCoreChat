@@ -138,3 +138,23 @@ Actualizar solo cuando ocurra uno de estos eventos:
 Hemos completado el cutover a la **Plataforma Cognitive**. La Fase 2 estÃ¡ cerrada con evidencia determinÃ­stica de trazabilidad. Estamos actualmente en la **Fase 3**, consolidando el catÃ¡logo de capacidades. La IA ya no decide por su cuenta cÃ³mo enviar mensajes o plantillas; propone acciones que la plataforma ejecuta tras validar la autorizaciÃ³n. Se resolviÃ³ un bug crÃ­tico que impedÃ­a ver mensajes nuevos en el frontend tras recargar, garantizando que el sistema sea usable durante la transiciÃ³n.
 
 **PrÃ³ximo paso decidido:** Finalizar la migraciÃ³n de `search_knowledge` para que sea la fuente Ãºnica de RAG gobernada por plataforma, eliminando cualquier transporte HTTP privado dentro de los runtimes.
+
+---
+
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en `docs/reconstruction-phase-1/exhaustive-mapping/`. 
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (`DocumentationQualityPanel`) es el único juez de la cobertura real.
+
+---
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en docs/reconstruction-phase-1/exhaustive-mapping/.
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (DocumentationQualityPanel) es el único juez de la cobertura real.
+---

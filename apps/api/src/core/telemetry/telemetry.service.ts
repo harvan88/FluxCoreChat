@@ -14,7 +14,8 @@ export interface PipelineTelemetryEvent {
     errorDetail?: string;
     latencyMs?: number;
     newSignalId?: number;
-    triggerSignalId?: number;
+    triggerSignalId?: number | string;
+    [key: string]: any; // Allow arbitrary debug info
   };
   timestamp: string;
 }

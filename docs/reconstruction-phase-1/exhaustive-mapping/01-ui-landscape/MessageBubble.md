@@ -1,40 +1,38 @@
 ---
-id: "message-bubble"
+id: "MessageBubble"
 type: "smart-component"
 status: "stable"
-criticality: "critical"
+criticality: "high"
 location: "apps/web/src/components/chat/MessageBubble.tsx"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Integra múltiples visores como AssetPreview" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Burbuja Canónica del Mensaje de Chat y Render de Medias" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Gradientes Parallax (Fijo), Badges de IA y Toolbar Múltiple de Clics" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# 🤖 MessageBubble (y MessageSelectionToolbar)
+# 🤖 MessageBubble
 
 ## 🎯 Propósito
-Es el "Ladrillo Base" sobre el cual descansa todo el peso gráfico conversacional del usuario. Toma el objeto `Message` puramente modelado por DTOs e imprime Burbujas flotantes en lados oscilantes (`isOwn === true/false`). Alberga inteligencia renderizadora desarticulando Arrays de Assets (imágenes, audios, documentos), y expone lógicas supercargadas ocultables para flujos (Replies, Reenvíos y Reportes).
+Este componente es el corazón visual del sistema de chat de ChatCore. Encapsula toda la lógica de visualización de mensajes, estados de sincronización, respuestas, archivos adjuntos y metadatos de actores humanos e IAs.
 
-## 📦 Estado y Datos
-**Acople Dual Contextual:**
-- Mantiene variables temporales transitorias relativas a posiciones del ratón (`showActions`, `showOptionsButton`). 
-- Interacciona en la capa semántica deduciendo al AI Generator (`message.generatedBy`).
+## 📐 Arquitectura e Interacción
+El componente utiliza el sistema de diseño canónico de FluxCore.
+- **Identidad de Actores:** Diferencia visualmente entre mensajes propios (`isOwn`), de la IA (`isAI`) y del sistema (`generatedBy: 'system'`). Es consciente de si la visualización se hace por un usuario o un visitante del perfil público.
+- **Orquestación de Multimedia:** Actúa como contenedor para múltiples activos (`media`), instanciando un `AssetPreview` por cada uno de ellos y gestionando el layout de visualización.
+- **Interactividad y Acciones:** Maneja flujos de respuesta (`onReply`), edición (`onEdit`), eliminación (`onDelete`) y selección múltiple (`isSelectionMode`).
+- **Estados de Sincronización:** Representa visualmente estados como `pending_backend`, `synced`, `delivered`, `seen` y `failed` con iconos y colores canónicos.
 
-## 🔄 Flujos de Interacción
-1. **Intérprete Arquitectónico de Tipos Atípicos (Medias/Archivos):** Ejecuta un switch masivo contra atributos lógicos adjuntos. Si encuentra `audio`, inyecta tags HTML Nativas con un visualizador empírico de picos (Barras Waveforms) si dispone un `samples[]`. Si topa una imagen amarra su visualización a `AssetPreview`, o un simple Link en casos estériles.
-2. **Efecto Fluido Paralaje Global (Gradient Mask):** Adopta una de las innovaciones de UI que más asombran al usuario: Todas las burbujas propias carecen de color sólido. Sus texturas apuntan a un `linear-gradient` fijo al tamaño absoluto de la página (`backgroundAttachment: 'fixed', backgroundSize: '100vw 100vh'`). Creando un efecto cascada, donde a medida que el scroll baja las burbujas mutan su azul celeste hasta azul profundo sin importar su propio código CSS individual.
-3. **Escudo y Aviso Estéril para RAG Blockers:** Si la burbuja se marca `isSystem` con flag de caída y bloqueo IA (`ai_blocked`), extingue la forma abombada mutando por entero a una Caja Banner de color amarilla alertándole al Humano.
+## 💡 Estados y Datos
+**Hooks utilizados:**
+- `useState`: Gestiona la visibilidad de las acciones y botones de opciones.
+- `useMemo`: (Vía Fragment) Protege el renderizado masivo.
 
-## 💡 Ejemplo de Uso
-```tsx
-import { MessageBubble } from '../../components/chat/MessageBubble';
+**Propiedades Clave:**
+- `message`: Objeto con `content` (text, media), `senderAccountId` y `status`.
+- `viewerAccountId`: Identifica a qué cuenta pertenece el lector actual.
+- `viewerActorId`: Identifica al usuario o visitante que lee el mensaje.
+- `viewerActorType`: `user` o `visitor`.
+- `isOwn`: Indica si el mensaje fue enviado por el actor que visualiza.
+- `isAI`: Indica si el contenido fue generado por un asistente.
 
-<MessageBubble 
-   message={msg}
-   isOwn={msg.authorId === currentUserId}
-   isAI={msg.generatedBy === 'ai'}
-   onSelectionModeToggle={() => activeModeBulk()}
-/>
-```
+## 🔗 Dependencias
+- **AssetPreview:** para la renderización segura de archivos y multimedia.
+- **DeleteMessageModal:** para confirmaciones de borrado.
+- **Lucide-React:** set de iconos canónicos.
+- **clsx:** gestión dinámica de clases Tailwind.

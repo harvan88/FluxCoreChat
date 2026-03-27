@@ -60,6 +60,11 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             conversationHistory,
         });
 
+        console.log(`[AsistentesLocal] 📜 SYSTEM PROMPT DEBUG:`);
+        console.log(`----------------------------------------`);
+        console.log(systemPrompt);
+        console.log(`----------------------------------------`);
+
         // 4. Decide which tools to offer
         const tools = capabilityLocalRuntimeToolsService.listTools({
             runtimeConfig,
@@ -97,6 +102,33 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                     if (!responseText) {
                         return [{ type: 'no_action', reason: 'LLM returned empty response' }];
                     }
+
+                    // 🔍 COGNITIVE BRIDGE: Detect automatic template call marker
+                    // Pattern: CALL_TEMPLATE:<templateId> [JSON_PARAMS]
+                    const templateMatch = responseText.match(/CALL_TEMPLATE:([a-f\d-]+)(?:\s+({.*}))?/i);
+                    if (templateMatch) {
+                        const templateId = templateMatch[1];
+                        const rawParams = templateMatch[2];
+                        let variables = {};
+
+                        if (rawParams) {
+                            try { variables = JSON.parse(rawParams); } catch (e) {}
+                        }
+
+                        // Security: Only allow if authorized in this turn
+                        if (authorizedContext.authorizedTemplates.includes(templateId)) {
+                            console.log(`[AsistentesLocal] 🪄 Transmuted marker to action: send_template(${templateId})`);
+                            return [{
+                                type: 'send_template',
+                                templateId,
+                                conversationId: policyContext.conversationId,
+                                variables,
+                            } as ExecutionAction];
+                        } else {
+                            console.warn(`[AsistentesLocal] ⚠️ IA tried to call unauthorized template: ${templateId}`);
+                        }
+                    }
+
                     console.log(`[AsistentesLocal] ✅ Response (${result.usage?.totalTokens ?? '?'} tokens)`);
                     return [{
                         type: 'send_message',

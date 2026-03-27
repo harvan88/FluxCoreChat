@@ -104,11 +104,24 @@ class FluxPolicyContextService {
             })()
             : [];
 
+        // 🛠️ FIX: Fetch authorized tools for the assistant
+        const assistantTools = assistant
+            ? await (async () => {
+                const result = await db.execute(sql`
+                    SELECT tool_id
+                    FROM fluxcore_assistant_tools
+                    WHERE assistant_id = ${assistant.id}
+                `) as any;
+                return result.map((r: any) => r.tool_id);
+            })()
+            : [];
+
         console.log(`[FluxPolicyContext] ✅ REALIDAD DEFINIDA PARA CUENTA ${accountId}:`);
         console.log(`  - Modo: ${policyContext.mode}`);
         console.log(`  - Channel: ${policyContext.channel}`);
         console.log(`  - Contact Rules: ${policyContext.contactRules.length} reglas`);
         console.log(`  - Authorized Templates: ${policyContext.authorizedTemplates.length} templates`);
+        console.log(`  - Authorized Tools: ${assistantTools.length} tools`);
         
         // 🎭 LOG DETALLADO DEL POLICY CONTEXT COMPLETO
         console.log(`[FluxPolicyContext] 📋 POLICY CONTEXT COMPLETO:`);
@@ -140,7 +153,7 @@ class FluxPolicyContextService {
                 temperature: (assistant.modelConfig as any)?.temperature,
                 vectorStoreId: (assistant as any).vectorStores?.[0]?.vectorStoreId,
                 externalAssistantId: assistant.externalId ?? undefined,
-                authorizedTools: (assistant as any).tools?.map((t: any) => t.toolId) ?? [],
+                authorizedTools: assistantTools,
             }
             : { runtimeId: 'asistentes-local', accountId, authorizedTools: [] };
 
@@ -306,8 +319,11 @@ class FluxPolicyContextService {
             turnWindowMaxMs: policyData.turnWindowMaxMs,
             offHoursPolicy: policyData.offHoursPolicy,
             contactRules,
-            authorizedTemplates,
-            resolvedBusinessProfile,
+            authorizedTemplates: authorizedTemplates.map(t => t.templateId),
+            resolvedBusinessProfile: {
+                ...resolvedBusinessProfile,
+                templates: authorizedTemplates
+            },
             workDefinitions: [],
         };
     }
@@ -500,11 +516,19 @@ class FluxPolicyContextService {
             .join('\n\n');
     }
 
-    private async resolveAuthorizedTemplates(accountId: string): Promise<string[]> {
+    private async resolveAuthorizedTemplates(accountId: string): Promise<any[]> {
         // Load authorized templates from fluxcore_template_settings
         const { fluxCoreTemplateSettingsService } = await import('./fluxcore/template-settings.service');
         const authorizedTemplates = await fluxCoreTemplateSettingsService.listAuthorizedTemplates(accountId);
-        return authorizedTemplates.map(t => t.id);
+        
+        // Return rich objects for PromptBuilder knowledge section
+        return authorizedTemplates.map(t => ({
+            templateId: t.id,
+            name: t.name,
+            instructions: t.aiUsageInstructions,
+            variables: t.variables || [],
+            content: t.content
+        }));
     }
 }
 

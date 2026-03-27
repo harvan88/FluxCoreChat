@@ -349,3 +349,23 @@ La siguiente acciÃ³n correcta dentro de Fase 2 es:
 - y decidir si hace falta un ajuste adicional de contrato antes de considerar la fase lista para cierre.
 
 En paralelo, ya puede prepararse la documentaciÃ³n ejecutable de Fase 3 para que la migraciÃ³n de capabilities no vuelva a mezclar ownership de plataforma, runtime y herramientas legacy.
+
+---
+
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en `docs/reconstruction-phase-1/exhaustive-mapping/`. 
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (`DocumentationQualityPanel`) es el único juez de la cobertura real.
+
+---
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en docs/reconstruction-phase-1/exhaustive-mapping/.
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (DocumentationQualityPanel) es el único juez de la cobertura real.
+---

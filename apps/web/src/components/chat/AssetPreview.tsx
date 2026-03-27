@@ -24,6 +24,7 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { fixLocalhostUrl } from '../../utils/urls';
 import clsx from 'clsx';
 import { useAuthStore } from '../../store/authStore';
 
@@ -41,6 +42,10 @@ interface AssetPreviewProps {
     showDownload?: boolean;
     compact?: boolean;
     typeHint?: AssetType;
+    actorId?: string;
+    actorType?: 'user' | 'assistant' | 'system' | 'visitor';
+    viewerActorId?: string;
+    viewerActorType?: 'user' | 'assistant' | 'system' | 'visitor';
 }
 
 type AssetType = 'image' | 'video' | 'audio' | 'document';
@@ -92,8 +97,13 @@ export function AssetPreview({
     showDownload = true,
     compact = false,
     typeHint,
+    actorId: explicitActorId,
+    actorType: explicitActorType = 'user',
+    viewerActorId,
+    viewerActorType,
 }: AssetPreviewProps) {
     const [signedUrl, setSignedUrl] = useState<string | null>(null);
+    const displayedUrl = fixLocalhostUrl(signedUrl);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -105,10 +115,15 @@ export function AssetPreview({
 
     // Obtener URL firmada
     const fetchSignedUrl = useCallback(async () => {
+        setError(null);
         if (signedUrl) return signedUrl;
 
-        if (!currentUserId) {
-            setError('Usuario no autenticado');
+        // Prioritize viewer actor info if provided, otherwise use explicit actor info, then current user
+        const finalActorId = viewerActorId || explicitActorId || currentUserId;
+        const finalActorType = viewerActorType || explicitActorType;
+
+        // Extra safety: never send empty strings to the API (Postgres will die)
+        if (!finalActorId || typeof finalActorId !== 'string' || finalActorId.trim() === '') {
             return null;
         }
 
@@ -117,13 +132,18 @@ export function AssetPreview({
 
         try {
             const response = await api.signAssetUrl(assetId, accountId, {
-                actorId: currentUserId,
-                actorType: 'user',
+                actorId: finalActorId,
+                actorType: finalActorType,
                 action: 'preview',
                 channel: 'web',
                 disposition: assetType === 'document' ? 'attachment' : 'inline',
             });
             if (!response.success || !response.data) {
+                // If it's a transient identity issue, don't show a hard error yet
+                if (response.error?.includes('500') || response.error?.includes('syntax')) {
+                    console.warn('[AssetPreview] Sign failed (likely identity syntax):', response.error);
+                    return null;
+                }
                 throw new Error(response.error || 'Failed to get signed URL');
             }
             setSignedUrl(response.data.url);
@@ -135,7 +155,7 @@ export function AssetPreview({
         } finally {
             setLoading(false);
         }
-    }, [assetId, accountId, signedUrl, currentUserId, assetType]);
+    }, [assetId, accountId, signedUrl, currentUserId, assetType, explicitActorId, explicitActorType, viewerActorId, viewerActorType]);
 
     // Cargar URL para imágenes automáticamente
     useEffect(() => {
@@ -191,7 +211,7 @@ export function AssetPreview({
             return (
                 <>
                     <img
-                        src={signedUrl}
+                        src={displayedUrl || undefined}
                         alt={name}
                         className={clsx(
                             'rounded-lg cursor-pointer object-cover',
@@ -213,7 +233,7 @@ export function AssetPreview({
                                 <X size={24} className="text-white" />
                             </button>
                             <img
-                                src={signedUrl}
+                                src={displayedUrl || undefined}
                                 alt={name}
                                 className="max-w-[90vw] max-h-[90vh] object-contain"
                                 onClick={(e) => e.stopPropagation()}

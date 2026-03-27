@@ -691,3 +691,23 @@ La direcciÃ³n recomendada es inequÃ­voca:
 > **todo artefacto consumible por mÃ¡s de un runtime debe consolidarse como capacidad de plataforma; todo runtime debe reducirse a su lÃ³gica soberana de decisiÃ³n.**
 
 Ese movimiento permite evolucionar FluxCore sin romper lo que hoy ya funciona y sin volver a mezclar ownership en futuras expansiones del sistema.
+
+---
+
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en `docs/reconstruction-phase-1/exhaustive-mapping/`. 
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (`DocumentationQualityPanel`) es el único juez de la cobertura real.
+
+---
+## ?? Gobernanza de Documentación Exhaustiva (Canon §7.0)
+
+Según el estándar establecido en **00-STANDARD.md**, es **obligatorio** mantener la documentación técnica sincronizada con la implementación real exclusivamente en docs/reconstruction-phase-1/exhaustive-mapping/.
+
+- **Soberanía de Código:** Ningún cambio en el Kernel o Runtimes se considera "Terminado" (Done) sin su correspondiente actualización en el Landscape del Backend o UI bajo los esquemas de Tiers definidos.
+- **Prohibición de Basura:** Todo documento fuera de la carpeta oficial (incluyendo este archivo temporal) se considera transitorio y debe ser purgado o consolidado una vez validada la fase.
+- **Actualización Continua:** La documentación es un componente vivo del sistema y el monitor de calidad (DocumentationQualityPanel) es el único juez de la cobertura real.
+---

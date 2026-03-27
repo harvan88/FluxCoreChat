@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 26/03/2026, 17:20
+**Última Actualización:** 27/03/2026, 18:46
 
 ---
 
@@ -29,13 +29,13 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📈 **MÉTRICAS PRINCIPALES**
 
 ### **Calidad General**
-- **Score Promedio:** 49.9%
-- **Índice de Confianza:** 93.2%
-- **Total Documentos Analizados:** 381
+- **Score Promedio:** 49.8%
+- **Índice de Confianza:** 91.5%
+- **Total Documentos Analizados:** 386
 
 ### **Cobertura del Sistema**
 - **Cobertura UI:** 98.8% (161/163)
-- **Cobertura Backend:** 97.4% (184/189)
+- **Cobertura Backend:** 100.0% (189/189)
 
 ---
 
@@ -43,7 +43,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ### **Documentos Estables (Completos)**
 - **Cantidad:** 357
-- **Porcentaje del Total:** 93.7%
+- **Porcentaje del Total:** 92.5%
 - **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDataAuditPanel.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountOrphanExplorer.md, AccountsSection.md (+347 más)
 
 ### **Documentos en Revisión (Con Dudas)**
@@ -52,23 +52,19 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 - **Lista:** account-avatar.routes.md, asset-gateway.service.md
 
 ### **Documentos WIP (Incompletos)**
-- **Cantidad:** 1
-- **Porcentaje del Total:** 0.3%
-- **Lista:** routes-test.md
+- **Cantidad:** 6
+- **Porcentaje del Total:** 1.6%
+- **Lista:** routes-test.md, services-capability-extra-instructions.md, services-capability-instruction.md, services-capability-openai-tool-response.md, services-runtime-composition.md, services-runtime-selection.md
 
 ---
 
 ## 🚨 **COMPONENTES SIN DOCUMENTAR**
 
 ### **Backend Crítico**
-- **Total:** 5
-- **Porcentaje:** 2.6%
+- **Total:** 0
+- **Porcentaje:** 0.0%
 - **Lista Prioritaria:**
-- services/capability-extra-instructions.service.ts
-- services/capability-instruction.service.ts
-- services/capability-openai-tool-response.service.ts
-- services/runtime-composition.service.ts
-- services/runtime-selection.service.ts
+- 
 
 ### **UI Components**
 - **Total:** 2
@@ -87,26 +83,33 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 - **Componentes Afectados:** account-avatar.routes.md, asset-gateway.service.md, documentation-quality.service.md, documentation-quality.service.md, environment-variables.md (+2 más)
 
 ### **Advertencias**
-- **Total:** 4
-- **Tipos Comunes:** Documento, Sin
+- **Total:** 11
+- **Tipos Comunes:** Sin, Documento
 - **Detalle:** 
+- MessageBubble.md: Sin ejemplos de código
 - account-avatar.routes.md: Documento con dudas técnicas (correctamente marcado como needs_review)
 - asset-gateway.service.md: Documento con dudas técnicas (correctamente marcado como needs_review)
+- assets-routes.md: Sin ejemplos de código
+- services-capability-extra-instructions.md: Sin ejemplos de código
+- services-capability-instruction.md: Sin ejemplos de código
+- services-capability-openai-tool-response.md: Sin ejemplos de código
+- services-runtime-composition.md: Sin ejemplos de código
+- services-runtime-selection.md: Sin ejemplos de código
 - prompt documentador.md: Sin sección de propósito
-- prompt documentador.md: Sin ejemplos de código
+- ... (+1 más)
 
 ---
 
 ## 📊 **ANÁLISIS MATEMÁTICO**
 
 ### **Distribución por Tipo**
-- **Core/Subsystem:** 184 documentos
+- **Core/Subsystem:** 189 documentos
 - **Smart Components:** 161 documentos  
 - **UI Components:** 161 documentos
 
 ### **Eficiencia de Documentación**
 - **Documentos por Día:** Calculado en tiempo real
-- **Tasa de Completitud:** 93.7%
+- **Tasa de Completitud:** 92.5%
 - **Tiempo Promedio por Documento:** Variable según complejidad
 
 ---
@@ -114,22 +117,22 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🎯 **RECOMENDACIONES PARA LA IA**
 
 ### **Prioridades Inmediatas**
-1. **Documentar Backend:** Los 5 componentes sin documentación
+1. **Documentar Backend:** Los 0 componentes sin documentación
 2. **Resolver Dudas:** Los 2 documentos con preguntas técnicas
-3. **Completar WIP:** Los 1 documentos incompletos
+3. **Completar WIP:** Los 6 documentos incompletos
 
 ### **Estrategia Sugerida**
-1. **Foco en Backend:** 97.4% de cobertura necesita mejora
+1. **Foco en Backend:** 100.0% de cobertura necesita mejora
 2. **Revisión Técnica:** Resolver dudas en 2 documentos
-3. **Mantenimiento:** Mantener 49.9% de calidad promedio
+3. **Mantenimiento:** Mantener 49.8% de calidad promedio
 
 ---
 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 26/3/2026
-- **Cambios:** Actualizado con 381 documentos analizados
+- **Fecha:** 27/3/2026
+- **Cambios:** Actualizado con 386 documentos analizados
 - **Impacto:** 7 errores críticos detectados
 
 ### **Tendencias**
@@ -145,7 +148,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ### **Consistencia de Datos**
 - **Validación UI:** ✅ Válido
 - **Validación Backend:** ✅ Válido
-- **Detalles Genuinos:** UI [Refs/Real]: 161/163 (Huérfanos: 0) | Backend [Refs/Real]: 184/189 (Huérfanos: 0)
+- **Detalles Genuinos:** UI [Refs/Real]: 161/163 (Huérfanos: 0) | Backend [Refs/Real]: 189/189 (Huérfanos: 0)
 
 ---
 
@@ -168,8 +171,8 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 - **Total Componentes UI:** 163
 - **Total Componentes Backend:** 189
-- **Ratio Documentación/Componente:** 108.2
-- **Eficiencia del Sistema:** 96.4%
+- **Ratio Documentación/Componente:** 109.7
+- **Eficiencia del Sistema:** 96.7%
 
 ---
 
@@ -178,7 +181,7 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 
 ```markdown
 Basado en el Snapshot:
-- Cobertura Backend: 97.4%
+- Cobertura Backend: 100.0%
 - Errores Críticos: 7
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```

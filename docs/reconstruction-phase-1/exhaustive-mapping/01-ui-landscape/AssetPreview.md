@@ -1,356 +1,68 @@
 ---
-id: asset-preview
-type: smart-component
-status: stable
-criticality: high
-location: apps/web/src/components/chat/AssetPreview.tsx
-layers:
-  discovery:
-    status: complete
-    completed_date: '2026-03-22'
-    confidence: 100
-    notes: Componente detectado y analizado automáticamente
-  connections:
-    status: pending
-    completed_date: ''
-    confidence: 0
-    dependencies_mapped: 0
-    notes: Falta mapear conexiones con API de assets
-  subsystem:
-    status: pending
-    completed_date: ''
-    confidence: 0
-    subsystem: ''
-    purpose_validated: false
-    notes: Falta asignar a subsistema de Chat Core
-  operations:
-    status: pending
-    completed_date: ''
-    confidence: 0
-    guides_count: 0
-    notes: Falta crear guía de uso y troubleshooting
-evolution:
-  current_layer: 2
-  total_layers: 4
-  completion_percentage: 50
-  last_updated: '2026-03-22'
-  next_milestone: subsystem
-relationships:
-  depends_on:
-    - api
-    - useAuthStore
-  used_by:
-    - AssetBrowser
-    - MessageBubble
-    - ChatInterface
-  similar_to:
-    - FilePreview
-    - MediaViewer
+id: "AssetPreview"
+type: "smart-component"
+status: "stable"
+criticality: "high"
+location: "apps/web/src/components/chat/AssetPreview.tsx"
 ---
+
+# 🤖 AssetPreview
 
 ## 🎯 Propósito
-(Texto pendiente)
+Este componente es el encargado de visualizar y permitir la interacción con activos (assets) de cualquier tipo (imágenes, video, audio y documentos) dentro de la interfaz de chat de ChatCore y perfiles públicos de FluxCore.
 
-# 🖼️ AssetPreview Component
+## 📐 Arquitectura e Interacción
+Se comporta como un componente inteligente que gestiona su propio estado de carga para obtener URLs firmadas temporales.
+- **Seguridad en Identidad:** Maneja casos en los que el actor no está autenticado (perfil público) utilizando las props `viewerActorId`, `viewerActorType` y `accountId`.
+- **Protección de Errores:** Incluye lógica preventiva para nunca enviar IDs vacíos (`""`) al backend y gestiona fallos de firma transitorios durante la inicialización de la sesión del visitante sin interrumpir la experiencia de usuario.
+- **Network Awareness:** Utiliza `fixLocalhostUrl` para transformar automáticamente las URLs de `localhost` a la IP local de la red (ej: `192.168.0.x`) cuando se accede desde dispositivos móviles en modo desarrollo.
+- **Funcionalidades UI:**
+    - **Imágenes:** Previsualización con Lightbox integrado al hacer clic.
+    - **Multimedia:** Soporte nativo de `video` y `audio`.
+    - **Documentos:** Icono representativo por tipo de archivo y enlaces de descarga seguros.
 
-**Ubicación:** `apps/web/src/components/chat/AssetPreview.tsx`
-**Tipo:** Smart Component (con estado y lógica de negocio)
-**Propósito:** Componente polimórfico para mostrar preview de diferentes tipos de assets (imágenes, videos, audio, documentos) con descarga y lightbox
-
----
-
-## 🎯 **Propósito**
-
-Componente React que renderiza previews adaptativos según el tipo de asset (MIME type). Soporta imágenes con lightbox, videos con controles nativos, audio con player y documentos con iconos representativos. Maneja URLs firmadas seguras y acciones de descarga.
-
----
-
-## 🧩 **Características Principales**
-
-### **🎨 Renderizado Polimórfico:**
-- **Imágenes:** Preview con lightbox fullscreen al hacer click
-- **Videos:** Player nativo con controles y carga lazy
-- **Audio:** Player HTML5 con botones de descarga/abrir
-- **Documentos:** Icono + metadata con acciones de descarga
-
-### **🔐 Seguridad:**
-- **URLs firmadas:** Genera URLs temporales seguras
-- **Validación de usuario:** Requiere autenticación activa
-- **Lazy loading:** Carga solo cuando es necesario
-
-### **⚡ Performance:**
-- **Carga bajo demanda:** Solo carga imágenes automáticamente
-- **Cache de URLs:** Evita llamadas repetidas
-- **Loading states:** Indicadores visuales durante carga
-
-### **🎨 UX/UI:**
-- **Compact mode:** Versión reducida para espacios limitados
-- **Error handling:** Estados claros de error
-- **Responsive:** Adaptable a diferentes contextos
-- **Accesible:** Navegación por teclado y lectores
-
----
-
-## 📊 **Estado y Datos**
-
-### **Props (Interface):**
-```typescript
-interface AssetPreviewProps {
-  assetId: string;           // ID único del asset
-  accountId: string;         // ID de cuenta propietaria
-  name: string;              // Nombre del archivo
-  mimeType: string;          // MIME type para determinar tipo
-  sizeBytes: number;         // Tamaño en bytes
-  className?: string;        // Classes CSS adicionales
-  showDownload?: boolean;    // Mostrar botón de descarga
-  compact?: boolean;         // Modo compacto
-  typeHint?: AssetType;      // Hint de tipo (opcional)
-}
-```
-
-### **Estado Interno:**
-```typescript
-const [signedUrl, setSignedUrl] = useState<string | null>(null);
-const [loading, setLoading] = useState(false);
-const [error, setError] = useState<string | null>(null);
-const [lightboxOpen, setLightboxOpen] = useState(false);
-```
-
-### **Hooks Utilizados:**
-- **`useState`:** Manejo de estado local de URLs y UI
-- **`useEffect`:** Carga automática de imágenes
-- **`useCallback`:** Optimización de handlers
-- **`useAuthStore`:** Obtener usuario actual para URLs firmadas
-
----
-
-## 🔄 **Flujos de Interacción**
-
-### **🖼️ Flujo de Imagen:**
-1. **Mount:** Detecta tipo image → carga URL automáticamente
-2. **Loading:** Muestra spinner mientras carga
-3. **Click:** Abre lightbox fullscreen
-4. **Close:** Cierra lightbox con click o botón X
-
-### **🎥 Flujo de Video/Audio:**
-1. **Mount:** Muestra botón de carga
-2. **Click:** Usuario hace click → carga URL firmada
-3. **Load:** Renderiza player nativo con controles
-4. **Actions:** Botones de descarga/abrir disponibles
-
-### **📄 Flujo de Documento:**
-1. **Mount:** Renderiza icono + metadata inmediatamente
-2. **Download:** Click en descarga → genera URL firmada
-3. **Open:** Click en abrir → abre en nueva pestaña
-
-### **⚠️ Manejo de Errores:**
-- **No autenticado:** Mensaje de error claro
-- **URL fallida:** Indicador de error con retry implícito
-- **Network error:** Mensaje genérico de error
-
----
-
-## 🎨 **Implementación Técnica**
-
-### **🏗️ Estructura del Componente:**
+## 💡 Ejemplo de Uso
+Renderizado de una imagen en un perfil público (actor visitante):
 ```tsx
-export function AssetPreview({ assetId, accountId, name, mimeType, sizeBytes, ...props }) {
-  // Estado para URL firmada y UI
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  
-  // Determinar tipo de asset
-  const assetType = typeHint ?? getAssetType(mimeType);
-  
-  // Obtener URL firmada (lazy loading)
-  const fetchSignedUrl = useCallback(async () => {
-    // Lógica de API con seguridad
-  }, [assetId, accountId, signedUrl, currentUserId, assetType]);
-  
-  // Carga automática para imágenes
-  useEffect(() => {
-    if (assetType === 'image' && !signedUrl && !loading && !error) {
-      fetchSignedUrl();
-    }
-  }, [assetType, signedUrl, loading, error, fetchSignedUrl]);
-  
-  // Renderizado polimórfico
-  const renderContent = () => {
-    switch (assetType) {
-      case 'image': return renderImage();
-      case 'video': return renderVideo();
-      case 'audio': return renderAudio();
-      default: return renderDocument();
-    }
-  };
-  
-  return <div className={clsx('asset-preview', className)}>{renderContent()}</div>;
-}
+<AssetPreview
+    assetId="f07f52c0-3fed-4398-b9c0-bba2befd8987"
+    accountId="520954df-cd5b-499a-a435-a5c0be4fb4e8"
+    viewerActorId="8f57db0d-902f-4c99-a1fd-bc424bfff007"
+    viewerActorType="visitor"
+    name="foto-perfil.jpg"
+    mimeType="image/jpeg"
+/>
 ```
 
-### **🎯 Puntos Clave:**
-- **Detección automática:** MIME type → tipo de renderizado
-- **Lazy loading:** Solo carga imágenes automáticamente
-- **URL caching:** Evita múltiples llamadas API
-- **Polimorfismo:** Un componente para múltiples tipos
-- **Security first:** URLs firmadas con validación de usuario
+## 💡 Estados y Datos
+**Hooks utilizados:**
+- `useState`: Gestiona `signedUrl`, `loading`, `error` y el estado del `lightbox`.
+- `useCallback`: Memoriza la función `fetchSignedUrl` para evitar re-renderizados innecesarios.
+- `useEffect`: Dispara automáticamente la carga de la URL para imágenes y assets que requieren previsualización inmediata.
 
----
+**Propiedades Clave:**
+- `assetId`: ID único del recurso en el registro.
+- `viewerActorId`: ID del actor que está visualizando (puede ser un visitante anónimo).
+- `viewerActorType`: Tipo de actor (`user` | `visitor` | `assistant`).
+- `accountId`: ID de la cuenta dueña del recurso.
 
-## 🔗 **Dependencias Externas**
-
-### **Servicios:**
-- **`api.signAssetUrl`:** Generación de URLs firmadas seguras
-
-### **Stores:**
-- **`useAuthStore`:** Estado de autenticación global
-
-### **Utilidades:**
-- **`clsx`:** Utilidad de clases CSS condicionales
-- **Iconos Lucide:** UI consistente (ImageIcon, Film, Music, etc.)
-
----
-
-## 📋 **Casos de Uso**
-
-### **💬 Chat Interface:**
-1. Usuario envía mensaje con archivo adjunto
-2. AssetPreview muestra preview inline
-3. Click en imagen → lightbox fullscreen
-4. Descarga disponible para todos los tipos
-
-### **📁 Asset Browser:**
-1. Lista de assets en grid view
-2. AssetPreview compact para thumbnails
-3. Click para preview completo
-4. Acciones de gestión disponibles
-
-### **📝 Message History:**
-1. Mensajes históricos con archivos
-2. Preview sin carga automática (excepto imágenes)
-3. Download on-demand para videos/audio
-4. Documentos con metadata visible
-
-### **🔄 Edge Cases:**
-- **Archivos grandes:** Manejo de timeouts en carga
-- **Formatos no soportados:** Fallback a documento genérico
-- **URLs expiradas:** Recarga automática si falla
-- **Permisos denegados:** Mensaje de error específico
-
----
-
-## 🎯 **Consideraciones de Diseño**
-
-### **✅ Fortalezas:**
-- **Polimorfismo inteligente:** Un componente para todos los tipos
-- **Seguridad integrada:** URLs firmadas y validación
-- **Performance optimizado:** Lazy loading y caching
-- **UX completa:** Lightbox, descargas, estados de carga
-
-### **⚠️ Limitaciones:**
-- **Dependencia de API:** Requiere backend funcional
-- **Formatos limitados:** Solo los soportados por el browser
-- **Tamaño de archivos:** No maneja archivos muy grandes
-- **Offline:** No funciona sin conexión
-
----
-
-## 📊 **Métricas de Uso**
-
-### **🔍 Eventos Rastreados:**
-- **Previews cargados:** Por tipo de asset
-- **Lightbox abierto:** Interacciones con imágenes
-- **Downloads:** Archivos descargados
-- **Errores de carga:** Fallos por tipo
-
-### **📈 KPIs Relevantes:**
-- **Tiempo de carga:** Velocidad de preview
-- **Tasa de interacción:** Clicks en previews
-- **Uso de descargas:** Popularidad por tipo
-- **Error rate:** Fiabilidad del componente
-
----
-
-## 🔧 **Helpers y Utilidades**
-
-### **Detección de Tipo:**
-```typescript
-function getAssetType(mimeType: string): AssetType {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'video';
-  if (mimeType.startsWith('audio/')) return 'audio';
-  return 'document';
-}
+## 🚥 Rutas Principales
+- **`POST /:assetId/sign`**: Genera una URL firmada temporal.
+```bash
+# Ejemplo de firma para un visitante
+curl -X POST http://localhost:3000/api/assets/ID-ASSET/sign \
+     -H "Content-Type: application/json" \
+     -d '{
+       "actorId": "visitante-123",
+       "actorType": "visitor",
+       "action": "preview"
+     }'
 ```
 
-### **Iconos por Tipo:**
-```typescript
-function getAssetIcon(type: AssetType) {
-  switch (type) {
-    case 'image': return ImageIcon;
-    case 'video': return Film;
-    case 'audio': return Music;
-    default: return FileText;
-  }
-}
-```
+- **`POST /upload-session`**: Inicia carga.
+- **`POST /confirm-upload`**: Finaliza registro.
 
-### **Formateo de Metadata:**
-```typescript
-function formatBytes(bytes: number): string {
-  // Convierte bytes a formato legible
-}
-
-function getFileExtension(name: string): string {
-  // Extrae extensión del nombre
-}
-```
-
----
-
-## 🎨 **Variantes de Renderizado**
-
-### **🖼️ Image Preview:**
-- **Auto-load:** Carga automática al montar
-- **Lightbox:** Fullscreen con overlay
-- **Responsive:** Max-width/height según modo
-- **Error state:** Placeholder con retry
-
-### **🎥 Video Preview:**
-- **Click-to-load:** Botón para cargar URL
-- **Native controls:** Player HTML5 completo
-- **Compact mode:** Tamaño reducido opcional
-- **Fallback:** Mensaje si no soportado
-
-### **🎵 Audio Preview:**
-- **Player integrado:** Controles nativos
-- **Actions panel:** Botones de descarga/abrir
-- **Metadata visible:** Nombre y tamaño
-- **Loading state:** Spinner durante carga
-
-### **📄 Document Preview:**
-- **Icon + metadata:** Visual inmediato
-- **Extension badge:** Tipo de archivo visible
-- **Action buttons:** Descarga y abrir externo
-- **Compact mode:** Diseño reducido disponible
-
----
-
-**NOTA:** Este componente es fundamental para la experiencia de usuario con archivos multimedia. Su diseño polimórfico reduce la complejidad del sistema mientras mantiene una UX consistente across todos los tipos de assets.
-
-
-## 🔗 Capa 2: Conexiones e Interdependencias
-
-### 📦 Dependencias (LO QUE CONSUME)
-- `../../services/api`
-- `../../store/authStore`
-
-### 🔄 Dependientes (QUIÉN LO CONSUME)
-- *No hay consumidores detectados o es un entry point*
-
-## 📦 Estado y Datos
-(Texto pendiente)
-
-## 🔄 Flujos de Interacción
-(Texto pendiente)
+## 🔗 Dependencias
+- **ApiService (`api`):** consume el endpoint `/api/assets/:id/sign`.
+- **fixLocalhostUrl:** utilidad para resolución de redes locales.
+- **Lucide-React:** set de iconos para representaciones visuales.

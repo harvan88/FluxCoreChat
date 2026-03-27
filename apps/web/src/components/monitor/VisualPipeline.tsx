@@ -69,7 +69,13 @@ export function VisualPipeline() {
                 const data = JSON.parse(event.data);
                 if (data.type === 'telemetry:pipeline_step') {
                     const payload = data.payload;
-                    if (telemetryConversationId && payload.conversationId !== telemetryConversationId) {
+                    console.log(`[VisualPipeline] 📥 Step: ${payload.step}, Msg: ${payload.messageId}, Conv: ${payload.conversationId}`);
+
+                    // Filtrar por ID de conversación, pero ser tolerantes con 'unknown'
+                    // Si el usuario está viendo una conversación específica, solo mostrar lo de esa O lo que venga como 'unknown'
+                    if (telemetryConversationId && 
+                        payload.conversationId !== 'unknown' && 
+                        payload.conversationId !== telemetryConversationId) {
                         return;
                     }
 

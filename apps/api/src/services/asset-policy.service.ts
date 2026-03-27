@@ -55,7 +55,7 @@ const DEFAULT_POLICIES: Record<string, { ttlSeconds: number; contexts: string[] 
 export interface SignAssetParams {
     assetId: string;
     actorId: string;
-    actorType: 'user' | 'assistant' | 'system';
+    actorType: 'user' | 'assistant' | 'system' | 'visitor';
     context: PolicyContext;
     disposition?: 'inline' | 'attachment';
 }
@@ -68,16 +68,33 @@ export interface SignedAssetResult {
 
 export class AssetPolicyService {
     /**
+     * Helper para sanitizar UUIDs
+     */
+    private sanitizeUuid(id: string | null | undefined): string | null {
+        if (!id || typeof id !== 'string' || id.trim() === '') return null;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        return uuidRegex.test(id) ? id : null;
+    }
+
+    /**
      * Evaluar si un actor puede acceder a un asset en un contexto dado
      */
     async evaluateAccess(params: EvaluatePolicyParams): Promise<PolicyEvaluationResult> {
         const { assetId, actorId, actorType, context } = params;
         const contextString = `${context.action}:${context.channel}`;
 
-        console.log(`${DEBUG_PREFIX} Access evaluated: assetId=${assetId}, actor=${actorId}, context=${contextString}`);
+        // Sanitización preventiva
+        const safeAssetId = this.sanitizeUuid(assetId);
+        const safeActorId = this.sanitizeUuid(actorId);
+
+        console.log(`${DEBUG_PREFIX} Access evaluated: assetId=${safeAssetId}, actor=${safeActorId} (${actorType}), context=${contextString}`);
+
+        if (!safeAssetId) {
+            return { allowed: false, ttlSeconds: 0, reason: 'Invalid Asset ID (UUID expected)' };
+        }
 
         // Obtener asset
-        const asset = await assetRegistryService.getById(assetId);
+        const asset = await assetRegistryService.getById(safeAssetId);
         if (!asset) {
             console.log(`${DEBUG_PREFIX} Access denied: asset not found`);
             return { allowed: false, ttlSeconds: 0, reason: 'Asset not found' };
@@ -87,6 +104,16 @@ export class AssetPolicyService {
         if (asset.status !== 'ready') {
             console.log(`${DEBUG_PREFIX} Access denied: asset status=${asset.status}`);
             return { allowed: false, ttlSeconds: 0, reason: `Asset status is ${asset.status}` };
+        }
+
+        // Verificar si el asset es público (bypass policies check)
+        if (asset.isPublic) {
+            console.log(`${DEBUG_PREFIX} Access allowed automatically: asset is PUBLIC`);
+            return {
+                allowed: true,
+                ttlSeconds: this.getDefaultPolicy(asset.scope || 'message_attachment').ttlSeconds * 2, // Público tiene doble tiempo o según scope
+                policyId: undefined,
+            };
         }
 
         // Buscar política específica para la cuenta
@@ -129,7 +156,8 @@ export class AssetPolicyService {
                 throw new Error(`[AssetPolicy] CRITICAL: Default policy for scope '${asset.scope}' missing ttlSeconds property`);
             }
             // Usar política por defecto del sistema
-            const defaultPolicy = this.getDefaultPolicy(asset.scope);
+            const fallbackScope = asset.scope || 'message_attachment';
+            const defaultPolicy = this.getDefaultPolicy(fallbackScope);
             allowedContexts = defaultPolicy.contexts;
             ttlSeconds = defaultPolicy.ttlSeconds;
         }

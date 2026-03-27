@@ -19,6 +19,8 @@
     "@elysiajs/swagger": "0.8.5",
     "@fluxcore/db": "workspace:*",
     "@fluxcore/types": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-trace-base": "^2.6.1",
     "archiver": "^7.0.1",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.10.2",

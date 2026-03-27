@@ -78,7 +78,7 @@ export interface PolicyContext {
 export interface EvaluatePolicyParams {
     assetId: string;
     actorId: string;
-    actorType: 'user' | 'assistant' | 'system';
+    actorType: 'user' | 'assistant' | 'system' | 'visitor';
     context: PolicyContext;
 }
 

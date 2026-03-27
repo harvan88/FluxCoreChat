@@ -28,7 +28,7 @@ export interface CoreEventMap {
 
 
     // SOVEREIGN KERNEL INTERRUPTS
-    'kernel:wakeup': () => void;
+    'kernel:wakeup': (payload?: { source: string; timestamp: number }) => void;
     'kernel:cognition:wakeup': (payload: { conversationId: string; accountId: string }) => void;
 
     // PROJECTOR EVENTS (secondary triggers, not source of truth)
@@ -51,6 +51,8 @@ export interface CoreEventMap {
 
     // 🎯 NUEVO: EVENTOS DE TELEMETRÍA (Pipeline Visual)
     'telemetry:pipeline_step': (payload: import('./telemetry/telemetry.service').PipelineTelemetryEvent) => void;
+    'telemetry:kernel_signal': (payload: any) => void;
+    'telemetry:distributed_trace': (payload: any) => void;
 }
 
 export class CoreEventBus extends EventEmitter {

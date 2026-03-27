@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-INDEX.md"
 ## 🎯 Propósito
 Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y proporciona métricas reales del estado de cobertura del proyecto FluxCore.
 
-**Última actualización:** 2026-03-24
+**Última actualización:** 2026-03-27
 **Validador:** `DocumentationQualityService` (backend)
 
 ---
@@ -35,7 +35,14 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 **Nomenclatura:** `PascalCase.md` (basado en convención React)
 **Estado:** Fase 1 completada (~95% de componentes detectados).
 
-Incluye componentes presentacionales (`ui-component`) y componentes con lógica (`smart-component`).
+### Subsistemas Críticos UI:
+
+```
+📦 Asset & Media UI
+├── AssetPreview.md
+├── MessageBubble.md
+└── useChatUnified.md
+```
 
 ---
 
@@ -74,6 +81,11 @@ Incluye componentes presentacionales (`ui-component`) y componentes con lógica 
 ├── fluxi.runtime.md
 ├── asistentes-local.runtime.md (Consumidor Caps)
 └── asistentes-openai.runtime.md (Consumidor Caps)
+
+📦 Asset Management System
+├── asset-audit-service.md
+├── asset-policy.service.md
+└── assets-routes.md
 ```
 
 ---

@@ -57,6 +57,11 @@ class PromptBuilderService {
             sections.push(knowledgeSection);
         }
 
+        // ── Section 5: Execution Directives — GUIDANCE ────────────────────────
+        if (authorizedContext && authorizedContext.authorizedTemplates.length > 0) {
+            sections.push(`## Directivas de Ejecución\n\n- Tienes acceso a **Plantillas Autorizadas**. Si el mensaje del usuario encaja con la descripción de uso de una plantilla, **DEBES prioritariamente** usar la herramienta \`send_template\` con el ID correspondiente en lugar de generar una respuesta de texto libre.`);
+        }
+
         const systemPrompt = sections.join('\n\n');
 
         // ── Message History ───────────────────────────────────────────────────

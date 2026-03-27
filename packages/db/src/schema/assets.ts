@@ -6,7 +6,7 @@
  * adjuntados a mensajes, plantillas o execution plans.
  */
 
-import { pgTable, uuid, varchar, text, bigint, timestamp, index, unique, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, bigint, timestamp, index, unique, pgEnum, boolean } from 'drizzle-orm/pg-core';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Enums
@@ -59,6 +59,10 @@ export const assets = pgTable('assets', {
     // Metadatos del archivo
     name: varchar('name', { length: 500 }).notNull(),
     originalName: varchar('original_name', { length: 500 }),
+    
+    // Acceso y Compartición
+    isPublic: boolean('is_public').default(false).notNull(),
+
     mimeType: varchar('mime_type', { length: 100 }).default('application/octet-stream'),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).default(0),
 
@@ -125,6 +129,7 @@ export interface CreateAssetParams {
     storageKey: string;
     storageProvider?: string;
     scope?: AssetScope;
+    isPublic?: boolean;
     dedupPolicy?: DedupPolicy;
     uploadedBy?: string;
     metadata?: Record<string, unknown>;
