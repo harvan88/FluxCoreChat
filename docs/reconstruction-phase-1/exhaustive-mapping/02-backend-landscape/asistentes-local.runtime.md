@@ -1,42 +1,100 @@
 ---
 id: "asistentes-local-runtime"
 type: "core"
-status: "stable"
+status: "needs_review"
 criticality: "critical"
 location: "apps/api/src/services/fluxcore/runtimes/asistentes-local.runtime.ts"
 layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "LLM Client, CapabilityLocalRuntimeToolsService, CreateCapabilityDeps, Prompt Builder" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Motor Cognitivo Soberano (Local LLM)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Multi-round Tool Calling, Platform Capability Consumption, Template Authorization" }
+  discovery: { status: "complete", completed_date: "2026-04-01", confidence: 100, notes: "Revalidado contra el archivo real y sus dependencias directas" }
+  connections: { status: "complete", completed_date: "2026-04-01", confidence: 100, notes: "RuntimeGateway, PromptBuilder, LLMClient, CapabilityLocalRuntimeToolsService y CapabilityDepsFactory" }
+  subsystem: { status: "complete", completed_date: "2026-04-01", confidence: 100, notes: "Runtime cognitivo local con loop de tools y compatibilidad legacy para plantillas" }
+  operations: { status: "complete", completed_date: "2026-04-01", confidence: 100, notes: "Guard clauses, prompt composition, tool loop, parseo CALL_TEMPLATE y follow-up post-plantilla" }
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# 🧠 AsistentesLocalRuntime (v8.3)
+# 🤖 asistentes-local.runtime
 
-## 🎯 Propósito (Canon §4.10)
-Es el motor de IA soberano de FluxCore. Implementa la ejecución de modelos de lenguaje (vía Groq u OpenAI) siguiendo un flujo determinista y mediado por la plataforma. Su diseño garantiza que el runtime sea un consumidor puro de capacidades, sin lógica de herramientas interna.
+## 🎯 Propósito
+`AsistentesLocalRuntime` implementa el runtime cognitivo local de FluxCore para modelos compatibles con chat completions. Recibe un `RuntimeInput` ya resuelto, compone el prompt soberano con `promptBuilder`, ofrece solo las capacidades permitidas (`search_knowledge`, `send_template`), ejecuta un loop de function calling de hasta 2 rondas y devuelve únicamente `ExecutionAction[]` declarativas para que otro componente medie los efectos.
 
-## 🏗️ Arquitectura "Plataforma Primero"
-A partir de la v8.3, el runtime local ya no define sus propias herramientas. En su lugar:
-1. Recibe el `RuntimeInput` con los servicios de plataforma ya inyectados.
-2. Consulta al `capabilityLocalRuntimeToolsService` para obtener la lista de herramientas autorizadas (`LLMTool[]`).
-3. Ejecuta las llamadas a herramientas generadas por el LLM delegando la lógica al servicio de puente de la plataforma.
-4. Soporta hasta 2 rondas de llamadas (`MAX_TOOL_ROUNDS`) para flujos complejos (RAG -> Respuesta).
+## 🏗️ Arquitectura
 
-## 🚥 Invariantes y Seguridad
-- **Aislamiento de Datos:** No tiene acceso directo a la DB (Canon Inv. 10).
-- **Mediación de Efectos:** Nunca ejecuta efectos secundarios directamente (ej. enviar mensaje); siempre devuelve `ExecutionAction[]` para ser procesados por el `ActionExecutor`.
-- **Autorización Granular:** Solo expone las herramientas y plantillas marcadas como autorizadas en el `PolicyContext`.
+### Flujo principal de `handleMessage()`
+1. **Guards iniciales**
+   - Si `policyContext.mode === 'off'`, retorna `no_action`.
+   - Si no hay historial o el último mensaje no es `user`, retorna `no_action` para evitar loops.
+
+2. **Resolución local de parámetros del modelo**
+   - Provider por defecto: `groq`.
+   - Modelo por defecto: `llama-3.1-8b-instant`.
+   - `maxTokens` por defecto: `1024`.
+   - `temperature` por defecto: `0.7`.
+
+3. **Construcción del prompt soberano**
+   - Llama `promptBuilder.build({ policyContext, authorizedContext, runtimeConfig, conversationHistory })`.
+   - El prompt resultante mezcla identidad de negocio, directivas de atención, instrucciones autorizadas del asistente y recursos autorizados del negocio.
+
+4. **Oferta de herramientas autorizadas**
+   - Usa `capabilityLocalRuntimeToolsService.listTools(...)`.
+   - Filtra explícitamente por `ASISTENTES_LOCAL_TOOL_NAMES = ['search_knowledge', 'send_template']`.
+
+5. **Preparación de dependencias de ejecución**
+   - Construye `capabilityExecutionDeps` con `createCapabilityDeps({ enableTemplateSend: false })`.
+   - Esto obliga a que `send_template` quede como acción declarativa encolada, no como efecto inmediato.
+
+6. **Loop LLM + tools**
+   - Inicializa `currentMessages` con el `systemPrompt` y el historial filtrado.
+   - Ejecuta `llmClient.complete(...)` dentro de un loop `for (round = 0; round <= MAX_TOOL_ROUNDS; round++)`.
+   - Si el modelo devuelve `toolCalls`, las agrega como mensaje `assistant`, ejecuta cada tool y agrega la respuesta como mensaje `tool`.
+
+7. **Cierre del turno cognitivo**
+   - Si la respuesta final es texto puro, devuelve `send_message`.
+   - Si hay plantillas detectadas o encoladas, devuelve `send_template` y, si corresponde, un `send_message` de seguimiento.
+   - Si el modelo no produce salida utilizable, devuelve `no_action`.
+
+### Compatibilidad legacy de plantillas
+El archivo mantiene un subsistema local para compatibilidad con respuestas que incluyan marcadores `CALL_TEMPLATE:` en texto libre:
+
+- `extractJsonObject()` parsea un payload JSON opcional después del marcador.
+- `parseTemplateResponse()` identifica markers, valida autorización, deduplica acciones y calcula el texto residual.
+- `buildTemplateFollowUpContext()` reconstruye el contenido exacto de las plantillas autorizadas desde `authorizedContext.businessProfile.templates`.
+- `generateTemplateAwareFollowUp()` hace una segunda llamada LLM para redactar un seguimiento breve cuando hubo plantillas y todavía quedó texto residual útil.
+- `sanitizeFollowUpText()` bloquea salidas técnicas o inseguras (`NO_FOLLOW_UP`, JSON puro, fenced blocks, markers técnicos).
+
+**Problema identificado (2026-04-01):** El parseo actual falla cuando los marcadores `CALL_TEMPLATE:` están incrustados en medio del texto conversacional. El sistema espera que los marcadores estén solos o al final, pero el LLM a veces los genera mezclados con texto, produciendo outputs malformados.
+
+### Integración con el resto del sistema
+- **Registro e invocación:** `runtimeGateway.register(asistentesLocalRuntime)` ocurre en `apps/api/src/server.ts` y en el bootstrap legado de `apps/api/src/index.ts`.
+- **Ejecución efectiva:** el `RuntimeGateway` es quien llama `handleMessage(input)` y consume sus `ExecutionAction[]`.
+- **Oferta/ejecución de capabilities:** el runtime delega en `capabilityLocalRuntimeToolsService` la traducción entre tool calls del LLM y capacidades autorizadas de plataforma.
 
 ## 🧱 Dependencias
-- **Depende de:** `llm-client.service.ts`, `capability-local-runtime-tools.service.ts`, `capability-deps-factory.service.ts`, `prompt-builder.service.ts`.
-- **Es usado por:** `runtime-gateway.service.ts`.
+- **Depende de:**
+  - `apps/api/src/services/fluxcore/prompt-builder.service.ts`
+  - `apps/api/src/services/fluxcore/llm-client.service.ts`
+  - `apps/api/src/services/capability-local-runtime-tools.service.ts`
+  - `apps/api/src/services/capability-deps-factory.service.ts`
+- **Lo usa:**
+  - `apps/api/src/services/fluxcore/runtime-gateway.service.ts`
+  - Registro en `apps/api/src/server.ts`
+  - Registro legado en `apps/api/src/index.ts`
+
+## 🔒 Invariantes observados en el código
+- No ejecuta directamente efectos externos: retorna acciones declarativas como `send_message`, `send_template` o `no_action`.
+- Limita el surface de tools locales a dos nombres explícitos.
+- Deduplica acciones de plantilla por `templateId + variables`.
+- Evita follow-ups inseguros cuando detecta JSON, fenced blocks o marcadores técnicos.
+- Implementa prevención de loops si el último mensaje no proviene del usuario.
+
+## ⚠️ Dudas técnicas / razones para `needs_review`
+1. **Drift del contrato `RuntimeInput`:** `RuntimeInput` expone `services`, pero este runtime no usa `input.services`; construye dependencias internas con `createCapabilityDeps(...)`. La consolidación de plataforma no está cerrada en este archivo.
+2. **Acceso transitivo a infraestructura durante `handleMessage()`:** aunque el runtime no importa `db` directamente, los deps creados localmente terminan delegando en `retrievalService` y `aiTemplateService`, por lo que la garantía “todo llega resuelto” queda debilitada en la práctica.
+3. **Exposición de prompt sensible en logs:** imprime el `systemPrompt` completo con `console.log`, incluyendo identidad de negocio, instrucciones y recursos autorizados del negocio.
+4. **Problema crítico con parseo de plantillas (2026-04-01):** Cuando el LLM genera respuestas que mezclan marcadores `CALL_TEMPLATE:<uuid>` con texto conversacional, el runtime no los separa correctamente. Esto produce mensajes malformados que llegan a ChatCore. El sistema actual intenta hacer follow-up post-plantilla pero falla cuando el marcador está incrustado en texto libre.
 
 ## 💡 Ejemplo de Uso
 ```typescript
 import { asistentesLocalRuntime } from './services/fluxcore/runtimes/asistentes-local.runtime';
 
-// Invocado por el RuntimeGateway
 const actions = await asistentesLocalRuntime.handleMessage(input);
 ```

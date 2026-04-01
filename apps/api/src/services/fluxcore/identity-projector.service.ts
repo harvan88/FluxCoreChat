@@ -46,6 +46,10 @@ export class IdentityProjector extends BaseProjector {
      *   - provenance_entry_point (tenant scope hint for AccountActorContext)
      */
     protected async project(signal: typeof fluxcoreSignals.$inferSelect, tx: TransactionClient): Promise<void> {
+        if (signal.factType === 'COGNITIVE_STEP_OBSERVED') {
+            return;
+        }
+
         console.log(`[IdentityProjector] ▶️ Processing signal #${signal.sequenceNumber} (${signal.factType})`);
         // ── ChatCore Gateway: authenticated users with @fluxcore/internal namespace ──
         if (signal.certifiedByAdapter === CHATCORE_GATEWAY_ID) {

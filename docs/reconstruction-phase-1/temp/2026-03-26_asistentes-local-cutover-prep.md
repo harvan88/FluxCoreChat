@@ -14,6 +14,7 @@ Estado resultante:
 - ya no conserva defs privadas de `search_knowledge` ni `send_template`
 - ya no conserva parser/dispatcher privado de tools
 - ya no conserva fetch HTTP interno de RAG
+- **CONSOLIDADO (2026-04-01):** `send_template` fue removido de `ASISTENTES_LOCAL_TOOL_NAMES`; el modelo ahora habla `CALL_TEMPLATE` exclusivamente
 - mantiene temporalmente `ASISTENTES_LOCAL_TOOL_NAMES` como guard de parity
 - ese guard evita exponer `list_available_templates`, que hoy sí existe en la oferta canónica general pero no en el contrato histórico del runtime local
 
@@ -33,6 +34,7 @@ Esto significa que el runtime local ya no necesita seguir siendo owner de:
 
 - definición de `search_knowledge`
 - definición de `send_template`
+- **HECHO (2026-04-01):** `send_template` ya no es tool ofrecido al modelo; el modelo habla `CALL_TEMPLATE` y el runtime lo traduce a `send_template` internamente
 - parseo manual de tool args
 - branching manual entre query capability y command capability
 - ejecución HTTP/manual de RAG

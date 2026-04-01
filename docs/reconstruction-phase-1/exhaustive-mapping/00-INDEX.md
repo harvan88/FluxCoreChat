@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-INDEX.md"
 ## 🎯 Propósito
 Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y proporciona métricas reales del estado de cobertura del proyecto FluxCore.
 
-**Última actualización:** 2026-03-27
+**Última actualización:** 2026-04-01 (Actualizado con cambios de template-registry y prompt-builder)
 **Validador:** `DocumentationQualityService` (backend)
 
 ---
@@ -21,11 +21,11 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 | Paisaje | Documentos | Estado | Fase |
 | :--- | :--- | :--- | :--- |
 | **01-ui-landscape** | 162 docs | ✅ Completado | Fase 1 |
-| **02-backend-landscape** | 181 docs | ✅ Completado | Fase 2 |
+| **02-backend-landscape** | 182 docs | ✅ Completado | Fase 2 |
 | **03-database-landscape** | 33 docs | ✅ Completado | Fase 3 |
 | **04-end-to-end-flows** | 1 doc | ⏳ Pendiente | Fase 4 |
 | **05-configuration-state** | 2 docs | ⏳ Parcial | Fase 5 |
-| **TOTAL** | **379 docs** | 🏗️ 3/5 Fases | — |
+| **TOTAL** | **380 docs** | 🏗️ 3/5 Fases | — |
 
 ---
 
@@ -57,6 +57,7 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 ```
 🤖 AI Response Pipeline (FluxCore)
 ├── cognitive-dispatcher.service.md
+├── tracer.md
 ├── runtime-input-factory.service.md
 ├── runtime-gateway.service.md
 ├── action-executor.service.md
@@ -71,6 +72,11 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 ├── capability-argument-normalizer.service.md
 └── capability-openai-compat.service.md
 
+📝 Template & Prompt Services
+├── template-registry.service.md (needs_review)
+├── prompt-builder.service.md (needs_review)
+└── template-parsing-problem.md (Issue Crítico)
+
 🧠 Kernel Architecture
 ├── kernel.md
 ├── base.projector.md
@@ -80,7 +86,8 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 🔌 Runtime Adapters (Consumidores)
 ├── fluxi.runtime.md
 ├── asistentes-local.runtime.md (Consumidor Caps)
-└── asistentes-openai.runtime.md (Consumidor Caps)
+├── asistentes-openai.runtime.md (Consumidor Caps)
+└── template-parsing-problem.md (Issue Crítico)
 
 📦 Asset Management System
 ├── asset-audit-service.md

@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 27/03/2026, 18:46
+**Última Actualización:** 01/04/2026, 13:55
 
 ---
 
@@ -30,7 +30,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ### **Calidad General**
 - **Score Promedio:** 49.8%
-- **Índice de Confianza:** 91.5%
+- **Índice de Confianza:** 90.7%
 - **Total Documentos Analizados:** 386
 
 ### **Cobertura del Sistema**
@@ -78,25 +78,25 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## ⚠️ **INCIDENCIAS DETECTADAS**
 
 ### **Errores Críticos**
-- **Total:** 7
+- **Total:** 8
 - **Tipos Comunes:** Contiene, Inconsistencia, Falta
-- **Componentes Afectados:** account-avatar.routes.md, asset-gateway.service.md, documentation-quality.service.md, documentation-quality.service.md, environment-variables.md (+2 más)
+- **Componentes Afectados:** account-avatar.routes.md, asset-gateway.service.md, documentation-quality.service.md, documentation-quality.service.md, template-registry.service.md (+3 más)
 
 ### **Advertencias**
-- **Total:** 11
+- **Total:** 14
 - **Tipos Comunes:** Sin, Documento
 - **Detalle:** 
 - MessageBubble.md: Sin ejemplos de código
 - account-avatar.routes.md: Documento con dudas técnicas (correctamente marcado como needs_review)
+- ai-template.service.md: Sin ejemplos de código
 - asset-gateway.service.md: Documento con dudas técnicas (correctamente marcado como needs_review)
 - assets-routes.md: Sin ejemplos de código
+- cognitive-dispatcher.service.md: Sin ejemplos de código
 - services-capability-extra-instructions.md: Sin ejemplos de código
 - services-capability-instruction.md: Sin ejemplos de código
 - services-capability-openai-tool-response.md: Sin ejemplos de código
 - services-runtime-composition.md: Sin ejemplos de código
-- services-runtime-selection.md: Sin ejemplos de código
-- prompt documentador.md: Sin sección de propósito
-- ... (+1 más)
+- ... (+4 más)
 
 ---
 
@@ -131,9 +131,9 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 27/3/2026
+- **Fecha:** 1/4/2026
 - **Cambios:** Actualizado con 386 documentos analizados
-- **Impacto:** 7 errores críticos detectados
+- **Impacto:** 8 errores críticos detectados
 
 ### **Tendencias**
 - **Mejora en Calidad:** 📉 Necesita atención
@@ -172,7 +172,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 - **Total Componentes UI:** 163
 - **Total Componentes Backend:** 189
 - **Ratio Documentación/Componente:** 109.7
-- **Eficiencia del Sistema:** 96.7%
+- **Eficiencia del Sistema:** 96.5%
 
 ---
 
@@ -182,7 +182,7 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 ```markdown
 Basado en el Snapshot:
 - Cobertura Backend: 100.0%
-- Errores Críticos: 7
+- Errores Críticos: 8
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```
 

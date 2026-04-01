@@ -8,43 +8,77 @@ layers:
   discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
   connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "FluxPolicyContextService, RuntimeGateway, ActionExecutor, AccountLabelService, Drizzle (conversations, messages, suggestions)" }
   subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Router de Decisiones Cognitivas (Canon §4.9)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Context resolution (Policy + Runtime), Automation gate (Auto/Suggest/Off), Semantic history building, Typing keeping-alive, Suggestion persistence, Stop-propagation enforcement" }
+  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Context resolution (Policy + Runtime), Automation gate (Auto/Suggest/Off), Semantic history building, Typing keeping-alive, Suggestion persistence, Stop-propagation enforcement, Telemetría OpenTelemetry" }
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# ⚙️ CognitiveDispatcherService
+# CognitiveDispatcherService
 
-## 🎯 Propósito (v8.3 Canon §4.9)
-El `CognitiveDispatcher` es el director de orquesta del ciclo de vida de un mensaje. Siguiendo el **Canon §4.9**, es responsable de recolectar toda la información necesaria (contexto de negocio, historial, reglas) y decidir qué runtime debe procesar el turno, gestionando la transición desde la intención hasta la ejecución de acciones mediadas.
+## Propósito
+`CognitiveDispatcherService` es el punto donde un turno listo para procesarse se convierte en una invocación soberana de runtime. Resuelve el contexto de negocio y técnico, arma el historial semántico, aplica los gates de automatización y entrega al `ActionExecutor` las acciones resultantes.
 
-## 🚥 Modos de Operación (The Gate)
-El dispatcher aplica las restricciones del `PolicyContext` antes de cualquier llamada a la IA:
--   **AUTO**: Ejecuta el runtime y aplica las acciones mediadas inmediatamente a través del `ActionExecutor`.
--   **SUGGEST**: Ejecuta el runtime pero **guarda la respuesta como una sugerencia** (`aiSuggestions`) para revisión humana.
--   **OFF**: Cierra el turno sin realizar ninguna acción, ignorando el razonamiento de IA por completo.
+## Arquitectura
+El método `dispatch(...)` realiza, en este orden, las siguientes tareas verificadas en código:
 
-## 🧬 Preparación de Contexto (Canon §4.5)
-Garantiza que el input para la IA esté blindado ante drift configuracional. Delega en `RuntimeInputFactoryService` para ensamblar el `RuntimeInput` que incluye:
--   **Business Governance**: El `PolicyContext` resuelto (Soberanía de Negocio).
--   **Technical Config**: El asistente activo (`RuntimeConfig`) y sus instrucciones.
--   **Semantic History**: Una lista de hasta 50 mensajes purificados para el LLM.
--   **Action Mediation Services**: El sistema de herramientas autorizado (`RuntimeServices`).
+1. carga la conversación desde `conversations`
+2. resuelve `PolicyContext`
+3. resuelve `RuntimeSelection`
+4. obtiene `RuntimeComposition` y `runtimeConfig` enriquecido
+5. reconstruye hasta 50 mensajes semánticos desde `messages`
+6. construye `RuntimeInput` usando `runtimeInputFactoryService`
+7. invoca el runtime a través de `runtimeGateway`
+8. entrega `ExecutionAction[]` a `actionExecutor.execute(...)`
 
-## 🛡️ Humanización y Flujo
-- **Typing Pulse:** Inicia un pulso de escritura ("typing...") cada 3 segundos mientras la IA razona.
-- **Action Execution:** Pasa las acciones resultantes al `ActionExecutor` (Canon §4.8) para garantizar que los efectos secundarios sean mediados por la plataforma.
+## Gates de operación
+El comportamiento depende del `PolicyContext.mode` y del estado de `RuntimeSelection`:
 
-## 🧱 Dependencias
-- **Depende de:** `flux-policy-context.service.ts`, `runtime-selection.service.ts`, `runtime-composition.service.ts`, `runtime-input-factory.service.ts`, `runtime-gateway.service.ts`, `action-executor.service.ts`.
+- **`off`**
+  - cierra el turno con `actionExecutor.closeTurn(...)`
+  - no invoca ningún runtime
+- **`suggest`**
+  - invoca el runtime
+  - persiste la sugerencia en `aiSuggestions`
+  - no ejecuta automáticamente las acciones resultantes
+- **`auto`**
+  - invoca el runtime
+  - ejecuta las acciones mediante `ActionExecutor`
+
+Si `runtimeSelection.state === 'inactive'`, el dispatcher también cierra el turno sin invocar IA.
+
+## Observabilidad implementada
+Antes de invocar `runtimeGateway.invoke(...)`, el dispatcher hace wrapping con:
+
+```ts
+trackCognitiveStep('IA_RUNTIME_INVOCATION', attributes, input, async () => {
+  return runtimeGateway.invoke(runtimeId, input, lastSignalSeq);
+});
+```
+
+Eso captura el `RuntimeInput` efectivo y lo publica como `telemetry:distributed_trace`, lo que permite inspección live en `KernelConsole`.
+
+Además, el dispatcher emite `telemetry:pipeline_step` en caminos exitosos de `suggest` y `auto`.
+
+## Efectos auxiliares
+- inicia un pulso de typing cada 3 segundos mientras el runtime está razonando
+- intenta certificar un paso interno de contexto resuelto; si falla, registra el error sin bloquear el turno
+- consulta `fluxcore_cognition_queue` para recuperar `targetAccountId` antes de ejecutar acciones
+
+## Dependencias
+- **Depende de:** `flux-policy-context.service.ts`, `runtime-selection.service.ts`, `runtime-composition.service.ts`, `runtime-input-factory.service.ts`, `runtime-gateway.service.ts`, `action-executor.service.ts`, `apps/api/src/telemetry/tracer.ts`.
 - **Es usado por:** `cognition-worker.ts`.
 
-## 💡 Ejemplo de Uso
-```typescript
+## Riesgos o límites actuales
+- La trazabilidad profunda del payload es live-first y depende del canal WebSocket.
+- La validación TypeScript global del API hoy está contaminada por errores preexistentes en scripts auxiliares, por lo que este componente no puede considerarse validado mediante gate global de repo.
+
+## Ejemplo de uso
+```ts
 import { cognitiveDispatcher } from './services/fluxcore/cognitive-dispatcher.service';
 
 const result = await cognitiveDispatcher.dispatch({
   turnId: 1088,
   conversationId: '...',
-  accountId: '...'
+  accountId: '...',
+  lastSignalSeq: 1089,
 });
 ```

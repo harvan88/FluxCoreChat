@@ -1,4 +1,5 @@
 import { db, fluxcoreSignals, fluxcoreProjectorCursors, fluxcoreProjectorErrors, eq, gt, asc, sql, and } from '@fluxcore/db';
+import { signCandidate } from '../../services/fluxcore/kernel-utils';
 
 /**
  * BaseProjector — RFC-0001 §5.9, §5.11
@@ -16,6 +17,8 @@ import { db, fluxcoreSignals, fluxcoreProjectorCursors, fluxcoreProjectorErrors,
  *   4. Full replay is possible by resetting cursors.
  *   5. Duplicate wake-ups are harmless (isProcessing guard).
  */
+const KERNEL_PROJECTOR_SIGNING_SECRET = 'sovereign-secret-key-change-me-in-prod';
+
 export abstract class BaseProjector {
 
     protected abstract projectorName: string;
@@ -60,39 +63,51 @@ export abstract class BaseProjector {
                 try {
                     // Canon Invariant: cursor update and projection write are atomic.
                     await db.transaction(async (tx) => {
-                        // 🎯 REALIDAD (Soberanía): Certificar Proyección
-                        try {
-                            const { kernel } = await import('../kernel');
-                            const evidence = {
-                                raw: { 
-                                    projector: this.projectorName,
-                                    triggerSignalId: signal.sequenceNumber 
-                                },
-                                format: 'json',
-                                provenance: {
-                                    driverId: 'kernel/projector',
-                                    externalId: `proj-${this.projectorName}-${signal.sequenceNumber}`,
-                                    entryPoint: this.projectorName,
-                                },
-                                claimedOccurredAt: new Date().toISOString(),
-                            };
+                        // REALIDAD (Soberanía): Certificar Proyección
+                        const isProjectorObservation =
+                            signal.factType === 'COGNITIVE_STEP_OBSERVED' ||
+                            signal.certifiedByAdapter === 'kernel-projector-adapter';
 
-                            const candidate = {
-                                factType: 'COGNITIVE_STEP_OBSERVED',
-                                source: { namespace: '@kernel/projector', key: this.projectorName },
-                                subject: { namespace: signal.sourceNamespace, key: signal.sourceKey },
-                                evidence,
-                                certifiedBy: {
-                                    adapterId: 'kernel-projector-adapter',
-                                    adapterVersion: '1.0.0',
-                                    signature: ''
-                                }
-                            };
-                            
-                            // Emisión directa al kernel (bypass circular dependecy if any via internal call)
-                            await kernel.ingestSignal(candidate as any);
-                        } catch (e) {
-                            console.error(`[BaseProjector:${this.projectorName}] Telemetry error:`, e);
+                        if (signal.factType === 'COGNITIVE_STEP_OBSERVED') {
+                            await this.updateCursor(signal.sequenceNumber, tx);
+                            return;
+                        }
+
+                        if (!isProjectorObservation) {
+                            try {
+                                const { kernel } = await import('../kernel');
+                                const evidence = {
+                                    raw: { 
+                                        projector: this.projectorName,
+                                        triggerSignalId: signal.sequenceNumber 
+                                    },
+                                    format: 'json',
+                                    provenance: {
+                                        driverId: 'kernel/projector',
+                                        externalId: `proj-${this.projectorName}-${signal.sequenceNumber}`,
+                                        entryPoint: this.projectorName,
+                                    },
+                                    claimedOccurredAt: new Date().toISOString(),
+                                };
+
+                                const candidate = {
+                                    factType: 'COGNITIVE_STEP_OBSERVED',
+                                    source: { namespace: '@kernel/projector', key: this.projectorName },
+                                    subject: { namespace: signal.sourceNamespace, key: signal.sourceKey },
+                                    evidence,
+                                    certifiedBy: {
+                                        adapterId: 'kernel-projector-adapter',
+                                        adapterVersion: '1.0.0',
+                                        signature: ''
+                                    }
+                                };
+                                candidate.certifiedBy.signature = signCandidate(candidate, KERNEL_PROJECTOR_SIGNING_SECRET);
+                                
+                                // Emisión directa al kernel (bypass circular dependecy if any via internal call)
+                                await kernel.ingestSignal(candidate as any);
+                            } catch (e) {
+                                console.error(`[BaseProjector:${this.projectorName}] Telemetry error:`, e);
+                            }
                         }
 
                         await this.project(signal, tx);

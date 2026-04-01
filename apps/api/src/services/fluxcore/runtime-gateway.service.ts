@@ -15,7 +15,9 @@
 import type { RuntimeAdapter, RuntimeInput, ExecutionAction } from '../../core/fluxcore-types';
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, Evidence } from '../../core/types';
-import crypto from 'node:crypto';
+import { signCandidate } from './kernel-utils';
+
+const RUNTIME_GATEWAY_SIGNING_SECRET = 'sovereign-secret-key-change-me-in-prod';
 
 class RuntimeGatewayService {
     private runtimes = new Map<string, RuntimeAdapter>();
@@ -93,7 +95,7 @@ class RuntimeGatewayService {
                     }
                 };
 
-                candidate.certifiedBy.signature = crypto.createHash('sha256').update(JSON.stringify(candidate)).digest('hex');
+                candidate.certifiedBy.signature = signCandidate(candidate, RUNTIME_GATEWAY_SIGNING_SECRET);
                 await kernel.ingestSignal(candidate);
             } catch (e) {
                 console.error(`[RuntimeGateway] Failed to certify runtime step:`, e);

@@ -4,12 +4,12 @@ import type { KernelCandidateSignal, PhysicalFactType } from './types';
 import { coreEventBus } from './events';
 
 /**
- * Normaliza un valor de fecha a un objeto Date válido.
+ * Normaliza un valor de fecha a un objeto Date vÃ¡lido.
  * Maneja strings ISO, numbers (timestamps), y objetos Date.
  */
 
 /**
- * FluxCore Kernel — RFC-0001 (RATIFIED)
+ * FluxCore Kernel â€” RFC-0001 (RATIFIED)
  *
  * SOVEREIGN REALITY CERTIFIER
  *
@@ -37,9 +37,9 @@ const PHYSICAL_FACT_TYPES: ReadonlySet<PhysicalFactType> = new Set([
     'COGNITIVE_STEP_OBSERVED',
 ]);
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Deterministic Canonicalization & Fingerprinting
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function canonicalize(value: unknown): string {
     if (value === null || typeof value !== 'object') {
@@ -75,9 +75,9 @@ export function fingerprint(candidate: KernelCandidateSignal, checksum: string):
     return crypto.createHash('sha256').update(base).digest('hex');
 }
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Kernel
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export class Kernel {
     /**
@@ -92,8 +92,6 @@ export class Kernel {
      *   IA agents, and controllers are PROHIBITED.
      */
     async ingestSignal(candidate: KernelCandidateSignal): Promise<number> {
-        console.log(`[Kernel] 🔍 INGEST_SIGNAL START ==================`);
-        console.log(`[Kernel] 📥 CANDIDATE RECEIVED:`);
         console.log(`  - factType: ${candidate.factType}`);
         console.log(`  - source: ${JSON.stringify(candidate.source)}`);
         console.log(`  - subject: ${JSON.stringify(candidate.subject)}`);
@@ -106,22 +104,15 @@ export class Kernel {
         console.log(`  - certifiedBy.adapterId: ${candidate.certifiedBy.adapterId}`);
         console.log(`  - certifiedBy.adapterVersion: ${candidate.certifiedBy.adapterVersion}`);
         console.log(`  - certifiedBy.signature (preview): ${candidate.certifiedBy.signature.substring(0, 16)}...`);
-        console.log(`[Kernel] 🔍 INGEST_SIGNAL END ==================`);
         
-        // 🔍 DEBUG INMEDIATO DESPUÉS DE INGEST_SIGNAL END
-        console.log(`[Kernel] 🔍 DEBUG: Starting gates validation for factType: ${candidate.factType}`);
+        // ðŸ” DEBUG INMEDIATO DESPUÃ‰S DE INGEST_SIGNAL END
         
-        // ── Gate 1: Physical fact type ──
-        console.log(`[Kernel] 🔍 DEBUG: Checking PHYSICAL_FACT_TYPES...`);
+        // â”€â”€ Gate 1: Physical fact type â”€â”€
         if (!PHYSICAL_FACT_TYPES.has(candidate.factType)) {
-            console.error(`[Kernel] ❌ DEBUG: Unknown physical fact class: ${candidate.factType}`);
-            console.error(`[Kernel] 🔍 DEBUG: Available types:`, Array.from(PHYSICAL_FACT_TYPES));
             throw new Error(`Unknown physical fact class: ${candidate.factType}`);
         }
-        console.log(`[Kernel] ✅ DEBUG: Physical fact type validated: ${candidate.factType}`);
 
-        // ── Gate 2: Adapter registration ──
-        console.log(`[Kernel] 🔍 DEBUG: Checking adapter registration...`);
+        // â”€â”€ Gate 2: Adapter registration â”€â”€
         const adapterAllowed = await db.query.fluxcoreRealityAdapters.findFirst({
             where: (t, { eq }) => eq(t.adapterId, candidate.certifiedBy.adapterId),
             columns: {
@@ -134,41 +125,31 @@ export class Kernel {
         });
 
         if (!adapterAllowed) {
-            console.error(`[Kernel] ❌ DEBUG: Unknown reality adapter: ${candidate.certifiedBy.adapterId}`);
             throw new Error(`Unknown reality adapter: ${candidate.certifiedBy.adapterId}`);
         }
-        console.log(`[Kernel] ✅ DEBUG: Adapter validated: ${adapterAllowed.adapterId}`);
 
-        // ── Gate 3: Adapter class ──
-        console.log(`[Kernel] 🔍 DEBUG: Checking adapter class...`);
+        // â”€â”€ Gate 3: Adapter class â”€â”€
         if (adapterAllowed.adapterClass === 'INTERPRETER') {
-            console.error(`[Kernel] ❌ DEBUG: Interpreter adapter cannot certify: ${adapterAllowed.adapterClass}`);
             throw new Error(
                 `Interpreter adapters cannot certify physical reality (${candidate.certifiedBy.adapterId})`
             );
         }
-        console.log(`[Kernel] ✅ DEBUG: Adapter class validated: ${adapterAllowed.adapterClass}`);
 
-        // ── Gate 4: Driver match ──
-        console.log(`[Kernel] 🔍 DEBUG: Checking driver match...`);
-        console.log(`[Kernel] 🔍 DEBUG: Expected driver: ${adapterAllowed.driverId}, Received: ${candidate.evidence.provenance.driverId}`);
+        // â”€â”€ Gate 4: Driver match â”€â”€
         if (adapterAllowed.driverId !== candidate.evidence.provenance.driverId) {
-            console.error(`[Kernel] ❌ DEBUG: Driver mismatch for adapter ${candidate.certifiedBy.adapterId}`);
             throw new Error(
                 `Driver mismatch for adapter ${candidate.certifiedBy.adapterId}`
             );
         }
-        console.log(`[Kernel] ✅ DEBUG: Driver match validated`);
 
-        // ── Gate 5: HMAC signature verification ──
-        console.log(`[Kernel] 🔍 CANONICALIZANDO:`);
-        console.log(`📋 Fact: ${candidate.factType}`);
-        console.log(`📋 Source: ${JSON.stringify(candidate.source)}`);
-        console.log(`📋 Object: ${candidate.object ? 'present' : 'none'}`);
-        console.log(`📋 Evidence Keys: ${Object.keys(candidate.evidence)}`);
-        console.log(`📋 Evidence Raw Keys: ${Object.keys(candidate.evidence.raw as any)}`);
-        console.log(`📋 Evidence Meta Keys: ${Object.keys((candidate.evidence.raw as any).meta || {})}`);
-        console.log(`📋 Adapter: ${candidate.certifiedBy.adapterId} v${candidate.certifiedBy.adapterVersion}`);
+        // â”€â”€ Gate 5: HMAC signature verification â”€â”€
+        console.log(`ðŸ“‹ Fact: ${candidate.factType}`);
+        console.log(`ðŸ“‹ Source: ${JSON.stringify(candidate.source)}`);
+        console.log(`ðŸ“‹ Object: ${candidate.object ? 'present' : 'none'}`);
+        console.log(`ðŸ“‹ Evidence Keys: ${Object.keys(candidate.evidence)}`);
+        console.log(`ðŸ“‹ Evidence Raw Keys: ${Object.keys(candidate.evidence.raw as any)}`);
+        console.log(`ðŸ“‹ Evidence Meta Keys: ${Object.keys((candidate.evidence.raw as any).meta || {})}`);
+        console.log(`ðŸ“‹ Adapter: ${candidate.certifiedBy.adapterId} v${candidate.certifiedBy.adapterVersion}`);
 
         const canonicalCandidate = canonicalize({
             factType: candidate.factType,
@@ -180,47 +161,45 @@ export class Kernel {
             adapterVersion: candidate.certifiedBy.adapterVersion,
         });
 
-        console.log(`[Kernel] 📋 CANONICAL GENERADO:`);
-        console.log(`📋 Length: ${canonicalCandidate.length} chars`);
-        console.log(`📋 Preview: ${canonicalCandidate.substring(0, 100)}...`);
+        console.log(`ðŸ“‹ Length: ${canonicalCandidate.length} chars`);
+        console.log(`ðŸ“‹ Preview: ${canonicalCandidate.substring(0, 100)}...`);
 
-        console.log(`[Kernel] 🔍 VERIFICANDO FIRMA:`);
-        console.log(`📋 Adapter: ${candidate.certifiedBy.adapterId}`);
-        console.log(`📋 Secret: ${adapterAllowed.signingSecret ? 'configured' : 'missing'}`);
-        console.log(`📋 Received: ${candidate.certifiedBy.signature.substring(0, 16)}...`);
+        console.log(`ðŸ“‹ Adapter: ${candidate.certifiedBy.adapterId}`);
+        console.log(`ðŸ“‹ Secret: ${adapterAllowed.signingSecret ? 'configured' : 'missing'}`);
+        console.log(`ðŸ“‹ Received: ${candidate.certifiedBy.signature.substring(0, 16)}...`);
         const expectedSignature = crypto.createHmac('sha256', adapterAllowed.signingSecret!)
             .update(canonicalCandidate)
             .digest('hex');
 
-        console.log(`📋 Expected: ${expectedSignature.substring(0, 16)}...`);
-        console.log(`📋 Match: ${expectedSignature === candidate.certifiedBy.signature ? '✅' : '❌'}`);
+        console.log(`ðŸ“‹ Expected: ${expectedSignature.substring(0, 16)}...`);
+        console.log(`ðŸ“‹ Match: ${expectedSignature === candidate.certifiedBy.signature ? 'âœ…' : 'âŒ'}`);
 
         if (expectedSignature !== candidate.certifiedBy.signature) {
-            console.error(`[Kernel] ❌ SIGNATURE VERIFICATION FAILED:`);
-            console.error(`📋 Expected: ${expectedSignature}`);
-            console.error(`📋 Received: ${candidate.certifiedBy.signature}`);
-            console.error(`📋 Adapter: ${candidate.certifiedBy.adapterId}`);
-            console.error(`📋 Canonical: ${canonicalCandidate}`);
+            console.error(`[Kernel] âŒ SIGNATURE VERIFICATION FAILED:`);
+            console.error(`ðŸ“‹ Expected: ${expectedSignature}`);
+            console.error(`ðŸ“‹ Received: ${candidate.certifiedBy.signature}`);
+            console.error(`ðŸ“‹ Adapter: ${candidate.certifiedBy.adapterId}`);
+            console.error(`ðŸ“‹ Canonical: ${canonicalCandidate}`);
 
-            // 🔍 DIAGNÓSTICO DETALLADO
-            console.error(`[Kernel] 🔍 DIAGNÓSTICO DETALLADO:`);
+            // ðŸ” DIAGNÃ“STICO DETALLADO
+            console.error(`[Kernel] ðŸ” DIAGNÃ“STICO DETALLADO:`);
 
             // Comparar longitud
             if (expectedSignature.length !== candidate.certifiedBy.signature.length) {
-                console.error(`📋 ❌ Longitud diferente: expected=${expectedSignature.length}, received=${candidate.certifiedBy.signature.length}`);
+                console.error(`ðŸ“‹ âŒ Longitud diferente: expected=${expectedSignature.length}, received=${candidate.certifiedBy.signature.length}`);
             }
 
-            // Comparar primeros/últimos caracteres
+            // Comparar primeros/Ãºltimos caracteres
             const prefixLength = 8;
             if (expectedSignature.substring(0, prefixLength) !== candidate.certifiedBy.signature.substring(0, prefixLength)) {
-                console.error(`📋 ❌ Prefijo diferente: expected="${expectedSignature.substring(0, prefixLength)}", received="${candidate.certifiedBy.signature.substring(0, prefixLength)}"`);
+                console.error(`ðŸ“‹ âŒ Prefijo diferente: expected="${expectedSignature.substring(0, prefixLength)}", received="${candidate.certifiedBy.signature.substring(0, prefixLength)}"`);
             }
 
             if (expectedSignature.substring(-prefixLength) !== candidate.certifiedBy.signature.substring(-prefixLength)) {
-                console.error(`📋 ❌ Sufijo diferente: expected="${expectedSignature.substring(-prefixLength)}", received="${candidate.certifiedBy.signature.substring(-prefixLength)}"`);
+                console.error(`ðŸ“‹ âŒ Sufijo diferente: expected="${expectedSignature.substring(-prefixLength)}", received="${candidate.certifiedBy.signature.substring(-prefixLength)}"`);
             }
 
-            // Analizar diferencias carácter por carácter
+            // Analizar diferencias carÃ¡cter por carÃ¡cter
             let differences = [];
             const minLength = Math.min(expectedSignature.length, candidate.certifiedBy.signature.length);
             for (let i = 0; i < minLength; i++) {
@@ -230,32 +209,30 @@ export class Kernel {
                 }
             }
             if (differences.length > 0) {
-                console.error(`📋 ❌ Diferencias encontradas: ${differences.join(', ')}`);
+                console.error(`ðŸ“‹ âŒ Diferencias encontradas: ${differences.join(', ')}`);
             }
 
             // Posibles causas
-            console.error(`[Kernel] 🔍 POSIBLES CAUSAS:`);
-            console.error(`📋 1. Timestamp diferente en claimedOccurredAt`);
-            console.error(`📋 2. Orden diferente de propiedades en canonical`);
-            console.error(`📋 3. Propiedades faltantes o extrañas`);
-            console.error(`📋 4. Diferencia en signing secret`);
-            console.error(`📋 5. Diferencia en canonicalize function`);
+            console.error(`[Kernel] ðŸ” POSIBLES CAUSAS:`);
+            console.error(`ðŸ“‹ 1. Timestamp diferente en claimedOccurredAt`);
+            console.error(`ðŸ“‹ 2. Orden diferente de propiedades en canonical`);
+            console.error(`ðŸ“‹ 3. Propiedades faltantes o extraÃ±as`);
+            console.error(`ðŸ“‹ 4. Diferencia en signing secret`);
+            console.error(`ðŸ“‹ 5. Diferencia en canonicalize function`);
 
-            // ⚠️ BYPASS RECONSTRUCTION: Si es el cognitive-gateway interno en dev, permitimos log pero no crash
+            // âš ï¸ BYPASS RECONSTRUCTION: Si es el cognitive-gateway interno en dev, permitimos log pero no crash
             if (candidate.certifiedBy.adapterId === 'cognitive-gateway') {
-                console.warn(`[Kernel] ⚠️ BYPASS: Invalid signature for internal @fluxcore/cognition signal. Continuing without persistence lock.`);
+                console.warn(`[Kernel] âš ï¸ BYPASS: Invalid signature for internal @fluxcore/cognition signal. Continuing without persistence lock.`);
             } else {
                 throw new Error('Invalid reality adapter signature');
             }
         }
 
-        console.log(`[Kernel] ✅ SIGNATURE VERIFIED SUCCESSFULLY`);
+        console.log(`[Kernel] âœ… SIGNATURE VERIFIED SUCCESSFULLY`);
 
-        // 🔍 DEBUG ANTES DE LA TRANSACCIÓN
-        console.log(`[Kernel] 🔍 DEBUG: All gates passed, starting transaction...`);
-        console.log(`[Kernel] 🔍 DEBUG: About to prepare data for INSERT...`);
+        // ðŸ” DEBUG ANTES DE LA TRANSACCIÃ“N
 
-        // ── Preparación fuera de la transacción para logs visibles
+        // â”€â”€ PreparaciÃ³n fuera de la transacciÃ³n para logs visibles
         const occurredAt = candidate.evidence.claimedOccurredAt 
             ? new Date(candidate.evidence.claimedOccurredAt).toISOString()
             : new Date().toISOString();
@@ -263,23 +240,19 @@ export class Kernel {
         const checksum = checksumEvidence(candidate.evidence.raw);
         const signalFingerprint = fingerprint(candidate, checksum);
         
-        console.log(`[Kernel] 🔍 PREPARING INSERT:`);
-        console.log(`📋 factType: ${candidate.factType}`);
-        console.log(`📋 source: ${candidate.source.namespace}, ${candidate.source.key}`);
-        console.log(`📋 subject: ${candidate.subject?.namespace || 'null'}, ${candidate.subject?.key || 'null'}`);
-        console.log(`📋 occurredAt: ${occurredAt}`);
-        console.log(`📋 checksum: ${checksum.substring(0, 16)}...`);
-        console.log(`📋 fingerprint: ${signalFingerprint.substring(0, 16)}...`);
+        console.log(`ðŸ“‹ factType: ${candidate.factType}`);
+        console.log(`ðŸ“‹ source: ${candidate.source.namespace}, ${candidate.source.key}`);
+        console.log(`ðŸ“‹ subject: ${candidate.subject?.namespace || 'null'}, ${candidate.subject?.key || 'null'}`);
+        console.log(`ðŸ“‹ occurredAt: ${occurredAt}`);
+        console.log(`ðŸ“‹ checksum: ${checksum.substring(0, 16)}...`);
+        console.log(`ðŸ“‹ fingerprint: ${signalFingerprint.substring(0, 16)}...`);
         
-        console.log(`[Kernel] 🔍 DEBUG: Starting db.transaction...`);
 
-        // ── Atomic Transaction: Journal + Outbox ──
+        // â”€â”€ Atomic Transaction: Journal + Outbox â”€â”€
         const finalSequenceNumber = await db.transaction(async (tx): Promise<number> => {
-            console.log(`[Kernel] 🔍 DEBUG: Inside transaction, checking idempotency...`);
             
             // Idempotency: check by (adapter, external_id) first
             if (candidate.evidence.provenance.externalId) {
-                console.log(`[Kernel] 🔍 DEBUG: Checking for duplicate with externalId: ${candidate.evidence.provenance.externalId}`);
                 const existingByExternal = await tx.query.fluxcoreSignals.findFirst({
                     where: (t, { and, eq }) => and(
                         eq(t.certifiedByAdapter, candidate.certifiedBy.adapterId),
@@ -289,13 +262,11 @@ export class Kernel {
                 });
 
                 if (existingByExternal) {
-                    console.log(`[Kernel] 📋 DUPLICATE: signal ${existingByExternal.sequenceNumber} already exists`);
+                    console.log(`[Kernel] ðŸ“‹ DUPLICATE: signal ${existingByExternal.sequenceNumber} already exists`);
                     return existingByExternal.sequenceNumber;
                 }
-                console.log(`[Kernel] 🔍 DEBUG: No duplicate found, proceeding with INSERT...`);
             }
             
-            console.log(`[Kernel] 🔍 DEBUG: About to execute INSERT SQL...`);
             try {
                 const insertResult = await tx.execute(sql`
                     INSERT INTO fluxcore_signals (
@@ -321,20 +292,20 @@ export class Kernel {
                     RETURNING sequence_number
                 `);
                 
-                console.log(`[Kernel] ✅ INSERT SUCCESS: ${JSON.stringify(insertResult)}`);
+                console.log(`[Kernel] âœ… INSERT SUCCESS: ${JSON.stringify(insertResult)}`);
                 
                 const sequenceNumber = (insertResult[0] as any)?.sequence_number || (insertResult as any).rows?.[0]?.sequence_number;
                 
                 if (!sequenceNumber) {
-                    console.error(`[Kernel] ❌ INSERT FAILED: No sequence number returned`);
-                    console.error(`📋 insertResult: ${JSON.stringify(insertResult)}`);
+                    console.error(`[Kernel] âŒ INSERT FAILED: No sequence number returned`);
+                    console.error(`ðŸ“‹ insertResult: ${JSON.stringify(insertResult)}`);
                     throw new Error('Failed to insert signal - no sequence number returned');
                 }
                 
-                console.log(`[Kernel] ✅ SIGNAL INSERTED: sequence_number=${sequenceNumber}`);
+                console.log(`[Kernel] âœ… SIGNAL INSERTED: sequence_number=${sequenceNumber}`);
                 console.log(`[Diag][Kernel] message=${candidate.evidence.provenance.externalId || candidate.source.key} runtime=- decision=respond stage=ingest_stored seq=${sequenceNumber}`);
                 
-                // Transactional Outbox — same transaction, guaranteed
+                // Transactional Outbox â€” same transaction, guaranteed
                 await tx.execute(sql`
                     INSERT INTO fluxcore_outbox (signal_id, event_type, payload, status)
                     VALUES (
@@ -352,14 +323,14 @@ export class Kernel {
                     )
                 `);
                 
-                console.log(`[Kernel] ✅ OUTBOX INSERTED: signal_id=${sequenceNumber}`);
+                console.log(`[Kernel] âœ… OUTBOX INSERTED: signal_id=${sequenceNumber}`);
                 
                 return Number(sequenceNumber);
             } catch (insertError: any) {
-                console.error(`[Kernel] ❌ INSERT FAILED: ${insertError.message}`);
-                console.error(`📋 Error Details:`, insertError);
-                console.error(`📋 SQL State:`, insertError.code);
-                console.error(`📋 Candidate:`, JSON.stringify(candidate, null, 2));
+                console.error(`[Kernel] âŒ INSERT FAILED: ${insertError.message}`);
+                console.error(`ðŸ“‹ Error Details:`, insertError);
+                console.error(`ðŸ“‹ SQL State:`, insertError.code);
+                console.error(`ðŸ“‹ Candidate:`, JSON.stringify(candidate, null, 2));
                 throw insertError;
             }
         });
@@ -370,7 +341,7 @@ export class Kernel {
             timestamp: Date.now() 
         });
 
-        // 🎯 TELEMETRÍA (Fase 2): Señal viva para la Kernel Console
+        // ðŸŽ¯ TELEMETRÃA (Fase 2): SeÃ±al viva para la Kernel Console
         try {
             coreEventBus.emit('telemetry:kernel_signal', {
                 sequenceNumber: finalSequenceNumber, 

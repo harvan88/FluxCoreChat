@@ -1,7 +1,7 @@
 ---
 id: "template-registry-service"
-type: "logic-service"
-status: "stable"
+type: "core"
+status: "needs_review"
 criticality: "high"
 location: "apps/api/src/services/fluxcore/template-registry.service.ts"
 layers:
@@ -12,28 +12,59 @@ layers:
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# ⚙️ TemplateRegistryService
+# TemplateRegistryService
 
-## 🎯 Propósito
-Este servicio centraliza la forma en que la IA visualiza y usa las plantillas de respuesta. Su objetivo es garantizar que tanto el runtime de OpenAI como el Local tengan exactamente la misma definición de qué plantillas están permitidas y cómo deben invocarse.
+## Propósito
+`TemplateRegistryService` es la fuente única de verdad para la relación entre IA y plantillas autorizadas. Centraliza qué plantillas puede ver la IA, cómo se describen en instrucciones dinámicas y cómo se valida si una plantilla concreta puede ejecutarse.
 
-## 🚥 Generación de Catálogo (Markdown Table)
-El método `buildInstructionBlock` construye dinámicamente una sección de prompt:
-1.  **Librería de Intenciones**: Genera una tabla Markdown con `ID`, `Nombre`, `Instrucciones de Uso` y `Variables`.
-2.  **Directiva Determinista**: Inyecta una regla estricta: si hay coincidencia, la IA debe responder **exclusivamente** con el comando `CALL_TEMPLATE:<id>`.
-3.  **Sanitización**: Limpia caracteres conflictivos (como pipes `|`) para evitar romper la estructura de la tabla en el prompt.
+**Actualización 2026-04-01:** Se simplificó el protocolo de instrucciones para usar exclusivamente `CALL_TEMPLATE:<template_id>` en lugar de `send_template`. Se reestructuró el formato de instrucciones con 4 reglas claras y se eliminó la tabla Markdown en favor de un formato más legible para el LLM.
 
-## 🧹 Limpieza de Legado (`stripLegacyBlocks`)
-Debido a la migración de un sistema de prompts manual a uno dinámico, este servicio incluye lógica para detectar y eliminar bloques de plantillas "quemados" (hardcoded) en las instrucciones de los asistentes, evitando así instrucciones duplicadas o contradictorias.
+## Arquitectura
+El servicio expone cuatro operaciones reales:
 
-## 🛡️ Seguridad de Ejecución
-Proporciona `canExecute`, una guarda final que verifica no solo si la plantilla existe, sino si tiene el switch `authorizeForAI` activo en la cuenta específica.
+- `getAuthorizedTemplates(accountId)`
+  - delega en `fluxCoreTemplateSettingsService.listAuthorizedTemplates(accountId)`
+  - devuelve únicamente plantillas activas y autorizadas para IA
 
-## 💡 Ejemplo de Uso
-```typescript
-// Importar y usar el servicio
-import { templateRegistryService } from 'apps/api/src/services/fluxcore/template-registry.service.ts';
+- `buildInstructionBlock(accountId)`
+  - genera un bloque de instrucciones con 4 reglas claras para el uso de `CALL_TEMPLATE:`
+  - formato simplificado: cada plantilla con ID, nombre, caso de uso y variables
+  - incluye reglas específicas para múltiples plantillas y texto complementario
+  - **cambio 2026-04-01:** eliminada tabla Markdown, agregado formato de reglas numeradas
 
-// Ejemplo de invocación típica
-const result = await templateRegistryService.execute(params);
+- `canExecute(templateId, accountId)`
+  - valida que la plantilla esté autorizada para IA y pertenezca al conjunto efectivamente autorizado para la cuenta
+
+- `stripLegacyBlocks(content)`
+  - elimina bloques heredados de inyección estática para evitar duplicación o contradicción en instrucciones antiguas
+
+## Consumidores verificados
+- `apps/api/src/services/ai-template.service.ts`
+  - usa `getAuthorizedTemplates` y `canExecute`
+- `apps/api/src/services/fluxcore/runtime.service.ts`
+  - usa `stripLegacyBlocks` y `buildInstructionBlock` al armar la composición del asistente
+
+## Relación con el flujo actual de templates
+Este servicio no envía mensajes por sí mismo. Su papel es previo a la ejecución:
+
+1. define qué plantillas son visibles para la IA
+2. inyecta la descripción oficial de esas plantillas en el prompt/composición cuando corresponde
+3. actúa como guard final antes de que una acción termine en `templateService.executeTemplate(...)`
+
+## Límites actuales
+- **Protocolo unificado:** El servicio ahora genera instrucciones exclusivamente para `CALL_TEMPLATE:` eliminando la doble semántica con `send_template`.
+- **Formato mejorado:** Las instrucciones usan un formato de reglas numeradas más claro que la tabla Markdown anterior.
+- **Compatibilidad:** Se mantiene `stripLegacyBlocks` para limpiar instrucciones antiguas que puedan contaminar el prompt.
+- **Validación:** `canExecute` sigue siendo el guard final antes de la ejecución de plantillas.
+
+## Ejemplo de uso
+```ts
+const templateBlock = await templateRegistryService.buildInstructionBlock(accountId);
+
+if (templateBlock) {
+  instructions.push({
+    id: 'system-templates-context',
+    content: templateBlock.content,
+  } as any);
+}
 ```

@@ -1,7 +1,7 @@
 ---
 id: "prompt-builder-service"
 type: "logic-service"
-status: "stable"
+status: "needs_review"
 criticality: "high"
 location: "apps/api/src/services/fluxcore/prompt-builder.service.ts"
 layers:
@@ -17,12 +17,15 @@ evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ## 🎯 Propósito
 El `PromptBuilderService` es el arquitecto del "pensamiento" de la IA. Su responsabilidad es fusionar los objetivos técnicos del asistente con las restricciones comerciales del negocio (Canon §4.10), garantizando que la IA responda siempre bajo la identidad y reglas de la empresa.
 
+**Actualización 2026-04-01:** Se modificó para instruir explícitamente el uso de marcadores `CALL_TEMPLATE:` en lugar del tool `send_template` para el runtime local. Esto busca simplificar el protocolo de plantillas pero ha generado un problema crítico: el LLM ahora genera marcadores mezclados con texto conversacional, y el runtime no logra separarlos correctamente.
+
 ## 🚥 Priorización de Capas
 El prompt generado sigue un orden estricto de precedencia:
 1.  **Identidad del Negocio**: Define quién habla (DisplayName/Bio).
 2.  **Directivas de Política (VOICE OF BUSINESS)**: Prioridad máxima. Define el tono, uso de emojis, idioma y reglas específicas para el contacto actual.
 3.  **Instrucciones Técnicas**: El conocimiento experto del asistente.
 4.  **Recursos de Conocimiento**: Catálogo de plantillas y servicios disponibles para ser referenciados.
+5.  **Directivas de Ejecución (2026-04-01)**: Instrucciones específicas para el runtime local sobre el uso de `CALL_TEMPLATE:`. Esta sección se agregó para soportar el nuevo protocolo de plantillas.
 
 ## 🧬 Contexto Progresivo
 El servicio inyecta dinámicamente las `contactRules` (Notas y Preferencias) en el prompt de sistema. Esto permite que el LLM "recuerde" detalles específicos del usuario (ej: "Prefiere ser contactado por la tarde") sin necesidad de que el desarrollador gestione el guardado manual de cada preferencia en el prompt.

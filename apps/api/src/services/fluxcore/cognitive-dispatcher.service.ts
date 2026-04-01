@@ -28,11 +28,12 @@ import { runtimeGateway } from './runtime-gateway.service';
 import { actionExecutor } from './action-executor.service';
 import { accountLabelService } from '../account-label.service';
 import { runtimeInputFactoryService } from './runtime-input-factory.service';
+import { signCandidate } from './kernel-utils';
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, Evidence } from '../../core/types';
-import crypto from 'node:crypto';
 
 const MAX_HISTORY_MESSAGES = 50;
+const COGNITIVE_GATEWAY_SIGNING_SECRET = 'sovereign-secret-key-change-me-in-prod';
 
 export interface DispatchResult {
     actions: ExecutionAction[];
@@ -133,8 +134,7 @@ class CognitiveDispatcherService {
                     }
                 };
                 
-                // Deterministic signature (dummy for now as per system design for internal gateways)
-                candidate.certifiedBy.signature = crypto.createHash('sha256').update(JSON.stringify(candidate)).digest('hex');
+                candidate.certifiedBy.signature = signCandidate(candidate, COGNITIVE_GATEWAY_SIGNING_SECRET);
                 await kernel.ingestSignal(candidate);
             } catch (e) {
                 console.error(`[CognitiveDispatcher] Failed to certify dispatcher step:`, e);

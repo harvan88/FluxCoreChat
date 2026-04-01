@@ -1,5 +1,5 @@
 import { db } from '@fluxcore/db';
-import { fluxcoreActors, fluxcoreAddresses, fluxcoreActorAddressLinks, fluxcoreAccountActorContexts } from '@fluxcore/db';
+import { fluxcoreActors, fluxcoreAddresses, fluxcoreActorAddressLinks, fluxcoreAccountActorContexts, accounts, actors } from '@fluxcore/db';
 import { eq, and } from 'drizzle-orm';
 
 export interface ActorResolutionResult {
@@ -39,8 +39,27 @@ export class ActorResolutionService {
     }, tx?: any): Promise<ActorResolutionResult> {
         const client = tx || db;
         const { accountId, driverId, externalId, hints } = params;
+        let normalizedAccountId: string | null = accountId || null;
         let matchedBy: 'external_id_exact' | 'email_heuristic' | 'new_actor' = 'new_actor';
         let confidence = 1.0;
+
+        if (normalizedAccountId) {
+            const existingAccount = await client
+                .select({ id: accounts.id })
+                .from(accounts)
+                .where(eq(accounts.id, normalizedAccountId))
+                .limit(1);
+
+            if (existingAccount.length === 0) {
+                const actorBackref = await client
+                    .select({ accountId: actors.accountId })
+                    .from(actors)
+                    .where(eq(actors.id, normalizedAccountId))
+                    .limit(1);
+
+                normalizedAccountId = actorBackref[0]?.accountId ?? null;
+            }
+        }
 
         // 1. Find or create Address (Physical Layer)
         let address = await client.query.fluxcoreAddresses.findFirst({
@@ -106,30 +125,34 @@ export class ActorResolutionService {
         }
 
         // 3. Resolve AccountActorContext (Commercial Layer)
-        let context = await client.query.fluxcoreAccountActorContexts.findFirst({
-            where: and(
-                eq(fluxcoreAccountActorContexts.accountId, accountId),
-                eq(fluxcoreAccountActorContexts.actorId, actorId)
-            )
-        });
+        let context: typeof fluxcoreAccountActorContexts.$inferSelect | null = null;
 
-        if (!context) {
-            const [newContext] = await client.insert(fluxcoreAccountActorContexts).values({
-                accountId,
-                actorId,
-                displayName: hints?.displayName || null,
-                status: 'active'
-            }).returning();
-            context = newContext;
-        } else if (hints?.displayName && !context.displayName) {
-            await client.update(fluxcoreAccountActorContexts)
-                .set({ displayName: hints.displayName })
-                .where(eq(fluxcoreAccountActorContexts.id, context.id));
+        if (normalizedAccountId) {
+            context = await client.query.fluxcoreAccountActorContexts.findFirst({
+                where: and(
+                    eq(fluxcoreAccountActorContexts.accountId, normalizedAccountId),
+                    eq(fluxcoreAccountActorContexts.actorId, actorId)
+                )
+            });
+
+            if (!context) {
+                const [newContext] = await client.insert(fluxcoreAccountActorContexts).values({
+                    accountId: normalizedAccountId,
+                    actorId,
+                    displayName: hints?.displayName || null,
+                    status: 'active'
+                }).returning();
+                context = newContext;
+            } else if (hints?.displayName && !context.displayName) {
+                await client.update(fluxcoreAccountActorContexts)
+                    .set({ displayName: hints.displayName })
+                    .where(eq(fluxcoreAccountActorContexts.id, context.id));
+            }
         }
 
         return {
             actorId,
-            contextId: context.id,
+            contextId: context?.id || '',
             snapshot: {
                 resolverVersion: this.VERSION,
                 matchedBy,

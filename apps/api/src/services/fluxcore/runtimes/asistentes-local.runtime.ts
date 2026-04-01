@@ -16,15 +16,345 @@
  *  - Provider fallback built into LLMClient
  */
 
-import type { RuntimeAdapter, RuntimeInput, ExecutionAction } from '../../../core/fluxcore-types';
-import type { LLMMessage } from '../llm-client.service';
+import type { RuntimeAdapter, RuntimeInput, ExecutionAction, SendTemplateAction } from '../../../core/fluxcore-types';
+import type { LLMCompletionResult, LLMMessage } from '../llm-client.service';
 import { createCapabilityDeps } from '../../capability-deps-factory.service';
 import { capabilityLocalRuntimeToolsService } from '../../capability-local-runtime-tools.service';
 import { promptBuilder } from '../prompt-builder.service';
 import { llmClient } from '../llm-client.service';
 
 const MAX_TOOL_ROUNDS = 2;
-const ASISTENTES_LOCAL_TOOL_NAMES = ['search_knowledge', 'send_template'];
+const ASISTENTES_LOCAL_TOOL_NAMES = ['search_knowledge'];
+
+type AuthorizedTemplateDefinition = {
+    templateId: string;
+    name: string;
+    content?: string;
+};
+
+type ParsedTemplateResponse = {
+    foundTemplateMarker: boolean;
+    templateActions: SendTemplateAction[];
+    residualText: string | null;
+};
+
+type TemplateFollowUpContext = {
+    templateId: string;
+    name: string;
+    renderedContent: string;
+};
+
+function getNextNonWhitespaceIndex(text: string, startIndex: number): number {
+    let cursor = startIndex;
+    while (cursor < text.length && /\s/.test(text[cursor]!)) {
+        cursor += 1;
+    }
+    return cursor;
+}
+
+function normalizeTemplateVariables(input: unknown): Record<string, string> {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        return {};
+    }
+
+    const variables: Record<string, string> = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            variables[key] = String(value);
+        }
+    }
+    return variables;
+}
+
+function extractJsonObject(text: string, startIndex: number): { variables: Record<string, string>; endIndex: number } | null {
+    const jsonStart = getNextNonWhitespaceIndex(text, startIndex);
+    if (jsonStart >= text.length || text[jsonStart] !== '{') {
+        return null;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = jsonStart; i < text.length; i += 1) {
+        const char = text[i]!;
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (char === '\\' && inString) {
+            escaped = true;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+
+        if (inString) {
+            continue;
+        }
+
+        if (char === '{') {
+            depth += 1;
+        } else if (char === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                const rawObject = text.slice(jsonStart, i + 1);
+                try {
+                    return {
+                        variables: normalizeTemplateVariables(JSON.parse(rawObject)),
+                        endIndex: i + 1,
+                    };
+                } catch {
+                    return null;
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function normalizeResidualText(text: string): string | null {
+    const normalized = text
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+
+    return normalized.length > 0 ? normalized : null;
+}
+
+function removeRanges(text: string, ranges: Array<{ start: number; end: number }>): string | null {
+    if (ranges.length === 0) {
+        return normalizeResidualText(text);
+    }
+
+    const orderedRanges = [...ranges].sort((a, b) => a.start - b.start);
+    const mergedRanges: Array<{ start: number; end: number }> = [];
+
+    for (const range of orderedRanges) {
+        const lastRange = mergedRanges[mergedRanges.length - 1];
+        if (!lastRange || range.start > lastRange.end) {
+            mergedRanges.push({ ...range });
+            continue;
+        }
+        lastRange.end = Math.max(lastRange.end, range.end);
+    }
+
+    const parts: string[] = [];
+    let cursor = 0;
+
+    for (const range of mergedRanges) {
+        if (cursor < range.start) {
+            parts.push(text.slice(cursor, range.start));
+        }
+        cursor = Math.max(cursor, range.end);
+    }
+
+    if (cursor < text.length) {
+        parts.push(text.slice(cursor));
+    }
+
+    return normalizeResidualText(parts.join('\n'));
+}
+
+function serializeTemplateVariables(variables?: Record<string, string>): string {
+    return JSON.stringify(
+        Object.entries(variables ?? {}).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    );
+}
+
+function dedupeTemplateActions(actions: SendTemplateAction[]): SendTemplateAction[] {
+    const seen = new Set<string>();
+
+    return actions.filter(action => {
+        const signature = `${action.templateId}:${serializeTemplateVariables(action.variables)}`;
+        if (seen.has(signature)) {
+            return false;
+        }
+        seen.add(signature);
+        return true;
+    });
+}
+
+function parseTemplateResponse(params: {
+    responseText: string;
+    conversationId: string;
+    authorizedTemplateIds: string[];
+}): ParsedTemplateResponse {
+    const { responseText, conversationId, authorizedTemplateIds } = params;
+    const markerRegex = /CALL_TEMPLATE:\s*([a-f\d-]+)/ig;
+    const authorizedTemplateSet = new Set(authorizedTemplateIds);
+    const templateActions: SendTemplateAction[] = [];
+    const rangesToRemove: Array<{ start: number; end: number }> = [];
+    let foundTemplateMarker = false;
+    let match: RegExpExecArray | null;
+
+    while ((match = markerRegex.exec(responseText)) !== null) {
+        foundTemplateMarker = true;
+        const templateId = match[1];
+        if (!templateId) {
+            continue;
+        }
+
+        const markerStart = match.index;
+        let markerEnd = match.index + match[0].length;
+        const nextNonWhitespaceIndex = getNextNonWhitespaceIndex(responseText, markerEnd);
+        const hasJsonCandidate = nextNonWhitespaceIndex < responseText.length && responseText[nextNonWhitespaceIndex] === '{';
+        let variables: Record<string, string> = {};
+
+        if (hasJsonCandidate) {
+            const parsedObject = extractJsonObject(responseText, markerEnd);
+            if (parsedObject) {
+                variables = parsedObject.variables;
+                markerEnd = parsedObject.endIndex;
+            } else {
+                console.warn(`[AsistentesLocal] ⚠️ Ignoring malformed JSON payload for template marker: ${templateId}`);
+            }
+        }
+
+        rangesToRemove.push({ start: markerStart, end: markerEnd });
+
+        if (!authorizedTemplateSet.has(templateId)) {
+            console.warn(`[AsistentesLocal] ⚠️ IA tried to call unauthorized template: ${templateId}`);
+            continue;
+        }
+
+        templateActions.push({
+            type: 'send_template',
+            templateId,
+            conversationId,
+            variables,
+        });
+    }
+
+    return {
+        foundTemplateMarker,
+        templateActions: dedupeTemplateActions(templateActions),
+        residualText: removeRanges(responseText, rangesToRemove),
+    };
+}
+
+function getAuthorizedTemplateDefinitions(authorizedContext: RuntimeInput['authorizedContext']): AuthorizedTemplateDefinition[] {
+    const templates = (authorizedContext.businessProfile as { templates?: unknown }).templates;
+    if (!Array.isArray(templates)) {
+        return [];
+    }
+
+    return templates
+        .filter((template): template is AuthorizedTemplateDefinition => {
+            return !!template && typeof template === 'object' && typeof (template as AuthorizedTemplateDefinition).templateId === 'string';
+        })
+        .map(template => ({
+            templateId: template.templateId,
+            name: typeof template.name === 'string' && template.name.trim().length > 0 ? template.name : template.templateId,
+            content: typeof template.content === 'string' ? template.content : undefined,
+        }));
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function renderTemplateContent(content: string, variables?: Record<string, string>): string {
+    let renderedContent = content;
+
+    for (const [key, value] of Object.entries(variables ?? {})) {
+        renderedContent = renderedContent.replace(new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, 'g'), value);
+    }
+
+    return renderedContent;
+}
+
+function buildTemplateFollowUpContext(
+    actions: SendTemplateAction[],
+    authorizedContext: RuntimeInput['authorizedContext']
+): TemplateFollowUpContext[] {
+    const templateDefinitions = getAuthorizedTemplateDefinitions(authorizedContext);
+
+    return actions
+        .map(action => {
+            const definition = templateDefinitions.find(template => template.templateId === action.templateId);
+            if (!definition?.content || definition.content.trim().length === 0) {
+                return null;
+            }
+
+            return {
+                templateId: action.templateId,
+                name: definition.name,
+                renderedContent: renderTemplateContent(definition.content, action.variables),
+            };
+        })
+        .filter((entry): entry is TemplateFollowUpContext => !!entry);
+}
+
+function summarizeResidualFacts(residualText: string): string | null {
+    const trimmed = residualText.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return null;
+        }
+
+        const lines = Object.entries(parsed)
+            .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+            .map(([key, value]) => `- ${key}: ${String(value)}`);
+
+        return lines.length > 0 ? lines.join('\n') : null;
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeFollowUpText(text: string | null | undefined): string | null {
+    const trimmed = text?.trim();
+    if (!trimmed || /^NO_FOLLOW_UP$/i.test(trimmed)) {
+        return null;
+    }
+
+    if (/CALL_TEMPLATE:/i.test(trimmed)) {
+        return null;
+    }
+
+    if (/^```(?:json)?[\s\S]*```$/i.test(trimmed)) {
+        return null;
+    }
+
+    if (/^(\{[\s\S]*\}|\[[\s\S]*\])$/.test(trimmed)) {
+        return null;
+    }
+
+    return trimmed;
+}
+
+function logLLMCompletion(params: {
+    phase: 'main' | 'template_follow_up';
+    result: LLMCompletionResult;
+    round?: number;
+}): void {
+    const { phase, result, round } = params;
+    const suffix = typeof round === 'number' ? ` round=${round}` : '';
+    console.log(`[AsistentesLocal] 🧠 LLM ${phase}${suffix}: ${JSON.stringify({
+        provider: result.provider,
+        model: result.model,
+        finishReason: result.finishReason ?? null,
+        content: result.content,
+        toolCalls: result.toolCalls ?? [],
+        usage: result.usage ?? null,
+    })}`);
+}
 
 // ─── Runtime ────────────────────────────────────────────────────────────────
 
@@ -83,6 +413,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             { role: 'system', content: systemPrompt },
             ...messages,
         ];
+        const queuedTemplateActions: SendTemplateAction[] = [];
 
         try {
             for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -95,38 +426,84 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                     tools: tools.length > 0 ? tools : undefined,
                     toolChoice: tools.length > 0 ? 'auto' : undefined,
                 });
+                logLLMCompletion({ phase: 'main', round, result });
 
                 // No tool calls — final text response
                 if (!result.toolCalls || result.toolCalls.length === 0) {
                     const responseText = result.content?.trim();
                     if (!responseText) {
-                        return [{ type: 'no_action', reason: 'LLM returned empty response' }];
+                        return queuedTemplateActions.length > 0
+                            ? dedupeTemplateActions(queuedTemplateActions)
+                            : [{ type: 'no_action', reason: 'LLM returned empty response' }];
                     }
 
-                    // 🔍 COGNITIVE BRIDGE: Detect automatic template call marker
-                    // Pattern: CALL_TEMPLATE:<templateId> [JSON_PARAMS]
-                    const templateMatch = responseText.match(/CALL_TEMPLATE:([a-f\d-]+)(?:\s+({.*}))?/i);
-                    if (templateMatch) {
-                        const templateId = templateMatch[1];
-                        const rawParams = templateMatch[2];
-                        let variables = {};
+                    const parsedTemplateResponse = parseTemplateResponse({
+                        responseText,
+                        conversationId: policyContext.conversationId,
+                        authorizedTemplateIds: authorizedContext.authorizedTemplates,
+                    });
 
-                        if (rawParams) {
-                            try { variables = JSON.parse(rawParams); } catch (e) {}
+                    const templateActions = dedupeTemplateActions([
+                        ...queuedTemplateActions,
+                        ...parsedTemplateResponse.templateActions,
+                    ]);
+
+                    if (templateActions.length > 0) {
+                        const residualText = parsedTemplateResponse.foundTemplateMarker
+                            ? parsedTemplateResponse.residualText
+                            : normalizeResidualText(responseText);
+
+                        if (!residualText) {
+                            console.log(`[AsistentesLocal] ✅ Template-only response (${result.usage?.totalTokens ?? '?'} tokens)`);
+                            return templateActions;
                         }
 
-                        // Security: Only allow if authorized in this turn
-                        if (authorizedContext.authorizedTemplates.includes(templateId)) {
-                            console.log(`[AsistentesLocal] 🪄 Transmuted marker to action: send_template(${templateId})`);
-                            return [{
-                                type: 'send_template',
-                                templateId,
+                        const templateFollowUpContext = buildTemplateFollowUpContext(templateActions, authorizedContext);
+                        if (templateFollowUpContext.length !== templateActions.length) {
+                            console.warn(`[AsistentesLocal] ⚠️ Skipping follow-up generation because exact template content is unavailable`);
+                            return templateActions;
+                        }
+
+                        const followUpText = await this.generateTemplateAwareFollowUp({
+                            provider,
+                            model,
+                            maxTokens,
+                            temperature,
+                            systemPrompt,
+                            messages,
+                            lastUserMessage: lastMessage.content,
+                            residualText,
+                            templateFollowUpContext,
+                        });
+
+                        if (!followUpText) {
+                            console.log(`[AsistentesLocal] ✅ Template response without safe follow-up (${result.usage?.totalTokens ?? '?'} tokens)`);
+                            return templateActions;
+                        }
+
+                        console.log(`[AsistentesLocal] ✅ Hybrid template response (${result.usage?.totalTokens ?? '?'} tokens)`);
+                        return [
+                            ...templateActions,
+                            {
+                                type: 'send_message',
                                 conversationId: policyContext.conversationId,
-                                variables,
-                            } as ExecutionAction];
-                        } else {
-                            console.warn(`[AsistentesLocal] ⚠️ IA tried to call unauthorized template: ${templateId}`);
+                                content: followUpText,
+                            },
+                        ];
+                    }
+
+                    if (parsedTemplateResponse.foundTemplateMarker) {
+                        const safeResidualText = sanitizeFollowUpText(parsedTemplateResponse.residualText);
+                        if (!safeResidualText) {
+                            return [{ type: 'no_action', reason: 'Template marker response produced no safe user-facing text' }];
                         }
+
+                        console.log(`[AsistentesLocal] ✅ Cleaned marker response (${result.usage?.totalTokens ?? '?'} tokens)`);
+                        return [{
+                            type: 'send_message',
+                            conversationId: policyContext.conversationId,
+                            content: safeResidualText,
+                        }];
                     }
 
                     console.log(`[AsistentesLocal] ✅ Response (${result.usage?.totalTokens ?? '?'} tokens)`);
@@ -167,8 +544,8 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
                     // If send_template was called → return immediately as action
                     if (toolCall.function.name === 'send_template' && toolResult.templateAction) {
-                        console.log(`[AsistentesLocal] ✅ Template sent: ${toolResult.templateAction.templateId}`);
-                        return [toolResult.templateAction as ExecutionAction];
+                        console.log(`[AsistentesLocal] ✅ Template queued: ${toolResult.templateAction.templateId}`);
+                        queuedTemplateActions.push(toolResult.templateAction as SendTemplateAction);
                     }
 
                     currentMessages = [
@@ -182,11 +559,97 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                 }
             }
 
-            return [{ type: 'no_action', reason: 'Tool loop exhausted without final response' }];
+            return queuedTemplateActions.length > 0
+                ? dedupeTemplateActions(queuedTemplateActions)
+                : [{ type: 'no_action', reason: 'Tool loop exhausted without final response' }];
 
         } catch (error: any) {
             console.error(`[AsistentesLocal] ❌ LLM call failed:`, error.message);
             return [{ type: 'no_action', reason: `LLM error: ${error.message}` }];
+        }
+    }
+
+    private async generateTemplateAwareFollowUp(params: {
+        provider: 'groq' | 'openai';
+        model: string;
+        maxTokens: number;
+        temperature: number;
+        systemPrompt: string;
+        messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+        lastUserMessage: string;
+        residualText: string;
+        templateFollowUpContext: TemplateFollowUpContext[];
+    }): Promise<string | null> {
+        const { provider, model, maxTokens, temperature, systemPrompt, messages, lastUserMessage, residualText, templateFollowUpContext } = params;
+
+        if (templateFollowUpContext.some(template => template.renderedContent.includes('{{'))) {
+            return null;
+        }
+
+        const templateContextText = templateFollowUpContext
+            .map((template, index) => {
+                return [
+                    `Plantilla ${index + 1}: ${template.name} (ID: ${template.templateId})`,
+                    `Contenido exacto enviado:`,
+                    template.renderedContent,
+                ].join('\n');
+            })
+            .join('\n\n');
+
+        const residualFacts = summarizeResidualFacts(residualText);
+
+        try {
+            const followUpResult = await llmClient.complete({
+                provider,
+                model,
+                messages: [
+                    {
+                        role: 'system',
+                        content: [
+                            systemPrompt,
+                            '## Directiva de Seguimiento Post-Plantilla',
+                            '- En este turno ya se enviaron una o más plantillas al usuario.',
+                            '- Usa como fuente de verdad el contenido exacto de las plantillas ya enviadas.',
+                            '- Genera como máximo un único mensaje breve de seguimiento.',
+                            '- Nunca repitas, contradigas o reformules información ya cubierta por las plantillas.',
+                            '- Nunca menciones IDs, JSON, marcadores técnicos ni procesos internos.',
+                            '- Si no existe información adicional segura y útil para enviar, responde exactamente: NO_FOLLOW_UP.',
+                        ].join('\n'),
+                    },
+                    ...messages,
+                    {
+                        role: 'assistant',
+                        content: `En este turno ya se enviaron estas plantillas:\n\n${templateContextText}`,
+                    },
+                    {
+                        role: 'user',
+                        content: [
+                            `Último mensaje del usuario:\n${lastUserMessage}`,
+                            `Borrador residual interno a depurar:\n${residualText}`,
+                            residualFacts ? `Datos estructurados detectados:\n${residualFacts}` : null,
+                            'Genera solo un mensaje de seguimiento si aporta información útil que no esté ya cubierta por las plantillas. Si no hace falta enviar nada más, responde exactamente: NO_FOLLOW_UP.',
+                        ].filter((section): section is string => !!section).join('\n\n'),
+                    },
+                ],
+                maxTokens: Math.min(maxTokens, 256),
+                temperature: Math.min(temperature, 0.2),
+            });
+            logLLMCompletion({ phase: 'template_follow_up', result: followUpResult });
+
+            const followUpText = sanitizeFollowUpText(followUpResult.content);
+            if (!followUpText) {
+                return null;
+            }
+
+            const normalizedFollowUpText = followUpText.replace(/\s+/g, ' ').trim().toLowerCase();
+            const duplicatesTemplateContent = templateFollowUpContext.some(template => {
+                return template.renderedContent.replace(/\s+/g, ' ').trim().toLowerCase() === normalizedFollowUpText;
+            });
+
+            return duplicatesTemplateContent ? null : followUpText;
+        } catch (error: any) {
+            console.warn(`[AsistentesLocal] ⚠️ Follow-up generation skipped: ${error.message}`);
+            return null;
         }
     }
 }

@@ -57,15 +57,9 @@ export function signCandidate(candidate: any, signingSecret: string): string {
         adapterVersion: candidate.certifiedBy.adapterVersion,
     });
 
-    console.log(`[signCandidate] 🔍 CANDIDATE PARA FIRMAR:`);
-    console.log(`📋 Input: ${JSON.stringify(candidate, null, 2)}`);
-    console.log(`📋 Canonical: ${canonical}`);
-
     const signature = crypto
         .createHmac('sha256', signingSecret)
         .update(canonical)
         .digest('hex');
-
-    console.log(`[signCandidate] ✅ FIRMA GENERADA: ${signature}`);
     return signature;
 }

@@ -1,6 +1,6 @@
 ---
 id: "ai-template-service"
-type: "logic-service"
+type: "core"
 status: "stable"
 criticality: "high"
 location: "apps/api/src/services/ai-template.service.ts"
@@ -12,23 +12,39 @@ layers:
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# ⚙️ AITemplateService
+# AITemplateService
 
-## 🎯 Propósito
-Actúa como la capa de seguridad y abstracción entre la IA y el sistema maestro de plantillas. Su función es garantizar que la IA nunca envíe mensajes que no hayan sido explícitamente autorizados por el administrador de la cuenta.
+## Propósito
+`AITemplateService` es la fachada de seguridad que permite a la IA interactuar con el sistema canónico de plantillas sin acceder directamente a la lógica de render y persistencia. Su función es listar solo plantillas autorizadas y delegar su envío al `TemplateService` después de una validación final.
 
-## 🚥 Seguridad Multinivel
-1.  **Visibilidad**: Solo expone a la IA las plantillas que tienen el permiso habilitado en `TemplateRegistry`.
-2.  **Ejecución**: Antes de enviar cualquier mensaje, vuelve a validar con `TemplateRegistry.canExecute` para prevenir ataques de inyección donde la IA intente adivinar IDs de plantillas privadas.
+## Arquitectura
+El servicio implementa dos operaciones reales:
 
-## 🔄 Delegación (Kernel Sovereignty)
-El servicio no "envía" el mensaje directamente. Una vez aprobada la seguridad, delega la ejecución al `TemplateService` central, asegurando que se apliquen todas las reglas de formato, variables y guardado de mensajes estándar de FluxCore.
+- `getAvailableTemplates(accountId)`
+  - devuelve únicamente las plantillas autorizadas para IA usando `templateRegistryService.getAuthorizedTemplates(...)`
 
-## 💡 Ejemplo de Uso
-```typescript
-// Importar y usar el servicio
-import { aiTemplateService } from 'apps/api/src/services/ai-template.service.ts';
+- `sendAuthorizedTemplate({ templateId, accountId, conversationId, variables })`
+  - valida con `templateRegistryService.canExecute(...)`
+  - delega en `templateService.executeTemplate(...)`
+  - fuerza `generatedBy: 'ai'` para que el mensaje quede marcado como emitido por IA dentro de ChatCore
 
-// Ejemplo de invocación típica
-const result = await aiTemplateService.execute(params);
+## Flujo operativo
+1. la IA propone o llama una plantilla
+2. la plataforma resuelve el `templateId`
+3. `AITemplateService` revalida la autorización
+4. `TemplateService` construye el mensaje final con texto y assets
+5. ChatCore persiste y distribuye el mensaje como cualquier otro mensaje canónico
+
+## Dependencias
+- **Depende de:** `template-registry.service.ts`, `template.service.ts`
+- **Es usado por:** `templates.capability.ts`
+
+## Ejemplo de uso
+```ts
+const result = await aiTemplateService.sendAuthorizedTemplate({
+  accountId,
+  conversationId,
+  templateId,
+  variables,
+});
 ```
