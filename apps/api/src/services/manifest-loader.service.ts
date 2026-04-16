@@ -16,9 +16,9 @@ const extensionRoots: Map<string, string> = new Map();
 // Manifest de @fluxcore/asistentes (preinstalada)
 const asistentesManifest: ExtensionManifest = {
   id: '@fluxcore/asistentes',
-  name: 'Asistentes',
+  name: 'FluxCore',
   version: '1.0.0',
-  description: 'Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto',
+  description: 'Kernel de IA determinista que unifica Asistentes, Fluxi (WES) y Runtimes de OpenAI en una sola plataforma.',
   author: 'FluxCore',
   preinstalled: true,
   permissions: [
@@ -26,10 +26,23 @@ const asistentesManifest: ExtensionManifest = {
     'read:context.private',
     'read:context.relationship',
     'read:context.history',
+    'read:messages',
     'write:context.overlay',
     'send:messages',
     'modify:automation',
+    'tools:register',
   ],
+  ui: {
+    sidebar: {
+      icon: 'Bot',
+      title: 'FluxCore',
+      priority: 10,
+    },
+    panel: {
+      component: 'FluxCorePanel',
+      title: 'FluxCore AI',
+    }
+  },
   configSchema: {
     enabled: { type: 'boolean', default: true, description: 'Habilitar IA' },
     provider: {

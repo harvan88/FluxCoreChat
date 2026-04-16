@@ -84,8 +84,9 @@ const fluxCoreSchema: ConfigSchema = {
     description: 'Modelo de lenguaje a utilizar',
     default: 'llama-3.1-8b-instant',
     options: [
-      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (r?pido)' },
+      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (rápido)' },
       { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B (potente)' },
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (máximo razonamiento)' },
       { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
       { value: 'gpt-4o-mini-2024-07-18', label: 'GPT-4o mini (2024-07-18)' },
     ],
@@ -131,7 +132,7 @@ export function ExtensionConfigPanel({
         const provider = value;
         const currentModel = next.model;
 
-        const groqModels = new Set(['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768']);
+        const groqModels = new Set(['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768']);
         const openaiModels = new Set(['gpt-4o-mini-2024-07-18']);
 
         if (provider === 'openai' && !openaiModels.has(currentModel)) {

@@ -6,7 +6,6 @@ import { Layout } from './components/layout/Layout';
 import { AuthPage } from './components/auth/AuthPage';
 import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { DesignSystemPage } from './pages/DesignSystemPage';
-import { SystemMonitor } from './components/monitor';
 import { AccountDeletionPortalPage } from './pages/AccountDeletionPortalPage';
 import { PublicProfilePage } from './public-profile';
 
@@ -45,7 +44,6 @@ function App() {
     <>
       <Routes>
         <Route path="/design-system" element={<DesignSystemPage />} />
-        <Route path="/monitor" element={<SystemMonitor />} />
         <Route path="/account-deletions/:jobId" element={<AccountDeletionPortalPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route 

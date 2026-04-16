@@ -55,40 +55,6 @@ export async function generateManagedInstructionContent(accountId: string): Prom
     // Instrucciones base
     sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${account.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
 
-    // Tiempo actual
-    const now = new Date();
-    const nowUtc = now.toISOString();
-    let nowArgentina: string;
-    try {
-        nowArgentina = new Intl.DateTimeFormat('sv-SE', {
-            timeZone: 'America/Argentina/Buenos_Aires',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-        }).format(now);
-    } catch (_err) {
-        nowArgentina = nowUtc;
-    }
-
-    sections.push(`\n📅 FECHA Y HORA ACTUAL: ${nowArgentina}`);
-
-    // Contexto del Negocio/Perfil
-    if (account.profile) {
-        const profile = typeof account.profile === 'string' ? JSON.parse(account.profile) : account.profile;
-        sections.push('\n🏢 INFORMACIÓN DEL NEGOCIO/PERFIL:');
-        sections.push(JSON.stringify(profile, null, 2));
-    }
-
-    // Contexto Privado
-    if (account.privateContext) {
-        sections.push('\n🔒 CONTEXTO PRIVADO (Instrucciones específicas):');
-        sections.push(account.privateContext);
-    }
-
     // Guidelines de estilo
     sections.push(`
 📝 PAUTAS DE ESTILO:

@@ -21,9 +21,10 @@ import { useAuthStore } from '../../../store/authStore';
 interface RAGConfig {
     chunking: {
         enabled: boolean;
-        strategy: 'fixed' | 'recursive' | 'sentence' | 'paragraph';
+        strategy: 'fixed' | 'recursive' | 'sentence' | 'paragraph' | 'custom';
         sizeTokens: number;
         overlapTokens: number;
+        customRegex?: string;
     };
     embedding: {
         enabled: boolean;
@@ -63,12 +64,13 @@ const CHUNKING_STRATEGIES = [
     { value: 'recursive', label: 'Recursivo', description: 'Divide por separadores jerárquicos' },
     { value: 'sentence', label: 'Por oraciones', description: 'Agrupa oraciones completas' },
     { value: 'paragraph', label: 'Por párrafos', description: 'Mantiene párrafos intactos' },
+    { value: 'custom', label: 'Patrón Exacto', description: 'Usa una expresión regular (Ej: \\n---\\n)' },
 ];
 
 const EMBEDDING_PROVIDERS = [
     { value: 'openai', label: 'OpenAI', models: ['text-embedding-3-small', 'text-embedding-3-large', 'text-embedding-ada-002'] },
     { value: 'cohere', label: 'Cohere', models: ['embed-english-v3.0', 'embed-multilingual-v3.0'] },
-    { value: 'local', label: 'Local', models: ['all-MiniLM-L6-v2'] },
+    { value: 'local', label: 'Local', models: ['paraphrase-multilingual-MiniLM-L12-v2', 'all-MiniLM-L6-v2'] },
 ];
 
 interface RAGConfigSectionProps {
@@ -221,6 +223,23 @@ export function RAGConfigSection({ vectorStoreId, accountId, onConfigChange }: R
                             ))}
                         </div>
                     </div>
+
+                    {/* Custom Regex Input */}
+                    {config.chunking.strategy === 'custom' && (
+                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            <label className="block text-sm text-muted mb-2">Separador Personalizado (Regex)</label>
+                            <input
+                                type="text"
+                                className="w-full bg-input border border-subtle rounded-lg px-3 py-2 text-primary focus:border-accent outline-none font-mono text-sm"
+                                value={config.chunking.customRegex || ''}
+                                onChange={(e) => updateChunking({ customRegex: e.target.value })}
+                                placeholder="Ej: \n---\n"
+                            />
+                            <p className="text-xs text-muted mt-2">
+                                Se creará un nuevo fragmento cada vez que se encuentre este patrón.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Size */}
                     <div>

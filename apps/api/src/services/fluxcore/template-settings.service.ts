@@ -1,5 +1,5 @@
 import { db, templates, fluxcoreTemplateSettings, type Template } from '@fluxcore/db';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 
 export interface AuthorizedTemplate extends Template {
     aiUsageInstructions: string | null;
@@ -106,6 +106,45 @@ export class FluxCoreTemplateSettingsService {
                     aiIncludeName: granularPermissions?.aiIncludeName ?? current.aiIncludeName ?? true,
                     aiIncludeContent: granularPermissions?.aiIncludeContent ?? current.aiIncludeContent ?? true,
                     aiIncludeInstructions: granularPermissions?.aiIncludeInstructions ?? current.aiIncludeInstructions ?? true,
+                    updatedAt: new Date()
+                }
+            })
+            .returning();
+    }
+
+    /**
+     * Actualiza masivamente la configuración de IA para múltiples plantillas
+     */
+    async bulkUpdateSettings(settingsData: {
+        templateId: string;
+        authorizeForAI: boolean;
+        aiUsageInstructions?: string | null;
+        aiIncludeName?: boolean;
+        aiIncludeContent?: boolean;
+        aiIncludeInstructions?: boolean;
+    }[]) {
+        if (settingsData.length === 0) return [];
+
+        const values = settingsData.map((data) => ({
+            templateId: data.templateId,
+            authorizeForAI: data.authorizeForAI,
+            aiUsageInstructions: data.aiUsageInstructions || null,
+            aiIncludeName: data.aiIncludeName ?? true,
+            aiIncludeContent: data.aiIncludeContent ?? true,
+            aiIncludeInstructions: data.aiIncludeInstructions ?? true,
+        }));
+
+        return await this.orm
+            .insert(fluxcoreTemplateSettings)
+            .values(values)
+            .onConflictDoUpdate({
+                target: fluxcoreTemplateSettings.templateId,
+                set: {
+                    authorizeForAI: sql`EXCLUDED.authorize_for_ai`,
+                    aiUsageInstructions: sql`EXCLUDED.ai_usage_instructions`,
+                    aiIncludeName: sql`EXCLUDED.ai_include_name`,
+                    aiIncludeContent: sql`EXCLUDED.ai_include_content`,
+                    aiIncludeInstructions: sql`EXCLUDED.ai_include_instructions`,
                     updatedAt: new Date()
                 }
             })

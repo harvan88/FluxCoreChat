@@ -141,6 +141,7 @@ export function OpenAIAssistantConfigView({
 
   // OpenAI Models disponibles
   const OPENAI_MODELS = [
+    { value: 'gpt-4o-mini-2024-07-18', label: 'GPT-4o Mini (2024-07-18)' },
     { value: 'gpt-4o', label: 'GPT-4o' },
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
     { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },

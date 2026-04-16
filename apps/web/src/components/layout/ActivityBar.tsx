@@ -177,8 +177,8 @@ export function ActivityBar() {
     setActiveActivity('monitoring');
     openTab('dashboard', {
       type: 'monitoring',
-      identity: 'monitoring-hub',
-      title: 'Monitoring Hub',
+      identity: 'monitoring-kernel',
+      title: 'Kernel Console',
       icon: 'Activity',
       closable: true,
       context: {},
@@ -286,7 +286,7 @@ export function ActivityBar() {
                 ? 'bg-active text-primary'
                 : 'text-secondary hover:text-primary hover:bg-hover'
             )}
-            title={!activityBarExpanded ? 'Monitoring Hub' : undefined}
+            title={!activityBarExpanded ? 'Kernel Console' : undefined}
           >
             <MonitoringIcon size={18} className="flex-shrink-0" />
             {activityBarExpanded && (

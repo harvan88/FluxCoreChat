@@ -51,7 +51,6 @@ export interface CoreEventMap {
 
     // 🎯 NUEVO: EVENTOS DE TELEMETRÍA (Pipeline Visual)
     'telemetry:pipeline_step': (payload: import('./telemetry/telemetry.service').PipelineTelemetryEvent) => void;
-    'telemetry:kernel_signal': (payload: any) => void;
     'telemetry:distributed_trace': (payload: any) => void;
 }
 

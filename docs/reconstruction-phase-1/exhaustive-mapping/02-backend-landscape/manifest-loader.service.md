@@ -1,36 +1,45 @@
 ---
 id: "manifest-loader-service"
-type: "infrastructure-service"
+type: "core"
 status: "stable"
 criticality: "high"
 location: "apps/api/src/services/manifest-loader.service.ts"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Filesystem (manifest.json), ExtensionService" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Cargador y Validador de Metadatos de Extensiones (FC-155)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Manifest validation, Built-in extension registration, Directory scanning, Default config generation" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# ⚙️ ManifestLoaderService
+# ⚙️ manifest-loader.service
 
 ## 🎯 Propósito
-El `ManifestLoaderService` es el encargado de leer y certificar la identidad de las piezas de software externas (extensiones). Asegura que cualquier código que intente integrarse al sistema cumpla con el esquema técnico y declare explícitamente qué permisos necesita.
+El `manifest-loader.service` es el punto de entrada para los metadatos de las extensiones. Se encarga de cargar, validar y registrar las capacidades del sistema, asegurando que cumplan con el estándar de seguridad y diseño de FluxCore.
 
-## 🚥 Validación Estricta
-Cada extensión debe proporcionar un `manifest.json`. El cargador valida:
--   **Identidad**: ID único, versión semver y autor.
--   **Permisos**: Solo permite declarar permisos de una lista blanca pre-aprobada (ej. `read:context.public`, `send:messages`).
--   **Config Schema**: Esquema para los formularios de configuración en la UI, incluyendo tipos de datos y valores por defecto.
+## 🚀 Funcionalidades Clave
 
-## 🏗️ Extensiones Built-in
-El sistema viene con extensiones pre-registradas (como `@fluxcore/asistentes`). El cargador las inyecta en el esquema de arranque para asegurar que las capacidades núcleo estén disponibles desde el primer segundo sin necesidad de escaneo de disco adicional.
+### 📂 Carga Multinivel
+- **Built-in:** Extensiones registradas directamente en código para capacidades núcleo (ej: `FluxCore`).
+- **File System:** Escanea el directorio `/extensions` para cargar complementos dinámicamente.
+
+### 📐 Validación de Esquema
+Certifica que cada extensión declare correctamente:
+- **Identidad:** ID, nombre, versión y descripción.
+- **Seguridad:** Lista blanca de permisos permitidos.
+- **Configuración:** `configSchema` utilizado para generar formularios dinámicos en el frontend.
+
+### 🖥️ Metadatos de UI (v8.3)
+El cargador ahora procesa metadatos visuales críticos:
+- **Sidebar Config:** Define el icono (`Bot`, `Zap`, etc.), el título y la **prioridad** para su visualización en la barra lateral.
+- **Panel Config:** Define el componente de React (`FluxCorePanel`, etc.) que se renderizará al activar la extensión.
 
 ## 💡 Ejemplo de Uso
-```typescript
-// Importar y usar el servicio
-import { manifestLoaderService } from 'apps/api/src/services/manifest-loader.service.ts';
 
-// Ejemplo de invocación típica
-const result = await manifestLoaderService.execute(params);
+### Obtener extensiones preinstaladas
+```typescript
+const presets = manifestLoader.getPreinstalledManifests();
+// Retorna la lista de manifiestos marcados como preinstalled: true
 ```
+
+### Generación de configuración por defecto
+```typescript
+const config = manifestLoader.getDefaultConfig("@fluxcore/asistentes");
+```
+
+## 🏗️ Arquitectura
+Actúa como un puente entre los archivos de configuración y la lógica de negocio del `ExtensionService`. Es una pieza clave del arranque del sistema (`kernel.bootstrap.ts`).

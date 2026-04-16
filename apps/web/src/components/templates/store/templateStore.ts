@@ -39,6 +39,7 @@ interface TemplateState {
   // CRUD
   fetchTemplates: (accountId: string) => Promise<void>;
   createTemplate: (accountId: string, data: CreateTemplateInput) => Promise<Template>;
+  bulkImportTemplates: (accountId: string, templates: CreateTemplateInput[]) => Promise<{ createdCount: number }>;
   updateTemplate: (accountId: string, id: string, data: UpdateTemplateInput) => Promise<Template>;
   deleteTemplate: (accountId: string, id: string) => Promise<void>;
   duplicateTemplate: (id: string, accountId: string) => Promise<Template>;
@@ -116,6 +117,27 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
       return newTemplate;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Error al crear plantilla');
+      set({ error: error.message, isCreating: false });
+      throw error;
+    }
+  },
+
+  // Bulk Import
+  bulkImportTemplates: async (accountId, templates) => {
+    set({ isCreating: true, error: null });
+
+    try {
+      const response = await api.bulkImportTemplates(accountId, templates);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Error al importar plantillas masivamente');
+      }
+
+      await get().fetchTemplates(accountId);
+
+      set({ isCreating: false });
+      return response.data;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Error al importar plantillas');
       set({ error: error.message, isCreating: false });
       throw error;
     }

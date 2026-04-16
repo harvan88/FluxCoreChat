@@ -127,6 +127,7 @@ export interface AuthorizedRuntimeContext {
     contactRules: FluxPolicyContext['contactRules'];
     authorizedTemplates: string[];
     instructions?: string;
+    systemClock?: string;
     responder: {
         runtimeId: string;
         assistantId?: string;
@@ -189,6 +190,12 @@ export interface RuntimeInput {
      * Runtimes use these services instead of direct infrastructure access.
      */
     services: RuntimeServices;
+
+    /**
+     * 🎯 Identidad de Turno Inquebrantable (v10.0)
+     * Permite vincular trazas técnicas distribuidas con el mensaje original.
+     */
+    executionId?: string;
 }
 
 /**

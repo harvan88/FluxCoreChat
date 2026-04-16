@@ -189,7 +189,7 @@ class ActionExecutorService {
                 return this.executeSendMessage(action, context);
 
             case 'send_template':
-                return this.executeSendTemplate(action, context.accountId);
+                return this.executeSendTemplate(action, context);
 
             case 'start_typing':
                 return this.executeStartTyping(action);
@@ -289,17 +289,18 @@ class ActionExecutorService {
      */
     private async executeSendTemplate(
         action: { type: 'send_template'; templateId: string; conversationId: string; variables?: Record<string, string> },
-        accountId: string
+        context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
-            console.log(`[ActionExecutor] 📋 Executing template send: ${action.templateId} for account ${accountId}`);
+            console.log(`[ActionExecutor] 📋 Executing template send: ${action.templateId} for account ${context.accountId}`);
 
             const result = await templateService.executeTemplate({
                 templateId: action.templateId,
-                accountId,
+                accountId: context.accountId,
                 conversationId: action.conversationId,
                 variables: action.variables || {},
                 generatedBy: 'ai',
+                triggerSignalId: context.triggerSignalId, // ✅ Propagar ID de trazabilidad
             });
 
             console.log(`[ActionExecutor] ✅ Template ${action.templateId} sent. MessageId: ${result.messageId}`);

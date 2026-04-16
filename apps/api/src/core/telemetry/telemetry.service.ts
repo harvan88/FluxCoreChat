@@ -6,6 +6,7 @@ export interface PipelineTelemetryEvent {
   messageId: string;               
   conversationId: string;          
   accountId?: string;
+  traceId?: string;                // 🧬 ID de vínculo con trazas técnicas
   step: PipelineNodeStep;          
   status: 'pending' | 'processing' | 'success' | 'error';
   metadata?: {
@@ -26,13 +27,15 @@ export function emitTelemetry(
   accountId: string | undefined,
   step: PipelineNodeStep,
   status: 'pending' | 'processing' | 'success' | 'error',
-  metadata?: PipelineTelemetryEvent['metadata']
+  metadata?: PipelineTelemetryEvent['metadata'],
+  traceId?: string
 ) {
   try {
     const payload: PipelineTelemetryEvent = {
       messageId,
       conversationId,
       accountId,
+      traceId,
       step,
       status,
       timestamp: new Date().toISOString(),

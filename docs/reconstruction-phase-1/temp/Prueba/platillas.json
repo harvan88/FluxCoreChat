@@ -1,0 +1,104 @@
+[
+    {
+        "name": "Saludo Inicial",
+        "content": "¡Hola! Somos Ragno Fumigaciones Córdoba.\nDecime en ¿qué te puedo ayudar, qué plaga o infección necesitas controlar?",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa solo al inicio, cuando no hay contexto previo y el usuario envía un saludo o una frase genérica como “Hola” o “Quiero info”."
+    },
+    {
+        "name": "Solicitud de Barrio",
+        "content": "Entiendo, ¿En qué barrio de Córdoba necesitás el servicio?",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se activa si el asistente tiene definida la plaga pero no conoce el barrio o zona del usuario."
+    },
+    {
+        "name": "Confirmación de barrio",
+        "content": "🤔 Me podrías confirmar: {{Nombre de barrio}} es un {{Tipo de precio}}.",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa para validar el barrio y es obligatorio antes de avanzar con precios."
+    },
+    {
+        "name": "Barrio No Reconocido",
+        "content": "No recuerdo tu barrio.\n¿Podrías escribirlo completo o darnos otra referencia si está dentro o fuera de circunvalación o si es un barrio cerrado?\nMientras te derivo con alguien de nuestro equipo.",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa si el barrio proporcionado no es válido o no está en la base de conocimiento."
+    },
+    {
+        "name": "Zona Fuera de Cobertura",
+        "content": "Dejame consultar con el equipo si podemos brindar el servicio en tu zona.",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa si el usuario menciona una localidad fuera del área operativa."
+    },
+    {
+        "name": "Solicitud de Tipo de Plaga",
+        "content": "¿Podés indicarme qué plaga estás queriendo controlar?",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se activa cuando el usuario no menciona ninguna plaga específica."
+    },
+    {
+        "name": "Solicitud de Especie de Plaga",
+        "content": "¿Podrías describirme un poco más dónde lo ves o cómo es? Así puedo identificar qué especie es.\nTambién podés enviarme fotos si tenés.\nTe doy algunas opciones:\n{{Nombre de infección o plaga}}\n{{Características}}",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se activa cuando se menciona una plaga genérica sin suficiente detalle."
+    },
+    {
+        "name": "Confirmación de Identificación Estimada",
+        "content": "Gracias, por lo que me contás, probablemente se trate de {{Nombre científico}}, también conocida como {{Nombre de infección o plaga}}. {{Características}} ¿Puede ser?",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa si la descripción permite inferir con cierto margen la especie."
+    },
+    {
+        "name": "Plaga No Identificable",
+        "content": "No logro identificar exactamente la plaga con esa descripción.\n¿Podrías describirla un poco más o enviarnos una foto para que el equipo técnico lo evalúe?\nEjemplo: {{Características}}",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa si no hay suficiente información para identificar la plaga."
+    },
+    {
+        "name": "Plaga No Encontrada",
+        "content": "No tengo información específica sobre esa plaga, voy a derivar tu consulta al área técnica.",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa si no existe ficha para la especie mencionada."
+    },
+    {
+        "name": "Tratamiento de Plaga",
+        "content": "Para {{Nombre científico}}, también conocida como {{Nombre de infección o plaga}}, realizamos el siguiente tratamiento: {{Tratamiento}}.\nEl precio es {{Tipos de precios}}.",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se activa cuando la especie está identificada y el barrio validado."
+    },
+    {
+        "name": "Coordinación de Turno",
+        "content": "Podés agendar tu turno acá:\nhttps://calendar.app.google/gzV6RpA6C6WA3bEb9\nAvisame cuando confirmes así lo bloqueamos 🔒",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa cuando el usuario expresa intención de agendar luego de recibir tratamiento/precio."
+    },
+    {
+        "name": "Confirmación de Reserva",
+        "content": "¡Perfecto! Tu turno ya quedó registrado.\nLeé el instructivo para que tengas todo preparado:\n{{Palabra clave de imagen}}",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa cuando el usuario confirma que ya agendó."
+    },
+    {
+        "name": "Instructivo Post-Reserva",
+        "content": "Leé el instructivo para que tengas todo preparado:\n{{Palabra clave de imagen}}",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa si el usuario pide indicaciones luego de reservar."
+    },
+    {
+        "name": "Tratamiento para Otra Plaga",
+        "content": "¿Querés que veamos también el tratamiento para {{Nombre de infección o plaga}}?",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa cuando el usuario menciona más de una plaga."
+    },
+    {
+        "name": "Derivación por Imagen",
+        "content": "Dame un momento, derivo tu imagen a alguien del equipo.",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se activa si el usuario envía imágenes sin contexto o para identificación."
+    },
+    {
+        "name": "Corte por Conversación Improductiva",
+        "content": "Gracias por escribirnos.\nSi en algún momento necesitás nuestros servicios, quedamos a disposición.\nQue tengas un buen día 🙂",
+        "authorizeForAI": true,
+        "aiUsageInstructions": "Se usa ante mensajes incoherentes o interacción improductiva reiterada."
+    }
+]

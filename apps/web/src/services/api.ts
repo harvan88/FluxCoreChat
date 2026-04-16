@@ -12,9 +12,6 @@ import type {
   LoginCredentials,
   RegisterData,
   AccountDeletionJob,
-  AccountDeletionLog,
-  AccountDataReference,
-  AccountOrphanReference,
   AIStatusResponse,
   AIEligibilityResponse,
   PromptPreviewData,
@@ -430,36 +427,7 @@ class ApiService {
     if (params.statuses && params.statuses.length > 0) {
       query.set('status', params.statuses.join(','));
     }
-
     return this.request<{ sessions: KernelSession[] }>(`/kernel/sessions/active?${query.toString()}`);
-  }
-
-  async getKernelConsoleSignals(
-    accountId: string,
-    params?: { factType?: string; sourceNamespace?: string; search?: string; limit?: number }
-  ): Promise<ApiResponse<any[]>> {
-    const query = new URLSearchParams();
-    if (params?.factType) query.set('factType', params.factType);
-    if (params?.sourceNamespace) query.set('sourceNamespace', params.sourceNamespace);
-    if (params?.search) query.set('search', params.search);
-    if (params?.limit) query.set('limit', String(params.limit));
-
-    const qs = query.toString();
-    const endpoint = `/kernel/console/signals${qs ? '?' + qs : ''}`;
-
-    return this.request<any[]>(endpoint, {
-      headers: {
-        'x-account-id': accountId,
-      },
-    });
-  }
-
-  async getAgents(accountId: string): Promise<ApiResponse<any[]>> {
-    return this.request<any[]>(`/fluxcore/agents?accountId=${encodeURIComponent(accountId)}`);
-  }
-
-  async getAgent(accountId: string, agentId: string): Promise<ApiResponse<any>> {
-    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}?accountId=${encodeURIComponent(accountId)}`);
   }
 
   async createAgent(params: {
@@ -707,42 +675,6 @@ class ApiService {
     return this.request<AccountDeletionJob | null>(`/accounts/${accountId}/delete/job`);
   }
 
-  async getAccountDeletionLogs(params: {
-    limit?: number;
-    accountId?: string;
-    jobId?: string;
-    status?: string;
-    createdAfter?: string;
-    createdBefore?: string;
-  }): Promise<ApiResponse<AccountDeletionLog[]>> {
-    const query = new URLSearchParams();
-    if (params.limit) query.set('limit', String(params.limit));
-    if (params.accountId) query.set('accountId', params.accountId);
-    if (params.jobId) query.set('jobId', params.jobId);
-    if (params.status) query.set('status', params.status);
-    if (params.createdAfter) query.set('createdAfter', params.createdAfter);
-    if (params.createdBefore) query.set('createdBefore', params.createdBefore);
-
-    return this.request<AccountDeletionLog[]>(`/internal/account-deletions/logs?${query.toString()}`, {
-      headers: this.getAdminHeaders(),
-    });
-  }
-
-  async getAccountDataReferences(accountId: string): Promise<ApiResponse<AccountDataReference[]>> {
-    const query = new URLSearchParams({ accountId });
-    return this.request<AccountDataReference[]>(`/internal/account-deletions/references?${query.toString()}`, {
-      headers: this.getAdminHeaders(),
-    });
-  }
-
-  async getAccountOrphanReferences(sampleLimit?: number): Promise<ApiResponse<AccountOrphanReference[]>> {
-    const query = new URLSearchParams();
-    if (sampleLimit) query.set('sampleLimit', String(sampleLimit));
-    return this.request<AccountOrphanReference[]>(`/internal/account-deletions/orphans?${query.toString()}`, {
-      headers: this.getAdminHeaders(),
-    });
-  }
-
   // Templates CRUD -----------------------------------------------------------
   async listTemplates(accountId: string): Promise<ApiResponse<Template[]>> {
     const query = new URLSearchParams({ accountId });
@@ -758,6 +690,13 @@ class ApiService {
     return this.request<Template>('/api/templates', {
       method: 'POST',
       body: JSON.stringify({ accountId, ...payload }),
+    });
+  }
+
+  async bulkImportTemplates(accountId: string, templates: CreateTemplateInput[]): Promise<ApiResponse<{ createdCount: number }>> {
+    return this.request<{ createdCount: number }>('/api/templates/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ accountId, templates }),
     });
   }
 
@@ -1185,93 +1124,10 @@ class ApiService {
     });
   }
 
-  // Kernel Status
-  async getKernelStatusOverview(params?: { accountId?: string }): Promise<ApiResponse<{
-    kernel: {
-      total_signals: number;
-      unique_fact_types: number;
-      last_signal_at: string;
-      signals_last_hour: number;
-      signals_last_24h: number;
-      status: 'active' | 'inactive';
-    };
-    outbox: {
-      total: number;
-      certified: number;
-      pending: number;
-      last_outbox_at: string;
-      outbox_last_hour: number;
-    };
-    sessions: {
-      total: number;
-      active: number;
-      pending: number;
-      invalidated: number;
-      last_activity: string;
-    };
-    recent_signal_types: Array<{
-      fact_type: string;
-      count: number;
-      last_seen: string;
-    }>;
-    projectors: Array<{
-      name: string;
-      last_sequence_number: number;
-      error_count: number;
-      last_error: string | null;
-      is_healthy: boolean;
-    }>;
-    system_metrics: Array<{
-      metric_name: string;
-      metric_value: string;
-      recorded_at: string;
-    }>;
-  }>> {
-    const query = params?.accountId ? `?accountId=${params.accountId}` : '';
-    return this.request(`/kernel/status/overview${query}`);
-  }
-
-  async getKernelSignals(params?: { 
-    limit?: number; 
-    offset?: number; 
-    factType?: string;
-  }): Promise<ApiResponse<{
-    signals: Array<{
-      sequence_number: number;
-      fact_type: string;
-      source_namespace: string;
-      source_key: string;
-      subject_namespace: string;
-      subject_key: string;
-      object_namespace: string;
-      object_key: string;
-      evidence_raw: any;
-      evidence_format: string;
-      certified_by_adapter: string;
-      certified_adapter_version: string;
-      claimed_occurred_at: string;
-      observed_at: string;
-    }>;
-    pagination: {
-      total: number;
-      limit: number;
-      offset: number;
-      has_more: boolean;
-    };
-  }>> {
-    const queryParams = new URLSearchParams();
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
-    if (params?.offset) queryParams.append('offset', params.offset.toString());
-    if (params?.factType) queryParams.append('factType', params.factType);
-    
-    const query = queryParams.toString();
-    return this.request(`/kernel/status/signals${query ? `?${query}` : ''}`);
-  }
-
   async getAssetVersions(assetId: string, accountId: string): Promise<ApiResponse<Array<{
-    version: number;
-    sizeBytes: number;
-    createdAt: string;
+    id: string;
+    versionNumber: number;
+    storagePath: string;
   }>>> {
     return this.request(`/api/assets/${assetId}/versions?accountId=${accountId}`);
   }

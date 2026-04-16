@@ -270,12 +270,150 @@ export class CustomEmbeddingProvider implements IEmbeddingProvider {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Sovereign Embedding Provider (Transformers.js In-Memory) & Ollama Fallback
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Gestor Singleton del Pipeline de Transformers.js
+ * Para no cargar el modelo múltiples veces.
+ */
+class TransformerPipelineManager {
+    static instances: Record<string, any> = {};
+    static loadingMap: Record<string, boolean> = {};
+
+    static async getInstance(modelName: string) {
+        if (this.instances[modelName]) return this.instances[modelName];
+        
+        while (this.loadingMap[modelName]) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        if (this.instances[modelName]) return this.instances[modelName];
+
+        this.loadingMap[modelName] = true;
+        try {
+            // Importación dinámica para no bloquear el inicio del servidor
+            const { pipeline, env } = await import('@xenova/transformers');
+            
+            // Configurar para usar recursos locales si es posible, o descargar y cachear
+            env.allowRemoteModels = true; 
+            
+            console.log(`[Sovereign RAG] Cargando modelo en memoria: ${modelName}...`);
+            this.instances[modelName] = await pipeline('feature-extraction', modelName, {
+                quantized: true, // Usa versión optimizada
+            });
+            console.log(`[Sovereign RAG] Modelo cargado exitosamente.`);
+            
+            return this.instances[modelName];
+        } catch (error) {
+            console.error(`[Sovereign RAG] Error cargando Transformers.js (${modelName}):`, error);
+            throw error;
+        } finally {
+            this.loadingMap[modelName] = false;
+        }
+    }
+}
+
+export class LocalEmbeddingProvider implements IEmbeddingProvider {
+    readonly name = 'local';
+    // Soportamos el modelo por defecto en inglés y el nuevo multilingüe para español
+    readonly supportedModels = ['paraphrase-multilingual-MiniLM-L12-v2', 'all-MiniLM-L6-v2'];
+
+    async embed(text: string, config: EmbeddingProviderConfig): Promise<EmbeddingResult> {
+        const result = await this.embedBatch([text], config);
+        return {
+            embedding: result.embeddings[0],
+            tokenCount: result.tokenCounts[0],
+            model: result.model,
+            provider: this.name,
+        };
+    }
+
+    async embedBatch(texts: string[], config: EmbeddingProviderConfig): Promise<BatchEmbeddingResult> {
+        // 1. Si el usuario definió un Endpoint URL EXPLÍCITO, usamos el driver externo
+        if (config.endpointUrl) {
+            return this.embedWithOllama(texts, config);
+        }
+
+        // 2. MODO SOBERANO ABSOLUTO (Transformers.js In-Memory)
+        try {
+            const requestedModel = config.model || 'all-MiniLM-L6-v2';
+            // Transformers.js requiere el prefijo Xenova/ para descargar de HuggingFace
+            const hfModelName = requestedModel.startsWith('Xenova/') ? requestedModel : `Xenova/${requestedModel}`;
+            
+            const pipe = await TransformerPipelineManager.getInstance(hfModelName);
+            
+            // Generar embeddings puros
+            const output = await pipe(texts, { pooling: 'mean', normalize: true });
+            const embeddingsTensor = output.tolist();
+            
+            // ARQUITECTURA ROBUSTA (v8.4):
+            // Retornamos las dimensiones REALES del modelo. 
+            // Para que esto funcione, la columna en DB debe ser 'vector' (sin dimensión fija).
+            const realDim = embeddingsTensor[0]?.length || 0;
+            console.log(`[Sovereign RAG] Generando vectores nativos: dim=${realDim} | mo=${config.model}`);
+            
+            return {
+                embeddings: embeddingsTensor,
+                tokenCounts: texts.map(t => Math.ceil(t.length / 4)),
+                model: `local-${config.model || 'mini-lm'}`,
+                provider: 'sovereign-local',
+                totalTokens: Math.ceil(texts.join(' ').length / 4),
+            };
+            
+        } catch (err: any) {
+            console.warn(`[Sovereign RAG] Fallo en motor in-memory, intentando Ollama fallback... Error: ${err.message}`);
+            return this.embedWithOllama(texts, config);
+        }
+    }
+
+    private async embedWithOllama(texts: string[], config: EmbeddingProviderConfig): Promise<BatchEmbeddingResult> {
+        const endpoint = config.endpointUrl || process.env.LOCAL_EMBEDDING_URL || 'http://localhost:11434/api/embeddings';
+        
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: config.model || 'all-minilm', // Nota: ollama usa all-minilm
+                    prompt: texts[0], // Algunos locales de ollama api vieja solo aceptan uno
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Servicio local en ${endpoint} respondió con error ${response.status}.`);
+            }
+
+            const data = await response.json();
+            const embedding = data.embedding || data.embeddings?.[0];
+            
+            if (!embedding) throw new Error('Respuesta inválida del servicio local');
+
+            return {
+                embeddings: [embedding],
+                tokenCounts: [Math.ceil(texts[0].length / 4)],
+                model: config.model || 'all-minilm',
+                provider: 'ollama-local',
+                totalTokens: Math.ceil(texts[0].length / 4),
+            };
+        } catch (err: any) {
+            throw new Error(`Sovereign RAG Fallback failed: Asegúrate de tener Ollama corriendo en ${endpoint} con el modelo all-minilm. Ocurrió un error: ${err.message}`);
+        }
+    }
+
+    async isAvailable(config: EmbeddingProviderConfig): Promise<boolean> {
+        return true; 
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Embedding Provider Factory
 // ════════════════════════════════════════════════════════════════════════════
 
 const providers: Record<string, IEmbeddingProvider> = {
     openai: new OpenAIEmbeddingProvider(),
     cohere: new CohereEmbeddingProvider(),
+    local: new LocalEmbeddingProvider(),
     custom: new CustomEmbeddingProvider(),
 };
 
@@ -369,13 +507,18 @@ export class EmbeddingService {
     }
 
     /**
-     * Genera embedding con configuración específica y fallback
+     * Genera embedding con configuración específica y fallback inteligente
      */
     async embedWithConfig(
         text: string,
         config: EmbeddingProviderConfig
     ): Promise<EmbeddingResult> {
-        const providersToTry = [config.provider, ...this.fallbackOrder.filter(p => p !== config.provider)];
+        // Determinismo de Proveedor (v8.3): Si el usuario elige algo específico, no saltar a otros proveedores
+        // que causarán errores de "Model Not Found" o "Insufficient Quota".
+        const isDefaultProvider = config.provider === 'openai' || !config.provider;
+        const providersToTry = isDefaultProvider 
+            ? [config.provider || 'openai', ...this.fallbackOrder.filter(p => p !== config.provider)]
+            : [config.provider];
 
         let lastError: Error | null = null;
 
@@ -384,25 +527,36 @@ export class EmbeddingService {
                 const provider = getEmbeddingProvider(providerName);
 
                 if (await provider.isAvailable(config)) {
-                    return await provider.embed(text, config);
+                    // Si el proveedor es diferente al original, ajustamos el modelo al default del proveedor
+                    const effectiveConfig = provider.name !== config.provider
+                        ? { ...config, model: provider.supportedModels[0] }
+                        : config;
+
+                    return await provider.embed(text, effectiveConfig);
                 }
             } catch (error) {
                 console.warn(`Embedding provider ${providerName} failed:`, error);
                 lastError = error as Error;
+                
+                // Si el proveedor fue solicitado explícitamente y falló, no seguimos intentando fallbacks
+                if (!isDefaultProvider) break;
             }
         }
 
-        throw lastError || new Error('No embedding provider available');
+        throw lastError || new Error(`No embedding provider available for: ${config.provider}`);
     }
 
     /**
-     * Genera embeddings en batch con configuración específica y fallback
+     * Genera embeddings en batch con configuración específica y fallback inteligente
      */
     async embedBatchWithConfig(
         texts: string[],
         config: EmbeddingProviderConfig
     ): Promise<BatchEmbeddingResult> {
-        const providersToTry = [config.provider, ...this.fallbackOrder.filter(p => p !== config.provider)];
+        const isDefaultProvider = config.provider === 'openai' || !config.provider;
+        const providersToTry = isDefaultProvider 
+            ? [config.provider || 'openai', ...this.fallbackOrder.filter(p => p !== config.provider)]
+            : [config.provider];
 
         let lastError: Error | null = null;
 
@@ -411,15 +565,21 @@ export class EmbeddingService {
                 const provider = getEmbeddingProvider(providerName);
 
                 if (await provider.isAvailable(config)) {
-                    return await provider.embedBatch(texts, config);
+                    // Ajuste de modelo para fallbacks
+                    const effectiveConfig = provider.name !== config.provider
+                        ? { ...config, model: provider.supportedModels[0] }
+                        : config;
+
+                    return await provider.embedBatch(texts, effectiveConfig);
                 }
             } catch (error) {
                 console.warn(`Embedding provider ${providerName} failed:`, error);
                 lastError = error as Error;
+                if (!isDefaultProvider) break;
             }
         }
 
-        throw lastError || new Error('No embedding provider available');
+        throw lastError || new Error(`No embedding provider available for: ${config.provider}`);
     }
 
     /**

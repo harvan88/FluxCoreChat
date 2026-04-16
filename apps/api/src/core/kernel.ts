@@ -336,31 +336,10 @@ export class Kernel {
         });
         
         // Emit wakeup event AFTER transaction commits successfully
-        coreEventBus.emit('kernel:wakeup', { 
+        coreEventBus.emit('kernel:wakeup', {
             source: 'kernel.ingestSignal',
-            timestamp: Date.now() 
+            timestamp: Date.now()
         });
-
-        // ðŸŽ¯ TELEMETRÃA (Fase 2): SeÃ±al viva para la Kernel Console
-        try {
-            coreEventBus.emit('telemetry:kernel_signal', {
-                sequenceNumber: finalSequenceNumber, 
-                factType: candidate.factType,
-                sourceNamespace: candidate.source.namespace,
-                sourceKey: candidate.source.key,
-                subjectNamespace: candidate.subject?.namespace,
-                subjectKey: candidate.subject?.key,
-                objectNamespace: candidate.object?.namespace,
-                objectKey: candidate.object?.key,
-                evidenceRaw: candidate.evidence.raw,
-                certifiedByAdapter: candidate.certifiedBy.adapterId,
-                provenanceExternalId: candidate.evidence.provenance.externalId,
-                provenanceDriverId: candidate.evidence.provenance.driverId,
-                claimedOccurredAt: candidate.evidence.claimedOccurredAt,
-                status: 'certified',
-                timestamp: new Date().toISOString()
-            });
-        } catch (e) {}
 
         return finalSequenceNumber;
     }

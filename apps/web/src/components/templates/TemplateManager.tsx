@@ -6,8 +6,9 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plus, FileText, RefreshCw } from 'lucide-react';
+import { Plus, FileText, RefreshCw, UploadCloud } from 'lucide-react';
 import { TemplateList } from './TemplateList';
+import { TemplateBulkImportModal } from './TemplateBulkImportModal';
 import { useTemplateStore } from './store/templateStore';
 import { usePanelStore } from '../../store/panelStore';
 import { Button } from '../ui/Button';
@@ -43,6 +44,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   // For now, let's rely on tabs.
 
   const [isCreating, setIsCreating] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Fetch templates when accountId changes
   useEffect(() => {
@@ -108,59 +110,48 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
     fetchTemplates(accountId);
   };
 
+  let content = null;
+
   // Loading state
   if (isLoading) {
-    return (
-      <div className="h-full flex flex-col">
-        <Header onCreateNew={handleCreateNew} isCreating={isCreating} onRefresh={handleRefresh} />
-        <div className="flex-1 flex items-center justify-center">
-          <LoadingState message="Cargando plantillas..." />
-        </div>
+    content = (
+      <div className="flex-1 flex items-center justify-center">
+        <LoadingState message="Cargando plantillas..." />
       </div>
     );
   }
-
   // Error state
-  if (error) {
-    return (
-      <div className="h-full flex flex-col">
-        <Header onCreateNew={handleCreateNew} isCreating={isCreating} onRefresh={handleRefresh} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <ErrorState
-            message={error || 'Error al cargar plantillas'}
-            onRetry={handleRefresh}
-          />
-        </div>
+  else if (error) {
+    content = (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <ErrorState
+          message={error || 'Error al cargar plantillas'}
+          onRetry={handleRefresh}
+        />
       </div>
     );
   }
-
   // Empty state
-  if (filteredTemplates.length === 0 && !filters.search && !filters.category) {
-    return (
-      <div className="h-full flex flex-col">
-        <Header onCreateNew={handleCreateNew} isCreating={isCreating} onRefresh={handleRefresh} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <EmptyState
-            title="Sin plantillas"
-            subtitle="Crea tu primera plantilla para agilizar tus respuestas"
-            icon={<FileText size={48} className="text-muted" />}
-            action={
-              <Button onClick={handleCreateNew} disabled={isCreating}>
-                <Plus size={16} className="mr-2" />
-                Crear plantilla
-              </Button>
-            }
-          />
-        </div>
+  else if (filteredTemplates.length === 0 && !filters.search && !filters.category) {
+    content = (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <EmptyState
+          title="Sin plantillas"
+          subtitle="Crea tu primera plantilla para agilizar tus respuestas"
+          icon={<FileText size={48} className="text-muted" />}
+          action={
+            <Button onClick={handleCreateNew} disabled={isCreating}>
+              <Plus size={16} className="mr-2" />
+              Crear plantilla
+            </Button>
+          }
+        />
       </div>
     );
   }
-
   // Normal state with list
-  return (
-    <div className="h-full flex flex-col">
-      <Header onCreateNew={handleCreateNew} isCreating={isCreating} onRefresh={handleRefresh} />
+  else {
+    content = (
       <div className="flex-1 overflow-hidden">
         <TemplateList
           templates={filteredTemplates}
@@ -175,6 +166,25 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
           onDuplicate={handleDuplicate}
         />
       </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <Header 
+        onCreateNew={handleCreateNew} 
+        isCreating={isCreating} 
+        onRefresh={handleRefresh} 
+        onOpenImport={() => setIsImportModalOpen(true)}
+      />
+      {content}
+
+      {/* Modals always rendered */}
+      <TemplateBulkImportModal
+        accountId={accountId}
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+      />
     </div>
   );
 }
@@ -183,11 +193,13 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
 function Header({
   onCreateNew,
   isCreating,
-  onRefresh
+  onRefresh,
+  onOpenImport
 }: {
   onCreateNew: () => void;
   isCreating: boolean;
   onRefresh: () => void;
+  onOpenImport: () => void;
 }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-subtle">
@@ -200,6 +212,16 @@ function Header({
         >
           <RefreshCw size={16} />
         </button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onOpenImport}
+          disabled={isCreating}
+          className="hidden sm:flex"
+        >
+          <UploadCloud size={14} className="mr-1" />
+          Importar JSON
+        </Button>
         <Button
           size="sm"
           onClick={onCreateNew}

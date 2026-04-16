@@ -76,6 +76,40 @@ export class TemplateService {
     return { ...inserted, assets: [] };
   }
 
+  async bulkCreateTemplates(accountId: string, dataList: TemplateInput[]): Promise<TemplateWithAssets[]> {
+    if (dataList.length === 0) return [];
+
+    const values = dataList.map((data) => {
+      const payload = normalizeTemplateInput(data);
+      return {
+        accountId,
+        name: payload.name,
+        content: payload.content,
+        category: payload.category || null,
+        variables: payload.variables,
+        tags: payload.tags,
+        isActive: payload.isActive ?? true,
+        allowAutomatedUse: payload.allowAutomatedUse ?? false,
+      };
+    });
+
+    const inserted = await this.orm
+      .insert(templates)
+      .values(values)
+      .returning();
+
+    // Emite eventos de invalidación para todos los inserts
+    for (const t of inserted) {
+      coreEventBus.emit('template.authorization.changed', {
+        templateId: t.id,
+        accountId,
+        allowAutomatedUse: t.allowAutomatedUse,
+      });
+    }
+
+    return inserted.map((t) => ({ ...t, assets: [] }));
+  }
+
   async updateTemplate(accountId: string, templateId: string, data: TemplateUpdateInput): Promise<TemplateWithAssets> {
     const existing = await this.findTemplate(templateId);
     assertTemplateScope(existing?.accountId, accountId);
@@ -173,7 +207,8 @@ export class TemplateService {
         media: media.length > 0 ? media : undefined
       },
       type: 'outgoing',
-      generatedBy
+      generatedBy,
+      triggerSignalId: (params as any).triggerSignalId // ✅ Pasar ID de trazabilidad
     });
 
     // 5. Vincular formalmente en message_assets para consistencia del sistema

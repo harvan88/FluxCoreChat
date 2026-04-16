@@ -1,0 +1,280 @@
+[
+  {
+    "name": "Saludo Inicial",
+    "content": "¡Hola! Somos Ragno Fumigaciones Córdoba.\nDecime en ¿qué te puedo ayudar, qué plaga o infección necesitas controlar?",
+    "category": "Interacción",
+    "tags": ["inicio", "saludo"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa solo al inicio, cuando no hay contexto previo y el usuario envía un saludo o una frase genérica como “Hola” o “Quiero info”.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Solicitud de Barrio",
+    "content": "Entiendo, ¿En qué barrio de Córdoba necesitás el servicio?",
+    "category": "Ubicación",
+    "tags": ["ubicación", "barrio"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se activa si el asistente tiene definida la plaga pero no conoce el barrio o zona del usuario.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Confirmación de barrio",
+    "content": "🤔 Me podrías confirmar: {{Nombre de barrio}} es un {{Tipo de precio}}.",
+    "category": "Ubicación",
+    "tags": ["validación", "barrio"],
+    "variables": [
+      { "name": "Nombre de barrio", "type": "text", "required": true, "label": "Nombre del Barrio" },
+      { "name": "Tipo de precio", "type": "text", "required": true, "label": "Zona (Dentro, Fuera, Coto)" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa para validar el barrio y es obligatorio antes de avanzar con precios. El asistente debe clasificar el barrio según la base de conocimiento (Dentro de circunvalación, Fuera o Barrio cerrado).",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Barrio No Reconocido",
+    "content": "No recuerdo tu barrio.\n¿Podrías escribirlo completo o darnos otra referencia si está dentro o fuera de circunvalación o si es un barrio cerrado?\nMientras te derivo con alguien de nuestro equipo.",
+    "category": "Ubicación",
+    "tags": ["soporte", "barrio"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa si el barrio proporcionado no es válido o no está en la base de conocimiento después de un intento de búsqueda.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Zona Fuera de Cobertura",
+    "content": "Dejame consultar con el equipo si podemos brindar el servicio en tu zona.",
+    "category": "Ubicación",
+    "tags": ["excepción", "cobertura"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa si el usuario menciona una localidad claramente fuera del área operativa de Córdoba Capital.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Confirmación de Identificación Estimada",
+    "content": "Gracias, por lo que me contás, probablemente se trate de {{Nombre científico}}, también conocida como {{Nombre de infección o plaga}}. {{Características}} ¿Puede ser?",
+    "category": "Diagnóstico",
+    "tags": ["diagnóstico", "identificación"],
+    "variables": [
+      { "name": "Nombre científico", "type": "text", "required": false, "label": "Nombre Científico" },
+      { "name": "Nombre de infección o plaga", "type": "text", "required": true, "label": "Nombre Común" },
+      { "name": "Características", "type": "text", "required": false, "label": "Descripción Breve" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa si la descripción del usuario en el chat permite inferir con cierto margen la especie basándose en el Catálogo de plagas.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Plaga No Identificable",
+    "content": "No logro identificar exactamente la plaga con esa descripción.\n¿Podrías describirla un poco más o enviarnos una foto para que el equipo técnico lo evalúe?\nEjemplo: {{Características}}",
+    "category": "Diagnóstico",
+    "tags": ["diagnóstico", "falla"],
+    "variables": [
+      { "name": "Características", "type": "text", "required": false, "label": "Ejemplo de descripción" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa si no hay suficiente información en el mensaje del usuario para identificar la plaga de forma unívoca.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Plaga No Encontrada",
+    "content": "No tengo información específica sobre esa plaga, voy a derivar tu consulta al área técnica.",
+    "category": "Diagnóstico",
+    "tags": ["diagnóstico", "derivación"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa si la especie mencionada por el usuario no existe en absoluto dentro del Catálogo.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Tratamiento de Plaga",
+    "content": "Para {{Nombre científico}}, también conocida como {{Nombre de infección o plaga}}, realizamos el siguiente tratamiento: {{Tratamiento}}.\nEl precio es {{Tipos de precios}}.",
+    "category": "Venta",
+    "tags": ["tratamiento", "precio"],
+    "variables": [
+      { "name": "Nombre científico", "type": "text", "required": false, "label": "Nombre Científico" },
+      { "name": "Nombre de infección o plaga", "type": "text", "required": true, "label": "Nombre Común" },
+      { "name": "Tratamiento", "type": "text", "required": true, "label": "Descripción del Tratamiento" },
+      { "name": "Tipos de precios", "type": "text", "required": true, "label": "Precio según Zona" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se activa cuando la especie está identificada y el barrio validado. Es indispensable incluir el tratamiento exacto y el precio correspondiente a la zona validada según el Catálogo.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Coordinación de Turno",
+    "content": "Podés agendar tu turno acá:\nhttps://calendar.app.google/gzV6RpA6C6WA3bEb9\nAvisame cuando confirmes así lo bloqueamos 🔒",
+    "category": "Venta",
+    "tags": ["agenda", "turno"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa cuando el usuario expresa intención de agendar o contratar el servicio luego de haber recibido tratamiento y precio.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Confirmación de Reserva",
+    "content": "¡Perfecto! Tu turno ya quedó registrado.\nLeé el instructivo para que tengas todo preparado:\n{{Palabra clave de imagen}}",
+    "category": "Post-Venta",
+    "tags": ["confirmación", "instrucciones"],
+    "variables": [
+      { "name": "Palabra clave de imagen", "type": "text", "required": false, "label": "Instrucción de preparación" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa cuando el usuario confirma explícitamente que ya agendó el turno en el calendario.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Instructivo Post-Reserva",
+    "content": "Leé el instructivo para que tengas todo preparado:\n{{Palabra clave de imagen}}",
+    "category": "Post-Venta",
+    "tags": ["soporte", "preparación"],
+    "variables": [
+      { "name": "Palabra clave de imagen", "type": "text", "required": false, "label": "Instrucción de preparación" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa si el usuario pide indicaciones o preparaciones previas al trabajo luego de haber reservado.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Tratamiento para Otra Plaga",
+    "content": "¿Querés que veamos también el tratamiento para {{Nombre de infección o plaga}}?",
+    "category": "Venta",
+    "tags": ["upselling", "consulta"],
+    "variables": [
+      { "name": "Nombre de infección o plaga", "type": "text", "required": true, "label": "Nombre de la otra plaga" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa cuando el usuario menciona más de una plaga en su consulta original o posterior.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Derivación por Imagen",
+    "content": "Dame un momento, derivo tu imagen a alguien del equipo.",
+    "category": "Soporte",
+    "tags": ["derivación", "imagen"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se activa exclusivamente si el usuario envía imágenes para identificación técnica o sin contexto textual suficiente.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Corte por Conversación Improductiva",
+    "content": "Gracias por escribirnos.\nSi en algún momento necesitás nuestros servicios, quedamos a disposición.\nQue tengas un buen día 🙂",
+    "category": "Interacción",
+    "tags": ["cierre", "seguridad"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se usa ante mensajes incoherentes, bromas, o interacción improductiva que aleja al bot de su objetivo comercial.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Solicitud de Especie de Plaga",
+    "content": "¿Podrías describirme un poco más dónde lo ves o cómo es? Así puedo identificar qué especie es.\nTambién podés enviarme fotos si tenés.\nTe doy algunas opciones:\n{{Nombre de infección o plaga}}\n{{Características}}",
+    "category": "Diagnóstico",
+    "tags": ["identificación", "ayuda"],
+    "variables": [
+      { "name": "Nombre de infección o plaga", "type": "text", "required": false, "label": "Especies sugeridas" },
+      { "name": "Características", "type": "text", "required": false, "label": "Detalles a observar" }
+    ],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se activa cuando se menciona una plaga genérica (ej: cucarachas) pero necesitamos saber el tipo específico (Alemana vs Americana) para dar el tratamiento y precio correcto según el Catálogo.",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  },
+  {
+    "name": "Solicitud de Tipo de Plaga",
+    "content": "¿Podés indicarme qué plaga estás queriendo controlar?",
+    "category": "Diagnóstico",
+    "tags": ["identificación", "inicio"],
+    "variables": [],
+    "aiSettings": {
+      "authorizeForAI": true,
+      "aiUsageInstructions": "Se activa cuando el usuario tiene intención de contratar o fumigar pero no indica qué plaga quiere controlar (ej: 'cuanto cuesta el servicio').",
+      "aiIncludeName": true,
+      "aiIncludeContent": true,
+      "aiIncludeInstructions": true
+    },
+    "assets": []
+  }
+]

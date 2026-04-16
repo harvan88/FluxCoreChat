@@ -2,36 +2,42 @@
 id: "fluxcore-sidebar"
 type: "smart-component"
 status: "stable"
-criticality: "medium"
+criticality: "high"
 location: "apps/web/src/components/fluxcore/FluxCoreSidebar.tsx"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Inyectado con useAIStatus para discernimiento visual" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Menú Lateral de la Consola Administrativa" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Mutación de Menús basada en Runtime (Asistentes vs Fluxi)" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 🤖 FluxCoreSidebar
 
 ## 🎯 Propósito
-Es el componente arquitectónico de navegación rígido situado al lateral izquierdo de la Consola de Administración (`FluxCorePanel`). Presenta un sumario de accesos verticales con Iconografía estándar lucide (Bot, Database, Wrench). Sin embargo, posee inteligencia deductiva camaleónica escondida: analiza internamente el motor general del Workspace para desarmar u ocultar botones que el usuario no debería alcanzar si su sistema base ha mutado.
+El `FluxCoreSidebar` es el menú de navegación principal de la consola administrativa de FluxCore. Proporciona acceso a todas las configuraciones del asistente (Dashboard, Instrucciones, Base de Conocimiento, Fluxi, etc.) y actúa como el panel de control de visibilidad de la extensión.
 
 ## 📦 Estado y Datos
-**Acople Radial (Detector de Runtimes):**
-- Importa nativamente `useAIStatus(accountId)`. Chequea vitalmente qué "cerebro" está operando (`@fluxcore/asistentes` frente a `@fluxcore/fluxi`).
+- **Activación Real-Time:** Consume el hook `useExtensions` para gestionar y mostrar el estado de habilitación de la extensión `@fluxcore/asistentes`.
+- **Detección de Engine:** Usa `useAIStatus` para determinar si el modo activo es conversacional (Asistentes) o determinista (Fluxi), adaptando las opciones de navegación automáticamente.
 
-## 🔄 Flujos de Interacción
-1. **Filtrador Interceptual de Destinos (`filteredNavItems`):** En cada ciclo del EventLoop, pregunta "Quién es el motor". Si el motor que domina el cerebro de la cuenta es el de tipo *Fluxi* (Delegativos/Background), aniquila con `filter` los botones textuales inservibles (`assistants`, `instructions`, `debug`), forzando al humano a concentrarse únicamente en el tablero de Trabajos (`works`), evitando así configuraciones paramétricas falsas.
+## 🚀 Funcionalidades Clave
+
+### 🚥 Interruptor de Visibilidad (v8.3)
+Incluye un componente `Switch` en la cabecera del sidebar que actúa como el activador manual para el usuario final.
+- **Activación:** Al encender el switch, la extensión se marca como `enabled: true`, lo que dispara un evento global que hace aparecer el icono de FluxCore en la `ActivityBar` de forma inmediata.
+- **Desactivación:** Oculta el acceso directo pero mantiene el acceso vía el menú de Herramientas para una re-activación posterior.
+
+### 🎨 Branding Consistente
+Utiliza el `FluxCoreIcon` oficial de la librería centralizada para asegurar una identidad visual coherente entre el menú lateral y la barra lateral de actividades.
+
+### 🧩 Navegación Adaptativa
+Filtra la lista de destinos (`navItems`) basándose en el runtime activo para evitar mostrar secciones irrelevantes (ej: ocultar "Instrucciones" cuando se opera en modo puramente Fluxi).
 
 ## 💡 Ejemplo de Uso
-```tsx
-import { FluxCoreSidebar } from '../../components/fluxcore/FluxCoreSidebar';
 
+```tsx
 <FluxCoreSidebar 
-   activeView={view} 
-   onViewChange={setView} 
-   accountName="Workspace Ventas"
-   accountId="usr_123"
+   activeView="instructions" 
+   onViewChange={handleViewChange} 
+   accountName="FluxCore Admin"
+   accountId="acc_789"
 />
 ```
+
+## 🏗️ Arquitectura
+Es un componente inteligente que orquesta la navegación de la plataforma. Integra el `SidebarNavList` para el renderizado y el `RuntimeSwitcher` para el cambio de motores IA.

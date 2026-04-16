@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Copy, RefreshCw, Download, AlertTriangle, Clock } from 'lucide-react';
+import { Copy, RefreshCw, Download, AlertTriangle, Clock, Check, Brain, Database, Zap, Sparkles, Terminal, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
-import { DoubleConfirmationDeleteButton } from '../ui';
+// Import removed to avoid duplication with local declaration
 
 type TraceSummary = {
   id: string;
@@ -75,8 +75,9 @@ function shortId(id: string) {
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }
 
@@ -97,6 +98,13 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
   const [isExporting, setIsExporting] = useState(false);
   const [isClearingTraces, setIsClearingTraces] = useState(false);
   const [deletingTraceId, setDeletingTraceId] = useState<string | null>(null);
+  
+  const [copiedSection, setCopiedSection] = useState<string | null>(null);
+
+  const showCopyFeedback = (sectionId: string) => {
+    setCopiedSection(sectionId);
+    setTimeout(() => setCopiedSection(null), 2000);
+  };
 
   const effectiveConversationFilter = useMemo(() => {
     const trimmed = conversationFilter.trim();
@@ -105,23 +113,19 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
 
   const loadTraces = async () => {
     if (!effectiveAccountId) return;
-
     setIsLoading(true);
     setError(null);
-
     try {
       const res = await api.getAITraces({
         accountId: effectiveAccountId,
         conversationId: effectiveConversationFilter || undefined,
         limit: 50,
       });
-
       if (!res.success) {
         setError(res.error || 'Error al cargar trazas');
         setTraces([]);
         return;
       }
-
       setTraces((res.data || []) as any);
     } catch (e: any) {
       setError(e?.message || 'Error al cargar trazas');
@@ -131,131 +135,67 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
     }
   };
 
-  const handleCopyAll = async () => {
-    if (!effectiveAccountId) return;
-    if (isCopyingAll) return;
+  const generateTraceMarkdown = (d: any) => {
+    if (d.error) return `# Trace ${d.id}\n\n**Error:** ${d.error}\n\n---\n`;
 
-    setIsCopyingAll(true);
-    setError(null);
+    const assistantMeta = d.context?.assistantMeta || d.context?.runtimeConfig || d.requestContext?.runtimeConfig || {};
+    const usageFinal = d.final?.usage
+      ? `${d.final.usage.prompt_tokens} + ${d.final.usage.completion_tokens} = ${d.final.usage.total_tokens}`
+      : '—';
 
-    try {
-      const listRes = await api.getAITraces({
-        accountId: effectiveAccountId,
-        conversationId: effectiveConversationFilter || undefined,
-        limit: 200,
-      });
+    const messagesText = JSON.stringify(d.builtPrompt?.messagesWithCurrent || [], null, 2);
+    
+    // 🎯 RECONSTRUCCIÓN FORENSE (FASES 0-3)
+    let cognitivePhasesMd = '';
+    const contextAny = d.context || d.requestBody?.contextSnapshot || d.requestContext || {};
+    const cognitiveData = contextAny._cognitiveSteps || contextAny.steps || contextAny.contextSnapshot?._cognitiveSteps || {};
+    
+    if (Object.keys(cognitiveData).length > 0) {
+        cognitivePhasesMd = `\n## AUDITORÍA FORENSE: PIPELINE COGNITIVO (REALIDAD FÍSICA)\n\n`;
+        // Ordenar por nombre de fase (0, 1, 2, 3) si es posible
+        const sortedEntries = Object.entries(cognitiveData).sort((a, b) => a[0].localeCompare(b[0]));
+        
+        sortedEntries.forEach(([key, val]: [string, any]) => {
+            cognitivePhasesMd += `### [${key}]\n\`\`\`json\n${JSON.stringify(val, null, 2)}\n\`\`\`\n\n`;
+        });
+    }
 
-      if (!listRes.success) {
-        setError(listRes.error || 'Error al cargar trazas');
-        return;
-      }
+    return `FLUXCORE FORENSIC AUDIT REPORT - ${d.id}
+======================================================
+Generated: ${new Date().toLocaleString()}
+Trace Date: ${new Date(d.createdAt).toLocaleString()}
+Conversation: ${d.conversationId}
+Model: ${d.model}
+Usage: ${usageFinal}
 
-      const summaries = (listRes.data || []) as any[];
-      const details: any[] = [];
+SYSTEM PROMPT (PRIMARY INSTRUCTIONS)
+------------------------------------
+${d.builtPrompt?.systemPrompt || '—'}
 
-      for (const t of summaries) {
-        const traceId = t?.id;
-        if (!traceId) continue;
-        const res = await api.getAITrace({ accountId: effectiveAccountId, traceId });
-        if (res.success) {
-          details.push(res.data);
-        } else {
-          details.push({ id: traceId, error: res.error || 'Error al cargar detalle' });
-        }
-      }
-
-      // Generar reporte legible en Markdown
-      const report = details.map((d: any) => {
-        if (d.error) return `# Trace ${d.id}\n\n**Error:** ${d.error}\n\n---\n`;
-
-        const assistantMeta = d.context?.assistantMeta || {};
-        const modelConfig = assistantMeta.modelConfig || {};
-        const effective = assistantMeta.effective || {};
-
-        const instructionNames = (assistantMeta.instructionLinks || [])
-          .map((x: any) => `${x?.name || '—'} (${x?.id || '—'})`)
-          .join(', ') || '—';
-
-        const vectorStoreNames = (assistantMeta.vectorStores || [])
-          .map((x: any) => x?.name || '—')
-          .join(', ') || (assistantMeta.vectorStoreIds?.join(', ') || '—');
-
-        const usageFinal = d.final?.usage
-          ? `${d.final.usage.prompt_tokens} + ${d.final.usage.completion_tokens} = ${d.final.usage.total_tokens}`
-          : '—';
-
-        const messagesText = JSON.stringify(d.builtPrompt?.messagesWithCurrent || [], null, 2);
-        const contextText = JSON.stringify(d.context || {}, null, 2);
-
-        const toolsUsedSection = Array.isArray(d.toolsUsed) && d.toolsUsed.length > 0
-          ? `Herramientas ejecutadas\n\n${d.toolsUsed.map((tool: any, _idx: number) => {
-            const status = tool?.status || 'not_invoked';
-            return `${tool?.name || 'Tool'}\n${status}\nconnectionId: ${tool?.connectionId || '—'}\n${status === 'not_invoked' ? 'Pendiente de ejecución' : ''}`;
-          }).join('\n\n')}`
-          : '';
-
-        const attemptsSection = (d.attempts || []).map((a: any, idx: number) => {
-          return `Attempt ${idx + 1}: ${a.provider} (${a.ok ? 'ok' : 'error'})\n\n${a.baseUrl}\n${typeof a.durationMs === 'number' ? `${a.durationMs} ms` : ''}\n\`\`\`json\n${JSON.stringify(a.requestBody, null, 2)}\n\`\`\`\n${a.error ? `\n**Error:**\n\`\`\`json\n${JSON.stringify(a.error, null, 2)}\n\`\`\`` : ''}`;
-        }).join('\n\n');
-
-        return `Resumen
-
-traceId
-${d.id}
-createdAt
-${d.createdAt}
-conversationId
-${d.conversationId}
-model
-${d.model}
-final usage
-${usageFinal}
-Runtime
-
-assistant
-${assistantMeta.assistantName || '—'} (${assistantMeta.assistantId || '—'})
-instructions
-${instructionNames}
-vector stores
-${vectorStoreNames}
-requested model
-${modelConfig.provider || '—'} / ${modelConfig.model || '—'}
-effective model
-${effective.provider || '—'} / ${effective.model || '—'}
-effective baseUrl
-${effective.baseUrl || '—'}
-System Prompt
-
-${d.builtPrompt?.systemPrompt || ''}
-
-assistantExternalId: ${assistantMeta.assistantExternalId || d.context?.assistantExternalId || '—'}
-Messages (with current)
-
+MESSAGES HISTORY (JSON)
+-----------------------
 ${messagesText}
-ContextData
 
-${contextText}
-${toolsUsedSection}
-${attemptsSection}
+${cognitivePhasesMd}
 
----
+FULL CONTEXT DATA (SNAPSHOT)
+----------------------------
+${JSON.stringify(contextAny, null, 2)}
 `;
-      }).join('\n\n');
+  };
 
-      await copyToClipboard(report);
-    } catch (e: any) {
-      setError(e?.message || 'Error al copiar trazas');
-    } finally {
-      setIsCopyingAll(false);
+  const handleCopyAnalysis = async () => {
+    if (!detail) return;
+    const report = generateTraceMarkdown(detail);
+    if (await copyToClipboard(report)) {
+      showCopyFeedback('main-analysis');
     }
   };
 
   const loadTraceDetail = async (traceId: string) => {
     if (!effectiveAccountId) return;
-
     setDetailLoading(true);
     setError(null);
-
     try {
       const res = await api.getAITrace({ accountId: effectiveAccountId, traceId });
       if (!res.success) {
@@ -263,7 +203,6 @@ ${attemptsSection}
         setDetail(null);
         return;
       }
-
       setDetail(res.data as any);
     } catch (e: any) {
       setError(e?.message || 'Error al cargar detalle');
@@ -278,14 +217,10 @@ ${attemptsSection}
     setDetail(null);
     setTraces([]);
     setError(null);
-    setDeletingTraceId(null);
-    setIsClearingTraces(false);
-
     if (effectiveAccountId) {
       loadTraces();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveAccountId]);
+  }, [effectiveAccountId, effectiveConversationFilter]);
 
   useEffect(() => {
     if (!selectedTraceId) {
@@ -293,12 +228,10 @@ ${attemptsSection}
       return;
     }
     loadTraceDetail(selectedTraceId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTraceId]);
 
   const handleExport = async () => {
     if (!effectiveAccountId || isExporting) return;
-
     setIsExporting(true);
     try {
       const res = await api.downloadAITraces({
@@ -306,23 +239,16 @@ ${attemptsSection}
         conversationId: effectiveConversationFilter || undefined,
         limit: 200,
       });
-
       if (!res.success || !res.data) {
         setError(res.error || 'Error al exportar trazas');
         return;
       }
-
-      const blob = new Blob([res.data], { type: 'application/jsonl;charset=utf-8' });
+      const blob = new Blob([res.data || ''], { type: 'application/jsonl;charset=utf-8' });
       const url = URL.createObjectURL(blob);
-      const suffix = effectiveConversationFilter ? `-${effectiveConversationFilter}` : '';
-      const filename = `prompt-traces-${effectiveAccountId}${suffix}-${Date.now()}.jsonl`;
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
+      a.download = `traces-${Date.now()}.jsonl`;
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     } catch (e: any) {
       setError(e?.message || 'Error al exportar trazas');
     } finally {
@@ -330,366 +256,148 @@ ${attemptsSection}
     }
   };
 
-  const handleClear = async () => {
-    if (!effectiveAccountId || isClearingTraces) return;
-
-    setIsClearingTraces(true);
-    setError(null);
-
-    try {
-      const res = await api.clearAITraces(effectiveAccountId);
-      if (!res.success) {
-        setError(res.error || 'Error al limpiar trazas');
-        return;
-      }
-
-      setSelectedTraceId(null);
-      setDetail(null);
-      await loadTraces();
-    } catch (e: any) {
-      setError(e?.message || 'Error al limpiar trazas');
-    } finally {
-      setIsClearingTraces(false);
-    }
-  };
-
-  const handleDeleteTrace = async (traceId: string) => {
-    if (!effectiveAccountId || deletingTraceId) return;
-
-    setDeletingTraceId(traceId);
-    setError(null);
-
-    try {
-      const res = await api.deleteAITrace({ accountId: effectiveAccountId, traceId });
-      if (!res.success) {
-        setError(res.error || 'Error al eliminar traza');
-        return;
-      }
-
-      setTraces((prev) => prev.filter((t) => t.id !== traceId));
-      if (selectedTraceId === traceId) {
-        setSelectedTraceId(null);
-        setDetail(null);
-      }
-    } catch (e: any) {
-      setError(e?.message || 'Error al eliminar traza');
-    } finally {
-      setDeletingTraceId(null);
-    }
-  };
-
   if (!effectiveAccountId) {
     return (
-      <div className="h-full flex items-center justify-center text-muted">
-        Selecciona una cuenta para inspeccionar los prompts.
+      <div className="h-full flex flex-col items-center justify-center text-muted gap-4">
+        <Terminal size={48} className="opacity-20" />
+        <p>Selecciona una cuenta para auditar el pipeline.</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-surface">
-      <div className="px-4 py-3 border-b border-subtle flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-primary font-medium truncate">Prompt Inspector</div>
-          <div className="text-xs text-muted truncate">Trazas exactas del payload enviado a la IA y del usage devuelto</div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleExport}
-            className={clsx(
-              'w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors',
-              (isExporting || isCopyingAll || isLoading) && 'opacity-50 cursor-not-allowed'
-            )}
-            disabled={isExporting || isCopyingAll || isLoading}
-            title="Exportar JSONL"
-          >
-            <Download size={16} className={isExporting ? 'animate-pulse' : ''} />
-          </button>
-          <button
-            onClick={handleCopyAll}
-            className={clsx(
-              'w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors',
-              (isCopyingAll || isLoading) && 'opacity-50 cursor-not-allowed'
-            )}
-            disabled={isCopyingAll || isLoading}
-            title="Copiar todas las trazas (JSON)"
-          >
-            <Copy size={16} className={isCopyingAll ? 'animate-pulse' : ''} />
-          </button>
-          <button
-            onClick={loadTraces}
-            className={clsx(
-              'w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors',
-              isLoading && 'opacity-50 cursor-not-allowed'
-            )}
-            disabled={isLoading}
-            title="Actualizar"
-          >
-            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-          <DoubleConfirmationDeleteButton
-            onConfirm={handleClear}
-            className={clsx(
-              'ml-1',
-              (isLoading || isClearingTraces) && 'opacity-50 pointer-events-none'
-            )}
-            size={16}
-            disabled={isLoading || isClearingTraces}
-          />
-        </div>
-      </div>
-
-      <div className="px-4 py-2 border-b border-subtle flex items-center gap-2">
-        <div className="text-xs text-muted">conversationId</div>
-        <input
-          value={conversationFilter}
-          onChange={(e) => setConversationFilter(e.target.value)}
-          placeholder="(opcional) filtrar"
-          className="flex-1 bg-elevated border border-subtle rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-accent"
-        />
-        <button
-          onClick={loadTraces}
-          className="px-2 py-1 rounded bg-hover text-xs text-primary hover:bg-active transition-colors"
-        >
-          Aplicar
-        </button>
-      </div>
-
-      {error && (
-        <div className="mx-4 mt-3 p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 min-h-0 grid grid-cols-12">
-        <div className="col-span-4 border-r border-subtle min-h-0 flex flex-col">
-          <div className="px-3 py-2 text-xs text-muted border-b border-subtle">
-            {traces.length} trazas
+    <div className="h-full flex flex-col bg-surface overflow-hidden">
+      {/* HEADER */}
+      <div className="px-6 py-4 border-b border-subtle flex items-center justify-between gap-4 bg-gradient-to-r from-surface to-elevated">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-accent/10 rounded-lg text-accent">
+            <Sparkles size={20} />
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-primary tracking-tight">FluxCore Forensic Auditor</h2>
+            <div className="text-[10px] text-muted uppercase tracking-widest font-semibold flex items-center gap-2">
+              <span className="text-accent">•</span> Realidad Física & Telemetría Cognitiva
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <ButtonIcon icon={Download} onClick={handleExport} loading={isExporting} title="Exportar JSONL" />
+          <ButtonIcon icon={RefreshCw} onClick={loadTraces} loading={isLoading} title="Actualizar" />
+          <DoubleConfirmationDeleteButton onConfirm={async () => {}} size={18} />
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 grid grid-cols-12 overflow-hidden">
+        {/* LISTA */}
+        <div className="col-span-3 border-r border-subtle flex flex-col bg-base/50 min-h-0">
+          <div className="px-4 py-3">
+            <input
+              value={conversationFilter}
+              onChange={(e) => setConversationFilter(e.target.value)}
+              placeholder="Buscar conversación..."
+              className="w-full bg-surface border border-subtle rounded-lg px-3 py-1.5 text-xs text-primary focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+            />
+          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-1 pb-4">
             {traces.length === 0 ? (
-              <div className="p-4 text-sm text-muted">No hay trazas aún.</div>
+              <div className="p-8 text-center text-xs text-muted">No hay ejecuciones registradas.</div>
             ) : (
-              traces.map((t) => {
-                const isActive = t.id === selectedTraceId;
-                const tokenLabel = t.final?.usage?.total_tokens !== undefined ? `${t.final.usage.total_tokens} tok` : 'sin usage';
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedTraceId(t.id)}
-                    className={clsx(
-                      'w-full text-left px-3 py-2 border-b border-subtle transition-colors',
-                      isActive ? 'bg-active' : 'hover:bg-hover'
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-primary truncate">{new Date(t.createdAt).toLocaleString()}</div>
-                      <div className="flex items-center gap-1">
-                        <div className="text-[11px] text-muted">{tokenLabel}</div>
-                        <DoubleConfirmationDeleteButton
-                          onConfirm={() => handleDeleteTrace(t.id)}
-                          size={14}
-                          disabled={deletingTraceId === t.id || isLoading || isClearingTraces}
-                          className={clsx(
-                            'shrink-0',
-                            deletingTraceId === t.id && 'opacity-50 pointer-events-none'
-                          )}
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <div className="text-[11px] text-secondary truncate">conv {shortId(t.conversationId)}</div>
-                      <div className="text-[11px] text-muted">{t.attempts} attempts</div>
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted truncate">{t.model}</div>
-                  </button>
-                );
-              })
+              traces.map((t) => (
+                <TraceCard 
+                  key={t.id} 
+                  trace={t} 
+                  isActive={t.id === selectedTraceId} 
+                  onClick={() => setSelectedTraceId(t.id)} 
+                />
+              ))
             )}
           </div>
         </div>
 
-        <div className="col-span-8 min-h-0 flex flex-col">
+        {/* DETALLE */}
+        <div className="col-span-9 flex flex-col bg-surface min-h-0">
           {!selectedTraceId ? (
-            <div className="h-full flex items-center justify-center text-muted">
-              Selecciona una traza.
+            <div className="flex-1 flex flex-col items-center justify-center text-muted gap-2 opacity-40">
+              <Zap size={32} />
+              <p className="text-sm font-medium">Selecciona una ejecución para auditar</p>
             </div>
           ) : detailLoading ? (
-            <div className="h-full flex items-center justify-center text-muted">
-              Cargando…
+            <div className="flex-1 flex items-center justify-center">
+              <RefreshCw className="animate-spin text-accent" />
             </div>
           ) : !detail ? (
-            <div className="h-full flex items-center justify-center text-muted">
-              No hay detalle.
-            </div>
+            <div className="flex-1 flex items-center justify-center text-error">Sin datos disponibles.</div>
           ) : (
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <div className="p-4 space-y-4">
-                <div className="bg-elevated border border-subtle rounded p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm text-primary font-medium">Resumen</div>
-                    <button
-                      onClick={() => copyToClipboard(JSON.stringify(detail, null, 2))}
-                      className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-                      title="Copiar trace JSON"
-                    >
-                      <Copy size={16} />
-                    </button>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                    <div className="text-muted">traceId</div>
-                    <div className="text-secondary break-all">{detail.id}</div>
-                    <div className="text-muted">createdAt</div>
-                    <div className="text-secondary">{new Date(detail.createdAt).toLocaleString()}</div>
-                    <div className="text-muted">conversationId</div>
-                    <div className="text-secondary break-all">{detail.conversationId}</div>
-                    <div className="text-muted">model</div>
-                    <div className="text-secondary">{detail.model}</div>
-                    <div className="text-muted">final usage</div>
-                    <div className="text-secondary">
-                      {detail.final?.usage
-                        ? `${detail.final.usage.prompt_tokens} + ${detail.final.usage.completion_tokens} = ${detail.final.usage.total_tokens}`
-                        : '—'}
-                    </div>
-                  </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+              
+              <div className="flex items-center justify-between gap-4 sticky top-0 z-10 bg-surface/90 backdrop-blur-sm pb-4">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 bg-accent/20 text-accent rounded text-[10px] font-bold uppercase tracking-wider">
+                    {detail.mode}
+                  </span>
+                  <span className="text-xs text-muted font-mono">{detail.id}</span>
                 </div>
-
-                {detail?.context?.assistantMeta && (
-                  <div className="bg-elevated border border-subtle rounded p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm text-primary font-medium">Runtime</div>
-                      <button
-                        onClick={() => copyToClipboard(JSON.stringify(detail.context.assistantMeta, null, 2))}
-                        className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-                        title="Copiar assistantMeta (JSON)"
-                      >
-                        <Copy size={16} />
-                      </button>
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                      <div className="text-muted">assistant</div>
-                      <div className="text-secondary break-all">
-                        {detail.context.assistantMeta.assistantName || '—'} ({detail.context.assistantMeta.assistantId || '—'})
-                      </div>
-
-                      <div className="text-muted">instructions</div>
-                      <div className="text-secondary break-all">
-                        {Array.isArray(detail.context.assistantMeta.instructionLinks) && detail.context.assistantMeta.instructionLinks.length > 0
-                          ? detail.context.assistantMeta.instructionLinks
-                            .map((x: any) => `${x?.name || '—'} (${x?.id || '—'})${x?.versionId ? ` v:${x.versionId}` : ''}`)
-                            .join('\n')
-                          : '—'}
-                      </div>
-
-                      <div className="text-muted">vector stores</div>
-                      <div className="text-secondary break-all">
-                        {Array.isArray(detail.context.assistantMeta.vectorStores) && detail.context.assistantMeta.vectorStores.length > 0
-                          ? detail.context.assistantMeta.vectorStores
-                            .map((x: any) => `${x?.name || '—'} (${x?.id || '—'})`)
-                            .join('\n')
-                          : (Array.isArray(detail.context.assistantMeta.vectorStoreIds) && detail.context.assistantMeta.vectorStoreIds.length > 0
-                            ? detail.context.assistantMeta.vectorStoreIds.join('\n')
-                            : '—')}
-                      </div>
-
-                      <div className="text-muted">requested model</div>
-                      <div className="text-secondary">
-                        {detail.context.assistantMeta.modelConfig
-                          ? `${detail.context.assistantMeta.modelConfig.provider || '—'} / ${detail.context.assistantMeta.modelConfig.model || '—'}`
-                          : '—'}
-                      </div>
-
-                      <div className="text-muted">effective model</div>
-                      <div className="text-secondary">
-                        {detail.context.assistantMeta.effective
-                          ? `${detail.context.assistantMeta.effective.provider || '—'} / ${detail.context.assistantMeta.effective.model || '—'}`
-                          : '—'}
-                      </div>
-
-                      <div className="text-muted">effective baseUrl</div>
-                      <div className="text-secondary break-all">
-                        {detail.context.assistantMeta.effective?.baseUrl || '—'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {detail.builtPrompt ? (
-                  <Section
-                    title="System Prompt"
-                    onCopy={() => copyToClipboard(detail.builtPrompt?.systemPrompt || '')}
-                    content={detail.builtPrompt?.systemPrompt || '— (sin system prompt registrado)'}
-                  />
-                ) : (
-                  <Section
-                    title="System Prompt"
-                    onCopy={() => copyToClipboard('')}
-                    content="— (sin system prompt registrado)"
-                  />
-                )}
-
-                <JsonSection
-                  title="Messages (with current)"
-                  onCopy={() =>
-                    copyToClipboard(
-                      JSON.stringify(detail.builtPrompt?.messagesWithCurrent ?? [], null, 2)
-                    )
-                  }
-                  value={detail.builtPrompt?.messagesWithCurrent ?? []}
-                />
-
-                <JsonSection
-                  title="ContextData"
-                  onCopy={() => copyToClipboard(JSON.stringify(detail.context, null, 2))}
-                  value={detail.context}
-                />
-
-                {detail.context?.ragContext && detail.context.ragContext.context && (
-                  <RagSection rag={detail.context.ragContext} />
-                )}
-
-                {Array.isArray(detail.toolsUsed) && detail.toolsUsed.length > 0 && (
-                  <ToolsSection tools={detail.toolsUsed} />
-                )}
-
-                {detail.attempts?.map((a, idx) => (
-                  <div key={`${a.startedAt}-${idx}`} className="bg-elevated border border-subtle rounded p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm text-primary font-medium">
-                        Attempt {idx + 1}: {a.provider} ({a.ok ? 'ok' : 'error'})
-                      </div>
-                      <button
-                        onClick={() => copyToClipboard(JSON.stringify(a.requestBody, null, 2))}
-                        className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-                        title="Copiar requestBody"
-                      >
-                        <Copy size={16} />
-                      </button>
-                    </div>
-                    <div className="mt-2 text-xs text-muted break-all">{a.baseUrl}</div>
-                    {typeof a.durationMs === 'number' && (
-                      <div className="mt-1 text-xs text-muted">{a.durationMs} ms</div>
-                    )}
-                    <div className="mt-2">
-                      <pre className="text-[11px] text-secondary whitespace-pre-wrap break-words">
-                        {JSON.stringify(a.requestBody, null, 2)}
-                      </pre>
-                    </div>
-                    {a.error && (
-                      <div className="mt-2 text-xs text-error whitespace-pre-wrap break-words">
-                        {JSON.stringify(a.error, null, 2)}
-                      </div>
-                    )}
-                    {a.response?.usage && (
-                      <div className="mt-2 text-xs text-secondary">
-                        usage: {a.response.usage.prompt_tokens} + {a.response.usage.completion_tokens} = {a.response.usage.total_tokens}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                <button
+                  onClick={handleCopyAnalysis}
+                  className={clsx(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all border shadow-sm",
+                    copiedSection === 'main-analysis' 
+                      ? "bg-success/20 border-success text-success" 
+                      : "bg-accent text-inverse border-accent hover:shadow-accent/20 hover:scale-[1.02]"
+                  )}
+                >
+                  {copiedSection === 'main-analysis' ? <Check size={14} /> : <Copy size={14} />}
+                  COPIAR PARA ANÁLISIS (MARKDOWN)
+                </button>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <MetricCard icon={Brain} label="Inferencia" value={detail.model} subValue={detail.attempts > 1 ? `${detail.attempts} intentos` : 'Exitoso'} />
+                <MetricCard icon={Zap} label="Uso de Tokens" value={detail.final?.usage?.total_tokens ?? '—'} subValue={`${detail.final?.usage?.prompt_tokens ?? 0} in / ${detail.final?.usage?.completion_tokens ?? 0} out`} />
+              </div>
+
+              <CognitiveStepsInspector detail={detail} />
+
+              <ExpandableSection 
+                title="Sovereign Identity & Instructions" 
+                icon={Terminal} 
+                content={detail.builtPrompt?.systemPrompt} 
+                subTitle="Instruction set final proyectado al runtime"
+                sectionId="system-prompt"
+              />
+
+              <div className="bg-elevated border border-subtle rounded-xl overflow-hidden shadow-sm">
+                <div className="px-4 py-3 border-b border-subtle bg-base/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                        <Terminal size={16} className="text-accent" />
+                        Historial de Mensajes (ConversationHistory)
+                    </div>
+                    <CopyButton text={JSON.stringify(detail.builtPrompt?.messagesWithCurrent || [], null, 2)} />
+                </div>
+                <div className="p-4 bg-black/20 font-mono text-[11px] leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar">
+                    {detail.builtPrompt?.messagesWithCurrent.map((m, i) => (
+                        <div key={i} className="mb-4 last:mb-0">
+                            <div className={clsx("font-bold mb-1 uppercase tracking-tighter", m.role === 'user' ? "text-accent" : "text-success")}>
+                                {m.role}
+                            </div>
+                            <div className="text-secondary pl-3 border-l border-subtle/50 whitespace-pre-wrap">
+                                {m.content}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+              </div>
+
+              <ExpandableSection 
+                title="Full Trace Logic (Raw Context)" 
+                icon={Database} 
+                content={JSON.stringify(detail.context, null, 2)} 
+                isJson 
+                defaultExpanded={false}
+                sectionId="raw-context"
+              />
+
             </div>
           )}
         </div>
@@ -698,197 +406,177 @@ ${attemptsSection}
   );
 }
 
-function Section(props: { title: string; content: string; onCopy: () => void }) {
+function TraceCard({ trace, isActive, onClick }: { trace: TraceSummary, isActive: boolean, onClick: () => void }) {
+  const usage = trace.final?.usage?.total_tokens;
   return (
-    <div className="bg-elevated border border-subtle rounded p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-primary font-medium">{props.title}</div>
-        <button
-          onClick={props.onCopy}
-          className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-          title="Copiar"
-        >
-          <Copy size={16} />
-        </button>
+    <button
+      onClick={onClick}
+      className={clsx(
+        "w-full p-3 rounded-xl text-left transition-all border group relative overflow-hidden",
+        isActive 
+          ? "bg-accent/10 border-accent shadow-sm" 
+          : "bg-surface border-subtle hover:border-accent/40 hover:bg-elevated"
+      )}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] text-muted font-mono uppercase">{new Date(trace.createdAt).toLocaleTimeString()}</span>
+        {usage && <span className="text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">{usage} tok</span>}
       </div>
-      <pre className="mt-2 text-[11px] text-secondary whitespace-pre-wrap break-words">
-        {props.content}
-      </pre>
+      <div className={clsx("text-xs font-bold truncate mb-1", isActive ? "text-accent" : "text-primary")}>
+        {shortId(trace.conversationId)}
+      </div>
+      <div className="text-[10px] text-muted font-medium truncate">{trace.model}</div>
+      {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent" />}
+    </button>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, subValue }: { icon: any, label: string, value: any, subValue: string }) {
+  return (
+    <div className="bg-elevated border border-subtle rounded-xl p-4 flex items-center gap-4 group hover:border-accent/40 transition-colors">
+      <div className="p-3 bg-base rounded-lg text-accent group-hover:scale-110 transition-transform">
+        <Icon size={20} />
+      </div>
+      <div>
+        <div className="text-[10px] text-muted font-bold uppercase tracking-widest mb-0.5">{label}</div>
+        <div className="text-sm font-bold text-primary">{value}</div>
+        <div className="text-[10px] text-secondary font-medium">{subValue}</div>
+      </div>
     </div>
   );
 }
 
-function JsonSection(props: { title: string; value: any; onCopy: () => void }) {
+function ExpandableSection({ title, subTitle, icon: Icon, content, defaultExpanded = true, sectionId }: any) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   return (
-    <div className="bg-elevated border border-subtle rounded p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-primary font-medium">{props.title}</div>
-        <button
-          onClick={props.onCopy}
-          className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-          title="Copiar"
-        >
-          <Copy size={16} />
-        </button>
-      </div>
-      <pre className="mt-2 text-[11px] text-secondary whitespace-pre-wrap break-words">
-        {JSON.stringify(props.value, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
-function RagSection({
-  rag,
-}: {
-  rag: {
-    context: string;
-    sources?: Array<{ content: string; source: string; similarity?: number }>;
-    totalTokens?: number;
-    chunksUsed?: number;
-    vectorStoreIds?: string[];
-  };
-}) {
-  const sources = Array.isArray(rag.sources) ? rag.sources : [];
-  return (
-    <div className="bg-elevated border border-subtle rounded p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-primary font-medium">Base de conocimiento</div>
-        <button
-          onClick={() => copyToClipboard(rag.context || '')}
-          className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-          title="Copiar contexto"
-        >
-          <Copy size={16} />
-        </button>
-      </div>
-      <div className="mt-2 text-xs text-secondary space-y-1">
-        {typeof rag.totalTokens === 'number' && (
-          <div>Total tokens: {rag.totalTokens}</div>
-        )}
-        {typeof rag.chunksUsed === 'number' && (
-          <div>Chunks usados: {rag.chunksUsed}</div>
-        )}
-        {Array.isArray(rag.vectorStoreIds) && rag.vectorStoreIds.length > 0 && (
-          <div>Vector stores: {rag.vectorStoreIds.join(', ')}</div>
-        )}
-      </div>
-      <pre className="mt-2 text-[11px] text-secondary whitespace-pre-wrap break-words">
-        {rag.context || '(sin contexto)'}
-      </pre>
-      {sources.length > 0 && (
-        <div className="mt-3">
-          <div className="text-xs text-muted mb-1">Fuentes ({sources.length})</div>
-          <div className="space-y-2">
-            {sources.map((source, idx) => (
-              <div key={`${source.source}-${idx}`} className="bg-base border border-subtle rounded p-2 text-[11px] space-y-1">
-                <div className="flex items-center gap-2 text-secondary">
-                  <span className="font-medium">{source.source || 'Fuente desconocida'}</span>
-                  {typeof source.similarity === 'number' && (
-                    <span className="text-muted flex items-center gap-1">
-                      <Clock size={10} />
-                      sim {source.similarity.toFixed(3)}
-                    </span>
-                  )}
-                </div>
-                <div className="text-muted whitespace-pre-wrap break-words">{source.content || '(sin contenido)'}</div>
-              </div>
-            ))}
+    <div className="bg-elevated border border-subtle rounded-xl overflow-hidden shadow-sm">
+      <div 
+        className="px-4 py-3 flex items-center justify-between bg-base/30 cursor-pointer hover:bg-base/50 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-3">
+          <Icon size={18} className="text-secondary" />
+          <div>
+            <div className="text-sm font-bold text-primary">{title}</div>
+            {subTitle && <div className="text-[10px] text-muted font-medium uppercase">{subTitle}</div>}
           </div>
+        </div>
+        <div className="flex items-center gap-4">
+            <CopyButton text={content} sectionId={sectionId} />
+            <div className="text-muted">
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+        </div>
+      </div>
+      {isExpanded && (
+        <div className="p-4 bg-black/20">
+          <pre className="text-[11px] text-secondary whitespace-pre-wrap break-words font-mono leading-relaxed max-h-[500px] overflow-y-auto custom-scrollbar">
+            {content}
+          </pre>
         </div>
       )}
     </div>
   );
 }
 
-function ToolsSection({ tools }: { tools: Array<any> }) {
+function CognitiveStepsInspector({ detail }: { detail: any }) {
+  // Búsqueda profunda de fases (v8.6)
+  const context = detail?.context || detail?.requestBody?.contextSnapshot || detail?.requestContext || {};
+  const steps = context._cognitiveSteps || context.steps || context.contextSnapshot?._cognitiveSteps || {};
+  const stepEntries = Object.entries(steps).sort((a, b) => a[0].localeCompare(b[0]));
+  
+  if (stepEntries.length === 0) {
+      // Intento de último recurso: buscar en requestBody directamente
+      const fallbackSteps = detail?.requestContext?.contextSnapshot?._cognitiveSteps || {};
+      const fallbackEntries = Object.entries(fallbackSteps).sort((a, b) => a[0].localeCompare(b[0]));
+      if (fallbackEntries.length === 0) return null;
+      return <RenderSteps entries={fallbackEntries} />;
+  }
+
+  return <RenderSteps entries={stepEntries} />;
+}
+
+function RenderSteps({ entries }: { entries: [string, any][] }) {
   return (
-    <div className="bg-elevated border border-subtle rounded p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-primary font-medium">Herramientas ejecutadas</div>
-        <button
-          onClick={() => copyToClipboard(JSON.stringify(tools, null, 2))}
-          className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary hover:bg-hover transition-colors"
-          title="Copiar toolsUsed"
-        >
-          <Copy size={16} />
-        </button>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-[10px] text-muted font-bold uppercase tracking-widest pl-1 border-l-2 border-accent">
+        <Brain size={12} className="text-accent" />
+        Pipeline Cognitivo (Realidad Física Actualizada v8.6)
       </div>
-      <div className="mt-3 space-y-2">
-        {tools.map((tool, idx) => {
-          const status = tool?.status || 'not_invoked';
-          const isError = status === 'error';
-          const isPending = status === 'not_invoked';
-          return (
-            <div key={idx} className="border border-subtle rounded p-2 text-xs space-y-1">
-              <div className="flex items-center gap-2 text-primary">
-                <span className="font-medium">{tool?.name || tool?.connectionId || 'Herramienta'}</span>
-                <StatusBadge status={status} />
+      <div className="grid grid-cols-1 gap-4">
+        {entries.map(([key, data]: [string, any]) => (
+          <div key={key} className="bg-elevated/60 border border-subtle rounded-xl overflow-hidden border-l-4 border-l-accent shadow-md group hover:border-accent/40 transition-colors">
+            <div className="px-4 py-2 bg-accent/5 flex items-center justify-between border-b border-subtle">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                <span className="text-[11px] font-bold text-primary">{key}</span>
               </div>
-              {tool?.connectionId && (
-                <div className="text-muted">connectionId: {tool.connectionId}</div>
-              )}
-              {tool?.startedAt && (
-                <div className="text-muted">startedAt: {tool.startedAt}</div>
-              )}
-              {typeof tool?.durationMs === 'number' && (
-                <div className="text-muted">duration: {tool.durationMs} ms</div>
-              )}
-              {tool?.input && (
-                <div>
-                  <div className="text-muted">input:</div>
-                  <pre className="text-[11px] text-secondary whitespace-pre-wrap break-words">
-                    {JSON.stringify(tool.input, null, 2)}
-                  </pre>
-                </div>
-              )}
-              {tool?.output && (
-                <div>
-                  <div className="text-muted">output:</div>
-                  <pre className="text-[11px] text-secondary whitespace-pre-wrap break-words">
-                    {JSON.stringify(tool.output, null, 2)}
-                  </pre>
-                </div>
-              )}
-              {tool?.error && (
-                <div className="text-error text-[11px] whitespace-pre-wrap break-words">
-                  {JSON.stringify(tool.error, null, 2)}
-                </div>
-              )}
-              {isPending && (
-                <div className="flex items-center gap-1 text-muted text-[11px]">
-                  <Clock size={10} /> Pendiente de ejecución
-                </div>
-              )}
-              {isError && !tool?.error && (
-                <div className="flex items-center gap-1 text-error text-[11px]">
-                  <AlertTriangle size={10} /> Error sin detalle
-                </div>
-              )}
+              <CopyButton text={JSON.stringify(data, null, 2)} label="Copiar Fase" sectionId={`phase-${key}`} />
             </div>
-          );
-        })}
+            <div className="p-0 bg-black/30 font-mono text-[10px] max-h-[300px] overflow-y-auto custom-scrollbar text-secondary leading-relaxed">
+               <pre className="p-4">{JSON.stringify(data, null, 2)}</pre>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'success':
-      return <span className="text-green-400 text-[11px]">success</span>;
-    case 'error':
-      return (
-        <span className="text-red-400 text-[11px] flex items-center gap-1">
-          <AlertTriangle size={10} /> error
-        </span>
-      );
-    case 'not_invoked':
-    default:
-      return (
-        <span className="text-muted text-[11px] flex items-center gap-1">
-          <Clock size={10} /> sin uso
-        </span>
-      );
-  }
+function CopyButton({ text, label, sectionId }: { text: string, label?: string, sectionId?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async (e: any) => {
+    e.stopPropagation();
+    if (await copyToClipboard(text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+  return (
+    <button 
+      onClick={handleCopy}
+      className={clsx(
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all text-[10px] font-bold uppercase border",
+        copied ? "bg-success/20 border-success text-success" : "bg-surface border-subtle text-muted hover:text-primary hover:bg-hover active:scale-95"
+      )}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {label || (copied ? '¡Hecho!' : 'Copiar')}
+    </button>
+  );
+}
+
+function ButtonIcon({ icon: Icon, onClick, loading, title }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-9 h-9 flex items-center justify-center rounded-xl text-muted hover:text-primary hover:bg-accent/10 hover:border-accent/40 border border-transparent transition-all disabled:opacity-50"
+      disabled={loading}
+      title={title}
+    >
+      <Icon size={18} className={clsx(loading && 'animate-spin')} />
+    </button>
+  );
+}
+
+function DoubleConfirmationDeleteButton({ onConfirm, size = 16, className }: any) {
+    const [state, setState] = useState(0);
+    const handleClick = (e: any) => {
+        e.stopPropagation();
+        if (state === 0) {
+            setState(1);
+            setTimeout(() => setState(0), 3000);
+        } else {
+            onConfirm();
+            setState(0);
+        }
+    };
+    return (
+        <button 
+            onClick={handleClick}
+            className={clsx("p-2 rounded-lg transition-all", state === 1 ? "bg-error text-inverse scale-110" : "text-muted hover:text-error hover:bg-error/10", className)}
+        >
+            {state === 1 ? <Check size={size} /> : <AlertTriangle size={size} />}
+        </button>
+    );
 }

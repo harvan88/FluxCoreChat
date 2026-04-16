@@ -1,33 +1,45 @@
 ---
 id: "extension-service"
-type: "logic-service"
+type: "core"
 status: "stable"
 criticality: "high"
 location: "apps/api/src/services/extension.service.ts"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Drizzle (extensionInstallations, extensionContexts)" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Gestor de Ciclo de Vida de Extensiones (FC-154)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Installation management, Configuration persistence, Permission granting (RBAC), Uninstallation cleanup" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# ⚙️ ExtensionService
+# ⚙️ extension.service
 
 ## 🎯 Propósito
-El `ExtensionService` gestiona el ecosistema de complementos de FluxCore. Permite que cuentas específicas "instalen" capacidades adicionales (como la propia IA o integraciones externas), manejando sus configuraciones privadas y permisos concedidos de manera segura.
+El `extension.service` gestiona el ecosistema de complementos de FluxCore. Administra el ciclo de vida de las extensiones (instalación, configuración, habilitación y desinstalación), garantizando el aislamiento de datos entre cuentas y un control granular de permisos.
 
-## 🚥 Modelo de Permisos
-Cada instalación de extensión registra una lista de `grantedPermissions`. Esto permite un control granular: una extensión puede tener permiso para leer el historial de chat pero no para acceder a los datos privados del perfil, garantizando que el usuario mantenga el control sobre sus datos.
+## 🚀 Funcionalidades Clave
 
-## 🧹 Limpieza de Contexto
-Al desinstalar una extensión, el servicio no solo elimina la fila de instalación, sino que realiza una purga en cascada de los `extensionContexts`. Esto asegura que no queden datos huérfanos o basura técnica cuando una cuenta decide dejar de usar una capacidad opcional.
+### 🛠️ Gestión de Instalación (FC-154/155)
+El servicio permite instalar extensiones con un estado inicial específico (habilitada o deshabilitada). Esto es fundamental para la **instalación silenciosa** de FluxCore en nuevas cuentas, donde la extensión existe pero no es visible hasta que el usuario decide activarla.
+
+### 🚥 Control de Activación
+Proporciona métodos deterministicos para habilitar (`enable`) o deshabilitar (`disable`) una instalación existente. Un cambio en este estado se propaga al sistema de UI (Activity Bar) para mostrar/ocultar los puntos de entrada de la extensión.
+
+### 🧹 Persistencia y Limpieza
+Gestiona la configuración personalizada de cada extensión por cuenta y asegura la eliminación en cascada de contextos y datos relacionados durante la desinstalación.
 
 ## 💡 Ejemplo de Uso
-```typescript
-// Importar y usar el servicio
-import { extensionService } from 'apps/api/src/services/extension.service.ts';
 
-// Ejemplo de invocación típica
-const result = await extensionService.execute(params);
+### Instalación de una extensión (deshabilitada por defecto)
+```typescript
+await extensionService.install({
+  accountId: "acc_123",
+  extensionId: "@fluxcore/asistentes",
+  version: "1.0.0",
+  enabled: false, // Instalación silenciosa
+  config: { mode: "suggest" },
+  grantedPermissions: ["send:messages", "read:context.public"]
+});
 ```
+
+### Cambio de estado
+```typescript
+await extensionService.toggleEnabled("acc_123", "@fluxcore/asistentes", true);
+```
+
+## 🏗️ Arquitectura
+Interactúa directamente con `@fluxcore/db` (tabla `extension_installations`) y es consumido por las rutas de la API en `extensions.routes.ts` y servicios de orquestación como `account.service.ts`.

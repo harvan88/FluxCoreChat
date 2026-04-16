@@ -25,9 +25,13 @@ Es el "Gran Lienzo" de Flujo Central y el Enrutador Visual Interno de la aplicac
 
 ## 🔄 Flujos de Interacción
 1. **Intérprete ViewRegistry (Extensible):** A nivel núcleo opera bajo patrón Factory. Consulta primariamente en caliente al subsistema de plugins `viewRegistry` para validar si el render corresponde a un módulo externo encapsulado. 
-2. **Auto-Descubridor Fallback (El Switch Titánico):** Si es funcionalidad nativa, entra a una maquinaria Switch-Case abrumadora y monstruosa empujando subcomponentes vitales al lienzo. (Ej. Renderizando el `OpenAIAssistantEditor`, o delegando a `ExtensionTabContent` cuando nota prefijos ajenos y `MonitoringHub`).
+2. **Auto-Descubridor Fallback (El Switch Titánico):** Si es funcionalidad nativa, entra al `switch` local y resuelve la vista concreta. En monitoring, el router interno quedó reducido a tres superficies oficiales: `KernelConsole`, `VisualPipeline` y `DocumentationQualityPanel`, con fallback a `KernelConsole`.
 3. **Mecánica de Minimización Fluida:** Si detecta que su propiedad reducida global reza `container.minimized`, anula su cascada render destructiva masiva y retorna estrictamente un componente lateral mudo sin cuerpos (`TabBar`).
 4. **Acoples Sub-Dimensionales:** Todas las rutas generadas dentro de esta maquinaria empujan una llave única transversal (`identity`) acoplada a las Sesiones Multi-Tenant (`selectedAccountId`), salvaguardando que un usuario no pueda cruzar ventanas del Locatario A mientras visualiza locaciones del Locatario B.
+
+## Dependencias
+- **Depende de:** `usePanelStore`, `viewRegistry`, `ExtensionTabContent` y las vistas concretas resueltas por tipo de tab.
+- **Es usado por:** `ViewPort` y el sistema de layouts multi-panel del dashboard.
 
 ## 💡 Ejemplo de Uso
 ```tsx

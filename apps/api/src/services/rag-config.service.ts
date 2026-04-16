@@ -299,6 +299,7 @@ export class RAGConfigService {
             overlapTokens: number;
             minSize?: number;
             separators?: string[];
+            customRegex?: string;
         };
         embedding?: {
             provider: string;
@@ -324,6 +325,7 @@ export class RAGConfigService {
                 minSize: params.chunking.minSize || 50,
                 maxSize: params.chunking.sizeTokens * 2 || 2000,
                 separators: params.chunking.separators || ['\n\n', '\n', '. ', ' '],
+                customRegex: params.chunking.customRegex,
             };
         }
 

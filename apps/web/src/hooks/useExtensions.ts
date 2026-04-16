@@ -182,6 +182,7 @@ export function useExtensions(accountId: string | null) {
 
       await loadInstalled();
       await loadAvailable();
+      window.dispatchEvent(new CustomEvent('extensions:updated'));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -209,6 +210,7 @@ export function useExtensions(accountId: string | null) {
 
       await loadInstalled();
       await loadAvailable();
+      window.dispatchEvent(new CustomEvent('extensions:updated'));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -236,6 +238,8 @@ export function useExtensions(accountId: string | null) {
       }
 
       await loadInstalled();
+      // Notificar a otras instancias del hook para una actualización inmediata del UI
+      window.dispatchEvent(new CustomEvent('extensions:updated'));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -266,6 +270,7 @@ export function useExtensions(accountId: string | null) {
       }
 
       await loadInstalled();
+      window.dispatchEvent(new CustomEvent('extensions:updated'));
     } catch (err: any) {
       setError(err.message);
     }
@@ -285,6 +290,18 @@ export function useExtensions(accountId: string | null) {
       loadInstalled();
     }
   }, [accountId]);  // ✅ Solo dependencia de accountId
+
+  // Sincronización entre múltiples instancias del hook
+  useEffect(() => {
+    const handleGlobalUpdate = () => {
+      console.log('[useExtensions] Global update received');
+      loadInstalled();
+      loadAvailable();
+    };
+
+    window.addEventListener('extensions:updated', handleGlobalUpdate);
+    return () => window.removeEventListener('extensions:updated', handleGlobalUpdate);
+  }, [loadInstalled, loadAvailable]);
 
   // Combinar extensiones con estado de instalación
   const extensionsWithStatus = extensions.map(ext => {

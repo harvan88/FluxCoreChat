@@ -19,6 +19,14 @@ import type { RuntimeConfig } from '@fluxcore/db';
 import type { AuthorizedRuntimeContext } from '../../core/fluxcore-types';
 import { runtimeInstructionContextService } from './runtime-instruction-context.service';
 
+function containsTemplateProtocolInstructions(instructions?: string): boolean {
+    if (typeof instructions !== 'string' || instructions.trim().length === 0) {
+        return false;
+    }
+
+    return /CALL_TEMPLATE:|#\s*PLANTILLAS AUTORIZADAS/i.test(instructions);
+}
+
 export interface BuiltPrompt {
     systemPrompt: string;
     messages: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -57,11 +65,6 @@ class PromptBuilderService {
             sections.push(knowledgeSection);
         }
 
-        // ── Section 5: Execution Directives — GUIDANCE ────────────────────────
-        if (authorizedContext && authorizedContext.authorizedTemplates.length > 0) {
-            sections.push(`## Directivas de Ejecución\n\n- Tienes acceso a **Plantillas Autorizadas**. Si el mensaje del usuario encaja con la descripción de uso de una plantilla, **DEBES responder exclusivamente** con el marcador \`CALL_TEMPLATE:<template_id>\`. Si necesitas variables, agrega inmediatamente después un JSON con los valores. No uses \`send_template\` en el texto ni agregues explicación adicional junto al marcador.`);
-        }
-
         const systemPrompt = sections.join('\n\n');
 
         // ── Message History ───────────────────────────────────────────────────
@@ -84,6 +87,10 @@ class PromptBuilderService {
 
         if (authorizedContext?.responder.assistantName) {
             lines.push(`Respondes como **${authorizedContext.responder.assistantName}** dentro de FluxCore.`);
+        }
+
+        if (authorizedContext?.systemClock) {
+            lines.push(`\n📅 FECHA Y HORA ACTUAL: ${authorizedContext.systemClock}`);
         }
 
         if (resolvedBusinessProfile.bio) {
@@ -120,13 +127,14 @@ class PromptBuilderService {
     ): string | null {
         const resolvedBusinessProfile = authorizedContext?.businessProfile ?? policyContext.resolvedBusinessProfile;
         const parts: string[] = [];
+        const shouldIncludeTemplateKnowledge = !containsTemplateProtocolInstructions(authorizedContext?.instructions);
 
         const templates = resolvedBusinessProfile.templates as Array<{
             templateId: string; name: string; instructions?: string;
             variables: Array<{ name: string; required?: boolean }>; content?: string;
         }> | undefined;
 
-        if (templates && templates.length > 0) {
+        if (shouldIncludeTemplateKnowledge && templates && templates.length > 0) {
             const templateLines = [`### Plantillas Disponibles`];
             templates.forEach(t => {
                 let entry = `- **${t.name}** (ID: ${t.templateId})`;

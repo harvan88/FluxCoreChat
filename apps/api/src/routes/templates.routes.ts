@@ -274,6 +274,48 @@ export async function unlinkTemplateAssetHandler(
   }
 }
 
+export async function bulkCreateTemplatesHandler(
+  ctx: HandlerContext<{
+    accountId: string;
+    templates: Record<string, unknown>[];
+  }>,
+  service: TemplateService = templateService
+) {
+  if (!ctx.user) {
+    ctx.set.status = 401;
+    return { success: false, message: 'Unauthorized' };
+  }
+
+  try {
+    const input = ctx.body;
+    if (!input.templates || input.templates.length === 0) {
+      return { success: true, data: { createdCount: 0 } };
+    }
+
+    const insertedTemplates = await service.bulkCreateTemplates(input.accountId, input.templates as any);
+
+    const settingsData = input.templates.map((t: Record<string, unknown>, index: number) => ({
+      templateId: insertedTemplates[index].id,
+      authorizeForAI: (t.authorizeForAI as boolean) ?? false,
+      aiUsageInstructions: (t.aiUsageInstructions as string) || null,
+      aiIncludeName: (t.aiIncludeName as boolean) ?? true,
+      aiIncludeContent: (t.aiIncludeContent as boolean) ?? true,
+      aiIncludeInstructions: (t.aiIncludeInstructions as boolean) ?? true,
+    }));
+
+    await fluxCoreTemplateSettingsService.bulkUpdateSettings(settingsData);
+
+    return {
+      success: true,
+      data: { createdCount: insertedTemplates.length }
+    };
+  } catch (error) {
+    ctx.set.status = 400;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to bulk create templates';
+    return { success: false, message: errorMessage };
+  }
+}
+
 export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
   .use(authMiddleware)
   .get('/', (ctx) => listTemplatesHandler(ctx), {
@@ -304,6 +346,31 @@ export const templatesRoutes = new Elysia({ prefix: '/api/templates' })
     detail: {
       tags: ['Templates'],
       summary: 'Create template',
+    },
+  })
+  .post('/bulk', (ctx) => bulkCreateTemplatesHandler(ctx as any), {
+    body: t.Object({
+      accountId: t.String(),
+      templates: t.Array(
+        t.Object({
+          name: t.String({ minLength: 1, maxLength: 255 }),
+          content: t.String({ minLength: 1 }),
+          category: t.Optional(t.String({ maxLength: 100 })),
+          variables: t.Optional(t.Array(t.Any())),
+          tags: t.Optional(t.Array(t.String())),
+          isActive: t.Optional(t.Boolean()),
+          authorizeForAI: t.Optional(t.Boolean()),
+          allowAutomatedUse: t.Optional(t.Boolean()),
+          aiUsageInstructions: t.Optional(t.String()),
+          aiIncludeName: t.Optional(t.Boolean()),
+          aiIncludeContent: t.Optional(t.Boolean()),
+          aiIncludeInstructions: t.Optional(t.Boolean()),
+        })
+      ),
+    }),
+    detail: {
+      tags: ['Templates'],
+      summary: 'Bulk create templates',
     },
   })
   .get('/:templateId', (ctx) => getTemplateHandler(ctx), {

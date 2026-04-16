@@ -156,7 +156,12 @@ export class DocumentationQualityService {
       'schema.ts',
       'theme.ts',
       'syncManager.ts',
-      'syncQueue.ts'
+      'syncQueue.ts',
+      'MonitoringHub.tsx',
+      'AccountDataAuditPanel.tsx',
+      'AccountOrphanExplorer.tsx',
+      'AssetMonitoringPanel.tsx',
+      'SystemMonitor.tsx'
     ];
 
     const componentsList: string[] = [];
@@ -382,7 +387,8 @@ export class DocumentationQualityService {
       'error-tracking.md',
       'logger.md',
       'redis-connection.md',
-      'bullmq.md'
+      'bullmq.md',
+      'kernel-console.routes.ts'
     ];
 
     const componentsList: string[] = [];

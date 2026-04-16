@@ -83,6 +83,35 @@ class CapabilityLocalRuntimeToolsService {
         };
       }
 
+      // Validar variables requeridas de la plantilla
+      const templates = (authorizedContext.businessProfile as any)?.templates || [];
+      const templateDef = templates.find((t: any) => t.templateId === templateId);
+      
+      if (templateDef && templateDef.content) {
+          // Extraer las variables que la plantilla realmente necesita (sintaxis {{var}})
+          const missingVars: string[] = [];
+          const regex = /\{\{([^}]+)\}\}/g;
+          let match;
+          const providedVars = parsedArgs?.variables || {};
+          
+          while ((match = regex.exec(templateDef.content)) !== null) {
+              const reqVarVar = match[1].trim();
+              if (reqVarVar && !providedVars[reqVarVar]) {
+                  missingVars.push(reqVarVar);
+              }
+          }
+
+          if (missingVars.length > 0) {
+              return {
+                  parsedArgs,
+                  content: JSON.stringify({ 
+                      error: `Missing required template variables. You must provide: ${missingVars.join(', ')}`,
+                      missingVariables: missingVars
+                  }),
+              };
+          }
+      }
+
       return {
         parsedArgs,
         content: JSON.stringify({ status: 'queued', templateId }),

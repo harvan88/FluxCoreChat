@@ -158,7 +158,7 @@ Cuando el usuario pide documentar o actualizar algo, la IA DEBE seguir estos pas
 1. **EXCLUSIÓN DE SCRIPTS:** Los archivos de investigación (`audit-*.ts`, `debug-*.ts`, `check-*.ts`) NO son parte del paisaje arquitectónico y NO deben ser documentados en `exhaustive-mapping/`.
 2. **UBICACIÓN DE INVESTIGACIÓN:** Notas de auditoría o trazas de sesiones anteriores DEBEN moverse a `docs/reconstruction-phase-1/history/`.
 
-### **MONITORING HUB:**
+### **DOCUMENTATION QUALITY PANEL:**
 1. **ÚNICA FUENTE DE VERDAD:** El monitor de calidad en la UI (`DocumentationQualityPanel`) es el único juez de la cobertura real.
 2. **SNAPSHOT DINÁMICO:** La IA no debe editar a mano los números en `00-SNAPSHOT.md`.
 3. **MÉTRICAS DE COBERTURA:** El sistema escanea TODO el código útil, ignorando archivos temporales o de auditoría.

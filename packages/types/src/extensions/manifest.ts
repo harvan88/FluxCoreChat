@@ -18,6 +18,7 @@ export interface ExtensionUIConfig {
   sidebar?: {
     icon: string;
     title: string;
+    priority?: number;
   };
   panel?: {
     title: string;
@@ -39,6 +40,7 @@ export interface ExtensionManifest {
   description: string;
   author: string;
   preinstalled?: boolean;
+  hidden?: boolean;
   hooks?: string[];
   permissions: ContextPermission[];
   tools?: ExtensionTool[];

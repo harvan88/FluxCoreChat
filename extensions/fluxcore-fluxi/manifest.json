@@ -5,6 +5,7 @@
     "description": "Sistema de Ejecución de Trabajos (WES) determinista para procesos de negocio",
     "author": "FluxCore",
     "preinstalled": true,
+    "hidden": true,
     "permissions": [
         "read:context.public",
         "read:context.private",

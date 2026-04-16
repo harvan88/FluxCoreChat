@@ -150,17 +150,29 @@ export function LocalVectorStoreDetail({
                         </div>
                     </div>
 
-                    <div className="space-y-3 py-4 border-b border-subtle">
+                    <div className="space-y-4 pb-6 border-b border-subtle">
                         <div>
-                            <p className="text-xs text-muted tracking-wide">Detalles</p>
+                            <p className="text-xs text-muted tracking-wide">1. Reglas Matemáticas (Configuración RAG)</p>
+                            <p className="text-sm text-secondary">Defina cómo se procesarán los documentos antes de subirlos.</p>
+                        </div>
+                        <RAGConfigSection
+                            vectorStoreId={store.id}
+                            accountId={accountId}
+                        />
+                    </div>
+
+                    <div className="space-y-3 py-4">
+                        <div>
+                            <p className="text-xs text-muted tracking-wide">2. Ingesta y Recuperación</p>
+                            <p className="text-sm text-secondary">Los archivos soltados aquí usarán la configuración superior.</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-1">
-                                <p className="text-sm text-muted">Tamaño total</p>
+                                <p className="text-sm text-muted">Tamaño total procesado</p>
                                 <p className="text-sm font-medium text-primary">{formatSize(fileStats.sizeBytes)}</p>
                             </div>
                             <div className="space-y-1">
-                                <p className="text-sm text-muted">Archivos</p>
+                                <p className="text-sm text-muted">Archivos almacenados</p>
                                 <p className="text-sm font-medium text-primary">{fileStats.count}</p>
                             </div>
                         </div>
@@ -178,21 +190,11 @@ export function LocalVectorStoreDetail({
                         />
                     </CollapsibleSection>
 
-                    <div className="space-y-4 pb-4 border-b border-subtle">
-                        <div>
-                            <p className="text-xs text-muted tracking-wide">Configuración RAG (Local)</p>
-                            <p className="text-sm text-secondary">Fragmentación de texto · Modelo de embeddings · Recuperación</p>
-                        </div>
-                        <RAGConfigSection
+                    <div className="pt-2 pb-6 border-b border-subtle">
+                        <VectorStoreTestQuery
                             vectorStoreId={store.id}
                             accountId={accountId}
                         />
-                        <div className="pt-4 border-t border-dashed border-subtle">
-                            <VectorStoreTestQuery
-                                vectorStoreId={store.id}
-                                accountId={accountId}
-                            />
-                        </div>
                     </div>
 
                     <div className="space-y-3 py-4 border-b border-subtle">

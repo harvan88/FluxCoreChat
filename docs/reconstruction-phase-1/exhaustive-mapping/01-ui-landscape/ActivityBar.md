@@ -24,7 +24,11 @@ Es el "Totem" o mástil izquierdo omnipresente en el Dashboard (inspirado 100% e
 
 ## 🔄 Flujos de Interacción
 1. **Inyección de Extensiones (`extensionActivities`):** Recorre el array gigante de `installations`. Si una extensión declara `manifest.ui.sidebar`, extrae su ícono de sistema y se lo incrusta en el medio visual de los botones pre-empacados de la PWA.
-2. **Dashboard Dios (Monitoring Hub):** Cuenta con una validación explícita hard-codeada `selectedAccountId === '3e94...b02d'`. Si detecta que eres el Root Master (Harvan), inyecta en la barra un botón prohibido de "Monitoring" para supervisar el clúster entero.
+2. **Entrada privilegiada a observabilidad:** Cuenta con una validación explícita `selectedAccountId === '3e94...b02d'`. Si la cuenta coincide, el botón de monitoring abre un tab de tipo `monitoring` con identidad `monitoring-kernel` y título `Kernel Console`, que funciona como puerta de entrada a la superficie activa de observabilidad.
+
+## Dependencias
+- **Depende de:** `useUIStore`, `usePanelStore`, `api.getCreditsBalance` y el sistema de extensiones instaladas.
+- **Es usado por:** `Layout.tsx` como eje izquierdo permanente del shell principal.
 
 ## 💡 Ejemplo de Uso
 ```tsx

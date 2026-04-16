@@ -5,6 +5,7 @@
     "description": "Runtime de Asistentes delegado a la API de OpenAI Assistants",
     "author": "FluxCore",
     "preinstalled": true,
+    "hidden": true,
     "permissions": [
         "read:context.public",
         "read:context.private",

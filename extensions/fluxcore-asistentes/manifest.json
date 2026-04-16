@@ -1,8 +1,8 @@
 {
   "id": "@fluxcore/asistentes",
-  "name": "Asistentes",
+  "name": "FluxCore",
   "version": "1.0.0",
-  "description": "Asistente IA integrado de FluxCore para respuestas inteligentes basadas en contexto",
+  "description": "Kernel de IA determinista que unifica Asistentes, Fluxi (WES) y Runtimes de OpenAI en una sola plataforma.",
   "author": "FluxCore",
   "preinstalled": true,
   "permissions": [
@@ -10,9 +10,11 @@
     "read:context.private",
     "read:context.relationship",
     "read:context.history",
+    "read:messages",
     "write:context.overlay",
     "send:messages",
-    "modify:automation"
+    "modify:automation",
+    "tools:register"
   ],
   "hooks": [
     "onMessage",
@@ -121,6 +123,14 @@
       "type": "string",
       "default": "es",
       "description": "Idioma principal de respuesta"
+    },
+    "openaiAssistantId": {
+      "type": "string",
+      "description": "ID del asistente en OpenAI (asst_...)"
+    },
+    "openaiApiKey": {
+      "type": "string",
+      "description": "API Key de OpenAI específica para este asistente"
     }
   },
   "entrypoint": "./src/index.ts"

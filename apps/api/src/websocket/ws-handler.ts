@@ -15,6 +15,9 @@ import { conversationService } from '../services/conversation.service';
 import { db, accounts } from '@fluxcore/db';
 import { eq, inArray } from 'drizzle-orm';
 import { resolveActorId } from '../utils/actor-resolver';
+import { monitoringRegistry, cognitiveCollector } from '../telemetry/tracer';
+import { aiTraceService } from '../services/ai-trace.service';
+import { aiTraceService } from '../services/ai-trace.service';
 
 interface WSMessage {
   type:
@@ -29,7 +32,9 @@ interface WSMessage {
   | 'widget:connect'
   | 'widget:message'
   | 'subscribe_telemetry'
-  | 'unsubscribe_telemetry';
+  | 'unsubscribe_telemetry'
+  | 'toggle_persistence'
+  | 'clear_telemetry_history';
   relationshipId?: string;
   conversationId?: string;
   content?: any;
@@ -149,25 +154,6 @@ coreEventBus.on('telemetry:distributed_trace', (payload) => {
   }
 });
 
-// Escuchar señales crudas del Kernel para la Kernel Console viva
-coreEventBus.on('telemetry:kernel_signal', (payload) => {
-  if (kernelConsoleSubscriptions.size === 0) return;
-
-  const message = JSON.stringify({
-    type: 'telemetry:signal',
-    payload: payload
-  });
-
-  for (const ws of kernelConsoleSubscriptions) {
-    try {
-      // Broadcast simple para señales crudas si están suscritos a telemetría
-      ws.send(message);
-    } catch {
-      kernelConsoleSubscriptions.delete(ws);
-    }
-  }
-});
-
 export function broadcastAll(payload: any): void {
   const message = JSON.stringify(payload);
   for (const ws of activeConnections) {
@@ -257,10 +243,11 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
         break;
 
       case 'subscribe_telemetry':
-        // Fase 2: Pista Controlada de WebSocket
+        // Fase 13.1: Control Dinámico de Persistencia
         console.log(`[ws-handler] 📡 Petición de suscripción a telemetría. Role: ${data.role}`);
 
         if (data.role === 'kernel_console' && ws.data?.userId && ws.data?.accountId) {
+          const targetAccountId = data.accountId || ws.data.accountId;
           let telemetryConversationId: string | null = null;
 
           if (data.conversationId) {
@@ -278,18 +265,81 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
           }
 
           ws.data.telemetryConversationId = telemetryConversationId;
+          ws.data.monitoredAccountId = targetAccountId; // Puede ser 'all' o un UUID
+          
           kernelConsoleSubscriptions.add(ws);
-          ws.send(JSON.stringify({ type: 'subscribed_telemetry', status: 'success', conversationId: telemetryConversationId }));
+          
+          // 🎯 REGISTRO EN VÁLVULA (Solo si NO es global, para no saturar memoria)
+          if (targetAccountId && targetAccountId !== 'all') {
+            monitoringRegistry.register(targetAccountId, false); 
+          }
+
+          ws.send(JSON.stringify({ 
+            type: 'subscribed_telemetry', 
+            status: 'success', 
+            accountId: targetAccountId,
+            conversationId: telemetryConversationId 
+          }));
         } else {
           ws.send(JSON.stringify({ type: 'error', message: 'Acceso denegado a telemetría' }));
         }
         break;
 
       case 'unsubscribe_telemetry':
+        if (ws.data.monitoredAccountId) {
+            monitoringRegistry.unregister(ws.data.monitoredAccountId);
+        }
         ws.data.telemetryConversationId = null;
+        ws.data.monitoredAccountId = null;
         kernelConsoleSubscriptions.delete(ws);
         ws.send(JSON.stringify({ type: 'unsubscribed_telemetry', status: 'success' }));
         break;
+
+      case 'toggle_persistence':
+        if (data.accountId && typeof data.content === 'boolean') {
+            monitoringRegistry.setPersistence(data.accountId, data.content);
+            ws.send(JSON.stringify({ 
+                type: 'persistence_toggled', 
+                accountId: data.accountId, 
+                enabled: data.content 
+            }));
+        }
+        break;
+
+      case 'clear_telemetry_history':
+        if (data.accountId) {
+            await aiTraceService.clearTraces({ accountId: data.accountId });
+            ws.send(JSON.stringify({ 
+                type: 'telemetry_history_cleared', 
+                accountId: data.accountId 
+            }));
+        }
+        break;
+
+      case 'save_forensic_trace': {
+        const { traceData } = data as any;
+        if (!traceData || !traceData.accountId) {
+           ws.send(JSON.stringify({ type: 'save_trace_result', success: false, error: 'Datos de traza inválidos' }));
+           break;
+        }
+
+        try {
+           const traceId = await aiTraceService.persistTrace(traceData);
+           if (!traceId) throw new Error('El servicio de trazas no pudo persistir los datos (posible error de esquema)');
+
+           ws.send(JSON.stringify({ 
+              type: 'save_trace_result', 
+              success: true, 
+              traceId,
+              messageId: traceData.messageId
+           }));
+           console.log(`[ws-handler] 💾 Manual trace saved: ${traceId} for message ${traceData.messageId}`);
+        } catch (err: any) {
+           console.error('[ws-handler] ❌ Manual save error:', err.message);
+           ws.send(JSON.stringify({ type: 'save_trace_result', success: false, error: err.message || 'Error interno desconocido' }));
+        }
+        break;
+      }
 
       case 'message':
         if (data.conversationId && data.content && data.senderAccountId) {
@@ -616,7 +666,11 @@ export function handleWSClose(ws: any): void {
   }
 
   // Limpiar suscripciones de telemetría
+  if (ws.data.monitoredAccountId) {
+    monitoringRegistry.unregister(ws.data.monitoredAccountId);
+  }
   ws.data.telemetryConversationId = null;
+  ws.data.monitoredAccountId = null;
   kernelConsoleSubscriptions.delete(ws);
 }
 

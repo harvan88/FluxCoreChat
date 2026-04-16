@@ -20,7 +20,6 @@ import { workspacesRoutes } from './routes/workspaces.routes';
 import { automationRoutes } from './routes/automation.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { fluxiRoutes } from './routes/fluxcore/works.routes'; // WES-180
-import { kernelConsoleRoutes } from './routes/kernel-console.routes';
 import { messageCore } from './core/message-core';
 import { conversationService } from './services/conversation.service';
 
@@ -91,7 +90,6 @@ const app = new Elysia()
   .use(automationRoutes)
   .use(templatesRoutes)
   .use(fluxiRoutes) // WES-180
-  .use(kernelConsoleRoutes)
   .listen(PORT);
 
 async function initializeFluxCore() {

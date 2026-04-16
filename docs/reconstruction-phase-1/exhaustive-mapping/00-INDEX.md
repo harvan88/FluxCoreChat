@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-INDEX.md"
 ## 🎯 Propósito
 Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y proporciona métricas reales del estado de cobertura del proyecto FluxCore.
 
-**Última actualización:** 2026-04-01 (Actualizado con cambios de template-registry y prompt-builder)
+**Última actualización:** 2026-04-08 (Observability cleanup: monitoring reducido a Kernel Console, Cognitive Pipeline y Documentation Quality)
 **Validador:** `DocumentationQualityService` (backend)
 
 ---
@@ -20,16 +20,16 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 
 | Paisaje | Documentos | Estado | Fase |
 | :--- | :--- | :--- | :--- |
-| **01-ui-landscape** | 162 docs | ✅ Completado | Fase 1 |
-| **02-backend-landscape** | 182 docs | ✅ Completado | Fase 2 |
+| **01-ui-landscape** | 163 docs | ✅ Completado | Fase 1 |
+| **02-backend-landscape** | 185 docs | ✅ Completado | Fase 2 |
 | **03-database-landscape** | 33 docs | ✅ Completado | Fase 3 |
 | **04-end-to-end-flows** | 1 doc | ⏳ Pendiente | Fase 4 |
 | **05-configuration-state** | 2 docs | ⏳ Parcial | Fase 5 |
-| **TOTAL** | **380 docs** | 🏗️ 3/5 Fases | — |
+| **TOTAL** | **384 docs** | 🏗️ 3/5 Fases | — |
 
 ---
 
-## 🖥️ 1. UI Landscape — Componentes React (162 docs)
+## 🖥️ 1. UI Landscape — Componentes React (163 docs)
 
 **Ubicación:** `01-ui-landscape/`
 **Nomenclatura:** `PascalCase.md` (basado en convención React)
@@ -42,11 +42,36 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 ├── AssetPreview.md
 ├── MessageBubble.md
 └── useChatUnified.md
+
+🔭 Monitoring & Observability UI
+├── MonitoringSidebar.md
+├── KernelConsole.md
+├── VisualPipeline.md
+├── DocumentationQualityPanel.md
+├── ActivityBar.md
+└── DynamicContainer.md
+
+🧩 Extension & Modularization UI
+├── ExtensionsPanel.md
+├── FluxCoreSidebar.md
+├── ToolsSidebar.md
+└── useExtensions.md
 ```
+
+### Observabilidad canónica
+
+- **Kernel Console**
+  - superficie principal de trazas en vivo y payloads crudos.
+- **Cognitive Pipeline**
+  - vista operacional del recorrido de 7 etapas por mensaje.
+- **Documentation Quality**
+  - juez SSOT de cobertura e integridad documental.
+
+Las superficies retiradas de monitoring dejan de formar parte del paisaje canónico y no deben reintroducirse en la documentación oficial.
 
 ---
 
-⚙️ 2. Backend Landscape — Servicios y Rutas (190+ docs)
+⚙️ 2. Backend Landscape — Servicios y Rutas (185 docs)
 
 **Ubicación:** `02-backend-landscape/`
 **Nomenclatura:** `kebab-case.md` (basado en convención Node/Bun)
@@ -83,11 +108,18 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 ├── chat-projector.md
 └── projector-runner.md
 
-🔌 Runtime Adapters (Consumidores)
+📦 Core Identity & Management
+├── account.service.md          # Account cycle + Auto-install v8.3
+├── actor.service.md            # Actor resolution (human/bot)
+└── auth.service.md             # JWT & Session management
+
+111: 🔌 Runtime Adapters (Consumidores)
 ├── fluxi.runtime.md
 ├── asistentes-local.runtime.md (Consumidor Caps)
 ├── asistentes-openai.runtime.md (Consumidor Caps)
-└── template-parsing-problem.md (Issue Crítico)
+├── extension-service.md (Activación silenciosa v8.3)
+├── manifest-loader.service.md (Metadata UI v8.3)
+└── extension-manifest-types.md (Definición v8.3)
 
 📦 Asset Management System
 ├── asset-audit-service.md

@@ -1487,17 +1487,31 @@ const tracesRoutes = new Elysia({ prefix: '/traces' })
     '/',
     async ({ user, query, set }) => {
       if (!user) { set.status = 401; return { success: false, message: 'Unauthorized' }; }
-      if (!query.accountId) { set.status = 400; return { success: false, message: 'accountId is required' }; }
+      
+      const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+      const isHarvan = user.accountId === HARVAN_ACCOUNT_ID;
+      const targetAccountId = query.accountId;
+
+      if (!targetAccountId && !isHarvan) { 
+        set.status = 400; 
+        return { success: false, message: 'accountId is required for non-admins' }; 
+      }
+
       try {
         const { db, aiTraces } = await import('@fluxcore/db');
         const { eq, desc } = await import('drizzle-orm');
         const limit = Math.min(Number(query.limit ?? 50), 200);
-        const rows = await db
-          .select()
-          .from(aiTraces)
-          .where(eq(aiTraces.accountId, query.accountId))
-          .orderBy(desc(aiTraces.createdAt))
-          .limit(limit);
+
+        let queryBuilder = db.select().from(aiTraces).orderBy(desc(aiTraces.createdAt)).limit(limit);
+        
+        if (targetAccountId) {
+            queryBuilder = db.select().from(aiTraces)
+                .where(eq(aiTraces.accountId, targetAccountId))
+                .orderBy(desc(aiTraces.createdAt))
+                .limit(limit) as any;
+        }
+
+        const rows = await queryBuilder;
         return { success: true, data: rows };
       } catch (error: any) {
         set.status = 500;
@@ -1505,8 +1519,8 @@ const tracesRoutes = new Elysia({ prefix: '/traces' })
       }
     },
     {
-      query: t.Object({ accountId: t.String(), limit: t.Optional(t.String()) }),
-      detail: { tags: ['FluxCore'], summary: 'Get AI execution traces' },
+      query: t.Object({ accountId: t.Optional(t.String()), limit: t.Optional(t.String()) }),
+      detail: { tags: ['FluxCore'], summary: 'Get AI execution traces (Global if admin)' },
     }
   );
 

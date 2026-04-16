@@ -44,6 +44,7 @@ export interface LLMCompletionParams {
     temperature?: number;
     tools?: LLMTool[];
     toolChoice?: 'auto' | 'none';
+    responseFormat?: { type: 'text' | 'json_object' };
 }
 
 export interface LLMCompletionResult {
@@ -68,34 +69,16 @@ class LLMClientService {
 
     /**
      * Call the LLM and return the completion text.
-     * Falls back to the other provider if the primary fails.
+     * Strictly uses the requested provider.
      */
     async complete(params: LLMCompletionParams): Promise<LLMCompletionResult> {
         const apiKey = this.getApiKey(params.provider);
 
         if (!apiKey) {
-            // Try fallback provider
-            const fallback = params.provider === 'groq' ? 'openai' : 'groq';
-            const fallbackKey = this.getApiKey(fallback);
-            if (!fallbackKey) {
-                throw new Error(`No API key configured for providers: ${params.provider}, ${fallback}`);
-            }
-            console.warn(`[LLMClient] No key for ${params.provider}, falling back to ${fallback}`);
-            return this.callAPI({ ...params, provider: fallback }, fallbackKey);
+            throw new Error(`[LLMClient] No API key configured for provider: ${params.provider}`);
         }
 
-        try {
-            return await this.callAPI(params, apiKey);
-        } catch (error: any) {
-            // Attempt fallback on recoverable errors
-            const fallback = params.provider === 'groq' ? 'openai' : 'groq';
-            const fallbackKey = this.getApiKey(fallback);
-            if (fallbackKey && (error.status === 429 || error.status === 503)) {
-                console.warn(`[LLMClient] ${params.provider} failed (${error.status}), falling back to ${fallback}`);
-                return this.callAPI({ ...params, provider: fallback }, fallbackKey);
-            }
-            throw error;
-        }
+        return await this.callAPI(params, apiKey);
     }
 
     private async callAPI(
@@ -111,6 +94,10 @@ class LLMClientService {
             max_tokens: params.maxTokens ?? 1024,
             temperature: params.temperature ?? 0.7,
         };
+
+        if (params.responseFormat && params.responseFormat.type !== 'text') {
+            body.response_format = params.responseFormat;
+        }
 
         if (params.tools && params.tools.length > 0) {
             body.tools = params.tools;

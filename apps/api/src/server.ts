@@ -42,14 +42,12 @@ import { internalAiRoutes } from './routes/internal-ai.routes';
 import { creditsRoutes } from './routes/credits.routes';
 import { internalCreditsRoutes } from './routes/internal-credits.routes';
 import { systemAdminRoutes } from './routes/system-admin.routes';
-import { accountDeletionAdminRoutes } from './routes/account-deletion.admin.routes';
 import { accountDeletionPublicRoutes } from './routes/account-deletion.public.routes';
 import { websiteRoutes } from './routes/website.routes';
 import { fluxcoreRoutes } from './routes/fluxcore.routes';
 import { fluxcoreRuntimeRoutes } from './routes/fluxcore-runtime.routes';
 import { fluxcoreAgentRoutes } from './routes/fluxcore-agents.routes';
 import { kernelSessionsRoutes } from './routes/kernel-sessions.routes';
-import { kernelConsoleRoutes } from './routes/kernel-console.routes';
 import { testRoutes } from './routes/test.routes';
 import { testChatCoreRoutes } from './routes/test-chatcore.routes';
 import { assetRelationsRoutes } from './routes/asset-relations.routes';
@@ -271,14 +269,12 @@ const elysiaApp = new Elysia()
   .use(internalAiRoutes)
   .use(creditsRoutes)
   .use(internalCreditsRoutes)
-  .use(accountDeletionAdminRoutes)
   .use(accountDeletionPublicRoutes)
   .use(systemAdminRoutes)
   .use(websiteRoutes)
   .use(fluxcoreRuntimeRoutes)
   .use(fluxcoreRoutes)
   .use(kernelSessionsRoutes)
-  .use(kernelConsoleRoutes)
   .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(testChatCoreRoutes)

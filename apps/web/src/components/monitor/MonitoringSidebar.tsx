@@ -2,14 +2,10 @@ import clsx from 'clsx';
 import {
   MonitoringIcon,
   ExternalLinkIcon,
-  DatabaseIcon,
-  AlertTriangleIcon,
-  HardDriveIcon,
   CreditsIcon,
   DocumentationIcon,
 } from '../../lib/icon-library';
 import { usePanelStore } from '../../store/panelStore';
-import { useAccountDeletionMonitorStore } from '../../store/accountDeletionMonitorStore';
 
 interface MonitoringTool {
   id: string;
@@ -24,7 +20,6 @@ interface MonitoringTool {
 
 export function MonitoringSidebar() {
   const { openTab, layout } = usePanelStore((state) => ({ openTab: state.openTab, layout: state.layout }));
-  const { logs, isFetchingLogs } = useAccountDeletionMonitorStore();
 
   const dashboardContainer = layout.containers.find((container) => container.type === 'dashboard');
   const activeMonitoringIdentity = (() => {
@@ -32,17 +27,14 @@ export function MonitoringSidebar() {
     const activeTab = dashboardContainer.tabs.find((tab) => tab.id === dashboardContainer.activeTabId);
     if (!activeTab || activeTab.type !== 'monitoring') return null;
     if (activeTab.identity) return activeTab.identity;
-    const view = typeof activeTab.context?.view === 'string' ? activeTab.context.view : 'hub';
-    if (view === 'audit') return 'monitoring-data-audit';
+    const view = typeof activeTab.context?.view === 'string' ? activeTab.context.view : 'kernel';
     if (view === 'kernel') return 'monitoring-kernel';
     if (view === 'pipeline') return 'monitoring-pipeline';
-    if (view === 'orphans') return 'monitoring-orphans';
-    if (view === 'assets') return 'monitoring-assets';
     if (view === 'documentation') return 'monitoring-documentation';
-    return 'monitoring-hub';
+    return 'monitoring-kernel';
   })();
 
-  const openMonitoringTab = (identity: string, view: 'hub' | 'audit' | 'orphans' | 'kernel' | 'assets' | 'documentation', title: string, icon: string) => {
+  const openMonitoringTab = (identity: string, view: 'kernel' | 'pipeline' | 'documentation', title: string, icon: string) => {
     openTab('dashboard', {
       type: 'monitoring',
       identity,
@@ -54,64 +46,23 @@ export function MonitoringSidebar() {
   };
 
   const tools: MonitoringTool[] = [
-  {
-    id: 'monitoring-hub',
-    identity: 'monitoring-hub',
-    icon: <MonitoringIcon size={18} />,
-    title: 'Monitoring Hub',
-    description: 'Logs, banner global y tareas activas.',
-    onClick: () => openMonitoringTab('monitoring-hub', 'hub', 'Monitoring Hub', 'Activity'),
-    meta: isFetchingLogs ? 'Cargando…' : `${logs.length} registros locales`,
-  },
-  {
-    id: 'monitoring-kernel',
-    identity: 'monitoring-kernel',
-    icon: <MonitoringIcon size={18} />,
-    title: 'Kernel Console',
-    description: 'Monitor de señales en tiempo real desde FluxCore Kernel.',
-    onClick: () => openMonitoringTab('monitoring-kernel', 'kernel', 'Kernel Console', 'Activity'),
-  },
     {
-      id: 'monitoring-pipeline',
-      identity: 'monitoring-pipeline',
-      icon: <CreditsIcon size={18} />, // Usando Zap (CreditsIcon) para el pipeline cognitivo
-      title: 'Cognitive Pipeline',
-      description: 'Trazabilidad visual en tiempo real de mensajes e IA.',
-      onClick: () => openMonitoringTab('monitoring-pipeline', 'pipeline' as any, 'Visual Pipeline', 'Zap'),
+      id: 'monitoring-kernel',
+      identity: 'monitoring-kernel',
+      icon: <MonitoringIcon size={18} />,
+      title: 'Unified Kernel Monitor',
+      description: 'Observabilidad forense 360°: Pipeline de 7 pasos y trazas de IA (E/S).',
+      onClick: () => openMonitoringTab('monitoring-kernel', 'kernel', 'Kernel Monitor', 'Activity'),
     },
-  {
-    id: 'monitoring-audit',
-    identity: 'monitoring-data-audit',
-    icon: <DatabaseIcon size={18} />,
-    title: 'Account Data Audit',
-    description: 'Verifica tablas con referencias residuales.',
-    onClick: () => openMonitoringTab('monitoring-data-audit', 'audit', 'Account Data Audit', 'Database'),
-  },
-  {
-    id: 'monitoring-orphans',
-    identity: 'monitoring-orphans',
-    icon: <AlertTriangleIcon size={18} />,
-    title: 'Orphan Explorer',
-    description: 'Detecta tablas con cuentas inexistentes.',
-    onClick: () => openMonitoringTab('monitoring-orphans', 'orphans', 'Orphan Explorer', 'AlertTriangle'),
-  },
-  {
-    id: 'monitoring-assets',
-    identity: 'monitoring-assets',
-    icon: <HardDriveIcon size={18} />,
-    title: 'Asset Monitoring',
-    description: 'Logs de uploads, descargas y políticas de assets.',
-    onClick: () => openMonitoringTab('monitoring-assets', 'assets' as any, 'Asset Monitoring', 'HardDrive'),
-  },
-  {
-    id: 'monitoring-documentation',
-    identity: 'monitoring-documentation',
-    icon: <DocumentationIcon size={18} />,
-    title: 'Documentation Quality',
-    description: 'Métricas de calidad y cobertura de documentación del sistema.',
-    onClick: () => openMonitoringTab('monitoring-documentation', 'documentation' as any, 'Documentation Quality', 'FileText'),
-  },
-];
+    {
+      id: 'monitoring-documentation',
+      identity: 'monitoring-documentation',
+      icon: <DocumentationIcon size={18} />,
+      title: 'Documentation Quality',
+      description: 'Métricas de calidad y cobertura de documentación del sistema.',
+      onClick: () => openMonitoringTab('monitoring-documentation', 'documentation', 'Documentation Quality', 'FileText'),
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-elevated">

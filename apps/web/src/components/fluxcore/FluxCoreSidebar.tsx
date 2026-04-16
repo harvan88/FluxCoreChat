@@ -26,11 +26,13 @@ import {
   Activity,
 } from 'lucide-react';
 
-import { SidebarNavList } from '../ui';
+import { SidebarNavList, Switch } from '../ui';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 import { FluxCoreView } from '@/types/fluxcore/views.types';
 import { RuntimeSwitcher } from './RuntimeSwitcher';
 import { useAIStatus } from '../../hooks/fluxcore/useAIStatus';
+import { useExtensions } from '../../hooks/useExtensions';
+import { FluxCoreIcon } from '../../lib/icon-library';
 
 interface FluxCoreSidebarProps {
   activeView: FluxCoreView;
@@ -62,8 +64,14 @@ export function FluxCoreSidebar({
   isLocked = false,
 }: FluxCoreSidebarProps) {
   const { status } = useAIStatus({ accountId });
+  const { installations, toggle } = useExtensions(accountId || undefined);
+  
   const activeRuntime = status?.activeRuntimeId || '@fluxcore/asistentes';
   const isFluxiActive = activeRuntime === '@fluxcore/fluxi';
+
+  // Buscar instalación de FluxCore para el switch de activación (visibilidad en ActivityBar)
+  const fluxCoreInstallation = installations.find(i => i.extensionId === '@fluxcore/asistentes');
+  const isEnabled = fluxCoreInstallation?.enabled ?? false;
 
   // Filtrar navegación según el motor activo
   const filteredNavItems = navItems.filter((item) => {
@@ -80,13 +88,23 @@ export function FluxCoreSidebar({
     <div className="h-full flex flex-col bg-surface border-r border-subtle">
       {/* Header */}
       <div className="px-4 py-3 border-b border-subtle flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot size={20} className="text-accent" />
-          <span className="font-semibold text-primary">{accountName}</span>
+        <div className="flex items-center gap-2 overflow-hidden">
+          <FluxCoreIcon size={22} className="text-accent flex-shrink-0" />
+          <span className="font-semibold text-primary truncate">{accountName}</span>
         </div>
-        {isLocked && (
-          <Lock size={16} className="text-muted" />
-        )}
+        <div className="flex items-center gap-2">
+          {fluxCoreInstallation && (
+            <Switch
+              title={isEnabled ? "Ocultar de la barra lateral" : "Mostrar en la barra lateral"} 
+              checked={isEnabled}
+              onCheckedChange={(checked) => toggle('@fluxcore/asistentes', checked)}
+              size="sm"
+            />
+          )}
+          {isLocked && (
+            <Lock size={16} className="text-muted" />
+          )}
+        </div>
       </div>
 
       {/* Runtime Switcher */}

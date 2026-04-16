@@ -76,6 +76,10 @@ export function ExtensionsPanel({
 
   // Filtrar extensiones
   const filteredExtensions = extensions.filter(ext => {
+    // Ocultar si está marcado como hidden en el manifest
+    const isHidden = ext.installation?.manifest?.hidden || (ext as any).hidden;
+    if (isHidden) return false;
+
     // Filtro por tab
     if (activeTab === 'installed' && ext.status === 'available') return false;
     if (activeTab === 'available' && ext.status !== 'available') return false;

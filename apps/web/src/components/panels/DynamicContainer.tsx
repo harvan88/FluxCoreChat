@@ -31,12 +31,7 @@ import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
 import { OpenAIAssistantEditor } from '../editors/OpenAIAssistantEditor';
 import { ComponentPreviewGallery } from '../settings/ComponentPreviewGallery';
-import { MonitoringHub } from '../monitor/MonitoringHub';
-import { AccountDataAuditPanel } from '../monitor/AccountDataAuditPanel';
-import { AssetMonitoringPanel } from '../monitor/AssetMonitoringPanel';
-import { AccountOrphanExplorer } from '../monitor/AccountOrphanExplorer';
-import { KernelConsole } from '../monitor/KernelConsole';
-import { VisualPipeline } from '../monitor/VisualPipeline';
+import { UnifiedKernelMonitor } from '../monitor/UnifiedKernelMonitor';
 import { DocumentationQualityPanel } from '../monitor/DocumentationQualityPanel';
 
 // Extension imports (legacy - will be migrated to ViewRegistry)
@@ -646,26 +641,14 @@ function TabContent({ tab, containerId }: TabContentProps) {
       );
 
     case 'monitoring': {
-      const view = typeof tab.context?.view === 'string' ? tab.context.view : 'hub';
-      if (view === 'audit') {
-        return <AccountDataAuditPanel />;
-      }
-      if (view === 'assets') {
-        return <AssetMonitoringPanel />;
-      }
-      if (view === 'orphans') {
-        return <AccountOrphanExplorer />;
-      }
-      if (view === 'kernel') {
-        return <KernelConsole />;
-      }
-      if (view === 'pipeline') {
-        return <VisualPipeline />;
+      const view = typeof tab.context?.view === 'string' ? tab.context.view : 'kernel';
+      if (view === 'kernel' || view === 'pipeline') {
+        return <UnifiedKernelMonitor />;
       }
       if (view === 'documentation') {
         return <DocumentationQualityPanel />;
       }
-      return <MonitoringHub />;
+      return <UnifiedKernelMonitor />;
     }
 
     default:

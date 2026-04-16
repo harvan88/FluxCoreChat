@@ -17,6 +17,7 @@
  * Canon Invariant 10: RuntimeInput must be complete before handleMessage is called.
  */
 
+import { trace } from '@opentelemetry/api';
 import { db, conversations, messages, aiSuggestions, fluxcoreCognitionQueue } from '@fluxcore/db';
 import type { ConversationMessage } from '@fluxcore/db';
 import { eq, desc } from 'drizzle-orm';
@@ -26,8 +27,11 @@ import { runtimeSelectionService } from '../runtime-selection.service';
 import { runtimeCompositionService } from '../runtime-composition.service';
 import { runtimeGateway } from './runtime-gateway.service';
 import { actionExecutor } from './action-executor.service';
+import { monitoringRegistry } from '../../telemetry/tracer';
+import { aiTraceService } from '../ai-trace.service';
 import { accountLabelService } from '../account-label.service';
 import { runtimeInputFactoryService } from './runtime-input-factory.service';
+import { aiTraceService } from '../ai-trace.service';
 import { signCandidate } from './kernel-utils';
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, Evidence } from '../../core/types';
@@ -43,6 +47,41 @@ export interface DispatchResult {
     error?: string;
     stopped?: boolean; // Nuevo campo para stop propagation
 }
+
+const toSafeJson = (value: unknown) => {
+    try {
+        return JSON.parse(JSON.stringify(value));
+    } catch {
+        return {
+            _serializationError: 'non-serializable-value',
+            preview: String(value),
+        };
+    }
+};
+
+const summarizeActions = (actions: ExecutionAction[]): string | undefined => {
+    const summary = actions
+        .map((action) => {
+            const typedAction = action as any;
+
+            if (action.type === 'send_message') {
+                return `[send_message] ${typedAction.content || ''}`;
+            }
+
+            if (action.type === 'send_template') {
+                return `[send_template] ${typedAction.templateId || ''}`;
+            }
+
+            if (action.type === 'no_action') {
+                return `[no_action] ${typedAction.reason || ''}`;
+            }
+
+            return `[${action.type}]`;
+        })
+        .join('\n');
+
+    return summary || undefined;
+};
 
 class CognitiveDispatcherService {
 
@@ -209,6 +248,8 @@ class CognitiveDispatcherService {
 
                 console.log(`[CognitiveDispatcher] Runtime selection: ${runtimeSelection.activeRuntimeId} → Runtime: ${runtimeId}`);
                 console.log(`[FluxPipeline] 🤖 ASSIST id=${enrichedRuntimeConfig.assistantId?.slice(0, 8) ?? 'DEFAULT'} name="${enrichedRuntimeConfig.assistantName ?? 'fallback'}" model=${enrichedRuntimeConfig.provider ?? 'groq'}/${enrichedRuntimeConfig.model ?? 'llama-3.1-8b-instant'} instr=${enrichedRuntimeConfig.instructions ? Math.round(enrichedRuntimeConfig.instructions.length / 4) + ' tkn' : 'NONE'} rag=${enrichedRuntimeConfig.vectorStoreIds?.length ?? 0}`);
+                // 🎯 Identidad de Turno (v10.0)
+                const messageId = String(params.lastSignalSeq || turnId);
 
                 const input: RuntimeInput = await runtimeInputFactoryService.build({
                     accountId,
@@ -220,31 +261,70 @@ class CognitiveDispatcherService {
                     lastUserMessage: lastMsg?.content,
                 });
 
+                // 🎯 Propagar Identidad de Turno (v10.0)
+                input.executionId = messageId;
+
                 // 8. Invoke runtime via gateway (AHORA TOTALMENTE VISIBLE)
                 console.log(`[CognitiveDispatcher] Step 8: Invoking runtime '${runtimeId}'...`);
                 
+                // 🎯 TELEMETRÍA (Fase 1: Runtime Start)
+                try {
+                    const { coreEventBus } = await import('../../core/events');
+                    coreEventBus.emit('telemetry:pipeline_step', {
+                        messageId,
+                        conversationId,
+                        accountId,
+                        step: 'runtime',
+                        status: 'processing',
+                        metadata: { runtimeId },
+                        timestamp: new Date().toISOString()
+                    });
+                } catch (e) {}
+
                 // 🎯 TELEMETRÍA OPENTELEMETRY: Captura del Payload Crudo (Plantillas + Historial)
                 const { trackCognitiveStep } = await import('../../telemetry/tracer');
+                const runtimeStartedAtMs = Date.now();
+                let initialTraceId: string | undefined;
                 
                 const actions = await trackCognitiveStep(
                     'IA_RUNTIME_INVOCATION',
                     {
                         'account.id': accountId,
                         'conversation.id': conversationId,
-                        'model': input.runtimeConfig.model || 'unknown_model'
+                        'model': input.runtimeConfig.model || 'unknown_model',
+                        'runtime.id': runtimeId,
                     },
-                    input, // ESTE ES EL PAYLOAD GIGANTE CON PLANTILLAS
+                    input,
                     async () => {
+                        const span = trace.getActiveSpan();
+                        initialTraceId = span?.spanContext().traceId;
                         return await runtimeGateway.invoke(runtimeId, input, params.lastSignalSeq || undefined);
-                    }
+                    },
+                    messageId // 🎯 VÍNCULO DETERMINISTA (v10.0)
                 );
+
+                // 🎯 TELEMETRÍA (Fase 1: Runtime Success)
+                try {
+                    const { coreEventBus } = await import('../../core/events');
+                    coreEventBus.emit('telemetry:pipeline_step', {
+                        messageId,
+                        conversationId,
+                        accountId,
+                        step: 'runtime',
+                        status: 'success',
+                        metadata: { runtimeId, traceId: initialTraceId },
+                        timestamp: new Date().toISOString()
+                    });
+                } catch (e) {}
                 
-                console.log(`[CognitiveDispatcher] 📥 RUNTIME RETURNED ${actions.length} actions:`);
+                console.log(`[CognitiveDispatcher] ✅ Turn complete. TraceID: ${initialTraceId}. Actions: ${actions.length}`);
                 actions.forEach((action, i) => {
                     console.log(`  [${i}] type=${action.type}${action.type === 'send_message' ? ` content="${(action as any).content?.slice(0,50)}..."` : ''}`);
                 });
 
                 typingKeepAlive.stop();
+
+                // Persistencia automática desactivada (v14.2)
 
                 // ── SUGGEST GATE ──────────────────────────────────────────
                 // Canon §4.9: In suggest mode, save suggestion for operator
@@ -356,11 +436,80 @@ class CognitiveDispatcherService {
                 };
             } finally {
                 typingKeepAlive.stop();
+                // 🎯 LIMPIEZA DE MEMORIA SILENCIOSA (v14.2)
+                try {
+                    const { cognitiveCollector } = await import('../../telemetry/tracer');
+                    if (initialTraceId) cognitiveCollector.clear(initialTraceId);
+                    if (messageId) cognitiveCollector.clear(messageId);
+                } catch (e) {
+                    console.warn('[CognitiveDispatcher] 🧹 Remote cleanup failed (non-critical):', e);
+                }
             }
 
         } catch (error: any) {
             console.error(`[CognitiveDispatcher] ❌ Dispatch failed for conversation ${conversationId}:`, error.message);
             return this.failResult(error.message, startTime);
+        }
+    }
+
+    private async persistPipelineTrace(params: {
+        accountId: string;
+        conversationId: string;
+        runtimeId: string;
+        mode: string;
+        runtimeConfig: RuntimeInput['runtimeConfig'];
+        runtimeInput: RuntimeInput;
+        actions: ExecutionAction[];
+        startedAtMs: number;
+        traceId?: string;
+    }): Promise<void> {
+        const completedAt = new Date();
+        const { cognitiveCollector } = await import('../../telemetry/tracer');
+        
+        // 🎯 RECUPERAR REALIDAD FÍSICA (FASES COGNITIVAS)
+        // Usamos el traceId pasado explícitamente (v8.6) para evitar fragmentación
+        const traceId = params.traceId;
+        const cognitiveSteps = traceId ? cognitiveCollector.getSteps(traceId) : {};
+
+        // 🎯 VÁLVULA DE PERSISTENCIA SELECTIVA (v13.1)
+        if (!monitoringRegistry.isPersistenceEnabled(params.accountId)) {
+            console.log(`[CognitiveDispatcher] 🔇 Persistence skipped for ${params.accountId} (Monitoring Valve: OFF)`);
+            // Limpiar memoria igualmente antes de salir
+            if (traceId) {
+                cognitiveCollector.clear(traceId);
+            }
+            return;
+        }
+
+        try {
+            await aiTraceService.persistTrace({
+                accountId: params.accountId,
+                conversationId: params.conversationId,
+                runtime: params.runtimeId,
+                provider: params.runtimeConfig.provider || 'unknown',
+                model: params.runtimeConfig.model || 'unknown',
+                mode: params.mode,
+                startedAt: new Date(params.startedAtMs),
+                completedAt,
+                durationMs: completedAt.getTime() - params.startedAtMs,
+                requestBody: toSafeJson(params.runtimeInput),
+                requestContext: toSafeJson({
+                    _cognitiveSteps: cognitiveSteps, // AQUÍ SE GUARDA LA REALIDAD FÍSICA
+                    actionCount: params.actions.length,
+                    actionTypes: params.actions.map((action) => action.type),
+                    actions: params.actions,
+                }),
+                responseContent: summarizeActions(params.actions),
+            });
+        } catch (err: any) {
+            console.error(`[CognitiveDispatcher] ❌ Persistence failure: ${err.message}`);
+        } finally {
+            // 🎯 v8.8: LIMPIEZA DE MEMORIA DETERMINISTA
+            // Se ejecuta SIEMPRE para evitar fugas de memoria (colapso del sistema)
+            if (traceId) {
+                cognitiveCollector.clear(traceId);
+                console.log(`[CognitiveDispatcher] 🧹 Memory cleared for TraceID: ${traceId}`);
+            }
         }
     }
 

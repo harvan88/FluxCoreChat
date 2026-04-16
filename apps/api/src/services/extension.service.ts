@@ -10,6 +10,7 @@ export interface InstallExtensionParams {
   accountId: string;
   extensionId: string;
   version: string;
+  enabled?: boolean;
   config?: Record<string, any>;
   grantedPermissions?: string[];
   grantedBy?: string;
@@ -31,6 +32,7 @@ class ExtensionService {
       accountId, 
       extensionId, 
       version, 
+      enabled = true,
       config = {}, 
       grantedPermissions = [],
       grantedBy,
@@ -65,7 +67,7 @@ class ExtensionService {
         accountId,
         extensionId,
         version,
-        enabled: true,
+        enabled,
         config,
         grantedPermissions,
         grantedBy: grantedBy || null, // null = auto-concedido (propietario)

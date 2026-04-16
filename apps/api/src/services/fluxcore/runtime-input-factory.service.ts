@@ -19,6 +19,24 @@ class RuntimeInputFactoryService {
     async build(params: BuildRuntimeInputParams): Promise<RuntimeInput> {
         const { accountId, conversationId, runtimeId, policyContext, runtimeConfig, conversationHistory, lastUserMessage } = params;
 
+        // Proyección de la Realidad Física: Hora Actual (Argentina)
+        const now = new Date();
+        let nowArgentina: string;
+        try {
+            nowArgentina = new Intl.DateTimeFormat('sv-SE', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+            }).format(now);
+        } catch (_err) {
+            nowArgentina = now.toISOString();
+        }
+
         const authorizedContext: AuthorizedRuntimeContext = {
             accountId,
             conversationId,
@@ -27,6 +45,7 @@ class RuntimeInputFactoryService {
             contactRules: policyContext.contactRules,
             authorizedTemplates: policyContext.authorizedTemplates,
             instructions: runtimeConfig.instructions,
+            systemClock: nowArgentina,
             responder: {
                 runtimeId,
                 assistantId: runtimeConfig.assistantId,

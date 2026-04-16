@@ -1,0 +1,329 @@
+import { useMemo, useState, useEffect } from 'react';
+import { RefreshCw, Loader2, Copy, Check, ChevronDown, Brain, Zap, Sparkles, LayoutPanelLeft, Database } from 'lucide-react';
+import clsx from 'clsx';
+import { useUIStore } from '../../store/uiStore';
+import { useAuthStore } from '../../store/authStore';
+import { Button } from '../ui';
+
+interface TraceNode {
+  traceId: string;
+  flowId: string;
+  spanId: string;
+  parentSpanId?: string;
+  stepName: string;
+  attributes: Record<string, string>;
+  payloadEnorme: any;
+  timestamp: string;
+  children: TraceNode[];
+}
+
+const copyToClipboard = async (text: string) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return successful;
+    }
+  } catch (err) {
+    console.error('Copy failed', err);
+    return false;
+  }
+};
+
+const normalizeAttributes = (attributes?: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(attributes || {}).map(([key, value]) => [key, String(value)])
+  ) as Record<string, string>;
+
+export function KernelConsole() {
+  const selectedAccountId = useUIStore((state) => state.selectedAccountId);
+  const token = useAuthStore((state) => state.token);
+  const [tracesFlat, setTracesFlat] = useState<TraceNode[]>([]);
+  const [activeTraceId, setActiveTraceId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusText, setStatusText] = useState('Escuchando eventos en tiempo real...');
+  const [copiedTurn, setCopiedTurn] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedAccountId) {
+      setTracesFlat([]);
+      setActiveTraceId(null);
+      setStatusText('Selecciona una cuenta para iniciar observabilidad.');
+      return;
+    }
+
+    let socket: WebSocket | null = null;
+    let retryTimeout: any;
+
+    const connect = () => {
+      setIsLoading(true);
+      const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000';
+      const wsUrl = `${apiUrl.replace(/^http/, 'ws')}/ws?accountId=${selectedAccountId}${token ? `&token=${token}` : ''}`;
+      
+      socket = new WebSocket(wsUrl);
+      socket.onopen = () => {
+        setIsLoading(false);
+        setStatusText('Monitor en vivo activo 🟢');
+        socket?.send(JSON.stringify({ type: 'subscribe_telemetry', role: 'kernel_console' }));
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'telemetry:distributed_trace') {
+            const payload = data.payload;
+            const newNode: TraceNode = {
+              traceId: payload.traceId,
+              flowId: payload.attributes?.['conversation.id'] || payload.traceId,
+              spanId: payload.spanId,
+              parentSpanId: payload.parentSpanId,
+              stepName: payload.stepName,
+              attributes: normalizeAttributes(payload.attributes),
+              payloadEnorme: payload.payloadEnorme,
+              timestamp: payload.timestamp,
+              children: [],
+            };
+            setTracesFlat(prev => {
+              if (prev.some(t => t.spanId === newNode.spanId)) return prev;
+              return [newNode, ...prev].slice(0, 500);
+            });
+          }
+        } catch (err) { console.error(err); }
+      };
+
+      socket.onclose = () => {
+        setIsLoading(false);
+        setStatusText('Reintentando conexión... 🔴');
+        retryTimeout = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+    return () => { socket?.close(); clearTimeout(retryTimeout); };
+  }, [selectedAccountId, token]);
+
+  const flowGroups = useMemo(() => {
+    const groups = new Map<string, TraceNode[]>();
+    // Orden cronológico global
+    const sorted = [...tracesFlat].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    sorted.forEach(t => {
+      // 🎯 v8.7: Agrupamos por flowId (Conversation ID)
+      const list = groups.get(t.flowId) || [];
+      list.push(t);
+      groups.set(t.flowId, list);
+    });
+
+    return Array.from(groups.entries()).map(([flowId, nodes]) => {
+      const newestTimestamp = nodes.reduce((max, n) => 
+        new Date(n.timestamp) > new Date(max) ? n.timestamp : max, nodes[0].timestamp);
+      
+      return {
+        flowId,
+        nodes: nodes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()),
+        timestamp: newestTimestamp,
+      };
+    }).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [tracesFlat]);
+
+  const handleCopyFullFlow = async (flowId: string) => {
+    const group = flowGroups.find(g => g.flowId === flowId);
+    if (!group) return;
+
+    const report = `FLUXCORE FORENSIC AUDIT REPORT - Flow ${group.flowId}
+======================================================
+Generated: ${new Date().toLocaleString()}
+Flow Conversations: ${group.nodes.length} turns detectados
+
+${group.nodes.map((n, i) => `
+[TURN ${i + 1}] Step: ${n.stepName} | Trace: ${n.traceId}
+Timestamp: ${new Date(n.timestamp).toISOString().substring(11,23)}
+\`\`\`json
+${JSON.stringify(n.payloadEnorme, null, 2)}
+\`\`\`
+`).join('\n\n')}
+
+---
+END OF FORENSIC FLOW REPORT
+`;
+
+    if (await copyToClipboard(report)) {
+      setCopiedTurn(flowId);
+      setTimeout(() => setCopiedTurn(null), 2000);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-surface text-primary overflow-hidden">
+      {/* HEADER */}
+      <div className="border-b border-subtle px-6 py-4 flex items-center justify-between bg-gradient-to-r from-surface to-elevated">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-accent/10 rounded-lg text-accent">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">Kernel Live Monitor</h2>
+            <p className="text-[10px] text-muted uppercase tracking-widest font-semibold flex items-center gap-2">
+              <span className="text-accent animate-pulse">•</span> {statusText}
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setTracesFlat([])} className="text-muted"><RefreshCw size={14} /></Button>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 grid grid-cols-12 overflow-hidden">
+         {/* SIDEBAR: CARDS GROUPED BY TURN */}
+         <div className="col-span-3 border-r border-subtle flex flex-col bg-base/30 overflow-hidden">
+             <div className="px-4 py-3 border-b border-subtle flex items-center justify-between bg-surface/50">
+                <span className="text-[10px] font-bold text-muted uppercase tracking-widest">Pipeline Turns</span>
+                <span className="text-[10px] font-mono text-muted">{flowGroups.length} items</span>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                 {flowGroups.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center p-8 text-center opacity-30 mt-10">
+                        {isLoading ? <Loader2 className="animate-spin mb-4" size={32} /> : <Zap size={32} className="mb-4" />}
+                        <p className="text-xs font-medium">Listening for cognitive events...</p>
+                     </div>
+                 ) : (
+                     flowGroups.map(group => (
+                         <div 
+                             key={group.flowId} 
+                             onClick={() => setActiveTraceId(group.flowId)} 
+                             className={clsx(
+                                 "p-3 cursor-pointer rounded-xl border transition-all relative overflow-hidden group",
+                                 activeTraceId === group.flowId 
+                                 ? 'bg-accent/10 border-accent shadow-md' 
+                                 : 'bg-surface border-subtle hover:border-accent/40 hover:bg-elevated'
+                             )}
+                         >
+                             <div className="flex justify-between items-center mb-1.5">
+                                 <span className={clsx("text-xs font-bold truncate mr-2", activeTraceId === group.flowId ? "text-accent" : "text-primary")}>
+                                     {shortId(group.flowId)}
+                                 </span>
+                                 <span className="text-[9px] font-mono text-muted">
+                                     {new Date(group.timestamp).toLocaleTimeString()}
+                                 </span>
+                             </div>
+                             <div className="flex flex-wrap gap-1">
+                                 {group.nodes.slice(-10).map(n => (
+                                     <div key={n.spanId} className="w-1.5 h-1.5 rounded-full bg-accent/40" title={n.stepName} />
+                                 ))}
+                                 <span className="text-[9px] text-muted ml-1 font-bold">{group.nodes.length} fases</span>
+                             </div>
+                             {activeTraceId === group.flowId && <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent" />}
+                         </div>
+                     ))
+                 )}
+             </div>
+         </div>
+
+         {/* MAIN VIEWER */}
+         <div className="col-span-9 flex flex-col bg-surface overflow-hidden">
+             {activeTraceId ? (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="px-6 py-3 border-b border-subtle bg-base/20 flex items-center justify-between">
+                        <div className="text-xs font-bold text-secondary">Flow Conversation: {activeTraceId}</div>
+                        <button
+                            onClick={() => handleCopyFullFlow(activeTraceId)}
+                            className={clsx(
+                                "flex items-center gap-2 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase transition-all border",
+                                copiedTurn === activeTraceId ? "bg-success/20 border-success text-success" : "bg-accent text-inverse border-accent shadow-sm active:scale-95"
+                            )}
+                        >
+                            {copiedTurn === activeTraceId ? <Check size={14} /> : <Copy size={14} />}
+                            {copiedTurn === activeTraceId ? 'Flow Copiado' : 'Copiar Flow Completo'}
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+                        {flowGroups.find(g => g.flowId === activeTraceId)?.nodes.map((node, i) => (
+                            <PhaseCard key={node.spanId} node={node} index={i} />
+                        ))}
+                        <div className="h-10" />
+                    </div>
+                </div>
+             ) : (
+                 <div className="flex-1 flex flex-col items-center justify-center text-muted gap-4 opacity-30">
+                     <LayoutPanelLeft size={48} />
+                     <p className="text-sm font-medium">Selecciona una interacción para ver el pipeline completo</p>
+                 </div>
+             )}
+         </div>
+      </div>
+    </div>
+  );
+}
+
+function PhaseCard({ node, index }: { node: TraceNode, index: number }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const text = JSON.stringify(node.payloadEnorme, null, 2);
+    if (await copyToClipboard(text)) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="bg-elevated/40 border border-subtle rounded-2xl overflow-hidden shadow-sm hover:border-accent/30 transition-all border-l-4 border-l-accent">
+      <div 
+        className="px-5 py-3 flex items-center justify-between cursor-pointer group"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-6 h-6 rounded-full bg-accent/20 text-accent flex items-center justify-center text-[10px] font-bold">
+            {index}
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-primary flex items-center gap-2 tracking-tight group-hover:text-accent transition-colors">
+              {node.stepName}
+              <span className="text-[10px] text-muted font-mono">{new Date(node.timestamp).toLocaleTimeString()}</span>
+            </h4>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={(e) => { e.stopPropagation(); handleCopy(); }}
+            className={clsx(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all border",
+              copied ? "bg-success/20 border-success text-success" : "bg-surface border-subtle text-muted hover:text-primary hover:bg-hover active:scale-90"
+            )}
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            {copied ? '¡Copiado!' : 'Copiar Fase'}
+          </button>
+          <ChevronDown className={clsx("text-muted transition-transform", !isExpanded && "-rotate-90")} size={16} />
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="p-5 bg-black/30">
+          <pre className="text-[11px] text-secondary font-mono leading-relaxed whitespace-pre-wrap break-words max-h-[400px] overflow-y-auto custom-scrollbar">
+            {JSON.stringify(node.payloadEnorme, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function shortId(id: string) {
+  if (!id) return '';
+  return id.length > 15 ? `${id.slice(0, 6)}...${id.slice(-6)}` : id;
+}

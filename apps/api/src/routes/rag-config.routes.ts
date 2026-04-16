@@ -12,6 +12,19 @@ import { Elysia, t } from 'elysia';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { ragConfigService } from '../services/rag-config.service';
 
+/**
+ * Mapeo de dimensiones por modelo de embedding
+ */
+const EMBEDDING_DIMENSIONS: Record<string, number> = {
+    'text-embedding-3-small': 1536,
+    'text-embedding-3-large': 3072,
+    'text-embedding-ada-002': 1536,
+    'embed-multilingual-v3.0': 1024,
+    'embed-english-v3.0': 1024,
+    'paraphrase-multilingual-MiniLM-L12-v2': 384,
+    'all-MiniLM-L6-v2': 384,
+};
+
 export const ragConfigRoutes = new Elysia({ prefix: '/fluxcore/rag-config' })
     .use(authMiddleware)
 
@@ -43,6 +56,7 @@ export const ragConfigRoutes = new Elysia({ prefix: '/fluxcore/rag-config' })
                             strategy: config.chunking.strategy,
                             sizeTokens: config.chunking.sizeTokens,
                             overlapTokens: config.chunking.overlapTokens,
+                            customRegex: config.chunking.customRegex,
                         },
                         embedding: {
                             enabled: true,
@@ -93,13 +107,14 @@ export const ragConfigRoutes = new Elysia({ prefix: '/fluxcore/rag-config' })
                         strategy: chunking.strategy,
                         sizeTokens: chunking.sizeTokens,
                         overlapTokens: chunking.overlapTokens,
+                        customRegex: chunking.customRegex,
                         minSize: 50,
                         separators: ['\n\n', '\n', '. ', ' '],
                     } : undefined,
                     embedding: embedding ? {
                         provider: embedding.provider,
                         model: embedding.model,
-                        dimensions: embedding.provider === 'openai' ? 1536 : 1024,
+                        dimensions: EMBEDDING_DIMENSIONS[embedding.model] ?? (embedding.provider === 'openai' ? 1536 : 1024),
                         batchSize: 100,
                     } : undefined,
                     retrieval: retrieval ? {
@@ -126,6 +141,7 @@ export const ragConfigRoutes = new Elysia({ prefix: '/fluxcore/rag-config' })
                     strategy: t.String(),
                     sizeTokens: t.Number(),
                     overlapTokens: t.Number(),
+                    customRegex: t.Optional(t.String()),
                 })),
                 embedding: t.Optional(t.Object({
                     enabled: t.Boolean(),

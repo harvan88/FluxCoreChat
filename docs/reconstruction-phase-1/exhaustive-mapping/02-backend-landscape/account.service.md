@@ -1,40 +1,43 @@
 ---
 id: "account-service"
-type: "logic-service"
+type: "core"
 status: "stable"
-criticality: "critical"
+criticality: "high"
 location: "apps/api/src/services/account.service.ts"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "ActorService, CoreEventBus, ContextLimits (utils), Drizzle (accounts, actors)" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Gestor de Identidad y Perfil (COR-001)" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Account creation with alias validation, Profile updates, Search (alias/email), Business conversion, Avatar management, Domain event emission" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
-# ⚙️ AccountService
+# ⚙️ account.service
 
 ## 🎯 Propósito
-El `AccountService` gestiona el ciclo de vida de las cuentas en FluxCore. Una cuenta representa la identidad operativa de un usuario o negocio, actuando como el contenedor principal para sus agentes, chats y configuraciones de IA.
+El `account.service` gestiona el ciclo de vida de las cuentas en FluxCore. Una cuenta es la unidad fundamental de identidad operativa, conteniendo los perfiles, configuraciones de IA y el historial de actividad de un usuario o negocio.
 
-## 🚥 Validación de Alias y Límites
-El servicio aplica reglas estrictas para asegurar que las cuentas sean rastreables y seguras:
--   **Validación de Alias**: Verifica formato regex (`[a-z0-9_-]`), longitud (3-30) y previene el uso de nombres reservados (`admin`, `api`, `system`, etc.).
--   **Control de Límites (COR-006)**: Utiliza utilidades centralizadas para validar la longitud del `displayName` y del `privateContext`, evitando ataques de overflow o almacenamiento excesivo.
+## 🚀 Funcionalidades Clave
 
-## 🧬 Tipos de Cuenta
--   **Personal**: Cuenta por defecto creada al registrarse un usuario.
--   **Business**: Cuentas optimizadas para colaboración (vinculadas a Workspaces), que permiten gestión administrativa avanzada. El servicio permite la conversión unidireccional de Personal a Business.
+### 🛠️ Creación de Cuentas (v2-4.2)
+Además de la creación estándar, el servicio ahora garantiza que todas las nuevas cuentas tengan **preinstaladas las extensiones críticas** (como FluxCore).
+- **Instalación Silenciosa:** Las extensiones preinstaladas se registran en estado `enabled: false` para no saturar la UI inicial del usuario.
+- **Detección Automática:** Utiliza el `manifestLoader` para encontrar qué extensiones deben incluirse por defecto.
 
-## 📢 Integración con el Bus de Eventos
-Cada actualización de perfil (especialmente cambios en `allowAutomatedUse`) emite el evento `account.profile.updated`. Este evento es crítico para el **Policy Engine**, ya que gatilla la invalidación de contextos de seguridad y recalculación de permisos en tiempo real.
- village.
+### 🚥 Validación y Seguridad (COR-001/006)
+- **Alias Únicos:** Valida formatos, longitud y términos reservados.
+- **Límites de Contexto:** Aplica validaciones centralizadas para nombres de pantalla y contextos privados.
+- **RBAC Inicial:** Crea automáticamente la relación de `actor` tipo `owner` para el creador de la cuenta.
+
+### 📢 Eventos de Dominio
+Emite eventos (`account.profile.updated`) para notificar cambios en la configuración que afectan al motor de políticas (PolicyContext) y a la automatización.
 
 ## 💡 Ejemplo de Uso
-```typescript
-// Importar y usar el servicio
-import { accountService } from 'apps/api/src/services/account.service.ts';
 
-// Ejemplo de invocación típica
-const result = await accountService.execute(params);
+### Creación de cuenta con auto-instalación
+```typescript
+const account = await accountService.createAccount({
+  ownerUserId: "user_uuid",
+  alias: "mi-negocio",
+  displayName: "Mi Negocio S.A.",
+  accountType: "business"
+});
+// Internamente gatilla la preinstalación de @fluxcore/asistentes (disabled)
 ```
+
+## 🏗️ Arquitectura
+Es un servicio central que coordina `ExtensionService`, `ActorService` y el bus de eventos. Interactúa con las tablas `accounts` y `actors` en la base de datos.

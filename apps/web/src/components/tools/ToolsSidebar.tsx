@@ -1,6 +1,8 @@
-import { FileTextIcon } from '../../lib/icon-library';
+import { FileTextIcon, FluxCoreIcon } from '../../lib/icon-library';
 import { SidebarNavList } from '../ui/sidebar/SidebarNavList';
 import { usePanelStore } from '../../store/panelStore';
+import { useUIStore } from '../../store/uiStore';
+import { useExtensions } from '../../hooks/useExtensions';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 
 interface ToolsSidebarProps {
@@ -10,6 +12,10 @@ interface ToolsSidebarProps {
 export function ToolsSidebar({ accountId }: ToolsSidebarProps) {
   const layout = usePanelStore((state) => state.layout);
   const openTab = usePanelStore((state) => state.openTab);
+  const { activeActivity, setActiveActivity } = useUIStore();
+  const { installations } = useExtensions(accountId || undefined);
+
+  const isFluxCoreInstalled = installations.some(i => i.extensionId === '@fluxcore/asistentes');
 
   const activeToolId = (() => {
     const focusedId = layout.focusedContainerId;
@@ -50,6 +56,19 @@ export function ToolsSidebar({ accountId }: ToolsSidebarProps) {
       },
     },
   ];
+
+  // Agregar FluxCore si está instalado
+  if (isFluxCoreInstalled) {
+    items.push({
+      id: 'fluxcore',
+      label: 'Asistente (FluxCore)',
+      icon: <FluxCoreIcon size={18} />,
+      active: activeActivity === 'ext:@fluxcore/asistentes',
+      onSelect: () => {
+        setActiveActivity('ext:@fluxcore/asistentes');
+      },
+    });
+  }
 
   return (
     <div className="h-full flex flex-col" data-component-name="ToolsSidebar">

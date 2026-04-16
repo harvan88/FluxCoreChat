@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 01/04/2026, 13:55
+**Última Actualización:** 16/04/2026, 18:01
 
 ---
 
@@ -29,32 +29,32 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📈 **MÉTRICAS PRINCIPALES**
 
 ### **Calidad General**
-- **Score Promedio:** 49.8%
-- **Índice de Confianza:** 90.7%
-- **Total Documentos Analizados:** 386
+- **Score Promedio:** 49.6%
+- **Índice de Confianza:** 88.0%
+- **Total Documentos Analizados:** 383
 
 ### **Cobertura del Sistema**
-- **Cobertura UI:** 98.8% (161/163)
-- **Cobertura Backend:** 100.0% (189/189)
+- **Cobertura UI:** 98.7% (156/158)
+- **Cobertura Backend:** 100.0% (191/191)
 
 ---
 
 ## 🔍 **ANÁLISIS POR ESTADOS**
 
 ### **Documentos Estables (Completos)**
-- **Cantidad:** 357
-- **Porcentaje del Total:** 92.5%
-- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDataAuditPanel.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountOrphanExplorer.md, AccountsSection.md (+347 más)
+- **Cantidad:** 347
+- **Porcentaje del Total:** 90.6%
+- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountsSection.md, AccountSwitcher.md, ActivityBar.md (+337 más)
 
 ### **Documentos en Revisión (Con Dudas)**
-- **Cantidad:** 2
-- **Porcentaje del Total:** 0.5%
-- **Lista:** account-avatar.routes.md, asset-gateway.service.md
+- **Cantidad:** 4
+- **Porcentaje del Total:** 1.0%
+- **Lista:** account-avatar.routes.md, asset-gateway.service.md, prompt-builder.service.md, template-registry.service.md
 
 ### **Documentos WIP (Incompletos)**
-- **Cantidad:** 6
-- **Porcentaje del Total:** 1.6%
-- **Lista:** routes-test.md, services-capability-extra-instructions.md, services-capability-instruction.md, services-capability-openai-tool-response.md, services-runtime-composition.md, services-runtime-selection.md
+- **Cantidad:** 11
+- **Porcentaje del Total:** 2.9%
+- **Lista:** TemplateBulkImportModal.md, UnifiedKernelMonitor.md, routes-test.md, services-capability-extra-instructions.md, services-capability-instruction.md, services-capability-openai-tool-response.md, services-fluxcore-provider-capabilities.md, services-fluxcore-runtimes-asistentes-local-prompts.md, services-fluxcore-template-semantic.md, services-runtime-composition.md (+1 más)
 
 ---
 
@@ -68,7 +68,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ### **UI Components**
 - **Total:** 2
-- **Porcentaje:** 1.2%
+- **Porcentaje:** 1.3%
 - **Lista:** 
 - components/fluxcore/shared/EmptyState.tsx
 - core/components/LoadingState.tsx
@@ -78,15 +78,17 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## ⚠️ **INCIDENCIAS DETECTADAS**
 
 ### **Errores Críticos**
-- **Total:** 8
-- **Tipos Comunes:** Contiene, Inconsistencia, Falta
-- **Componentes Afectados:** account-avatar.routes.md, asset-gateway.service.md, documentation-quality.service.md, documentation-quality.service.md, template-registry.service.md (+3 más)
+- **Total:** 17
+- **Tipos Comunes:** Falta, Contiene, Inconsistencia
+- **Componentes Afectados:** FluxCoreSidebar.md, TemplateBulkImportModal.md, TemplateBulkImportModal.md, UnifiedKernelMonitor.md, UnifiedKernelMonitor.md (+12 más)
 
 ### **Advertencias**
-- **Total:** 14
+- **Total:** 19
 - **Tipos Comunes:** Sin, Documento
 - **Detalle:** 
 - MessageBubble.md: Sin ejemplos de código
+- TemplateBulkImportModal.md: Sin ejemplos de código
+- UnifiedKernelMonitor.md: Sin ejemplos de código
 - account-avatar.routes.md: Documento con dudas técnicas (correctamente marcado como needs_review)
 - ai-template.service.md: Sin ejemplos de código
 - asset-gateway.service.md: Documento con dudas técnicas (correctamente marcado como needs_review)
@@ -94,22 +96,20 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 - cognitive-dispatcher.service.md: Sin ejemplos de código
 - services-capability-extra-instructions.md: Sin ejemplos de código
 - services-capability-instruction.md: Sin ejemplos de código
-- services-capability-openai-tool-response.md: Sin ejemplos de código
-- services-runtime-composition.md: Sin ejemplos de código
-- ... (+4 más)
+- ... (+9 más)
 
 ---
 
 ## 📊 **ANÁLISIS MATEMÁTICO**
 
 ### **Distribución por Tipo**
-- **Core/Subsystem:** 189 documentos
-- **Smart Components:** 161 documentos  
-- **UI Components:** 161 documentos
+- **Core/Subsystem:** 191 documentos
+- **Smart Components:** 156 documentos  
+- **UI Components:** 156 documentos
 
 ### **Eficiencia de Documentación**
 - **Documentos por Día:** Calculado en tiempo real
-- **Tasa de Completitud:** 92.5%
+- **Tasa de Completitud:** 90.6%
 - **Tiempo Promedio por Documento:** Variable según complejidad
 
 ---
@@ -118,22 +118,22 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ### **Prioridades Inmediatas**
 1. **Documentar Backend:** Los 0 componentes sin documentación
-2. **Resolver Dudas:** Los 2 documentos con preguntas técnicas
-3. **Completar WIP:** Los 6 documentos incompletos
+2. **Resolver Dudas:** Los 4 documentos con preguntas técnicas
+3. **Completar WIP:** Los 11 documentos incompletos
 
 ### **Estrategia Sugerida**
 1. **Foco en Backend:** 100.0% de cobertura necesita mejora
-2. **Revisión Técnica:** Resolver dudas en 2 documentos
-3. **Mantenimiento:** Mantener 49.8% de calidad promedio
+2. **Revisión Técnica:** Resolver dudas en 4 documentos
+3. **Mantenimiento:** Mantener 49.6% de calidad promedio
 
 ---
 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 1/4/2026
-- **Cambios:** Actualizado con 386 documentos analizados
-- **Impacto:** 8 errores críticos detectados
+- **Fecha:** 16/4/2026
+- **Cambios:** Actualizado con 383 documentos analizados
+- **Impacto:** 17 errores críticos detectados
 
 ### **Tendencias**
 - **Mejora en Calidad:** 📉 Necesita atención
@@ -148,7 +148,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ### **Consistencia de Datos**
 - **Validación UI:** ✅ Válido
 - **Validación Backend:** ✅ Válido
-- **Detalles Genuinos:** UI [Refs/Real]: 161/163 (Huérfanos: 0) | Backend [Refs/Real]: 189/189 (Huérfanos: 0)
+- **Detalles Genuinos:** UI [Refs/Real]: 156/158 (Huérfanos: 0) | Backend [Refs/Real]: 191/191 (Huérfanos: 0)
 
 ---
 
@@ -169,10 +169,10 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ## 🔧 **METADATOS DEL SISTEMA**
 
-- **Total Componentes UI:** 163
-- **Total Componentes Backend:** 189
+- **Total Componentes UI:** 158
+- **Total Componentes Backend:** 191
 - **Ratio Documentación/Componente:** 109.7
-- **Eficiencia del Sistema:** 96.5%
+- **Eficiencia del Sistema:** 95.6%
 
 ---
 
@@ -182,7 +182,7 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 ```markdown
 Basado en el Snapshot:
 - Cobertura Backend: 100.0%
-- Errores Críticos: 8
+- Errores Críticos: 17
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```
 

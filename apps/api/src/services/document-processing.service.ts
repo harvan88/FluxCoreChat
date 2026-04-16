@@ -158,6 +158,19 @@ export class DocumentProcessingService {
             // 3. Obtener configuración RAG
             const config = await ragConfigService.getEffectiveConfig(vectorStoreId, accountId);
 
+            // RAG-FIX: Si no existe una configuración explícita para este Vector Store,
+            // persistimos la que estamos usando para asegurar consistencia en el retrieval.
+            const existingVsConfig = await ragConfigService.getByVectorStore(vectorStoreId);
+            if (!existingVsConfig) {
+                console.log(`[RAG-Ingesta] Persistiendo configuración automática para VS ${vectorStoreId}`);
+                await ragConfigService.setVectorStoreConfig(vectorStoreId, {
+                    chunking: config.chunking,
+                    embedding: config.embedding,
+                    retrieval: config.retrieval,
+                    processing: config.processing,
+                });
+            }
+
             // 4. Dividir en chunks
             updateJob(job.id, { progress: 30 });
             const chunkingResult = chunkingService.chunkWithConfig(parsed.text, config.chunking);

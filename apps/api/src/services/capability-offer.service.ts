@@ -58,16 +58,17 @@ class CapabilityOfferService {
         const { runtimeConfig, authorizedContext } = params;
         const authorizedToolIds = runtimeConfig.authorizedTools ?? [];
 
-        if (!authorizedToolIds.includes(definition.name)) {
-            return false;
-        }
-
+        // System tools bypass the manual authorizedToolIds array
         if (definition.slug === 'search_knowledge') {
             return (runtimeConfig.vectorStoreIds?.length ?? 0) > 0;
         }
 
         if (definition.slug === 'send_template' || definition.slug === 'list_available_templates') {
             return authorizedContext.authorizedTemplates.length > 0;
+        }
+
+        if (!authorizedToolIds.includes(definition.name)) {
+            return false;
         }
 
         return true;

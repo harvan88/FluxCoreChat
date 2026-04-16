@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { FileTextIcon, RotateCcwIcon, ExternalLinkIcon, SearchIcon, RefreshCcwIcon } from 'lucide-react';
+import { FileTextIcon, RotateCcwIcon, ExternalLinkIcon, SearchIcon } from 'lucide-react';
 import { CopyButton } from '../ui';
 
 interface DocumentationMetrics {

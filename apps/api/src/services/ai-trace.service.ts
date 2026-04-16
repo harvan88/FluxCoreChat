@@ -49,26 +49,28 @@ class AITraceService {
     attempts?: any;
   }): Promise<string | null> {
     try {
-      const requestBodyPayload =
-        data.requestBody ??
-        (data.builtPrompt || data.requestContext
-          ? {
-              builtPrompt: data.builtPrompt,
-              contextSnapshot: data.requestContext,
-            }
-          : undefined);
+      // 🎯 v8.6: Unificación de Payloads Forenses
+      // Aseguramos que requestContext (donde van las fases) no se pierda nunca.
+      const requestBodyPayload = {
+        ...(data.requestBody || {}),
+        ...(data.builtPrompt ? { builtPrompt: data.builtPrompt } : {}),
+        ...(data.requestContext ? { contextSnapshot: data.requestContext } : {}),
+      };
 
+      // 🎯 v8.7: VALIDACIÓN DE IDENTIDAD DETERMINISTA
+      const isUuid = (val?: string) => val && val.length === 36 && val.includes('-');
+      
       const row: NewAITrace = {
         id: data.id || undefined,
         accountId: data.accountId,
-        conversationId: data.conversationId || undefined,
-        messageId: data.messageId || undefined,
+        conversationId: isUuid(data.conversationId) ? data.conversationId : undefined,
+        messageId: isUuid(data.messageId) ? data.messageId : undefined,
         runtime: data.runtime,
         provider: data.provider,
         model: data.model,
         mode: data.mode,
-        startedAt: data.startedAt || new Date(),
-        completedAt: data.completedAt || new Date(),
+        startedAt: data.startedAt ? new Date(data.startedAt) : new Date(),
+        completedAt: data.completedAt ? new Date(data.completedAt) : new Date(),
         durationMs: data.durationMs,
         promptTokens: data.promptTokens || 0,
         completionTokens: data.completionTokens || 0,
@@ -82,9 +84,12 @@ class AITraceService {
       };
 
       const [inserted] = await db.insert(aiTraces).values(row).returning({ id: aiTraces.id });
+      console.log(`[ai-trace] ✅ Trace persisted successfully: ${inserted?.id}`);
       return inserted?.id || null;
     } catch (error: any) {
-      console.error('[ai-trace] Failed to persist trace:', error?.message);
+      console.error('[ai-trace] 📛 CRITICAL PERSISTENCE FAILURE');
+      console.error('Error Stack:', error?.stack);
+      console.error('Data being persisted:', JSON.stringify(data, null, 2).slice(0, 1000));
       return null;
     }
   }

@@ -6,24 +6,36 @@ criticality: "medium"
 location: "apps/web/src/components/monitor/MonitoringSidebar.tsx"
 layers:
   discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Director enlazado a System Panels (openTab)" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Menú Ruteo Maestro del Tablero Dev y Auditor" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Generador de Navegación por Props 'identity' y 'View' contextuales" }
+  connections: { status: "complete", completed_date: "2026-04-08", confidence: 100, notes: "Usa `panelStore` para abrir tabs de monitoring en dashboard" }
+  subsystem: { status: "complete", completed_date: "2026-04-08", confidence: 100, notes: "Navegador canónico de las tres superficies activas de observabilidad" }
+  operations: { status: "complete", completed_date: "2026-04-08", confidence: 100, notes: "Selección activa por identidad y apertura contextual por `view`" }
 evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 🤖 MonitoringSidebar
 
 ## 🎯 Propósito
-Abstracción navegacional dedicada excluyentemente al bloque de Herramientas Operacionales "Debajo de la capota" del App (Los Ojos de Ruteo Administrativo profundo). Define mediante variables estáticas los caminos críticos de diagnóstico (Pipeline Cognitivo, Kernels, Orphan Finders) operando y dictando su mando en formato Panel Store.
+`MonitoringSidebar` es el menú de entrada a la superficie de observabilidad activa del producto. Su responsabilidad es exponer únicamente las herramientas vigentes de monitoring y mantener sincronizada la selección visible con el `dashboard` multi-panel.
 
 ## 📦 Estado y Datos
-**Acople Computacional Silencioso:**
-- No confía en Urls HTTP ruteadas (`/monitoring/xyz`), en su lugar aplica lógica pesada para desarmar el `panelStore.layout` verificando si existe el Contenedor Pestaña `dashboard`, y espiando el `activeTabId` con su contexto adherido extrayendo la verdadera UI activa del Panel Dinámico inmenso.
+- `layout`
+  - se usa para localizar el contenedor `dashboard` y derivar la herramienta activa.
+- `openTab`
+  - abre tabs de tipo `monitoring` con identidad y `context.view` específicos.
+- `tools`
+  - catálogo estático reducido a tres opciones: `Kernel Console`, `Cognitive Pipeline` y `Documentation Quality`.
 
 ## 🔄 Flujos de Interacción
-1. **Catapulta Pestañil (`openMonitoringTab`):** Cada iterador Botón de su Matriz lanza un Disparo de Estado global enviando Type y Context al Orquestador Principal exigiendo re-render de un hijo nuevo sin abandonar jamás el ecosistema fluido Reactivo (Carencia natural de Flash).
-2. **Inyector Híbrido Metadato:** Su matriz dura `tools` provee ganchos para insertar alertas condicionales y diminutas bajo el título; por ejemplo, si capta que el Motor general está bajando Logs locales de Eliminación inyecta un letrero amarillo `25 registros activos` sobre su listado gris para robar los ojos al humano.
+1. **Detección de vista activa**
+   - inspecciona el tab activo del contenedor `dashboard`.
+   - resuelve la identidad activa desde `tab.identity` o, en su defecto, desde `tab.context.view`.
+
+2. **Apertura de herramientas**
+   - cada botón invoca `openMonitoringTab(identity, view, title, icon)`.
+   - el tab resultante siempre es de tipo `monitoring` y queda listo para ser resuelto por `DynamicContainer`.
+
+3. **Reducción del paisaje**
+   - la barra lateral expone únicamente la superficie oficial de observabilidad activa y excluye herramientas retiradas del paisaje canónico.
 
 ## 💡 Ejemplo de Uso
 ```tsx

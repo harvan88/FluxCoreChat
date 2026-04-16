@@ -19,8 +19,8 @@ export const aiTraces = pgTable(
     accountId: uuid('account_id')
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
-    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
-    messageId: uuid('message_id').references(() => messages.id, { onDelete: 'set null' }),
+    conversationId: uuid('conversation_id'),
+    messageId: uuid('message_id'),
 
     // Execution metadata
     runtime: varchar('runtime', { length: 20 }).notNull(), // 'local' | 'openai'

@@ -4,6 +4,8 @@ import { eq, and, or, ne, ilike } from 'drizzle-orm';
 import { validatePrivateContext, validateDisplayName } from '../utils/context-limits';
 import { coreEventBus } from '../core/events';
 import type { Account } from '@fluxcore/db';
+import { extensionService } from './extension.service';
+import { manifestLoader } from './manifest-loader.service';
 
 // V2-4.2: Instalación de extensiones preinstaladas en nuevas cuentas
 
@@ -64,6 +66,29 @@ export class AccountService {
       role: 'owner',
       actorType: 'account',
     });
+
+    // FC-154-155: V2-4.2: Auto-install preinstalled extensions
+    try {
+      const preinstalled = manifestLoader.getPreinstalledManifests();
+      for (const manifest of preinstalled) {
+        // Install but keep DISABLED by default per user requirement
+        // This allows the user to manually enable it from the UI (Extensions panel)
+        // and immediately see it in the activity bar.
+        await extensionService.install({
+          accountId: account.id,
+          extensionId: manifest.id,
+          version: manifest.version,
+          enabled: false, // Hidden from activity bar by default
+          config: manifestLoader.getDefaultConfig(manifest.id),
+          grantedPermissions: manifest.permissions,
+          grantedBy: undefined, // Owner
+        });
+        console.log(`[AccountService] Auto-installed preinstalled extension ${manifest.id} (disabled) for account ${account.id}`);
+      }
+    } catch (err) {
+      console.error('[AccountService] Failed to auto-install extensions:', err);
+      // We don't fail account creation if extensions fail to install
+    }
 
 
 
