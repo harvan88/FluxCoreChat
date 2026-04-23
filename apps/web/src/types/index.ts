@@ -72,6 +72,7 @@ export interface Account {
   aiIncludeName: boolean;
   aiIncludeBio: boolean;
   aiIncludePrivateContext: boolean;
+  aiIncludeTimestamp: boolean;
   createdAt: string;
   updatedAt: string;
   // New asset-based avatar field

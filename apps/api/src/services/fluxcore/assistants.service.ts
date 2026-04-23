@@ -50,12 +50,18 @@ export async function generateManagedInstructionContent(accountId: string): Prom
         return 'Eres Cori, asistente IA.';
     }
 
+    // Si el usuario tiene contexto personalizado, no generamos instrucciones por defecto
+    // para evitar duplicidades con lo que el proyector de realidad añadirá después.
+    if (account.privateContext && account.privateContext.trim().length > 0) {
+        return '';
+    }
+
     const sections: string[] = [];
 
-    // Instrucciones base
-    sections.push(`🤖 Eres Cori, asistente IA de la persona que ayuda a ${account.displayName || 'el usuario'} a responder mensajes de forma natural y empática.`);
+    // Instrucciones genéricas (Cori)
+    sections.push('🤖 Eres Cori, asistente IA que ayuda a responder mensajes de forma natural y empática.');
 
-    // Guidelines de estilo
+    // Pautas de estilo
     sections.push(`
 📝 PAUTAS DE ESTILO:
 - Sé breve y directo, como en WhatsApp.

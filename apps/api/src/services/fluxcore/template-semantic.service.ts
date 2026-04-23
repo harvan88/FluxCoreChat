@@ -17,9 +17,17 @@ export class TemplateSemanticService {
     }
 
     private setupListeners() {
+        console.log(`[SemanticService] Configurando Listeners...`);
+        // Listener del Core (Legacy/Fallback)
         coreEventBus.on('template.authorization.changed', async (payload: { templateId: string; accountId: string; allowAutomatedUse: boolean }) => {
-            console.log(`[SemanticService] Recibido cambio de autorización para ${payload.templateId}`);
+            console.log(`[SemanticService] EVENTO RECIBIDO: template.authorization.changed para ${payload.templateId}`);
             await this.syncTemplateVector(payload.templateId, payload.accountId, payload.allowAutomatedUse);
+        });
+
+        // Listener de la Extensión (Soberano/Garantizado)
+        coreEventBus.on('fluxcore.template.settings.changed', async (payload: { templateId: string; accountId: string; authorizeForAI: boolean }) => {
+            console.log(`[SemanticService] EVENTO RECIBIDO: fluxcore.template.settings.changed para ${payload.templateId}`);
+            await this.syncTemplateVector(payload.templateId, payload.accountId, payload.authorizeForAI);
         });
     }
 
@@ -35,13 +43,26 @@ export class TemplateSemanticService {
 
             // 1. Obtener instrucciones de IA
             const [settings] = await db.select().from(fluxcoreTemplateSettings).where(eq(fluxcoreTemplateSettings.templateId, templateId)).limit(1);
-            if (!settings || !settings.aiUsageInstructions) {
-                console.warn(`[SemanticService] No hay instrucciones para la plantilla ${templateId}`);
+            
+            let textToEmbed = settings?.aiUsageInstructions;
+
+            // 🎯 FALLBACK SEMÁNTICO: Si no hay instrucciones de uso explícitas, 
+            // usamos el Nombre de la Plantilla para que el vector no sea nulo.
+            if (!textToEmbed) {
+                const [template] = await db.select().from(templates).where(eq(templates.id, templateId)).limit(1);
+                textToEmbed = template?.name;
+                if (textToEmbed) {
+                    console.log(`[SemanticService] Usando fallback (nombre: "${textToEmbed}") para vectorizar plantilla ${templateId}`);
+                }
+            }
+
+            if (!textToEmbed) {
+                console.warn(`[SemanticService] No hay instrucciones ni nombre para la plantilla ${templateId}. Saltando vectorización.`);
                 return;
             }
 
             // 2. Generar embedding (Local MiniLM - 384)
-            const { embedding } = await embeddingService.embedWithConfig(settings.aiUsageInstructions, {
+            const { embedding } = await embeddingService.embedWithConfig(textToEmbed, {
                 provider: 'local',
                 model: 'paraphrase-multilingual-MiniLM-L12-v2',
                 dimensions: 384
@@ -59,7 +80,7 @@ export class TemplateSemanticService {
                 vectorStoreId: storeId,
                 fileId: templateId, // FK a fluxcore_vector_store_files
                 accountId,
-                content: settings.aiUsageInstructions,
+                content: textToEmbed,
                 chunkIndex: 0,
                 tokenCount: 0,
                 metadata: {
@@ -71,7 +92,7 @@ export class TemplateSemanticService {
             }).onConflictDoUpdate({
                 target: [fluxcoreDocumentChunks.fileId, fluxcoreDocumentChunks.chunkIndex],
                 set: {
-                    content: settings.aiUsageInstructions,
+                    content: textToEmbed,
                     metadata: {
                         type: 'template',
                         template_id: templateId,
@@ -154,6 +175,50 @@ export class TemplateSemanticService {
                 return null;
             })
             .filter((id): id is string => !!id)
+            .slice(0, limit);
+    }
+
+    /**
+     * Obtiene los IDs de las plantillas más relevantes semánticamente con sus puntuaciones.
+     */
+    async searchRelevantTemplatesWithScores(query: string, accountId: string, limit: number = 5): Promise<{ id: string; score: number }[]> {
+        const storeId = await this.getOrCreateSystemStore(accountId);
+        
+        // Generar embedding de consulta
+        const { embedding } = await embeddingService.embedWithConfig(query, {
+            provider: 'local',
+            model: 'paraphrase-multilingual-MiniLM-L12-v2',
+            dimensions: 384
+        });
+
+        const embeddingStr = `[${embedding.join(',')}]`;
+
+        // Búsqueda vectorial directa
+        const results = await db.select({
+            metadata: fluxcoreDocumentChunks.metadata,
+            embeddingDist: sql<number>`embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}`
+        })
+        .from(fluxcoreDocumentChunks)
+        .where(and(
+            eq(fluxcoreDocumentChunks.vectorStoreId, storeId),
+            eq(fluxcoreDocumentChunks.accountId, accountId),
+            sql`vector_dims(embedding) = 384`
+        ))
+        .orderBy(sql`embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}`)
+        .limit(limit * 2);
+
+        return results
+            .map(r => {
+                const meta = (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) as any;
+                if (meta?.status === 'active') {
+                    return {
+                        id: meta.template_id || meta.templateId,
+                        score: 1 - r.embeddingDist // Convertimos distancia (0-2) a similitud (1 = idénticos)
+                    };
+                }
+                return null;
+            })
+            .filter((res): res is { id: string; score: number } => !!res)
             .slice(0, limit);
     }
 

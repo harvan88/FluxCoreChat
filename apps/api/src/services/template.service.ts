@@ -229,6 +229,36 @@ export class TemplateService {
     return result;
   }
 
+  /**
+   * Renderiza el contenido de una plantilla sin ejecutar el envío físico.
+   * Utilizado por FluxCore ActionExecutor para mantener soberanía de Kernel.
+   */
+  async renderTemplateContent(accountId: string, templateId: string, variables?: Record<string, string>): Promise<{text: string; media: any[]}> {
+    const template = await this.getTemplate(accountId, templateId);
+
+    let finalContent = template.content;
+    if (variables) {
+      Object.entries(variables).forEach(([key, value]) => {
+        finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), value);
+      });
+    }
+
+    const media: any[] = (template.assets || []).map(asset => ({
+      assetId: asset.assetId,
+      name: asset.name,
+      mimeType: asset.mimeType,
+      sizeBytes: asset.sizeBytes,
+      type: asset.mimeType?.startsWith('image/') ? 'image' :
+        asset.mimeType?.startsWith('audio/') ? 'audio' :
+          asset.mimeType?.startsWith('video/') ? 'video' : 'document',
+      status: asset.status,
+      version: asset.version,
+      slot: asset.slot
+    }));
+
+    return { text: finalContent, media };
+  }
+
   private async findTemplate(templateId: string) {
     const [template] = await this.orm
       .select()

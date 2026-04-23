@@ -1,5 +1,6 @@
 import { db, templates, fluxcoreTemplateSettings, type Template } from '@fluxcore/db';
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
+import { coreEventBus } from '../../core/events';
 
 export interface AuthorizedTemplate extends Template {
     aiUsageInstructions: string | null;
@@ -88,7 +89,7 @@ export class FluxCoreTemplateSettingsService {
     async updateSettings(templateId: string, authorizeForAI: boolean, aiUsageInstructions?: string, granularPermissions?: { aiIncludeName?: boolean, aiIncludeContent?: boolean, aiIncludeInstructions?: boolean }) {
         const current = await this.getSettings(templateId);
 
-        return await this.orm
+        const [result] = await this.orm
             .insert(fluxcoreTemplateSettings)
             .values({
                 templateId,
@@ -110,6 +111,22 @@ export class FluxCoreTemplateSettingsService {
                 }
             })
             .returning();
+
+        // Obtener accountId del Core para el evento de sincronía
+        const [template] = await this.orm.select({ accountId: templates.accountId })
+            .from(templates)
+            .where(eq(templates.id, templateId))
+            .limit(1);
+
+        if (template) {
+            coreEventBus.emit('fluxcore.template.settings.changed', {
+                templateId,
+                accountId: template.accountId,
+                authorizeForAI: result.authorizeForAI
+            });
+        }
+
+        return [result];
     }
 
     /**
@@ -134,7 +151,7 @@ export class FluxCoreTemplateSettingsService {
             aiIncludeInstructions: data.aiIncludeInstructions ?? true,
         }));
 
-        return await this.orm
+        const results = await this.orm
             .insert(fluxcoreTemplateSettings)
             .values(values)
             .onConflictDoUpdate({
@@ -149,6 +166,28 @@ export class FluxCoreTemplateSettingsService {
                 }
             })
             .returning();
+
+        // Obtener mapeo de accountId para emisión de eventos masiva
+        const templateIds = results.map(r => r.templateId);
+        const coreTemplates = await this.orm.select({ id: templates.id, accountId: templates.accountId })
+            .from(templates)
+            .where(inArray(templates.id, templateIds));
+        
+        const accountMap = new Map(coreTemplates.map(t => [t.id, t.accountId]));
+
+        // Emitir eventos
+        for (const res of results) {
+            const accountId = accountMap.get(res.templateId);
+            if (accountId) {
+                coreEventBus.emit('fluxcore.template.settings.changed', {
+                    templateId: res.templateId,
+                    accountId,
+                    authorizeForAI: res.authorizeForAI
+                });
+            }
+        }
+
+        return results;
     }
 }
 

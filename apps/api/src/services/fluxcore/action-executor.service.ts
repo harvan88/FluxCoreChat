@@ -292,23 +292,52 @@ class ActionExecutorService {
         context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
-            console.log(`[ActionExecutor] 📋 Executing template send: ${action.templateId} for account ${context.accountId}`);
+            console.log(`[ActionExecutor] →🔑 CERTIFYING AI TEMPLATE RESPONSE VIA KERNEL:`);
+            console.log(`  - Account ID (responder): ${context.accountId}`);
+            console.log(`  - Template ID: ${action.templateId}`);
 
-            const result = await templateService.executeTemplate({
-                templateId: action.templateId,
-                accountId: context.accountId,
+            // 1. Obtener la plantilla renderizada con variables y array de media
+            const { text, media } = await templateService.renderTemplateContent(
+                context.accountId,
+                action.templateId,
+                action.variables
+            );
+
+            const { cognitionGateway } = await import('./cognition-gateway.service');
+
+            // 🔥 VALIDACIÓN CRÍTICA
+            if (!context.runtimeConfig) {
+                const error = `executeSendTemplate: runtimeConfig is required. Missing context propagation from CognitiveDispatcher. Conversation: ${action.conversationId}`;
+                console.error(`[ActionExecutor] ❌ ${error}`);
+                throw new Error(error);
+            }
+
+            // 2. Certificamos la respuesta ante el Kernel como AI_RESPONSE_GENERATED
+            const certResult = await cognitionGateway.certifyAiResponse({
                 conversationId: action.conversationId,
-                variables: action.variables || {},
-                generatedBy: 'ai',
+                accountId: context.accountId,
+                targetAccountId: context.targetAccountId || 'unknown',
+                content: { text, media: media.length > 0 ? media : undefined },
+                turnId: 0,
                 triggerSignalId: context.triggerSignalId, // ✅ Propagar ID de trazabilidad
+                runtimeId: context.runtimeConfig.runtimeId || 'unknown',
+                model: context.runtimeConfig.model || 'unknown',
+                provider: context.runtimeConfig.provider || 'unknown',
+                policyContext: context.policyContext,
             });
 
-            console.log(`[ActionExecutor] ✅ Template ${action.templateId} sent. MessageId: ${result.messageId}`);
+            if (!certResult.accepted) {
+                console.error(`[ActionExecutor] ❌ Kernel rejected AI template response: ${certResult.reason}`);
+                return { action, success: false, error: `Kernel rejected: ${certResult.reason}` };
+            }
+
+            console.log(`[ActionExecutor] ✅ AI template response certified as signal #${certResult.signalId}`);
+            console.log(`[FluxPipeline] ✅ CERTIFIED  conv=${action.conversationId.slice(0, 7)} signal=#${certResult.signalId} by=ai (template)`);
 
             return {
                 action,
                 success: true,
-                messageId: result.messageId,
+                messageId: String(certResult.signalId), // El ID final se resolverá asíncronamente
             };
         } catch (error: any) {
             console.error(`[ActionExecutor] ❌ Template send failed:`, error.message);

@@ -176,6 +176,11 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
     setTags(tags.filter(t => t !== tag));
   };
 
+  const handleAIChange = (authorized: boolean) => {
+    setAuthorizeForAI(authorized);
+    setAllowAutomatedUse(authorized);
+  };
+
   if (!originalTemplate) {
     return (
       <div className="h-full flex items-center justify-center text-muted">
@@ -436,9 +441,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
             {/* IA Section */}
             <FluxCoreTemplateConfig
               authorizeForAI={authorizeForAI}
-              onAuthorizeChange={setAuthorizeForAI}
-              allowAutomatedUse={allowAutomatedUse}
-              onAllowAutomatedUseChange={setAllowAutomatedUse}
+              onAuthorizeChange={handleAIChange}
               aiUsageInstructions={aiUsageInstructions}
               onInstructionsChange={setAiUsageInstructions}
             />

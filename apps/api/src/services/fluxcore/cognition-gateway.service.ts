@@ -30,7 +30,7 @@ export class CognitionGatewayService {
         conversationId: string;
         accountId: string;       // Cuenta que responde (el asistente/negocio)
         targetAccountId: string; // Cuenta que recibe la respuesta (el usuario)
-        content: { text: string };
+        content: { text: string; media?: any[] };
         turnId: number;
         triggerSignalId?: number; // ✅ Nuevo: Para trazabilidad unificada
         runtimeId?: string;

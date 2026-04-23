@@ -95,9 +95,16 @@ export async function createTemplateHandler(
     return { success: false, message: 'Unauthorized' };
   }
 
-  try {
+    try {
     const input = ctx.body as any;
-    const template = await service.createTemplate(input.accountId, input);
+    
+    // Sincronizar allowAutomatedUse con authorizeForAI si no se envió explícitamente diferente
+    const createData = {
+      ...input,
+      allowAutomatedUse: input.allowAutomatedUse !== undefined ? input.allowAutomatedUse : (input.authorizeForAI ?? false)
+    };
+    
+    const template = await service.createTemplate(input.accountId, createData);
 
     // Guardar configuración de FluxCore
     if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions || input.aiIncludeName !== undefined) {
@@ -141,11 +148,19 @@ export async function updateTemplateHandler(
 
   try {
     const input = ctx.body as any;
-    const template = await service.updateTemplate(input.accountId, ctx.params.templateId, input);
+    
+    // Sincronizar allowAutomatedUse con authorizeForAI si este último está presente
+    const updateData = { ...input };
+    if (typeof input.authorizeForAI === 'boolean' && input.allowAutomatedUse === undefined) {
+      updateData.allowAutomatedUse = input.authorizeForAI;
+    }
+
+    const template = await service.updateTemplate(input.accountId, ctx.params.templateId, updateData);
 
     // Actualizar configuración de FluxCore (si viene en el body)
     if (typeof input.authorizeForAI === 'boolean' || input.aiUsageInstructions !== undefined || input.aiIncludeName !== undefined || input.aiIncludeContent !== undefined || input.aiIncludeInstructions !== undefined) {
       const current = await fluxCoreTemplateSettingsService.getSettings(template.id);
+      
       await fluxCoreTemplateSettingsService.updateSettings(
         template.id,
         input.authorizeForAI ?? current.authorizeForAI,
@@ -292,7 +307,12 @@ export async function bulkCreateTemplatesHandler(
       return { success: true, data: { createdCount: 0 } };
     }
 
-    const insertedTemplates = await service.bulkCreateTemplates(input.accountId, input.templates as any);
+    const templatesInput = input.templates.map((t: any) => ({
+      ...t,
+      allowAutomatedUse: t.allowAutomatedUse !== undefined ? t.allowAutomatedUse : (t.authorizeForAI ?? false)
+    }));
+
+    const insertedTemplates = await service.bulkCreateTemplates(input.accountId, templatesInput as any);
 
     const settingsData = input.templates.map((t: Record<string, unknown>, index: number) => ({
       templateId: insertedTemplates[index].id,

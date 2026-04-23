@@ -20,8 +20,7 @@ ${templatesText || 'Ninguna.'}
 
 Instrucciones:
 1. Mapeo: Las plantillas tienen PRIORIDAD sobre el lenguaje natural. Si los datos están presentes o el estado de la conversación encaja con una plantilla, inclúyela en "plantillas".
-2. Intención: Términos REALES de búsqueda para el contexto.
-3. Plagas: Lista especies detectadas.
+2. Intención: Términos REALES de búsqueda para el contexto
 
 Respuesta JSON: {"plantillas": ["ID_CORTO"], "intencion_busqueda": "terminos"}
 `.trim();
@@ -35,7 +34,7 @@ export function buildTemplateEnforcement(): string {
   return `
 ### Prioridad de Plantillas
 Si la información que vas a comunicar está disponible en una plantilla autorizada:
-1. Es prioritario usar: CALL TEMPLATE: <ID_REAL> {"Variable": "Valor"}
+1. Es prioritario usar: CALL_TEMPLATE: <ID_CORTO> {"Variable": "Valor"}
 2. Solo redacta manualmente si NO existe una plantilla que cubra la información.
 3. El JSON debe usar los nombres de las variables como CLAVES.
 4. Si falta información para una plantilla, pídela naturalmente sin invocarla.

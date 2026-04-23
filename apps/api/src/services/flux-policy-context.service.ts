@@ -377,13 +377,16 @@ class FluxPolicyContextService {
                 aiIncludeName: accounts.aiIncludeName,
                 aiIncludeBio: accounts.aiIncludeBio,
                 aiIncludePrivateContext: accounts.aiIncludePrivateContext,
+                aiIncludeTimestamp: accounts.aiIncludeTimestamp,
             })
             .from(accounts)
             .where(eq(accounts.id, accountId))
             .limit(1);
         if (!account) return {};
 
-        const profile: Record<string, unknown> = {};
+        const profile: Record<string, unknown> = {
+            aiIncludeTimestamp: account.aiIncludeTimestamp ?? true,
+        };
         const accountProfile = (account.profile || {}) as any;
 
         if (account.aiIncludeName) {

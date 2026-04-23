@@ -42,6 +42,7 @@ export interface ResolvedBusinessProfile {
     website?: string;
     timezone?: string;
     avatarUrl?: string;
+    aiIncludeTimestamp?: boolean;
     /** Authorized templates available for this account */
     templates?: Array<{
         templateId: string;

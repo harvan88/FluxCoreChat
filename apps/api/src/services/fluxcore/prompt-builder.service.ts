@@ -18,6 +18,15 @@ import type { FluxPolicyContext, ConversationMessage } from '@fluxcore/db';
 import type { RuntimeConfig } from '@fluxcore/db';
 import type { AuthorizedRuntimeContext } from '../../core/fluxcore-types';
 import { runtimeInstructionContextService } from './runtime-instruction-context.service';
+import { LEGACY_HEADER_PATTERNS } from './template-registry.service';
+
+function stripLegacyBlocks(content: string): string {
+    let cleaned = content;
+    for (const pattern of LEGACY_HEADER_PATTERNS) {
+        cleaned = cleaned.replace(pattern, '');
+    }
+    return cleaned.trim();
+}
 
 function containsTemplateProtocolInstructions(instructions?: string): boolean {
     if (typeof instructions !== 'string' || instructions.trim().length === 0) {
@@ -39,8 +48,10 @@ class PromptBuilderService {
         authorizedContext?: AuthorizedRuntimeContext;
         runtimeConfig: RuntimeConfig;
         conversationHistory: ConversationMessage[];
+        ragContext?: string;
+        templateEnforcement?: string;
     }): BuiltPrompt {
-        const { policyContext, authorizedContext, runtimeConfig, conversationHistory } = params;
+        const { policyContext, authorizedContext, runtimeConfig, conversationHistory, ragContext, templateEnforcement } = params;
 
         const sections: string[] = [];
 
@@ -51,15 +62,39 @@ class PromptBuilderService {
         sections.push(this.buildPolicySection(policyContext, authorizedContext, runtimeConfig));
 
         // ── Section 3: RuntimeConfig Instructions ─────────────────────────────
+        const rawInstructions = authorizedContext?.instructions ?? runtimeConfig.instructions;
+        const instructions = stripLegacyBlocks(rawInstructions || '');
+
         const instructionsSection = runtimeInstructionContextService.buildAuthorizedInstructionsSection({
-            instructions: authorizedContext?.instructions ?? runtimeConfig.instructions,
+            instructions,
             title: '## Instrucciones del Asistente',
         });
         if (instructionsSection) {
-            sections.push(instructionsSection);
+            // Deduplicación de títulos: Si el contenido ya empieza con un título de nivel 1 o 2 similar, no repetir el título de la sección
+            const hasOverlappingTitle = /^\s*#+\s*PLANTILLAS AUTORIZADAS/i.test(instructions || '');
+            if (hasOverlappingTitle) {
+                sections.push(instructions!.trim());
+            } else {
+                sections.push(instructionsSection);
+            }
         }
 
-        // ── Section 4: Knowledge from resolvedBusinessProfile ─────────────────
+        // ── Section 4: Template Enforcement (Protocol) ────────────────────────
+        if (templateEnforcement) {
+            const alreadyHasProtocol = containsTemplateProtocolInstructions(instructions) || 
+                                     containsTemplateProtocolInstructions(policyContext.resolvedBusinessProfile.privateContext as string);
+            
+            if (!alreadyHasProtocol) {
+                sections.push(templateEnforcement.trim());
+            }
+        }
+
+        // ── Section 5: Knowledge Context (RAG) ────────────────────────────────
+        if (ragContext) {
+            sections.push(ragContext.trim());
+        }
+
+        // ── Section 6: Static Knowledge (Templates/Services) ──────────────────
         const knowledgeSection = this.buildKnowledgeSection(policyContext, authorizedContext);
         if (knowledgeSection) {
             sections.push(knowledgeSection);
@@ -97,7 +132,10 @@ class PromptBuilderService {
             lines.push(resolvedBusinessProfile.bio as string);
         }
         if (resolvedBusinessProfile.privateContext) {
-            lines.push(`\nContexto adicional: ${resolvedBusinessProfile.privateContext}`);
+            const cleanedPrivateContext = stripLegacyBlocks(resolvedBusinessProfile.privateContext as string);
+            if (cleanedPrivateContext) {
+                lines.push(`\nContexto adicional: ${cleanedPrivateContext}`);
+            }
         }
 
         return lines.join('\n');
@@ -142,6 +180,9 @@ class PromptBuilderService {
                 if (t.variables.length > 0) {
                     const vars = t.variables.map(v => v.required ? `${v.name}*` : v.name).join(', ');
                     entry += `\n  Variables: ${vars}`;
+                }
+                if (t.content) {
+                    entry += `\n  Contenido: "${t.content}"`;
                 }
                 templateLines.push(entry);
             });

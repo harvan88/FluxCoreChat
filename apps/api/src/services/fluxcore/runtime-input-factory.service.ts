@@ -45,7 +45,7 @@ class RuntimeInputFactoryService {
             contactRules: policyContext.contactRules,
             authorizedTemplates: policyContext.authorizedTemplates,
             instructions: runtimeConfig.instructions,
-            systemClock: nowArgentina,
+            systemClock: policyContext.resolvedBusinessProfile.aiIncludeTimestamp !== false ? nowArgentina : undefined,
             responder: {
                 runtimeId,
                 assistantId: runtimeConfig.assistantId,

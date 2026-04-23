@@ -17,6 +17,7 @@ export interface ProfileData {
   aiIncludeName: boolean;
   aiIncludeBio: boolean;
   aiIncludePrivateContext: boolean;
+  aiIncludeTimestamp: boolean;
   accountType: 'personal' | 'business';
   avatarUrl?: string;
   avatarAssetId?: string;
@@ -101,6 +102,7 @@ export function useProfile(): UseProfileReturn {
           aiIncludeName: targetAccount.aiIncludeName ?? true,
           aiIncludeBio: targetAccount.aiIncludeBio ?? true,
           aiIncludePrivateContext: targetAccount.aiIncludePrivateContext ?? true,
+          aiIncludeTimestamp: targetAccount.aiIncludeTimestamp ?? true,
           accountType: targetAccount.accountType as 'personal' | 'business',
           avatarUrl: targetAccount.profile?.avatarUrl,
           profile: targetAccount.profile || {},
@@ -150,6 +152,10 @@ export function useProfile(): UseProfileReturn {
 
       if (data.aiIncludePrivateContext !== undefined) {
         updateData.aiIncludePrivateContext = data.aiIncludePrivateContext;
+      }
+      
+      if (data.aiIncludeTimestamp !== undefined) {
+        updateData.aiIncludeTimestamp = data.aiIncludeTimestamp;
       }
 
       if (data.avatarAssetId !== undefined) {

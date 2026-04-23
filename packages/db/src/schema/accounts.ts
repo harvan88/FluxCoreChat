@@ -20,6 +20,7 @@ export const accounts = pgTable('accounts', {
   aiIncludeName: boolean('ai_include_name').default(true).notNull(),
   aiIncludeBio: boolean('ai_include_bio').default(true).notNull(),
   aiIncludePrivateContext: boolean('ai_include_private_context').default(true).notNull(),
+  aiIncludeTimestamp: boolean('ai_include_timestamp').default(true).notNull(),
   // Avatar asset reference (replaces profile.avatarUrl)
   avatarAssetId: uuid('avatar_asset_id').references(() => assets.id, { onDelete: 'set null' }),
 });

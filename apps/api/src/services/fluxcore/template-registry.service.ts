@@ -5,16 +5,16 @@ export interface TemplateInstructionBlock {
     templateCount: number;
 }
 
-const LEGACY_HEADER_PATTERNS: RegExp[] = [
-    /# INSTRUCCIONES DE USO DE PLANTILLAS[\s\S]*?(?=#|$)/gi,
-    /# LIBRERÍA DE PLANTILLAS[\s\S]*?(?=#|$)/gi,
-    /# LISTA DE PLANTILLAS AUTORIZADAS[\s\S]*?(?=#|$)/gi,
-    /# REGLA DE ORO[\s\S]*?(?=#|$)/gi,
-    /# SISTEMA DE PLANTILLAS OFICIALES[\s\S]*?(?=#|$)/gi,
-    /# PLANTILLAS AUTORIZADAS[\s\S]*?(?=#|$)/gi,
-    /## LIBRERÍA DE PLANTILLAS[\s\S]*?(?=#|$)/gi,
-    /## LIBRERÍA DE INTENCIONES[\s\S]*?(?=#|$)/gi,
-    /## LISTA DE PLANTILLAS AUTORIZADAS[\s\S]*?(?=#|$)/gi,
+export const LEGACY_HEADER_PATTERNS: RegExp[] = [
+    /# INSTRUCCIONES DE USO DE PLANTILLAS[\s\S]*?(?=\n#\s|$)/gi,
+    /# LIBRERÍA DE PLANTILLAS[\s\S]*?(?=\n#\s|$)/gi,
+    /# LISTA DE PLANTILLAS AUTORIZADAS[\s\S]*?(?=\n#\s|$)/gi,
+    /# REGLA DE ORO[\s\S]*?(?=\n#\s|$)/gi,
+    /# SISTEMA DE PLANTILLAS OFICIALES[\s\S]*?(?=\n#\s|$)/gi,
+    /# PLANTILLAS AUTORIZADAS[\s\S]*?(?=\n#\s|$)/gi,
+    /## LIBRERÍA DE PLANTILLAS[\s\S]*?(?=\n#\s|$)/gi,
+    /## LIBRERÍA DE INTENCIONES[\s\S]*?(?=\n#\s|$)/gi,
+    /## LISTA DE PLANTILLAS AUTORIZADAS[\s\S]*?(?=\n#\s|$)/gi,
 ];
 
 class TemplateRegistryService {
@@ -29,8 +29,24 @@ class TemplateRegistryService {
 
         const templatesList = aiTemplates.map(t => {
             const instruction = t.aiUsageInstructions?.trim() || 'n/a';
-            const variables = t.variables.map(v => v.name).join(', ') || 'n/a';
-            return `- ID: ${t.id}\n  Nombre: ${t.name}\n  Cuándo usarla: ${instruction}\n  Variables: ${variables}`;
+            
+            // Extracción dinámica de variables para máxima resiliencia
+            let variableNames = t.variables?.map(v => v.name) || [];
+            if (t.content) {
+                const regex = /\{\{\s*([^}]+)\s*\}\}/g;
+                let match;
+                while ((match = regex.exec(t.content)) !== null) {
+                    const varName = match[1].trim();
+                    if (!variableNames.includes(varName)) {
+                        variableNames.push(varName);
+                    }
+                }
+            }
+            
+            const variables = variableNames.length > 0 ? variableNames.join(', ') : 'n/a';
+            const content = t.content?.trim() || 'n/a';
+            const category = t.category || 'n/a';
+            return `- ID: ${t.id}\n  Nombre: ${t.name}\n  Categoría: ${category}\n  Cuándo usarla: ${instruction}\n  Variables: ${variables}\n  Contenido: ${content}`;
         }).join('\n\n');
 
         const content = `

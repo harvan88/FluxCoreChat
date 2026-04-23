@@ -111,8 +111,11 @@ async function initializeFluxCore() {
     const { asistentesLocalRuntime } = await import('./services/fluxcore/runtimes/asistentes-local.runtime');
 
     runtimeGateway.register(asistentesLocalRuntime);
-    // TODO H5: Register OpenAI Runtime
-    console.log('[Bootstrap] 3/4 Runtime Gateway initialized');
+    
+    // 🎯 NUEVO (v8.5): Inicializar motor semántico para vectores de plantillas
+    const { templateSemanticService } = await import('./services/fluxcore/template-semantic.service');
+    // Al importar el singleton, se registra el constructor y los listeners.
+    console.log('[Bootstrap] 3/4 Runtime Gateway & Semantic Engine initialized');
 
     // 4. COGNITION WORKER (The Heartbeat)
     const { cognitionWorker } = await import('./workers/cognition-worker');

@@ -7,6 +7,16 @@ import {
 } from './templates.routes';
 import type { TemplateService } from '../services/template.service';
 
+// Mock the settings service
+mock.module('../services/fluxcore/template-settings.service', () => ({
+  fluxCoreTemplateSettingsService: {
+    getSettings: mock(() => Promise.resolve({ authorizeForAI: false })),
+    getSettingsMap: mock(() => Promise.resolve(new Map())),
+    updateSettings: mock(() => Promise.resolve()),
+    bulkUpdateSettings: mock(() => Promise.resolve([])),
+  }
+}));
+
 type MockCtx<TBody = any, TQuery = any, TParams = any> = {
   user: { id: string } | null;
   body: TBody;
@@ -72,18 +82,22 @@ describe('templates.routes handlers', () => {
 
     it('creates template with service call', async () => {
       const service = serviceStub();
-      const ctx = createCtx({ body: { accountId: 'acc-1', name: 'Offer', content: 'Hi' } });
+      const input = { accountId: 'acc-1', name: 'Offer', content: 'Hi' };
+      const ctx = createCtx({ body: input });
 
       const res = await createTemplateHandler(ctx, service);
 
       expect(res.success).toBe(true);
-      expect(service.createTemplate).toHaveBeenCalledWith('acc-1', ctx.body);
+      expect(service.createTemplate).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+        ...input,
+        allowAutomatedUse: false // Default when authorizeForAI is missing
+      }));
     });
   });
 
   describe('updateTemplateHandler', () => {
     it('rejects unauthenticated users', async () => {
-      const ctx = createCtx({ user: null, body: { accountId: 'acc-1' }, params: { id: 'tpl-1' } });
+      const ctx = createCtx({ user: null, body: { accountId: 'acc-1' }, params: { templateId: 'tpl-1' } });
       const res = await updateTemplateHandler(ctx, serviceStub());
 
       expect(ctx.set.status).toBe(401);
@@ -92,7 +106,7 @@ describe('templates.routes handlers', () => {
 
     it('updates template via service', async () => {
       const service = serviceStub();
-      const ctx = createCtx({ body: { accountId: 'acc-1', name: 'New' }, params: { id: 'tpl-1' } });
+      const ctx = createCtx({ body: { accountId: 'acc-1', name: 'New' }, params: { templateId: 'tpl-1' } });
 
       const res = await updateTemplateHandler(ctx, service);
 
@@ -103,7 +117,7 @@ describe('templates.routes handlers', () => {
 
   describe('deleteTemplateHandler', () => {
     it('rejects unauthenticated users', async () => {
-      const ctx = createCtx({ user: null, query: { accountId: 'acc-1' }, params: { id: 'tpl-1' } });
+      const ctx = createCtx({ user: null, query: { accountId: 'acc-1' }, params: { templateId: 'tpl-1' } });
       const res = await deleteTemplateHandler(ctx, serviceStub());
 
       expect(ctx.set.status).toBe(401);
@@ -111,7 +125,7 @@ describe('templates.routes handlers', () => {
     });
 
     it('requires accountId query param', async () => {
-      const ctx = createCtx({ query: {}, params: { id: 'tpl-1' } });
+      const ctx = createCtx({ query: {}, params: { templateId: 'tpl-1' } });
       const res = await deleteTemplateHandler(ctx, serviceStub());
 
       expect(ctx.set.status).toBe(400);
@@ -120,7 +134,7 @@ describe('templates.routes handlers', () => {
 
     it('deletes template via service', async () => {
       const service = serviceStub();
-      const ctx = createCtx({ query: { accountId: 'acc-1' }, params: { id: 'tpl-1' } });
+      const ctx = createCtx({ query: { accountId: 'acc-1' }, params: { templateId: 'tpl-1' } });
 
       const res = await deleteTemplateHandler(ctx, service);
 

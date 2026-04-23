@@ -1,13 +1,10 @@
 import { CollapsibleSection } from '../../ui/CollapsibleSection';
 import { Textarea } from '../../ui/Input';
-import { Switch } from '../../ui/Switch';
 import { Bot } from 'lucide-react';
 
 interface FluxCoreTemplateConfigProps {
     authorizeForAI: boolean;
     onAuthorizeChange: (authorized: boolean) => void;
-    allowAutomatedUse: boolean;
-    onAllowAutomatedUseChange: (allowed: boolean) => void;
     aiUsageInstructions: string;
     onInstructionsChange: (instructions: string) => void;
 }
@@ -15,8 +12,6 @@ interface FluxCoreTemplateConfigProps {
 export function FluxCoreTemplateConfig({
     authorizeForAI,
     onAuthorizeChange,
-    allowAutomatedUse,
-    onAllowAutomatedUseChange,
     aiUsageInstructions,
     onInstructionsChange
 }: FluxCoreTemplateConfigProps) {
@@ -30,16 +25,8 @@ export function FluxCoreTemplateConfig({
         >
             <div className="space-y-4">
                 <p className="text-xs text-muted">
-                    Active esta opción para que FluxCore pueda utilizar esta plantilla automáticamente.
+                    Habilite esta opción para que FluxCore pueda indexar y utilizar esta plantilla automáticamente mediante búsqueda semántica y delegación operativa.
                 </p>
-
-                <div className="flex items-center justify-between p-3 bg-surface border border-subtle rounded-lg">
-                    <div className="text-sm font-medium text-primary">Habilitar delegación</div>
-                    <Switch
-                        checked={allowAutomatedUse}
-                        onCheckedChange={onAllowAutomatedUseChange}
-                    />
-                </div>
 
                 <Textarea
                     label="Instrucciones de Uso"
@@ -47,7 +34,7 @@ export function FluxCoreTemplateConfig({
                     onChange={(e) => onInstructionsChange(e.target.value)}
                     placeholder="Ej: Usar esta plantilla solo cuando el cliente pregunte precios mayoristas."
                     rows={4}
-                    helperText="Estas instrucciones guían a la IA sobre cuándo invocar esta plantilla."
+                    helperText="Indique a la IA en qué contextos debe proponer o enviar esta plantilla."
                     className="bg-surface"
                 />
             </div>

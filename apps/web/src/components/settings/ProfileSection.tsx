@@ -52,6 +52,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const [aiIncludeName, setAiIncludeName] = useState(true);
   const [aiIncludeBio, setAiIncludeBio] = useState(true);
   const [aiIncludePrivateContext, setAiIncludePrivateContext] = useState(true);
+  const [aiIncludeTimestamp, setAiIncludeTimestamp] = useState(true);
   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
   const [alias, setAlias] = useState('');
   const [aliasStatus, setAliasStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved' | 'current'>('idle');
@@ -143,6 +144,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       setAiIncludeName(profile.aiIncludeName ?? true);
       setAiIncludeBio(profile.aiIncludeBio ?? true);
       setAiIncludePrivateContext(profile.aiIncludePrivateContext ?? true);
+      setAiIncludeTimestamp(profile.aiIncludeTimestamp ?? true);
       setIsBusinessEnabled(profile.accountType === 'business');
     }
   }, [profile]);
@@ -159,7 +161,8 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         allowAutomatedUse !== (profile.allowAutomatedUse || false) ||
         aiIncludeName !== (profile.aiIncludeName ?? true) ||
         aiIncludeBio !== (profile.aiIncludeBio ?? true) ||
-        aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true);
+        aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true) ||
+        aiIncludeTimestamp !== (profile.aiIncludeTimestamp ?? true);
       setHasChanges(changed);
     }
   }, [displayName, bio, alias, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile, account]);
@@ -178,6 +181,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       aiIncludeName,
       aiIncludeBio,
       aiIncludePrivateContext,
+      aiIncludeTimestamp,
     };
     // Include alias if changed
     if (alias !== (account?.alias || '')) {
@@ -447,6 +451,28 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
               helperText={`${privateContext.split('\n').length} líneas • ~${estimateTokens(privateContext)} tokens • ${privateContext.length}/5000`}
             />
           </div>
+
+          {/* AI Timestamp Toggle */}
+          <Card variant="bordered" className="p-4 border-accent/20 bg-accent/5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+                  <span className="text-xs font-bold">⏰</span>
+                </div>
+                <div>
+                  <div className="text-primary font-medium text-sm">Mostrar hora a la IA</div>
+                  <div className="text-[11px] text-muted">Permite que el asistente sepa la fecha y hora actual para responder mejor.</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                <Switch
+                  checked={aiIncludeTimestamp}
+                  onCheckedChange={setAiIncludeTimestamp}
+                />
+              </div>
+            </div>
+          </Card>
 
           {/* Save Button */}
           <div className="pt-4 border-t border-subtle">

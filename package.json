@@ -45,8 +45,10 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "bullmq": "5.10.2",
     "gray-matter": "^4.0.3",
+    "jsonwebtoken": "^9.0.3",
     "react-markdown": "^10.1.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1"
