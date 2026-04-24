@@ -34,7 +34,7 @@ export function VectorStoreTestQuery({ vectorStoreId, accountId }: VectorStoreTe
 
     setLoading(true);
     setError(null);
-    setResult(null);
+    // No limpiamos el resultado anterior para evitar el parpadeo hasta tener el nuevo
 
     try {
       const response = await fetch('/api/fluxcore/runtime/rag-context', {
@@ -48,7 +48,8 @@ export function VectorStoreTestQuery({ vectorStoreId, accountId }: VectorStoreTe
           query: trimmedQuery,
           vectorStoreIds: [vectorStoreId],
           options: {
-            topK: 5,
+            topK: 10,
+            minScore: 0.05, // Umbral ultra-bajo para diagnóstico: garantizamos ver TODO lo que hay
           },
         }),
       });

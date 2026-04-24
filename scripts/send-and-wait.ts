@@ -27,7 +27,7 @@ const msgRes = await fetch('http://localhost:3000/messages', {
     body: JSON.stringify({
         conversationId: CONV_ID,
         type: 'outgoing',
-        text: 'Hola, este es un mensaje de prueba. ¿Puedes responder?',
+        text: 'Hola, me gustaría saber los precios de los tratamientos dentales y carillas',
     }),
 });
 

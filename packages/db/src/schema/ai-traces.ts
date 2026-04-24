@@ -9,8 +9,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
-import { conversations } from './conversations';
-import { messages } from './messages';
+
 
 export const aiTraces = pgTable(
   'ai_traces',

@@ -19,7 +19,8 @@ import {
   index
 } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
-import { fluxcoreVectorStores, fluxcoreVectorStoreFiles } from './fluxcore-vector-stores';
+import { assets } from './assets';
+
 
 /**
  * Tabla de chunks de documentos con embeddings vectoriales
@@ -34,12 +35,13 @@ export const fluxcoreDocumentChunks = pgTable('fluxcore_document_chunks', {
   id: uuid('id').primaryKey().defaultRandom(),
 
   // References to parent entities
-  vectorStoreId: uuid('vector_store_id')
-    .references(() => fluxcoreVectorStores.id, { onDelete: 'cascade' })
-    .notNull(),
   fileId: uuid('file_id')
-    .references(() => fluxcoreVectorStoreFiles.id, { onDelete: 'cascade' })
+    .references(() => assets.id, { onDelete: 'cascade' })
     .notNull(),
+  
+  // Model Configuration for multi-dimensional support
+  embeddingModel: varchar('embedding_model', { length: 255 }).notNull(),
+
   accountId: uuid('account_id')
     .references(() => accounts.id, { onDelete: 'cascade' })
     .notNull(),
@@ -61,12 +63,11 @@ export const fluxcoreDocumentChunks = pgTable('fluxcore_document_chunks', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => {
   return {
-    // Unique constraint: one chunk per file position
-    uniqueChunkPerFile: uniqueIndex('idx_document_chunks_file_chunk').on(table.fileId, table.chunkIndex),
+    // Unique constraint: one chunk per file position PER MODEL
+    uniqueChunkPerFileModel: uniqueIndex('idx_document_chunks_file_chunk_model').on(table.fileId, table.embeddingModel, table.chunkIndex),
 
     // Indexes for common query patterns
-    idxVectorStore: index('idx_document_chunks_vector_store_drizzle').on(table.vectorStoreId),
-    idxFile: index('idx_document_chunks_file_drizzle').on(table.fileId),
+    idxFileModel: index('idx_document_chunks_file_model').on(table.fileId, table.embeddingModel),
     idxAccount: index('idx_document_chunks_account_drizzle').on(table.accountId),
   };
 });

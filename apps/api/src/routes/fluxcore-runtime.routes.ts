@@ -293,14 +293,15 @@ export const fluxcoreRuntimeRoutes = new Elysia({ prefix: '/fluxcore/runtime' })
 
       const ragConfig = await ragConfigService.getEffectiveConfig(params.id, accountId);
 
-      // Chunk stats from DB
+      // Chunk stats from DB (Asset-Centric Query)
       const chunkStats = await db.execute(sql`
-        SELECT
-          count(*)::int as total_chunks,
-          count(embedding)::int as chunks_with_embedding,
-          coalesce(sum(token_count), 0)::int as total_tokens
-        FROM fluxcore_document_chunks
-        WHERE vector_store_id = ${params.id}::uuid
+        SELECT 
+          count(c.*)::int as total_chunks,
+          count(c.embedding)::int as chunks_with_embedding,
+          coalesce(sum(c.token_count), 0)::int as total_tokens
+        FROM fluxcore_document_chunks c
+        INNER JOIN fluxcore_vector_store_files vsf ON c.file_id = vsf.file_id
+        WHERE vsf.vector_store_id = ${params.id}::uuid
       `);
       const stats = Array.isArray(chunkStats) && chunkStats.length > 0
         ? chunkStats[0]

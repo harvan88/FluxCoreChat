@@ -10,7 +10,7 @@
  * RAG-007: Retrieval Service
  */
 
-import { db } from '@fluxcore/db';
+import { db, fluxcoreDocumentChunks, fluxcoreVectorStoreFiles } from '@fluxcore/db';
 import { sql } from 'drizzle-orm';
 import { embeddingService } from './embedding.service';
 import { ragConfigService } from './rag-config.service';
@@ -103,18 +103,46 @@ export class RetrievalService {
         const queryTerms = query.split(',').map(q => q.trim()).filter(q => q.length > 0);
         if (queryTerms.length === 0) queryTerms.push(query);
 
-        // 3. Obtener configuraciones de los vector stores (agrupar para optimizar)
-        const vsConfigs = new Map<string, any>();
+        // 3. Obtener todas las configuraciones de modelos PRESENTES en los chunks de estos vector stores
+        // RAG-FIX: Buscamos qué modelos hay realmente vinculados a este VS
+        const modelsInDB = await db.execute(sql`
+            SELECT DISTINCT embedding_model as model
+            FROM fluxcore_document_chunks
+            WHERE file_id IN (
+                SELECT file_id 
+                FROM fluxcore_vector_store_files 
+                WHERE vector_store_id = ANY(${`{${accessibleVectorStores.join(',')}}`}::uuid[])
+            )
+        `);
+
         const groups = new Map<string, { config: any, ids: string[] }>();
         
-        for (const vsId of accessibleVectorStores) {
-            const config = await ragConfigService.getEffectiveConfig(vsId, accountId);
-            const configKey = `${config.embedding.provider}:${config.embedding.model}:${config.embedding.dimensions}`;
-            
-            if (!groups.has(configKey)) {
-                groups.set(configKey, { config, ids: [] });
+        // Si no hay nada en la DB, usar la config por defecto para al menos intentar la búsqueda
+        const rows = Array.isArray(modelsInDB) ? modelsInDB : [];
+        if (rows.length === 0) {
+            for (const vsId of accessibleVectorStores) {
+                const config = await ragConfigService.getEffectiveConfig(vsId, accountId);
+                const configKey = `${config.embedding.provider}:${config.embedding.model}`;
+                if (!groups.has(configKey)) groups.set(configKey, { config, ids: [] });
+                groups.get(configKey)!.ids.push(vsId);
             }
-            groups.get(configKey)!.ids.push(vsId);
+        } else {
+            // RAG-ADAPTIVE: Crear un grupo de búsqueda por cada modelo detectado físicamente
+            for (const row of rows as any[]) {
+                const modelName = row.model;
+                // Inferir proveedor (sovereign si es mini-lm, openai si es text-embedding)
+                const provider = modelName.includes('MiniLM') ? 'local' : 'openai';
+                const dimensions = modelName.includes('MiniLM') ? 384 : 1536;
+                
+                const configKey = `${provider}:${modelName}`;
+                groups.set(configKey, {
+                    config: {
+                        embedding: { provider, model: modelName, dimensions },
+                        retrieval: { topK: 10, minScore: 0.05, maxTokens: 2000 }
+                    },
+                    ids: accessibleVectorStores
+                });
+            }
         }
 
         const groupConfigs = Array.from(groups.values());
@@ -142,14 +170,14 @@ export class RetrievalService {
                             endpointUrl: config.embedding.endpointUrl,
                         });
 
-                        // Buscar en este grupo para este término
                         const chunks = await this.vectorSearch(
                             term,
                             queryEmbeddingData.embedding,
                             ids,
                             accountId,
                             topK, 
-                            minScore
+                            minScore,
+                            config.embedding.model
                         );
 
                         // Agregar a mapa global para deduplicación (preferir mayor similitud)
@@ -266,7 +294,8 @@ ${contextParts.join('\n\n---\n\n')}
         vectorStoreIds: string[],
         accountId: string,
         limit: number,
-        minScore: number
+        minScore: number,
+        embeddingModel: string
     ): Promise<RetrievedChunk[]> {
         // Si no hay embeddings en el query, retornar vacío
         if (!queryEmbedding || queryEmbedding.length === 0) {
@@ -287,7 +316,6 @@ ${contextParts.join('\n\n---\n\n')}
           c.id,
           c.content,
           c.file_id as "fileId",
-          c.vector_store_id as "vectorStoreId",
           c.chunk_index as "chunkIndex",
           c.token_count as "tokenCount",
           c.page_number as "pageNumber",
@@ -302,7 +330,12 @@ ${contextParts.join('\n\n---\n\n')}
           vector_dims(c.embedding) = ${queryEmbedding.length} as dims_match
         FROM fluxcore_document_chunks c
         WHERE c.account_id = ${accountId}::uuid
-          AND c.vector_store_id = ANY(ARRAY[${sql.raw(vsIdsStr)}]::uuid[])
+          AND c.file_id IN (
+            SELECT file_id 
+            FROM fluxcore_vector_store_files 
+            WHERE vector_store_id = ANY(ARRAY[${sql.raw(vsIdsStr)}]::uuid[])
+          )
+          AND c.embedding_model = ${embeddingModel}
           AND c.embedding IS NOT NULL
           AND vector_dims(c.embedding) = ${queryEmbedding.length}
       ) scored
@@ -318,7 +351,7 @@ ${contextParts.join('\n\n---\n\n')}
                 id: row.id,
                 content: row.content,
                 fileId: row.fileId,
-                vectorStoreId: row.vectorStoreId,
+                vectorStoreId: row.vectorStoreId || vectorStoreIds[0],
                 chunkIndex: row.chunkIndex,
                 similarity: parseFloat(row.similarity),
                 tokenCount: row.tokenCount || 0,

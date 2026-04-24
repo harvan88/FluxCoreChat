@@ -36,9 +36,17 @@ La tabla `assets` es el registro central de todos los recursos binarios (imágen
 
 ## 🛡️ Reglas de Almacenamiento (Operations)
 1.  **Deduplicación Intra-Cuenta**: El constraint `assets_unique_checksum_account` impide que una misma cuenta suba dos veces el mismo archivo físico, ahorrando espacio en disco.
-2.  **Ciclo de Vida de Borrado**:
-    -   `archived`: El asset no es visible pero el archivo físico permanece.
-    -   `hard_delete_at`: Fecha programada para que un worker elimine el binario real del almacenamiento.
+2.  **Ciclo de Vida de Borrado y Escudo de Soberanía**:
+    -   **Sovereign Asset Shield:** La base de datos tiene un trigger (`prevent_asset_deletion`) que bloquea comandos `DELETE` crudos (como `DELETE FROM assets;`) para evitar desastres masivos.
+    -   **Borrado Granular:** El servicio oficial (`AssetRegistryService.delete`) realiza borrados **físicos reales** (no acumula basura) pero lo hace mediante una transacción certificada que abre el escudo temporalmente para esa fila específica.
+    -   **Borrado Total (Manual/Admin):** Si es necesario vaciar la tabla por completo (ej: reseteo de entorno), se debe ejecutar el siguiente SQL para bypasser el escudo:
+        ```sql
+        BEGIN;
+        SET LOCAL "fluxcore.allow_asset_deletion" = 'true';
+        DELETE FROM assets; -- O cualquier borrado masivo
+        COMMIT;
+        ```
+    -   **Soft-Delete Opcional:** El sistema aún soporta los estados `archived` y `deleted` para flujos que requieran una "papelera de reciclaje" antes de la purga final.
 3.  **Seguridad de Acceso**: El `scope` define las reglas de visibilidad (ej: un `profile_avatar` es público, un `message_attachment` requiere ser participante de la conversación).
 
 ## 💡 Ejemplo de Uso

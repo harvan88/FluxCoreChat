@@ -14,10 +14,11 @@ import { db } from '@fluxcore/db';
 import {
     fluxcoreFiles,
     fluxcoreVectorStoreFiles,
+    assets,
     type FluxcoreFile,
 } from '@fluxcore/db';
 import { eq, and, desc } from 'drizzle-orm';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 // ════════════════════════════════════════════════════════════════════════════
 // Types
@@ -90,14 +91,53 @@ export class FileService {
             .limit(1);
 
         if (existing.length > 0) {
-            // Retornar archivo existente (deduplicación)
-            return existing[0];
+            const legacyFile = existing[0];
+            
+            // RAG-FIX: Asegurar que el archivo legacy tenga representación en la tabla maestra assets
+            const [assetMatch] = await db.select().from(assets).where(eq(assets.id, legacyFile.id));
+            if (!assetMatch) {
+                console.log(`[FileService] Migrando archivo legacy ${legacyFile.id} a tabla maestra assets 'on-the-fly'`);
+                await db.insert(assets).values({
+                    id: legacyFile.id,
+                    name: legacyFile.name,
+                    mimeType: legacyFile.mimeType || 'text/plain',
+                    sizeBytes: legacyFile.sizeBytes || 0,
+                    accountId: legacyFile.accountId,
+                    storageKey: `uploads/${legacyFile.accountId}/${legacyFile.id}/${legacyFile.name}`,
+                    metadata: {
+                        contentHash,
+                        legacyMigration: true,
+                        originalName: legacyFile.name
+                    }
+                });
+            }
+            
+            return legacyFile;
         }
 
-        // Crear nuevo archivo
+        // Crear nuevo Asset Maestro (Fuente de Verdad)
+        const [asset] = await db
+            .insert(assets)
+            .values({
+                name,
+                mimeType: mimeType || 'text/plain',
+                sizeBytes: sizeBytes || Buffer.byteLength(textContent),
+                accountId,
+                storageKey: `uploads/${accountId}/${randomUUID()}/${name}`,
+                metadata: {
+                    contentHash,
+                    uploadedBy,
+                    originalName: name
+                }
+            })
+            .returning();
+
+        // Registrar en fluxcore_files para compatibilidad con el pipeline de procesamiento local
+        // Nota: fileService.uploadFile ahora retorna un Asset ID mapeado a FluxcoreFile para consistencia
         const [file] = await db
             .insert(fluxcoreFiles)
             .values({
+                id: asset.id, // Usamos el mismo UUID del asset
                 name,
                 originalName: name,
                 mimeType: mimeType || 'text/plain',
@@ -129,6 +169,26 @@ export class FileService {
             throw new Error(`File not found: ${fileId}`);
         }
 
+        const f = file[0];
+
+        // RAG-FIX: Asegurar existencia en assets para evitar FK violation
+        const [assetCheck] = await db.select().from(assets).where(eq(assets.id, fileId));
+        if (!assetCheck) {
+            console.log(`[FileService] Creando asset maestro faltante para vínculo: ${fileId}`);
+            await db.insert(assets).values({
+                id: f.id,
+                name: f.name,
+                mimeType: f.mimeType || 'text/plain',
+                sizeBytes: f.sizeBytes || 0,
+                accountId: f.accountId,
+                storageKey: `uploads/${f.accountId}/${f.id}/${f.name}`,
+                metadata: {
+                    legacyLinkMigration: true,
+                    originalName: f.name
+                }
+            });
+        }
+
         // Verificar si ya existe el enlace
         const existing = await db
             .select()
@@ -143,15 +203,12 @@ export class FileService {
             return existing[0].id;
         }
 
-        // Crear enlace
+        // Crear enlace limpio (Asset-Centric)
         const [link] = await db
             .insert(fluxcoreVectorStoreFiles)
             .values({
                 vectorStoreId,
                 fileId,
-                name: file[0].name,
-                mimeType: file[0].mimeType,
-                sizeBytes: file[0].sizeBytes,
                 status: 'pending',
             })
             .returning();

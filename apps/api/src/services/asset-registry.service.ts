@@ -85,7 +85,10 @@ export class AssetRegistryService {
             // Debemos eliminarlo para permitir que el nuevo insert funcione (evitar Unique Constraint Error)
             if (existing.status !== 'ready') {
                 console.log(`${DEBUG_PREFIX} Pruning zombie asset conflict: ${existing.id} (status=${existing.status})`);
-                await db.delete(assets).where(eq(assets.id, existing.id));
+                await db.transaction(async (tx) => {
+                    await tx.execute(sql`SET LOCAL "fluxcore.allow_asset_deletion" = 'true'`);
+                    await tx.delete(assets).where(eq(assets.id, existing.id));
+                });
 
                 // Intentar limpiar storage viejo si es posible
                 try { await getStorageAdapter().delete(existing.storageKey); } catch { }
@@ -342,21 +345,27 @@ export class AssetRegistryService {
     }
 
     /**
-     * Eliminar asset (soft delete)
+     * Eliminar asset (borrado físico certificado)
+     * Se usa el bypass del escudo de soberanía para permitir la eliminación granular.
      */
     async delete(assetId: string): Promise<void> {
-        const hardDeleteAt = new Date();
-        hardDeleteAt.setDate(hardDeleteAt.getDate() + DEFAULT_RETENTION_DAYS);
+        const asset = await this.getById(assetId);
+        if (asset) {
+            // Limpiar archivo del storage
+            try {
+                await getStorageAdapter().delete(asset.storageKey);
+            } catch (error) {
+                console.error(`${DEBUG_PREFIX} Failed to delete storage file during deletion:`, error);
+            }
+        }
 
-        await db.update(assets)
-            .set({
-                status: 'deleted',
-                hardDeleteAt,
-                updatedAt: new Date()
-            })
-            .where(eq(assets.id, assetId));
+        // Eliminar registro de forma certificada
+        await db.transaction(async (tx) => {
+            await tx.execute(sql`SET LOCAL "fluxcore.allow_asset_deletion" = 'true'`);
+            await tx.delete(assets).where(eq(assets.id, assetId));
+        });
 
-        console.log(`${DEBUG_PREFIX} Asset marked for deletion (soft): ${assetId}, hardDeleteAt: ${hardDeleteAt.toISOString()}`);
+        console.log(`${DEBUG_PREFIX} Asset deleted physically: ${assetId}`);
     }
 
     /**
@@ -391,8 +400,11 @@ export class AssetRegistryService {
             console.error(`${DEBUG_PREFIX} Failed to purge file:`, error);
         }
 
-        // Eliminar registro
-        await db.delete(assets).where(eq(assets.id, assetId));
+        // Eliminar registro de forma certificada
+        await db.transaction(async (tx) => {
+            await tx.execute(sql`SET LOCAL "fluxcore.allow_asset_deletion" = 'true'`);
+            await tx.delete(assets).where(eq(assets.id, assetId));
+        });
         console.log(`${DEBUG_PREFIX} Asset purged: ${assetId}`);
     }
 
@@ -465,7 +477,10 @@ export class AssetRegistryService {
         for (const asset of accountAssets) {
             try {
                 await storage.delete(asset.storageKey);
-                await db.delete(assets).where(eq(assets.id, asset.id));
+                await db.transaction(async (tx) => {
+                    await tx.execute(sql`SET LOCAL "fluxcore.allow_asset_deletion" = 'true'`);
+                    await tx.delete(assets).where(eq(assets.id, asset.id));
+                });
                 purged++;
             } catch (error) {
                 console.error(`${DEBUG_PREFIX} Failed to purge asset ${asset.id}:`, error);

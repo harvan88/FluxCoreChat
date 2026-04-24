@@ -16,7 +16,7 @@ import {
     fluxcoreVectorStoreFiles,
     type NewFluxcoreDocumentChunk,
 } from '@fluxcore/db';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { chunkingService } from './chunking.service';
 import { embeddingService } from './embedding.service';
 import { ragConfigService } from './rag-config.service';
@@ -143,11 +143,14 @@ export class DocumentProcessingService {
         const job = createJob(fileId, vectorStoreId, accountId);
 
         try {
-            // 1. Actualizar estado del archivo a "processing"
-            await db
+            // 1. Actualizar estado del archivo a "processing" y obtener asset subyacente
+            const [vsFile] = await db
                 .update(fluxcoreVectorStoreFiles)
                 .set({ status: 'processing' })
-                .where(eq(fluxcoreVectorStoreFiles.id, fileId));
+                .where(eq(fluxcoreVectorStoreFiles.id, fileId))
+                .returning({ assetId: fluxcoreVectorStoreFiles.fileId });
+            
+            const trueAssetId = vsFile?.assetId || fileId;
 
             updateJob(job.id, { status: 'processing', startedAt: new Date() });
 
@@ -173,12 +176,35 @@ export class DocumentProcessingService {
 
             // 4. Dividir en chunks
             updateJob(job.id, { progress: 30 });
-            const chunkingResult = chunkingService.chunkWithConfig(parsed.text, config.chunking);
+            let chunkingResult = chunkingService.chunkWithConfig(parsed.text, config.chunking);
+            
+            // RAG-FIX: Garantía de persistencia para archivos cortos o sin separadores
+            if (chunkingResult.chunks.length === 0 && parsed.text.trim().length > 0) {
+                console.log(`[RAG-Ingesta] Estrategia ${config.chunking.strategy} devolvió 0. Aplicando fragmento único de seguridad.`);
+                chunkingResult = {
+                    chunks: [{
+                        id: crypto.randomUUID(),
+                        content: parsed.text,
+                        index: 0,
+                        tokenCount: Math.ceil(parsed.text.length / 4), // Estimación simple
+                        startChar: 0,
+                        endChar: parsed.text.length,
+                        metadata: {}
+                    }],
+                    totalTokens: Math.ceil(parsed.text.length / 4)
+                };
+            }
+            console.log(`[RAG-Ingesta] Documento fragmentado en ${chunkingResult.chunks.length} chunks.`);
 
-            // 5. Eliminar chunks anteriores de este archivo
+            // 5. Eliminar chunks anteriores de este archivo PARA ESTE MODELO ESPECÍFICO (Asset-Centric Lazy)
             await db
                 .delete(fluxcoreDocumentChunks)
-                .where(eq(fluxcoreDocumentChunks.fileId, fileId));
+                .where(
+                    and(
+                        eq(fluxcoreDocumentChunks.fileId, trueAssetId),
+                        eq(fluxcoreDocumentChunks.embeddingModel, config.embedding.model)
+                    )
+                );
 
             // 6. Generar embeddings en batches
             updateJob(job.id, { progress: 50 });
@@ -186,10 +212,11 @@ export class DocumentProcessingService {
             const chunks = chunkingResult.chunks;
             const allChunksToInsert: NewFluxcoreDocumentChunk[] = [];
             const allEmbeddings: number[][] = [];
-
             for (let i = 0; i < chunks.length; i += batchSize) {
                 const batch = chunks.slice(i, i + batchSize);
                 const texts = batch.map(c => c.content);
+
+                console.log(`[RAG-Ingesta] Procesando batch de ${batch.length} chunks...`);
 
                 // Generar embeddings (almacenar para uso futuro con SQL raw)
                 const embeddingResult = await embeddingService.embedBatchWithConfig(texts, {
@@ -204,8 +231,8 @@ export class DocumentProcessingService {
                     const chunk = batch[j];
                     const embedding = embeddingResult.embeddings[j] || [];
                     allChunksToInsert.push({
-                        vectorStoreId,
-                        fileId,
+                        fileId: trueAssetId,
+                        embeddingModel: config.embedding.model,
                         accountId,
                         content: chunk.content,
                         chunkIndex: chunk.index,
@@ -232,26 +259,37 @@ export class DocumentProcessingService {
             // 7. Insertar chunks (sin embeddings por ahora, se agregarán via SQL)
             updateJob(job.id, { progress: 90 });
 
-            if (allChunksToInsert.length > 0) {
-                const inserted = await db
-                    .insert(fluxcoreDocumentChunks)
-                    .values(allChunksToInsert)
-                    .returning({ id: fluxcoreDocumentChunks.id });
-
-                for (let i = 0; i < inserted.length; i++) {
-                    const rowId = inserted[i]?.id;
-                    const embedding = allEmbeddings[i];
-                    if (!rowId) continue;
-                    if (!embedding || embedding.length === 0) continue;
-
-                    const embeddingStr = `[${embedding.join(',')}]`;
-                    await db.execute(sql`
-                      UPDATE fluxcore_document_chunks
-                      SET embedding = ${sql.raw(`'${embeddingStr}'::vector`)}
-                      WHERE id = ${rowId}::uuid
-                    `);
+            // 7. Insertar chunks uno a uno para garantizar que el vector corresponde al contenido
+            // RAG-FIX: Evitar desajuste de índices en inserts masivos
+            updateJob(job.id, { progress: 95 });
+            
+            let insertedCount = 0;
+            for (let i = 0; i < allChunksToInsert.length; i++) {
+                const chunkData = allChunksToInsert[i];
+                const embedding = allEmbeddings[i];
+                
+                try {
+                    const [inserted] = await db
+                        .insert(fluxcoreDocumentChunks)
+                        .values(chunkData)
+                        .returning({ id: fluxcoreDocumentChunks.id });
+                    
+                    if (inserted && embedding && embedding.length > 0) {
+                        const embeddingStr = `[${embedding.join(',')}]`;
+                        await db.execute(sql`
+                            UPDATE fluxcore_document_chunks
+                            SET embedding = ${sql.raw(`'${embeddingStr}'::vector`)}
+                            WHERE id = ${inserted.id}::uuid
+                        `);
+                        insertedCount++;
+                    }
+                } catch (error: any) {
+                    console.error(`[RAG-Ingesta] ❌ Error insertando fragmento ${i}:`, error.message);
                 }
             }
+
+            console.log(`[RAG-Ingesta] ✅ Proceso completado: ${insertedCount} fragmentos vinculados correctamente.`);
+
 
             // 8. Actualizar estado del archivo a "completed"
             await db

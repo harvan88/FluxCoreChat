@@ -4,6 +4,7 @@ import {
     fluxcoreVectorStores,
     fluxcoreVectorStoreFiles,
     fluxcoreFiles,
+    assets,
     type FluxcoreVectorStore,
     type NewFluxcoreVectorStore,
     type FluxcoreVectorStoreFile,
@@ -34,15 +35,19 @@ export function getOpenAIDriver(): OpenAIDriver {
  */
 export async function syncVectorStoreStats(vectorStoreId: string): Promise<void> {
     const files = await db
-        .select()
+        .select({
+            status: fluxcoreVectorStoreFiles.status,
+            sizeBytes: assets.sizeBytes,
+        })
         .from(fluxcoreVectorStoreFiles)
+        .leftJoin(assets, eq(fluxcoreVectorStoreFiles.fileId, assets.id))
         .where(eq(fluxcoreVectorStoreFiles.vectorStoreId, vectorStoreId));
 
     const total = files.length;
     const completed = files.filter(f => f.status === 'completed').length;
     const failed = files.filter(f => f.status === 'failed').length;
     const inProgress = files.filter(f => f.status === 'processing' || f.status === 'pending').length;
-    const totalSize = files.reduce((sum, f) => sum + (f.sizeBytes ?? 0), 0);
+    const totalSize = files.reduce((sum, f) => sum + (Number(f.sizeBytes) || 0), 0);
 
     await db
         .update(fluxcoreVectorStores)
@@ -233,12 +238,31 @@ export async function deleteVectorStore(id: string, accountId: string): Promise<
 }
 
 // Vector Store Files
-export async function getVectorStoreFiles(vectorStoreId: string): Promise<FluxcoreVectorStoreFile[]> {
-    return db
-        .select()
+export async function getVectorStoreFiles(vectorStoreId: string): Promise<any[]> {
+    const rows = await db
+        .select({
+            id: fluxcoreVectorStoreFiles.id,
+            fileId: fluxcoreVectorStoreFiles.fileId,
+            status: fluxcoreVectorStoreFiles.status,
+            createdAt: fluxcoreVectorStoreFiles.createdAt,
+            updatedAt: fluxcoreVectorStoreFiles.updatedAt,
+            lastError: fluxcoreVectorStoreFiles.lastError,
+            chunkCount: fluxcoreVectorStoreFiles.chunkCount,
+            // Datos del Asset Maestro
+            name: assets.name,
+            mimeType: assets.mimeType,
+            sizeBytes: assets.sizeBytes,
+        })
         .from(fluxcoreVectorStoreFiles)
+        .leftJoin(assets, eq(fluxcoreVectorStoreFiles.fileId, assets.id))
         .where(eq(fluxcoreVectorStoreFiles.vectorStoreId, vectorStoreId))
         .orderBy(desc(fluxcoreVectorStoreFiles.createdAt));
+
+    // Mapear al formato que espera la UI (compatibilidad total)
+    return rows.map(r => ({
+        ...r,
+        sizeBytes: Number(r.sizeBytes) || 0
+    }));
 }
 
 export async function addVectorStoreFile(data: NewFluxcoreVectorStoreFile): Promise<FluxcoreVectorStoreFile> {
@@ -253,12 +277,24 @@ export async function addVectorStoreFile(data: NewFluxcoreVectorStoreFile): Prom
 }
 
 export async function deleteVectorStoreFile(id: string, vectorStoreId: string): Promise<boolean> {
-    const result = await db
-        .delete(fluxcoreVectorStoreFiles)
+    // 1. Obtener el registro para conocer el fileId (Asset ID) antes de borrar
+    const [link] = await db
+        .select()
+        .from(fluxcoreVectorStoreFiles)
         .where(and(
             eq(fluxcoreVectorStoreFiles.id, id),
             eq(fluxcoreVectorStoreFiles.vectorStoreId, vectorStoreId)
-        ))
+        ));
+
+    if (!link) return false;
+
+    // 2. Borrar el Asset Maestro (Esto disparará el CASCADE DELETE en chunks y links)
+    // NOTA: Borramos el asset directamente. Si se desea compartir assets entre Carpetas,
+    // se debería implementar un contador de referencias, pero para la Fase 1,
+    // garantizamos limpieza total al borrar el archivo.
+    const result = await db
+        .delete(assets)
+        .where(eq(assets.id, link.fileId))
         .returning();
 
     if (result.length > 0) {
@@ -379,7 +415,6 @@ export async function syncVectorStoreFiles(
                 await db.insert(fluxcoreVectorStoreFiles).values({
                     vectorStoreId,
                     fileId: newFile.id,
-                    name: resolvedName,
                     externalId: remote.id,
                     status: remote.status,
                     usageBytes: remote.usageBytes,

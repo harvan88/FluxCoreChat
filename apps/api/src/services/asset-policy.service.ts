@@ -101,8 +101,11 @@ export class AssetPolicyService {
         }
 
         // Verificar estado del asset
-        if (asset.status !== 'ready') {
-            console.log(`${DEBUG_PREFIX} Access denied: asset status=${asset.status}`);
+        const isAvatar = asset.scope === 'profile_avatar' || asset.scope === 'public_profile_avatar';
+        console.log(`${DEBUG_PREFIX} Evaluation details: id=${asset.id}, scope=${asset.scope}, status=${asset.status}, isAvatar=${isAvatar}`);
+
+        if (asset.status !== 'ready' && !isAvatar) {
+            console.log(`${DEBUG_PREFIX} ❌ Access denied [STATUS]: assetId=${assetId}, status=${asset.status}`);
             return { allowed: false, ttlSeconds: 0, reason: `Asset status is ${asset.status}` };
         }
 
@@ -163,9 +166,7 @@ export class AssetPolicyService {
         }
         
         if (!allowedContexts.includes(contextString) && !allowedContexts.includes('*')) {
-            console.log(`${DEBUG_PREFIX} Access denied: context ${contextString} not allowed`);
-        console.log(`${DEBUG_PREFIX} Available contexts:`, allowedContexts);
-        console.log(`${DEBUG_PREFIX} Asset scope: ${asset.scope}`);
+            console.log(`${DEBUG_PREFIX} ❌ Access denied [CONTEXT]: context ${contextString} not in [${allowedContexts.join(', ')}] for scope ${asset.scope}`);
             return { 
                 allowed: false, 
                 ttlSeconds: 0, 

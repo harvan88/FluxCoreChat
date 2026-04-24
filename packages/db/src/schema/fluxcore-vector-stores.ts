@@ -11,6 +11,7 @@
 
 import { pgTable, uuid, varchar, timestamp, text, integer, jsonb, bigint } from 'drizzle-orm/pg-core';
 import { accounts } from './accounts';
+import { assets } from './assets';
 
 /**
  * Detalles de uso del vector store (para cálculos locales)
@@ -146,16 +147,13 @@ export const fluxcoreVectorStoreFiles = pgTable('fluxcore_vector_store_files', {
     .notNull()
     .references(() => fluxcoreVectorStores.id, { onDelete: 'cascade' }),
 
-  // Referencia al archivo centralizado (solo para backend=local)
-  fileId: uuid('file_id'),
+  // Referencia al archivo centralizado maestro (Asset-Centric)
+  fileId: uuid('file_id')
+    .notNull()
+    .references(() => assets.id, { onDelete: 'cascade' }),
 
   // Identificación
-  name: varchar('name', { length: 255 }).notNull(),
   externalId: varchar('external_id', { length: 255 }), // ID de OpenAI file (OBLIGATORIO para backend=openai)
-
-  // Archivo
-  mimeType: varchar('mime_type', { length: 100 }),
-  sizeBytes: integer('size_bytes').default(0),
 
   // Estado de procesamiento
   // Estados permitidos: 'pending', 'processing', 'completed', 'failed'

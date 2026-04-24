@@ -1,4 +1,4 @@
-import { db, fluxcoreVectorStores, fluxcoreVectorStoreFiles, fluxcoreDocumentChunks, templates, fluxcoreTemplateSettings, type Template } from '@fluxcore/db';
+import { db, fluxcoreVectorStores, fluxcoreVectorStoreFiles, fluxcoreDocumentChunks, templates, fluxcoreTemplateSettings, assets, type Template } from '@fluxcore/db';
 import { eq, and, sql } from 'drizzle-orm';
 import { embeddingService } from '../embedding.service';
 import { coreEventBus } from '../../core/events';
@@ -7,10 +7,11 @@ import { coreEventBus } from '../../core/events';
  * TemplateSemanticService
  * 
  * Gestiona la representación vectorial de las plantillas en FluxCore.
- * Mantiene el mundo de ChatCore (Templates) y FluxCore (Vecores) sincronizado.
+ * Implementa un sistema de SEÑAL CLARA (States) para evitar re-indexaciones innecesarias.
  */
 export class TemplateSemanticService {
     private readonly SYSTEM_STORE_NAME = 'SYSTEM_INTERNAL_TEMPLATES';
+    private readonly MODEL_NAME = 'paraphrase-multilingual-MiniLM-L12-v2';
 
     constructor() {
         this.setupListeners();
@@ -18,207 +19,209 @@ export class TemplateSemanticService {
 
     private setupListeners() {
         console.log(`[SemanticService] Configurando Listeners...`);
-        // Listener del Core (Legacy/Fallback)
         coreEventBus.on('template.authorization.changed', async (payload: { templateId: string; accountId: string; allowAutomatedUse: boolean }) => {
-            console.log(`[SemanticService] EVENTO RECIBIDO: template.authorization.changed para ${payload.templateId}`);
             await this.syncTemplateVector(payload.templateId, payload.accountId, payload.allowAutomatedUse);
         });
 
-        // Listener de la Extensión (Soberano/Garantizado)
         coreEventBus.on('fluxcore.template.settings.changed', async (payload: { templateId: string; accountId: string; authorizeForAI: boolean }) => {
-            console.log(`[SemanticService] EVENTO RECIBIDO: fluxcore.template.settings.changed para ${payload.templateId}`);
             await this.syncTemplateVector(payload.templateId, payload.accountId, payload.authorizeForAI);
         });
     }
 
     /**
-     * Sincroniza el vector de una plantilla basándose en su estado.
+     * Sincroniza el vector y marca la SEÑAL CLARA en la tabla Assets.
      */
     async syncTemplateVector(templateId: string, accountId: string, allowAutomatedUse: boolean) {
         try {
             if (!allowAutomatedUse) {
-                await this.setTemplateVectorStatus(templateId, accountId, 'hidden');
+                // Si se desactiva, marcamos como 'archived' (no disponible para RAG)
+                await db.update(assets).set({ status: 'archived' as any }).where(eq(assets.id, templateId));
                 return;
             }
 
-            // 1. Obtener instrucciones de IA
+            // Marcamos como 'ready' (pendiente) mientras procesamos
+            await db.update(assets).set({ status: 'ready' as any }).where(eq(assets.id, templateId));
+
             const [settings] = await db.select().from(fluxcoreTemplateSettings).where(eq(fluxcoreTemplateSettings.templateId, templateId)).limit(1);
-            
             let textToEmbed = settings?.aiUsageInstructions;
 
-            // 🎯 FALLBACK SEMÁNTICO: Si no hay instrucciones de uso explícitas, 
-            // usamos el Nombre de la Plantilla para que el vector no sea nulo.
             if (!textToEmbed) {
                 const [template] = await db.select().from(templates).where(eq(templates.id, templateId)).limit(1);
                 textToEmbed = template?.name;
-                if (textToEmbed) {
-                    console.log(`[SemanticService] Usando fallback (nombre: "${textToEmbed}") para vectorizar plantilla ${templateId}`);
-                }
             }
 
-            if (!textToEmbed) {
-                console.warn(`[SemanticService] No hay instrucciones ni nombre para la plantilla ${templateId}. Saltando vectorización.`);
-                return;
-            }
+            if (!textToEmbed) return;
 
-            // 2. Generar embedding (Local MiniLM - 384)
             const { embedding } = await embeddingService.embedWithConfig(textToEmbed, {
                 provider: 'local',
-                model: 'paraphrase-multilingual-MiniLM-L12-v2',
+                model: this.MODEL_NAME,
                 dimensions: 384
             });
 
-            // 3. Obtener/Crear el Almacén de Sistema
             const storeId = await this.getOrCreateSystemStore(accountId);
-
-            // 4. Asegurar que existe el "Archivo Virtual" para esta plantilla (FK constraint)
             await this.getOrCreateSystemFile(templateId, storeId);
 
-            // 5. Upsert en fluxcore_document_chunks
-            // Primero insertamos/actualizamos el registro básico (sin embedding)
-            const [chunk] = await db.insert(fluxcoreDocumentChunks).values({
-                vectorStoreId: storeId,
-                fileId: templateId, // FK a fluxcore_vector_store_files
-                accountId,
-                content: textToEmbed,
-                chunkIndex: 0,
-                tokenCount: 0,
-                metadata: {
-                    type: 'template',
-                    template_id: templateId,
-                    status: 'active',
-                    updatedAt: new Date().toISOString()
-                }
-            }).onConflictDoUpdate({
-                target: [fluxcoreDocumentChunks.fileId, fluxcoreDocumentChunks.chunkIndex],
-                set: {
-                    content: textToEmbed,
-                    metadata: {
-                        type: 'template',
-                        template_id: templateId,
-                        status: 'active',
-                        updatedAt: new Date().toISOString()
-                    },
-                    updatedAt: new Date()
-                }
-            }).returning({ id: fluxcoreDocumentChunks.id });
+            // Búsqueda atómica del fragmento
+            const [existing] = await db.select({ id: fluxcoreDocumentChunks.id })
+                .from(fluxcoreDocumentChunks)
+                .where(and(
+                    eq(fluxcoreDocumentChunks.fileId, templateId),
+                    eq(fluxcoreDocumentChunks.embeddingModel, this.MODEL_NAME),
+                    eq(fluxcoreDocumentChunks.chunkIndex, 0)
+                ))
+                .limit(1);
 
-            // Luego actualizamos el embedding vía SQL Raw (porque no está en el esquema TS)
-            if (chunk?.id) {
+            let chunkId: string;
+            // IMPORTANTE: Metadatos SOBERANOS con Status ACTIVE
+            const metadata = { type: 'template', template_id: templateId, status: 'active' };
+
+            const metadataJson = JSON.stringify(metadata);
+
+            if (existing) {
+                chunkId = existing.id;
+                // FIX: Forzamos JSONB nativo via SQL para evitar doble serialización
+                await db.execute(sql`
+                    UPDATE fluxcore_document_chunks 
+                    SET content = ${textToEmbed}, 
+                        metadata = ${metadataJson}::jsonb,
+                        updated_at = NOW()
+                    WHERE id = ${chunkId}::uuid
+                `);
+            } else {
+                const inserted = await db.execute(sql`
+                    INSERT INTO fluxcore_document_chunks (file_id, account_id, embedding_model, content, chunk_index, token_count, metadata)
+                    VALUES (${templateId}::uuid, ${accountId}::uuid, ${this.MODEL_NAME}, ${textToEmbed}, 0, 0, ${metadataJson}::jsonb)
+                    RETURNING id
+                `);
+                chunkId = (inserted[0] as any).id;
+            }
+
+            if (chunkId) {
                 const embeddingStr = `[${embedding.join(',')}]`;
+                // UPDATE VECTOR vía SQL Raw por compatibilidad con pgvector
                 await db.execute(sql`
                     UPDATE fluxcore_document_chunks
                     SET embedding = ${sql.raw(`'${embeddingStr}'::vector`)}
-                    WHERE id = ${chunk.id}::uuid
+                    WHERE id = ${chunkId}::uuid
                 `);
             }
 
-            console.log(`[SemanticService] Vector actualizado para plantilla: ${templateId}`);
+            // SEÑAL CLARA: Marcamos el ASSET como COMPLETED. La IA ya puede verlo.
+            await db.update(assets).set({ 
+                status: 'ready' as any, // En este sistema, 'ready' es el estado final de producción para activos
+                updatedAt: new Date()
+            }).where(eq(assets.id, templateId));
+
+            console.log(`[SemanticService] ✅ SEÑAL CLARA: Plantilla ${templateId} sincronizada y marcada como lista.`);
 
         } catch (error) {
-            console.error(`[SemanticService] Error sincronizando vector:`, error);
+            console.error(`[SemanticService] ❌ Error sincronizando vector:`, error);
         }
     }
 
     /**
-     * Cambia el estado lógico del vector (Baja lógica).
+     * Auditoría de Fidelidad basada en SEÑAL CLARA.
+     * Ya no dependemos de fechas, sino del estado 'ready' en la tabla Assets.
      */
-    private async setTemplateVectorStatus(templateId: string, accountId: string, status: 'active' | 'hidden') {
-        await db.update(fluxcoreDocumentChunks)
-            .set({
-                metadata: sql`jsonb_set(metadata, '{status}', ${JSON.stringify(status)}::jsonb)`,
-                updatedAt: new Date()
-            })
-            .where(and(
-                eq(fluxcoreDocumentChunks.fileId, templateId),
-                eq(fluxcoreDocumentChunks.accountId, accountId)
-            ));
-    }
-
-    /**
-     * Obtiene los IDs de las plantillas más relevantes semánticamente.
-     */
-    async searchRelevantTemplateIds(query: string, accountId: string, limit: number = 5): Promise<string[]> {
-        const storeId = await this.getOrCreateSystemStore(accountId);
+    async guaranteeSymmetry(templateList: any[], accountId: string): Promise<number> {
+        let updatedCount = 0;
+        console.log(`[SemanticService] Auditando Simetría mediante Señales (States)...`);
         
-        // Generar embedding de consulta
-        const { embedding } = await embeddingService.embedWithConfig(query, {
-            provider: 'local',
-            model: 'paraphrase-multilingual-MiniLM-L12-v2',
-            dimensions: 384
-        });
+        for (const template of templateList) {
+            // SOBERANÍA: Verificamos el deseo explícito del usuario
+            const [settings] = await db.select({ authorizeForAI: fluxcoreTemplateSettings.authorizeForAI })
+                .from(fluxcoreTemplateSettings)
+                .where(eq(fluxcoreTemplateSettings.templateId, template.id))
+                .limit(1);
+            
+            const isAuthorized = settings?.authorizeForAI ?? false;
 
-        const embeddingStr = `[${embedding.join(',')}]`;
+            // Verificamos el estado físico del Asset
+            const [asset] = await db.select({ status: assets.status, updatedAt: assets.updatedAt })
+                .from(assets)
+                .where(eq(assets.id, template.id))
+                .limit(1);
 
-        // Búsqueda vectorial directa (Recuperamos metadatos completos para extracción segura en JS)
-        const results = await db.select({
-            metadata: fluxcoreDocumentChunks.metadata,
-            embeddingDist: sql<number>`embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}`
-        })
-        .from(fluxcoreDocumentChunks)
-        .where(and(
-            eq(fluxcoreDocumentChunks.vectorStoreId, storeId),
-            eq(fluxcoreDocumentChunks.accountId, accountId),
-            // Guard de dimensiones para evitar errores de pgvector
-            sql`vector_dims(embedding) = 384`
-        ))
-        .orderBy(sql`embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}`)
-        .limit(limit * 2); // Tomamos un margen por si hay plantillas inactivas
+            // Verificamos si hay un fragmento con vector
+            const [chunk] = await db.select({ hasEmbedding: sql<boolean>`embedding IS NOT NULL` })
+                .from(fluxcoreDocumentChunks)
+                .where(and(
+                    eq(fluxcoreDocumentChunks.fileId, template.id),
+                    eq(fluxcoreDocumentChunks.embeddingModel, this.MODEL_NAME),
+                    sql`metadata::text LIKE '%template%'`
+                )).limit(1);
 
-        // Extracción y filtrado en capa de aplicación (venciendo problemas de operadores SQL JSONB)
-        return results
-            .map(r => {
-                const meta = (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) as any;
-                if (meta?.status === 'active') {
-                    return meta.template_id || meta.templateId; // Soporte para ambos por si acaso
+            // DETERMINISMO: 
+            const needsSync = isAuthorized 
+                ? (!asset || asset.status !== 'ready' || !chunk?.hasEmbedding || (new Date(template.updated_at) > new Date(asset.updatedAt)))
+                : (asset && asset.status === 'ready');
+            
+            if (needsSync) {
+                if (isAuthorized) {
+                    console.log(`[Symmetry] 🏗️ INDEXANDO: '${template.name}' (${template.id}) necesita sincronización.`);
+                } else {
+                    console.log(`[Symmetry] 🛡️ SOBERANÍA: Ocultando '${template.name}' (${template.id}) - Usuario revocó permiso.`);
                 }
-                return null;
-            })
-            .filter((id): id is string => !!id)
-            .slice(0, limit);
+                await this.syncTemplateVector(template.id, accountId, isAuthorized);
+                updatedCount++;
+            } else {
+                if (isAuthorized) {
+                    // console.log(`[Symmetry] ✅ '${template.name}' ya está en simetría.`);
+                } else {
+                    // console.log(`[Symmetry] ⏭️ Ignorando '${template.name}' - No autorizada para IA.`);
+                }
+            }
+        }
+        return updatedCount;
     }
 
     /**
-     * Obtiene los IDs de las plantillas más relevantes semánticamente con sus puntuaciones.
+     * Motor de Búsqueda Semántica Unificado.
      */
     async searchRelevantTemplatesWithScores(query: string, accountId: string, limit: number = 5): Promise<{ id: string; score: number }[]> {
-        const storeId = await this.getOrCreateSystemStore(accountId);
+        const authorized = await db.select()
+            .from(templates)
+            .innerJoin(fluxcoreTemplateSettings, eq(templates.id, fluxcoreTemplateSettings.templateId))
+            .where(and(
+                eq(templates.accountId, accountId),
+                eq(fluxcoreTemplateSettings.authorizeForAI, true)
+            ));
         
-        // Generar embedding de consulta
+        if (authorized.length > 0) {
+            // Auditoría JIT (Just-In-Time) previa a la búsqueda
+            await this.guaranteeSymmetry(authorized.map(a => a.templates), accountId);
+        }
+
         const { embedding } = await embeddingService.embedWithConfig(query, {
             provider: 'local',
-            model: 'paraphrase-multilingual-MiniLM-L12-v2',
+            model: this.MODEL_NAME,
             dimensions: 384
         });
-
+        
         const embeddingStr = `[${embedding.join(',')}]`;
 
-        // Búsqueda vectorial directa
-        const results = await db.select({
-            metadata: fluxcoreDocumentChunks.metadata,
-            embeddingDist: sql<number>`embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}`
-        })
-        .from(fluxcoreDocumentChunks)
-        .where(and(
-            eq(fluxcoreDocumentChunks.vectorStoreId, storeId),
-            eq(fluxcoreDocumentChunks.accountId, accountId),
-            sql`vector_dims(embedding) = 384`
-        ))
-        .orderBy(sql`embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}`)
-        .limit(limit * 2);
+        // BÚSQUEDA SOBERANA: SQL Nativo con blindaje JSONB
+        const rawResults = await db.execute(sql`
+            SELECT 
+                metadata,
+                1 - (embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}) as score
+            FROM fluxcore_document_chunks
+            WHERE account_id = ${accountId}::uuid
+              AND metadata::text LIKE '%template%'
+              AND embedding IS NOT NULL
+            ORDER BY score DESC
+            LIMIT ${limit * 2}
+        `);
 
-        return results
-            .map(r => {
+        return (rawResults as any)
+            .map((r: any) => {
                 const meta = (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) as any;
                 if (meta?.status === 'active') {
-                    return {
-                        id: meta.template_id || meta.templateId,
-                        score: 1 - r.embeddingDist // Convertimos distancia (0-2) a similitud (1 = idénticos)
-                    };
+                    return { id: meta.template_id || meta.templateId, score: Number(r.score) };
                 }
                 return null;
             })
-            .filter((res): res is { id: string; score: number } => !!res)
+            .filter((res: any) => !!res)
             .slice(0, limit);
     }
 
@@ -227,11 +230,9 @@ export class TemplateSemanticService {
             .where(and(
                 eq(fluxcoreVectorStores.accountId, accountId),
                 eq(fluxcoreVectorStores.name, this.SYSTEM_STORE_NAME)
-            ))
-            .limit(1);
+            )).limit(1);
 
         if (existing) return existing.id;
-
         const [created] = await db.insert(fluxcoreVectorStores).values({
             accountId,
             name: this.SYSTEM_STORE_NAME,
@@ -240,25 +241,36 @@ export class TemplateSemanticService {
             status: 'production',
             backend: 'local'
         }).returning();
-
-        return created.id;
+        return created[0].id;
     }
 
     private async getOrCreateSystemFile(templateId: string, storeId: string): Promise<string> {
-        const [existing] = await db.select().from(fluxcoreVectorStoreFiles)
-            .where(eq(fluxcoreVectorStoreFiles.id, templateId))
-            .limit(1);
+        const [existingAsset] = await db.select().from(assets).where(eq(assets.id, templateId)).limit(1);
+        if (!existingAsset) {
+            const [template] = await db.select().from(templates).where(eq(templates.id, templateId)).limit(1);
+            await db.insert(assets).values({
+                id: templateId,
+                accountId: template?.accountId || '', 
+                name: template?.name || `Template: ${templateId}`,
+                type: 'template',
+                source: 'system',
+                status: 'ready',
+                scope: 'template_asset',
+                storageKey: `template://${templateId}`
+            });
+        }
 
-        if (existing) return existing.id;
+        const [existingLink] = await db.select().from(fluxcoreVectorStoreFiles).where(eq(fluxcoreVectorStoreFiles.id, templateId)).limit(1);
+        if (existingLink) return existingLink.id;
 
-        const [created] = await db.insert(fluxcoreVectorStoreFiles).values({
+        await db.insert(fluxcoreVectorStoreFiles).values({
             id: templateId,
             vectorStoreId: storeId,
+            fileId: templateId,
             name: `Template-Virtual: ${templateId}`,
             status: 'completed'
-        }).returning();
-
-        return created.id;
+        });
+        return templateId;
     }
 }
 
