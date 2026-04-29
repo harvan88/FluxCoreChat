@@ -1191,6 +1191,16 @@ class ApiService {
     });
   }
 
+  async commitDelta(accountId: string, workId: string, payload: {
+    values?: Record<string, any>;
+    transition?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/works/${workId}/delta?accountId=${accountId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async getAssistantMode(accountId: string): Promise<ApiResponse<{ mode: string; assistantId: string | null; assistantName: string | null }>> {
     return this.request(`/fluxcore/assistants/active-mode?accountId=${accountId}`);
   }

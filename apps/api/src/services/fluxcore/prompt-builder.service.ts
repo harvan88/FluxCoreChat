@@ -59,7 +59,11 @@ class PromptBuilderService {
         sections.push(this.buildIdentitySection(policyContext, authorizedContext));
 
         // ── Section 2: PolicyContext Directives — PRIORITY — Voice of Business ─
-        sections.push(this.buildPolicySection(policyContext, authorizedContext, runtimeConfig));
+        const policySection = this.buildPolicySection(policyContext, authorizedContext, runtimeConfig);
+        // Si solo tiene el título (ej: "## Directivas de Atención" + \n), no la incluimos
+        if (policySection.trim().split('\n').length > 1) {
+            sections.push(policySection);
+        }
 
         // ── Section 3: RuntimeConfig Instructions ─────────────────────────────
         const rawInstructions = authorizedContext?.instructions ?? runtimeConfig.instructions;

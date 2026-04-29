@@ -58,13 +58,21 @@ class CapabilityOfferService {
         const { runtimeConfig, authorizedContext } = params;
         const authorizedToolIds = runtimeConfig.authorizedTools ?? [];
 
-        // System tools bypass the manual authorizedToolIds array
-        if (definition.slug === 'search_knowledge') {
-            return (runtimeConfig.vectorStoreIds?.length ?? 0) > 0;
-        }
-
         if (definition.slug === 'send_template' || definition.slug === 'list_available_templates') {
             return authorizedContext.authorizedTemplates.length > 0;
+        }
+
+        // 🔒 SEGURIDAD DE PLATAFORMA: Herramientas del dominio 'fluxcore' (administrativas)
+        // solo son visibles para la cuenta de soporte oficial de FluxCore.
+        if (definition.domain === 'fluxcore') {
+            const isSupportAccount = authorizedContext.accountId === '5f96c4c5-473b-4574-93ce-53f54225dd18';
+            
+            // search_knowledge es la única herramienta de fluxcore permitida para todos
+            if (definition.slug === 'search_knowledge') {
+                return (runtimeConfig.vectorStoreIds?.length ?? 0) > 0;
+            }
+
+            return isSupportAccount;
         }
 
         if (!authorizedToolIds.includes(definition.name)) {

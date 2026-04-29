@@ -13,8 +13,15 @@
  */
 
 import { coreEventBus } from '../core/events';
-import { db, relationships, accounts } from '@fluxcore/db';
-import { sql, eq } from 'drizzle-orm';
+import { 
+    db, 
+    relationships, 
+    accounts, 
+    templates, 
+    fluxcoreToolDefinitions, 
+    fluxcoreToolConnections 
+} from '@fluxcore/db';
+import { sql, eq, and, inArray } from 'drizzle-orm';
 import type { FluxPolicyContext, RuntimeConfig } from '@fluxcore/db';
 import { assetPolicyService } from './asset-policy.service';
 import { automationController } from './automation-controller.service';
@@ -104,15 +111,17 @@ class FluxPolicyContextService {
             })()
             : [];
 
-        // 🛠️ FIX: Fetch authorized tools for the assistant
+        // 🛠️ FIX: Fetch authorized tools for the assistant (via connections)
         const assistantTools = assistant
             ? await (async () => {
                 const result = await db.execute(sql`
-                    SELECT tool_id
-                    FROM fluxcore_assistant_tools
-                    WHERE assistant_id = ${assistant.id}
+                    SELECT d.slug
+                    FROM fluxcore_assistant_tools at
+                    INNER JOIN fluxcore_tool_connections c ON c.id = at.tool_connection_id
+                    INNER JOIN fluxcore_tool_definitions d ON d.id = c.tool_definition_id
+                    WHERE at.assistant_id = ${assistant.id} AND at.is_enabled = true
                 `) as any;
-                return result.map((r: any) => r.tool_id);
+                return result.map((r: any) => r.slug);
             })()
             : [];
 
@@ -306,6 +315,7 @@ class FluxPolicyContextService {
         const resolvedBusinessProfile = await this.resolveBusinessProfile(accountId);
         const contactRules = await this.resolveContactRules(contactId);
         const authorizedTemplates = await this.resolveAuthorizedTemplates(accountId);
+        const fluxiContext = await this.resolveFluxiContext(accountId);
 
         return {
             accountId,
@@ -324,7 +334,7 @@ class FluxPolicyContextService {
                 ...resolvedBusinessProfile,
                 templates: authorizedTemplates
             },
-            workDefinitions: [],
+            ...fluxiContext,
         };
     }
 
@@ -519,16 +529,68 @@ class FluxPolicyContextService {
             .join('\n\n');
     }
 
+    private async resolveAuthorizedToolIds(accountId: string, assistantId?: string | null): Promise<string[]> {
+        const authorizedIds = new Set<string>();
+
+        // 1. Herramientas del Asistente (Legacy/Specific)
+        if (assistantId) {
+            const { assistantsService } = await import('./fluxcore/assistants.service');
+            const assistant = await assistantsService.getAssistantById(assistantId, accountId);
+            if (assistant?.toolIds) {
+                assistant.toolIds.forEach(id => authorizedIds.add(id));
+            }
+        }
+
+        // 2. 🚀 SOBERANÍA DE CUENTA: Herramientas conectadas globalmente (Switch UI)
+        const connectedTools = await db
+            .select({ slug: fluxcoreToolDefinitions.slug })
+            .from(fluxcoreToolConnections)
+            .innerJoin(fluxcoreToolDefinitions, eq(fluxcoreToolConnections.toolDefinitionId, fluxcoreToolDefinitions.id))
+            .where(and(
+                eq(fluxcoreToolConnections.accountId, accountId),
+                eq(fluxcoreToolConnections.status, 'connected')
+            ));
+
+        // Mapear slugs de herramientas de sistema a sus nombres canónicos si es necesario, 
+        // o simplemente incluirlos si el CapabilityOfferService los reconoce.
+        connectedTools.forEach(t => {
+            if (t.slug) authorizedIds.add(t.slug);
+        });
+
+        return Array.from(authorizedIds);
+    }
+
     private async resolveAuthorizedTemplates(accountId: string): Promise<any[]> {
         // Load authorized templates from fluxcore_template_settings
         const { fluxCoreTemplateSettingsService } = await import('./fluxcore/template-settings.service');
-        const authorizedTemplates = await fluxCoreTemplateSettingsService.listAuthorizedTemplates(accountId);
+        const authorizedSettings = await fluxCoreTemplateSettingsService.listAuthorizedTemplates(accountId);
         
+        // 🛠️ MEJORA: Si la cuenta tiene plantillas activas pero no están en settings, 
+        // incluirlas si tienen allowAutomatedUse = true (Soberanía de Cuenta)
+        const [allActiveTemplates] = await Promise.all([
+            db.select().from(templates).where(and(eq(templates.accountId, accountId), eq(templates.isActive, true)))
+        ]);
+
+        const authorizedIds = new Set(authorizedSettings.map(t => t.id));
+        const combined = [...authorizedSettings];
+
+        for (const tpl of allActiveTemplates) {
+            if (!authorizedIds.has(tpl.id) && tpl.allowAutomatedUse) {
+                combined.push({
+                    ...tpl,
+                    aiUsageInstructions: null,
+                    aiIncludeName: true,
+                    aiIncludeContent: true,
+                    aiIncludeInstructions: true
+                });
+            }
+        }
+
         // Return rich objects for PromptBuilder knowledge section
-        return authorizedTemplates.map(t => ({
+        return combined.map(t => ({
             templateId: t.id,
             name: t.name,
-            instructions: t.aiUsageInstructions,
+            instructions: (t as any).aiUsageInstructions,
             variables: t.variables || [],
             content: t.content
         }));

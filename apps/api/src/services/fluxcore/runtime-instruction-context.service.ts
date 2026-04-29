@@ -54,9 +54,18 @@ class RuntimeInstructionContextService {
       neutral: 'neutro y claro',
     };
 
-    lines.push(`${tonePrefix}${toneMap[tone] || tone}`);
-    lines.push(`${emojiPrefix}${useEmojis ? 'sí, moderados' : 'no uses emojis'}`);
-    lines.push(`${languagePrefix}${language}`);
+    // Solo inyectar si el usuario definió algo distinto al vacío o si queremos ser estrictos con la soberanía
+    if (runtimeConfig?.tone) {
+      lines.push(`${tonePrefix}${toneMap[tone] || tone}`);
+    }
+    
+    if (runtimeConfig?.useEmojis !== undefined) {
+      lines.push(`${emojiPrefix}${useEmojis ? 'sí, moderados' : 'no uses emojis'}`);
+    }
+
+    if (runtimeConfig?.language) {
+      lines.push(`${languagePrefix}${language}`);
+    }
 
     const notes = contactRules.filter((rule) => rule.type === 'note');
     const preferences = contactRules.filter((rule) => rule.type === 'preference');

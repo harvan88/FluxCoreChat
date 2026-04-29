@@ -77,17 +77,12 @@ export const useAccountStore = create<AccountState>()(
             console.log('[AccountStore] Loaded accounts:', accounts.length);
             set({ accounts, isLoading: false });
 
-            // Auto-select first account if none selected
-            const state = get();
-            if (!state.activeAccountId && accounts.length > 0) {
-              console.log('[AccountStore] Auto-selecting first account:', accounts[0].id);
-              set({ activeAccountId: accounts[0].id });
-              // Load actor for auto-selected account
-              get().loadActorForAccount(accounts[0].id);
-            } else if (state.activeAccountId) {
+            // No auto-select here, let authStore or useContextSync handle it
+            // to avoid race conditions and multiple sources of truth.
+            if (get().activeAccountId) {
               // Load actor for existing active account
-              console.log('[AccountStore] Loading actor for existing active account:', state.activeAccountId);
-              get().loadActorForAccount(state.activeAccountId);
+              console.log('[AccountStore] Loading actor for existing active account:', get().activeAccountId);
+              get().loadActorForAccount(get().activeAccountId!);
             }
           } else {
             console.error('[AccountStore] Error:', response.error);

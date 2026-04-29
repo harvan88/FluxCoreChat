@@ -356,4 +356,63 @@ export const fluxiRoutes = new Elysia({ prefix: '/works' })
                 summary: 'Discard a proposed work',
             },
         }
+    )
+    
+    // POST /fluxcore/works/:id/delta
+    .post(
+        '/:id/delta',
+        async ({ user, params, query, body, set }) => {
+            if (!user) {
+                set.status = 401;
+                return { success: false, message: 'Unauthorized' };
+            }
+
+            const accountId = query.accountId;
+            if (!accountId) {
+                set.status = 400;
+                return { success: false, message: 'accountId is required' };
+            }
+
+            try {
+                const delta: any[] = [];
+                
+                // Si hay valores, convertirlos a operaciones 'set'
+                if (body.values) {
+                    for (const [path, value] of Object.entries(body.values)) {
+                        delta.push({ op: 'set', path, value });
+                    }
+                }
+
+                // Si hay una transición, añadirla
+                if (body.transition) {
+                    delta.push({ op: 'transition', toState: body.transition });
+                }
+
+                if (delta.length === 0) {
+                    return { success: false, message: 'No delta operations provided' };
+                }
+
+                const result = await workEngineService.commitDelta(params.id, delta, 'user', `ui-commit-${Date.now()}`);
+                return { success: true, data: result };
+            } catch (error: any) {
+                set.status = 500;
+                return { success: false, message: error.message };
+            }
+        },
+        {
+            params: t.Object({
+                id: t.String(),
+            }),
+            query: t.Object({
+                accountId: t.String(),
+            }),
+            body: t.Object({
+                values: t.Optional(t.Record(t.String(), t.Any())),
+                transition: t.Optional(t.String())
+            }),
+            detail: {
+                tags: ['FluxCore WES'],
+                summary: 'Commit delta to an active work',
+            },
+        }
     );

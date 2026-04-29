@@ -400,7 +400,30 @@ class ActionExecutorService {
 
             console.log(`[ActionExecutor] ✅ ProposedWork created: ${proposed.id}`);
 
-            // Immediately try to open the work (gate evaluation)
+            // 🎯 NOTIFICACIÓN SOBERANA: Avisar al frontend para autorización visual
+            coreEventBus.emit('fluxcore.work_proposed', {
+                proposedWorkId: proposed.id,
+                accountId: context.accountId,
+                conversationId: action.conversationId,
+                intent: action.intent,
+                typeId: action.workDefinitionId, // Nota: Aquí usamos el typeId mapeado en el proyector si es necesario
+                candidateSlots: action.candidateSlots
+            });
+
+            // Si es una creación de plantilla o mejora de instrucción, NO abrir automáticamente.
+            // Esperar a que el usuario autorice desde el UI (Composer Preview).
+            const manualReviewTypes = ['template_creation_v1', 'instruction_improvement_v1'];
+            const [def] = await db.select({ typeId: fluxcoreWorkDefinitions.typeId })
+                .from(fluxcoreWorkDefinitions)
+                .where(eq(fluxcoreWorkDefinitions.id, action.workDefinitionId))
+                .limit(1);
+
+            if (def && manualReviewTypes.includes(def.typeId)) {
+                console.log(`[ActionExecutor] ✋ Manual review required for ${def.typeId}. Waiting for UI authorization.`);
+                return { action, success: true };
+            }
+
+            // Para otros tipos, intentar apertura automática como antes
             try {
                 const work = await workEngineService.openWork(context.accountId, proposed.id);
                 console.log(`[ActionExecutor] ✅ Work opened: ${work.id} (state: ${work.state})`);
@@ -519,8 +542,13 @@ class ActionExecutorService {
                     : 'FAILED';
 
             const delta = [{ op: 'transition' as const, toState: terminalState }];
-            await workEngineService.commitDelta(action.workId, delta, 'system', `close-${Date.now()}`);
+            const updatedWork = await workEngineService.commitDelta(action.workId, delta, 'system', `close-${Date.now()}`);
             console.log(`[ActionExecutor] ✅ Work ${action.workId} → ${terminalState}`);
+
+            // ── Side Effects for Operational Works ──────────────────────────
+            if (terminalState === 'COMPLETED' && updatedWork) {
+                await this.handleWorkCompletionSideEffects(action.workId, context);
+            }
 
             if (action.replyMessage) {
                 await this.executeSendMessage(
@@ -533,6 +561,50 @@ class ActionExecutorService {
         } catch (error: any) {
             console.error(`[ActionExecutor] ❌ close_work failed:`, error.message);
             return { action, success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Handle side effects when an operational Work is COMPLETED.
+     * E.g., Creating templates or updating instructions.
+     */
+    private async handleWorkCompletionSideEffects(workId: string, context: ActionExecutionContext) {
+        try {
+            const stateResult = await workEngineService.getWorkState(workId);
+            if (!stateResult) return;
+
+            const { work, state } = stateResult;
+            const def = await db.query.fluxcoreWorkDefinitions.findFirst({
+                where: eq(fluxcoreWorkDefinitions.id, work.workDefinitionId)
+            });
+
+            if (!def) return;
+
+            // Resolve Target Account (where the effect will take place)
+            // If FluxCore is helping a user, context.targetAccountId is that user.
+            const effectAccountId = context.targetAccountId || context.accountId;
+
+            console.log(`[ActionExecutor] 🛠️ Executing side effects for ${def.typeId} on account ${effectAccountId}`);
+
+            if (def.typeId === 'template_creation_v1') {
+                const { templateService } = await import('../template.service');
+                await templateService.createTemplate(effectAccountId, {
+                    name: state.slots['name'],
+                    content: state.slots['content'],
+                    category: state.slots['category'],
+                    allowAutomatedUse: state.slots['allow_automated_use'] === true
+                });
+                console.log(`[ActionExecutor] ✅ Template created for account ${effectAccountId}`);
+            }
+
+            if (def.typeId === 'instruction_improvement_v1') {
+                const { assistantService } = await import('./assistants.service');
+                // Note: Implementation depends on assistantService.updateInstructions
+                console.log(`[ActionExecutor] ⚠️ instruction_improvement_v1 side effect logic pending integration with assistantService`);
+            }
+
+        } catch (error: any) {
+            console.error(`[ActionExecutor] 🔥 Side effect execution failed for work ${workId}:`, error.message);
         }
     }
 }

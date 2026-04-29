@@ -54,34 +54,8 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
     loadAccounts();
   }, []); // Empty deps - solo ejecutar una vez al montar
 
-  useEffect(() => {
-    if (accounts.length === 0) return;
-
-    const uiId = uiSelectedAccountId;
-    const storeId = activeAccountId;
-    const hasAccount = (id: string | null) => !!id && accounts.some((a) => a.id === id);
-
-    if (hasAccount(uiId)) {
-      if (uiId !== storeId) {
-        setActiveAccount(uiId!);
-      }
-      setCurrentAccountDB(uiId!);
-      return;
-    }
-
-    if (hasAccount(storeId)) {
-      useUIStore.getState().setSelectedAccount(storeId);
-      setCurrentAccountDB(storeId!);
-      return;
-    }
-
-    const first = accounts[0];
-    if (first) {
-      setActiveAccount(first.id);
-      useUIStore.getState().setSelectedAccount(first.id);
-      setCurrentAccountDB(first.id);
-    }
-  }, [accounts, activeAccountId, setActiveAccount, uiSelectedAccountId]);
+  // El control de selección se maneja ahora centralizadamente en authStore y useContextSync
+  // para evitar múltiples fuentes de verdad.
 
   // Close dropdown on outside click
   useEffect(() => {

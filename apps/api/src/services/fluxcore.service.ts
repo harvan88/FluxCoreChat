@@ -324,39 +324,91 @@ export * from './fluxcore/vector-store.service';
 // ============================================================================
 
 const TEMPLATES_TOOL_DEF_ID = '9e8c7b6a-5d4e-4f3a-2b1c-0d9e8f7a6b5c';
+const KNOWLEDGE_TOOL_DEF_ID = 'b7d8c9a0-1e2f-3d4c-5b6a-789012345678';
+const PLATFORM_INSTRUCTIONS_ID = '8f7e6d5c-4b3a-2109-8765-43210fedcba9';
+const PLATFORM_MANAGE_TEMPLATE_ID = '7e6d5c4b-3a21-0987-6543-210fedcba987';
+const PLATFORM_AUTHORIZE_TEMPLATE_ID = '6d5c4b3a-2109-8765-4321-0fedcba98765';
+
+const SUPPORT_ACCOUNT_ID = '5f96c4c5-473b-4574-93ce-53f54225dd18';
 
 async function ensureSystemTools() {
-  const [existing] = await db
-    .select()
-    .from(fluxcoreToolDefinitions)
-    .where(eq(fluxcoreToolDefinitions.id, TEMPLATES_TOOL_DEF_ID));
+  // 🧹 LIMPIEZA: Eliminar herramientas mock/legacy que ya no se usan
+  const mockSlugs = ['calendar', 'google_calendar', 'web_search', 'search_web'];
+  await db.delete(fluxcoreToolDefinitions).where(inArray(fluxcoreToolDefinitions.slug, mockSlugs));
 
-  if (!existing) {
-    // Si no existe, lo creamos. Si ya existe slug duplicado, podría fallar,
-    // pero asumimos que este ID es el canónico para este slug.
-    await db.insert(fluxcoreToolDefinitions).values({
+  const tools = [
+    {
       id: TEMPLATES_TOOL_DEF_ID,
       slug: 'templates',
       name: 'Envío de Plantillas',
       description: 'Permite a la IA seleccionar y enviar plantillas de mensajes predefinidas y autorizadas.',
       category: 'Comunicación',
-      authType: 'none',
-      isEnabled: true,
-      updatedAt: new Date(),
-    });
+    },
+    {
+      id: KNOWLEDGE_TOOL_DEF_ID,
+      slug: 'search_knowledge',
+      name: 'Búsqueda en Archivos',
+      description: 'Permite a la IA buscar información relevante dentro de la base de conocimiento y archivos subidos.',
+      category: 'Información',
+    },
+    {
+      id: PLATFORM_INSTRUCTIONS_ID,
+      slug: 'platform_update_instructions',
+      name: 'Gestión de Instrucciones',
+      description: 'Herramienta administrativa para actualizar las directrices de comportamiento de la cuenta.',
+      category: 'Plataforma',
+    },
+    {
+      id: PLATFORM_MANAGE_TEMPLATE_ID,
+      slug: 'platform_manage_template',
+      name: 'Creación de Plantillas',
+      description: 'Herramienta administrativa para crear o editar plantillas físicas en el sistema.',
+      category: 'Plataforma',
+    },
+    {
+      id: PLATFORM_AUTHORIZE_TEMPLATE_ID,
+      slug: 'platform_authorize_ai_template',
+      name: 'Autorización de Plantillas',
+      description: 'Herramienta administrativa para habilitar/deshabilitar plantillas para el uso del motor de IA.',
+      category: 'Plataforma',
+    }
+  ];
+
+  for (const tool of tools) {
+    const [existing] = await db
+      .select()
+      .from(fluxcoreToolDefinitions)
+      .where(eq(fluxcoreToolDefinitions.id, tool.id));
+
+    if (!existing) {
+      await db.insert(fluxcoreToolDefinitions).values({
+        ...tool,
+        authType: 'none',
+        isEnabled: true,
+        updatedAt: new Date(),
+      });
+    }
   }
 }
 
-export async function getToolDefinitions() {
+export async function getToolDefinitions(accountId?: string) {
   await ensureSystemTools();
 
-  const dbTools = await db
+  const query = db
     .select()
     .from(fluxcoreToolDefinitions)
     .where(eq(fluxcoreToolDefinitions.isEnabled, true))
     .orderBy(fluxcoreToolDefinitions.category);
 
-  return dbTools;
+  const dbTools = await query;
+
+  // Filtrar herramientas de plataforma para que solo sean visibles para soporte
+  return dbTools.filter(tool => {
+    if (tool.category === 'Plataforma') {
+      return accountId === SUPPORT_ACCOUNT_ID;
+    }
+    return true;
+  });
 }
 
 async function ensureToolConnections(accountId: string): Promise<void> {

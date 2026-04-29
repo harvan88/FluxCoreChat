@@ -19,6 +19,10 @@ export class AccountService {
     profile?: any;
     privateContext?: string;
     allowAutomatedUse?: boolean;
+    aiIncludeName?: boolean;
+    aiIncludeBio?: boolean;
+    aiIncludePrivateContext?: boolean;
+    aiIncludeTimestamp?: boolean;
   }) {
     const aliasValue = data.alias;
 
@@ -56,6 +60,10 @@ export class AccountService {
         profile: data.profile || {},
         privateContext: data.privateContext || null,
         allowAutomatedUse: data.allowAutomatedUse ?? false,
+        aiIncludeName: data.aiIncludeName ?? true,
+        aiIncludeBio: data.aiIncludeBio ?? true,
+        aiIncludePrivateContext: data.aiIncludePrivateContext ?? true,
+        aiIncludeTimestamp: data.aiIncludeTimestamp ?? true,
       })
       .returning();
 
@@ -119,6 +127,10 @@ export class AccountService {
       profile?: any;
       privateContext?: string;
       allowAutomatedUse?: boolean;
+      aiIncludeName?: boolean;
+      aiIncludeBio?: boolean;
+      aiIncludePrivateContext?: boolean;
+      aiIncludeTimestamp?: boolean;
       alias?: string | null;
       avatarAssetId?: string;
     }

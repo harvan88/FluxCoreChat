@@ -4,6 +4,11 @@ import {
     SYSTEM_SEARCH_KNOWLEDGE,
     SYSTEM_SEND_TEMPLATE,
 } from '../core/capabilities';
+import {
+    PLATFORM_UPDATE_ACCOUNT_INSTRUCTIONS,
+    PLATFORM_MANAGE_TEMPLATE,
+    PLATFORM_AUTHORIZE_AI_TEMPLATE,
+} from '../core/capabilities';
 
 export type CapabilityDefinition = FluxCoreCapability;
 
@@ -12,6 +17,9 @@ class CapabilityRegistryService {
         SYSTEM_SEARCH_KNOWLEDGE,
         SYSTEM_SEND_TEMPLATE,
         SYSTEM_LIST_TEMPLATES,
+        PLATFORM_UPDATE_ACCOUNT_INSTRUCTIONS,
+        PLATFORM_MANAGE_TEMPLATE,
+        PLATFORM_AUTHORIZE_AI_TEMPLATE,
     ];
 
     listDefinitions(): CapabilityDefinition[] {

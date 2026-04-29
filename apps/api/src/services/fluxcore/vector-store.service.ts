@@ -1,4 +1,4 @@
-import { eq, and, desc, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, isNotNull, sql } from 'drizzle-orm';
 import {
     db,
     fluxcoreVectorStores,
@@ -276,7 +276,7 @@ export async function addVectorStoreFile(data: NewFluxcoreVectorStoreFile): Prom
     return file;
 }
 
-export async function deleteVectorStoreFile(id: string, vectorStoreId: string): Promise<boolean> {
+export async function deleteVectorStoreFile(id: string, vectorStoreId: string, accountId: string): Promise<boolean> {
     // 1. Obtener el registro para conocer el fileId (Asset ID) antes de borrar
     const [link] = await db
         .select()
@@ -292,10 +292,15 @@ export async function deleteVectorStoreFile(id: string, vectorStoreId: string): 
     // NOTA: Borramos el asset directamente. Si se desea compartir assets entre Carpetas,
     // se debería implementar un contador de referencias, pero para la Fase 1,
     // garantizamos limpieza total al borrar el archivo.
-    const result = await db
-        .delete(assets)
-        .where(eq(assets.id, link.fileId))
-        .returning();
+    const result = await db.transaction(async (tx) => {
+        // Inyectar el pase de seguridad del Sovereign Shield v2 para esta transacción
+        await tx.execute(sql`SET LOCAL "fluxcore.allowed_delete_account_id" = '${sql.raw(accountId)}'`);
+        
+        return await tx
+            .delete(assets)
+            .where(eq(assets.id, link.fileId))
+            .returning();
+    });
 
     if (result.length > 0) {
         await syncVectorStoreStats(vectorStoreId);

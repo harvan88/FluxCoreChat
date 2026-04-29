@@ -111,6 +111,7 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
         accountType: t.Union([t.Literal('personal'), t.Literal('business')]),
         profile: t.Optional(t.Any()),
         privateContext: t.Optional(t.String({ maxLength: 5000 })),
+        aiIncludeTimestamp: t.Optional(t.Boolean()),
       }),
       detail: {
         tags: ['Accounts'],
@@ -201,6 +202,7 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
         aiIncludeName: t.Optional(t.Boolean()),
         aiIncludeBio: t.Optional(t.Boolean()),
         aiIncludePrivateContext: t.Optional(t.Boolean()),
+        aiIncludeTimestamp: t.Optional(t.Boolean()),
         alias: t.Optional(t.Union([t.String({ minLength: 3, maxLength: 30 }), t.Null()])),
         avatarAssetId: t.Optional(t.String()),
       }),

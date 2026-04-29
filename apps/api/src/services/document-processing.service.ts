@@ -246,6 +246,7 @@ export class DocumentProcessingService {
                             documentTitle: parsed.metadata?.title,
                             documentAuthor: parsed.metadata?.author,
                         },
+                        dimensions: embedding.length,
                         // NOTA: El embedding se insertará via SQL raw porque Drizzle no soporta vector
                     });
                     allEmbeddings.push(embedding);
@@ -278,7 +279,8 @@ export class DocumentProcessingService {
                         const embeddingStr = `[${embedding.join(',')}]`;
                         await db.execute(sql`
                             UPDATE fluxcore_document_chunks
-                            SET embedding = ${sql.raw(`'${embeddingStr}'::vector`)}
+                            SET embedding = ${sql.raw(`'${embeddingStr}'::vector`)},
+                                dimensions = ${embedding.length}
                             WHERE id = ${inserted.id}::uuid
                         `);
                         insertedCount++;

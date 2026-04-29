@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   workspacesApi,
   type Workspace,
@@ -57,7 +58,9 @@ interface WorkspaceState {
 // Store Implementation
 // ============================================================================
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+export const useWorkspaceStore = create<WorkspaceState>()(
+  persist(
+    (set, get) => ({
   // Initial state
   workspaces: [],
   activeWorkspaceId: null,
@@ -360,18 +363,26 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   // Utilities
   // ============================================================================
 
-  clearError: () => set({ error: null }),
-
-  reset: () => set({
-    workspaces: [],
-    activeWorkspaceId: null,
-    members: [],
-    invitations: [],
-    pendingInvitations: [],
-    isLoading: false,
-    error: null,
+    clearError: () => set({ error: null }),
+  
+    reset: () => set({
+      workspaces: [],
+      activeWorkspaceId: null,
+      activeWorkspace: null,
+      members: [],
+      invitations: [],
+      pendingInvitations: [],
+      isLoading: false,
+      error: null,
+    }),
   }),
-}));
+  {
+    name: 'fluxcore-workspaces',
+    partialize: (state) => ({
+      activeWorkspaceId: state.activeWorkspaceId,
+    }),
+  }
+));
 
 // ============================================================================
 // FC-820: useWorkspaces Hook

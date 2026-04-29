@@ -192,18 +192,15 @@ export class WorkEngineService {
                 // 3. Commit Delta
                 await this.commitDelta(workId, delta, 'user', envelope.id || `ingest-${Date.now()}`);
 
-                // 4. Send Acknowledgment
+                // 4. Return result — caller (FluxiRuntime) will send via Kernel certification
+                // CONSOLIDATION: Removed direct messageCore.send() bypass (Canon §4.4)
                 const slotsList = extractedSlots.map(slot => slot.path).join(', ');
-                await messageCore.send({
-                    conversationId: envelope.conversationId,
-                    senderAccountId: work.accountId,
-                    content: { text: `Entendido. He registrado la información para: ${slotsList}. Continuemos.` },
-                    type: 'outgoing',
-                    generatedBy: 'system',
-                    targetAccountId: envelope.senderAccountId,
-                });
-
-                return true;
+                return {
+                    ingested: true,
+                    slotsList,
+                    acknowledgment: `Entendido. He registrado la información para: ${slotsList}. Continuemos.`,
+                    extractedSlots,
+                };
             }
         } catch (error: any) {
             console.error('[WorkEngine] IngestMessage failed:', error);

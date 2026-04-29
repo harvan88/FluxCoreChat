@@ -19,6 +19,7 @@
 
 import type { RuntimeAdapter, RuntimeInput, ExecutionAction } from '../../../core/fluxcore-types';
 import { llmClient } from '../llm-client.service';
+import { asistentesLocalRuntime } from './asistentes-local.runtime';
 
 interface WorkDefinition {
     id: string;
@@ -38,20 +39,6 @@ interface ProposedAnalysis {
     confidence: number;
 }
 
-interface RuntimeInput {
-    policyContext: FluxPolicyContext;
-    runtimeConfig: {
-        // ... campos existentes
-        workEngineService?: any;  // Nuevo
-        messageCore?: any;         // Nuevo
-        provider?: string;
-        model?: string;
-        maxTokens?: number;
-        temperature?: number;
-        workDefinitions?: any[];
-    };
-    conversationHistory: ConversationMessage[];
-}
 
 export class FluxiRuntime implements RuntimeAdapter {
     readonly runtimeId = '@fluxcore/fluxi';
@@ -80,53 +67,71 @@ export class FluxiRuntime implements RuntimeAdapter {
             return [{ type: 'no_action', reason: 'No text content in last message' }];
         }
 
+        const accountId = runtimeConfig.accountId;
+
+        // ── Phase 0: Semantic Confirmation (Deterministic, no LLM) ────────────
+        // If the user is confirming a pending semantic context (sí/ok/dale),
+        // commit it immediately without LLM interpretation.
+        // Absorbed from legacy Extension (fluxcore-fluxi) into sovereign Runtime.
+        try {
+            const wes = runtimeConfig.workEngineService;
+            if (wes && typeof wes.resolveSemanticMatch === 'function') {
+                const semanticMatch = await wes.resolveSemanticMatch(accountId, conversationId, messageText);
+                if (semanticMatch) {
+                    console.log(`[FluxiRuntime] Phase 0: Semantic confirmation matched (context=${semanticMatch.id})`);
+                    await wes.commitSemanticConfirmation(semanticMatch.id, `runtime-${Date.now()}`);
+                    return [{
+                        type: 'send_message',
+                        conversationId,
+                        content: 'Confirmado. Procesando tu solicitud.',
+                    }];
+                }
+            }
+        } catch (error: any) {
+            console.warn(`[FluxiRuntime] Phase 0: Semantic confirmation check failed (non-blocking):`, error.message);
+        }
+
         // workDefinitions come from RuntimeConfig (resolved before handleMessage)
         const workDefinitions: WorkDefinition[] = runtimeConfig.workDefinitions ?? [];
         const activeWorkId = policyContext.activeWork?.workId;
 
         // ── Phase 1: Active Work exists → ingest new slot values ─────────────
         if (activeWorkId) {
-            return this.handleActiveWork(activeWorkId, messageText, conversationId, runtimeConfig);
+            return this.handleActiveWork(input, activeWorkId);
         }
 
         // ── Phase 2: No active work → interpret for new transactional intent ──
         if (workDefinitions.length === 0) {
-            return this.respondConversationally(messageText, conversationId, runtimeConfig);
+            return this.respondConversationally(input);
         }
 
-        return this.interpretAndPropose(messageText, conversationId, workDefinitions, runtimeConfig);
+        return this.interpretAndPropose(input, workDefinitions);
     }
 
     /**
      * Phase 1: An active Work exists. Try to extract slot values from the user message.
      */
     private async handleActiveWork(
-        workId: string,
-        messageText: string,
-        conversationId: string,
-        runtimeConfig: RuntimeInput['runtimeConfig']
+        input: RuntimeInput,
+        workId: string
     ): Promise<ExecutionAction[]> {
+        const { policyContext, runtimeConfig, conversationHistory } = input;
+        const messageText = conversationHistory[conversationHistory.length - 1]?.content || '';
+        const conversationId = policyContext.conversationId;
         const { provider: llmProvider, model: llmModel, maxTokens: llmMaxTokens, temperature: llmTemperature } = runtimeConfig;
 
-        // Check for semantic confirmation first (deterministic, no LLM needed)
-        const confirmKeywords = ['sí', 'si', 'ok', 'dale', 'confirmar', 'confirmado', 'afirmativo', 'está bien'];
-        if (confirmKeywords.includes(messageText.toLowerCase().trim())) {
-            // Semantic confirmation is handled by ActionExecutor via semantic context lookup
-            // Return advance_work_state with empty slots — ActionExecutor will do the lookup
-            return [{
-                type: 'advance_work_state',
-                conversationId,
-                workId,
-                slots: [],
-                replyMessage: 'Confirmado. Procesando...',
-            }];
-        }
+        // Note: Semantic confirmation (sí/ok/dale) is now handled by Phase 0 in handleMessage()
+        // before we reach this point. If we're here, the message is new data, not a confirmation.
 
         // Use LLM to extract slot values from the message
-        const systemPrompt = `Eres el extractor de datos del sistema transaccional Fluxi.
-Tu tarea: extraer valores de slots del mensaje del usuario para un Work en progreso.
-Devuelve ÚNICAMENTE un JSON array de slots extraídos o [] si no hay datos nuevos.
-Formato: [{"path": "slot.path", "value": "valor_extraído", "evidence": "texto exacto del mensaje"}]`;
+        const systemPrompt = `Eres el Agente de Extracción Transaccional de la cuenta. Estás gestionando un proceso (Work) en curso.
+Tu tarea: extraer los datos (slots) necesarios del mensaje para avanzar el proceso.
+
+REGLAS:
+1. Extrae pares de "path" y "value".
+2. Incluye el texto exacto como "evidence".
+3. Devuelve ÚNICAMENTE un JSON array: [{"path": "...", "value": "...", "evidence": "..."}]
+4. Si no hay datos nuevos, devuelve [].`;
 
         try {
             const result = await llmClient.complete({
@@ -156,12 +161,12 @@ Formato: [{"path": "slot.path", "value": "valor_extraído", "evidence": "texto e
             return [{
                 type: 'send_message',
                 conversationId,
-                content: `No pude identificar información relevante en tu mensaje. ¿Podrías ser más específico?`,
+                content: `Entiendo el contexto, pero necesito que seas más específico con los datos para poder procesar esta solicitud correctamente.`,
             }];
 
         } catch (error: any) {
             console.error(`[FluxiRuntime] Slot extraction failed for work ${workId}:`, error.message);
-            return this.respondConversationally(messageText, conversationId, runtimeConfig);
+            return this.respondConversationally(input);
         }
     }
 
@@ -169,34 +174,41 @@ Formato: [{"path": "slot.path", "value": "valor_extraído", "evidence": "texto e
      * Phase 2+3: No active work. Interpret message for transactional intent.
      */
     private async interpretAndPropose(
-        messageText: string,
-        conversationId: string,
-        workDefinitions: WorkDefinition[],
-        runtimeConfig: RuntimeInput['runtimeConfig']
+        input: RuntimeInput,
+        workDefinitions: WorkDefinition[]
     ): Promise<ExecutionAction[]> {
+        const { policyContext, runtimeConfig, conversationHistory } = input;
+        const messageText = conversationHistory[conversationHistory.length - 1]?.content || '';
+        const conversationId = policyContext.conversationId;
         const { provider: llmProvider, model: llmModel, maxTokens: llmMaxTokens } = runtimeConfig;
 
         const defsForPrompt = workDefinitions.map(d => ({
             id: d.typeId,
             bindingAttribute: d.definitionJson.bindingAttribute,
-            slots: d.definitionJson.slots?.map(s => ({ path: s.path, type: s.type, required: s.required })) ?? [],
+            slots: d.definitionJson.slots?.map(s => ({ 
+                path: s.path, 
+                type: s.type, 
+                required: s.required,
+                description: (s as any).description // 🎯 INSTRUCCIÓN DE CAMPO: Guía a la IA para no inventar slots
+            })) ?? [],
         }));
 
-        const systemPrompt = `Eres el intérprete transaccional de Fluxi.
-Analiza si el mensaje del usuario expresa una intención transaccional que coincide con alguna de las definiciones de Work disponibles.
+        const systemPrompt = `Eres el Agente de Ejecución Transaccional de la cuenta. Tu única función es mapear la intención del usuario a uno de los WorkDefinitions disponibles.
 
-WorkDefinitions disponibles:
-${JSON.stringify(defsForPrompt, null, 2)}
+INVENTARIO:
+${JSON.stringify(defsForPrompt)}
 
-Si detectas intención transaccional, responde ÚNICAMENTE con este JSON:
+LÓGICA:
+1. Si la intención coincide con un ID del inventario, propón la apertura del Work y extrae los datos presentes.
+2. De lo contrario, responde exactamente: null.
+
+RESPUESTA (JSON):
 {
-  "workDefinitionTypeId": "id_del_tipo",
-  "intent": "descripción breve de la intención",
-  "candidateSlots": [{"path": "slot.path", "value": "valor", "evidence": {"text": "texto exacto", "confidence": 0.9}}],
-  "confidence": 0.85
-}
-
-Si NO hay intención transaccional clara, responde exactamente: null`;
+  "workDefinitionTypeId": "id",
+  "intent": "descripción",
+  "candidateSlots": [{"path": "p", "value": "v", "evidence": {"text": "t", "confidence": 0.9}}],
+  "confidence": 0.95
+}`;
 
         try {
             const result = await llmClient.complete({
@@ -238,37 +250,62 @@ Si NO hay intención transaccional clara, responde exactamente: null`;
 
         } catch (error: any) {
             console.error(`[FluxiRuntime] Interpretation failed:`, error.message);
-            return this.respondConversationally(messageText, conversationId, runtimeConfig);
+            return this.respondConversationally(input);
         }
     }
 
     private async respondConversationally(
-        messageText: string,
-        conversationId: string,
-        runtimeConfig: RuntimeInput['runtimeConfig']
+        input: RuntimeInput
     ): Promise<ExecutionAction[]> {
+        const { policyContext, runtimeConfig, conversationHistory } = input;
+        const messageText = conversationHistory[conversationHistory.length - 1]?.content || '';
+        const conversationId = policyContext.conversationId;
+
         const normalized = messageText.trim().toLowerCase();
         if (['hola', 'buenas', 'buen día', 'buen dia', 'hello', 'hi'].includes(normalized)) {
             return [{
                 type: 'send_message',
                 conversationId,
-                content: 'Hola. Soy Fluxi. Puedo ayudarte tanto con consultas simples como con gestiones operativas. ¿Qué necesitas?',
+                content: 'Hola. Soy Fluxi. Tu operador autónomo. ¿En qué puedo ayudarte hoy?',
             }];
         }
 
         try {
+            // ESTRATEGIA DE SOBERANÍA: Consultar al Asistente Local para la base de conocimiento
+            // pero Fluxi mantiene el control de la personalidad y la proactividad.
+            const localResponse = await asistentesLocalRuntime.handleMessage({
+                ...input,
+                // Marcamos que es una consulta interna para evitar bucles o comportamientos recursivos
+                // (Nota: Tendríamos que añadir este campo a RuntimeInput si queremos tipado estricto, 
+                // por ahora lo pasamos como parte del objeto para que llegue al pipeline)
+                metadata: { isInternalQuery: true }
+            } as any);
+
+            const baseContent = localResponse.find(a => a.type === 'send_message')?.content || '';
+
             const result = await llmClient.complete({
                 provider: runtimeConfig.provider ?? 'groq',
                 model: runtimeConfig.model ?? 'llama-3.1-8b-instant',
                 messages: [
                     {
                         role: 'system',
-                        content: 'Eres Fluxi, un runtime soberano operativo. Debes responder siempre al usuario, incluso si el mensaje no abre un work transaccional. Responde breve, útil y natural. No derives al usuario a otro asistente. Si falta información para operar, explícalo y guía el siguiente paso.',
+                        content: `Eres el Runtime Operativo de la cuenta. Tu función es responder al usuario basándote exclusivamente en la POLÍTICA y el CONOCIMIENTO DE DOMINIO proporcionados.
+
+POLÍTICA:
+${authorizedContext.instructions || 'Responder de forma técnica y directa.'}
+
+CONOCIMIENTO DE DOMINIO:
+"${baseContent}"
+
+REGLAS:
+1. Sé preciso y autoritativo.
+2. No menciones tu propia naturaleza a menos que sea necesario.
+3. Orienta la respuesta hacia la resolución o el siguiente paso operativo.`,
                     },
                     { role: 'user', content: messageText },
                 ],
-                maxTokens: Math.min(runtimeConfig.maxTokens ?? 256, 256),
-                temperature: 0.3,
+                maxTokens: Math.min(runtimeConfig.maxTokens ?? 512, 512),
+                temperature: 0.4,
             });
 
             const responseText = result.content?.trim();

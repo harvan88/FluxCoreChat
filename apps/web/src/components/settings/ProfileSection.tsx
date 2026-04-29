@@ -271,14 +271,14 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-muted text-sm" style={{minWidth: '120px'}}>meetgar.com/p/</span>
+                <span className="text-muted text-sm" style={{minWidth: '100px'}}>meetgar.com/</span>
               </div>
               <input
                 type="text"
                 value={alias}
                 onChange={(e) => handleAliasChange(e.target.value)}
                 placeholder="tu-alias"
-                className="w-full pl-[130px] pr-20 py-2 rounded-lg border border-subtle bg-surface text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
+                className="w-full pl-[110px] pr-20 py-2 rounded-lg border border-subtle bg-surface text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-colors"
                 maxLength={30}
               />
               <div className="absolute inset-y-0 right-0 flex items-center">

@@ -42,6 +42,14 @@ export interface CoreEventMap {
     'account.profile.updated': (payload: { accountId: string; allowAutomatedUse: boolean }) => void;
     'template.authorization.changed': (payload: { templateId: string; accountId: string; allowAutomatedUse: boolean }) => void;
     'fluxcore.template.settings.changed': (payload: { templateId: string; accountId: string; authorizeForAI: boolean }) => void;
+    'fluxcore.work_proposed': (payload: { 
+        proposedWorkId: string; 
+        accountId: string; 
+        conversationId: string; 
+        intent: string; 
+        typeId: string; 
+        candidateSlots: any[] 
+    }) => void;
     'relationship.context.updated': (payload: { relationshipId: string; accountId?: string }) => void;
     'knowledge.authorized': (payload: { accountId: string; allowAutomatedUse: boolean }) => void;
     'appointments.authorization.changed': (payload: { accountId: string }) => void;

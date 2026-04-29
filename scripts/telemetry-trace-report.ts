@@ -7,17 +7,17 @@
  */
 
 import { sign } from 'jsonwebtoken';
-import { 
-    db, 
-    aiTraces, 
-    conversations, 
-    messages, 
-    aiSuggestions, 
-    fluxcoreCognitionQueue, 
-    aiSignals, 
-    fluxcoreActionAudit, 
-    fluxcoreOutbox, 
-    chatcoreOutbox 
+import {
+    db,
+    aiTraces,
+    conversations,
+    messages,
+    aiSuggestions,
+    fluxcoreCognitionQueue,
+    aiSignals,
+    fluxcoreActionAudit,
+    fluxcoreOutbox,
+    chatcoreOutbox
 } from '@fluxcore/db';
 import { eq, desc, or } from 'drizzle-orm';
 import { promptBuilder } from '../apps/api/src/services/fluxcore/prompt-builder.service';
@@ -28,10 +28,10 @@ const WS_URL = 'ws://localhost:3000/ws';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 // IDs Provided by User
-const RECIPIENT_ACCOUNT_ID = '65d340af-97ff-4c9b-85d2-b378badeacf4'; // AI Account
-const SENDER_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';    // User Account
-const SENDER_USER_ID = '535949b8-58a9-4310-87a7-42a2480f5746';      // User Identity
-const CONVERSATION_ID = '5ad75a5f-f0ea-4cc8-a94c-812f67a4f446';     // Default Conv
+const RECIPIENT_ACCOUNT_ID = '5f96c4c5-473b-4574-93ce-53f54225dd18'; // FluxCore Account
+const SENDER_ACCOUNT_ID = '65d340af-97ff-4c9b-85d2-b378badeacf4';    // Dr. Jones Account
+const SENDER_USER_ID = 'c7439d6a-7e46-4e84-a4d6-d73bea3cb5fe';      // Dr. Jones Identity
+const CONVERSATION_ID = 'eadb0912-127c-4738-af5e-18b0ecb52670';     // Conv Dr Jones -> Fluxi
 
 const messageText = process.argv.find(a => !a.startsWith('--') && a !== process.argv[0] && !a.includes('telemetry-trace-report.ts')) || 'Hola';
 const shouldClear = process.argv.includes('--clear') || process.argv.includes('-c');
@@ -52,7 +52,7 @@ async function main() {
     // 2. Setup WebSocket for Telemetry
     console.log(`📡 Connecting to WebSocket for telemetry...`);
     const ws = new WebSocket(`${WS_URL}?token=${token}&accountId=${SENDER_ACCOUNT_ID}`);
-    
+
     let capturedSteps: any[] = [];
     let runtimePhases: Record<string, any> = {};
     let aiTraceData: any = null;
@@ -76,7 +76,7 @@ async function main() {
         let triggered = false;
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data.toString());
-            
+
             if (data.type === 'subscribed_telemetry' && !triggered) {
                 triggered = true;
                 ws.send(JSON.stringify({
@@ -84,17 +84,17 @@ async function main() {
                     accountId: RECIPIENT_ACCOUNT_ID,
                     content: true
                 }));
-                
+
                 console.log(`✅ Telemetry subscription active & persistence enabled`);
                 // Give a small moment for persistence to register
                 setTimeout(() => triggerMessage().catch(reject), 500);
             }
-            
+
             if (data.type === 'telemetry:pipeline_step') {
                 const payload = data.payload;
                 console.log(`📍 STEP: ${payload.step} (${payload.status})`);
                 capturedSteps.push(payload);
-                
+
                 if (payload.step === 'runtime' && payload.status === 'success') {
                     // Start a timer to finish if we don't get the distributed traces soon
                     setTimeout(() => {
@@ -102,7 +102,7 @@ async function main() {
                         resolve(true);
                     }, 5000);
                 }
-                
+
                 if (payload.status === 'error') {
                     console.error(`❌ Pipeline Error:`, payload.metadata?.errorDetail);
                     ws.close();
@@ -112,8 +112,8 @@ async function main() {
 
             if (data.type === 'telemetry:distributed_trace') {
                 const payload = data.payload;
-                const phaseNames = ['FASE_0_SIEVE', 'FASE_1_ROUTER', 'FASE_1_5_DETERMINISTIC_SHORTCUT', 'FASE_2_RAG', 'FASE_3_RESOLUTIVE_CALL', 'FASE_4_BODY_TRANSLATION', 'IA_RUNTIME_INVOCATION'];
-                
+                const phaseNames = ['DEBUG_INPUT_CHECK', 'FASE_0_SIEVE', 'FASE_1_ROUTER', 'FASE_1_5_DETERMINISTIC_SHORTCUT', 'FASE_2_RAG', 'FASE_3_RESOLUTIVE_CALL', 'FASE_4_BODY_TRANSLATION', 'IA_RUNTIME_INVOCATION'];
+
                 if (phaseNames.includes(payload.stepName)) {
                     console.log(`🧠 Phase Captured: ${payload.stepName} (${payload.stepStatus || 'processing'})`);
                     runtimePhases[payload.stepName] = {
@@ -123,7 +123,7 @@ async function main() {
                         timestamp: payload.timestamp
                     };
                 }
-                
+
                 if (payload.stepStatus === 'completed' && payload.stepName === 'IA_RUNTIME_INVOCATION') {
                     console.log(`✅ Final AI Response captured`);
                     aiTraceData = {
@@ -169,7 +169,7 @@ async function main() {
         await wsPromise;
         if (Object.keys(runtimePhases).length > 0) {
             await generateReport(capturedSteps, runtimePhases, aiTraceData);
-            
+
             if (shouldClear) {
                 await clearHistory(CONVERSATION_ID);
             }
@@ -187,12 +187,12 @@ async function clearHistory(conversationId: string) {
         // 1. Eliminar mensajes e historial visible
         await db.delete(messages).where(eq(messages.conversationId, conversationId));
         console.log(`  ✅ Mensajes eliminados`);
-        
+
         // 2. Eliminar trazas y señales (Soberanía Cognitiva)
         await db.delete(aiTraces).where(eq(aiTraces.conversationId, conversationId));
         await db.delete(aiSignals).where(eq(aiSignals.conversationId, conversationId));
         console.log(`  ✅ Trazas y Señales eliminadas`);
-        
+
         // 3. Eliminar sugerencias y auditoría de acciones
         await db.delete(aiSuggestions).where(eq(aiSuggestions.conversationId, conversationId));
         await db.delete(fluxcoreActionAudit).where(eq(fluxcoreActionAudit.conversationId, conversationId));
@@ -206,11 +206,11 @@ async function clearHistory(conversationId: string) {
             await db.delete(fluxcoreOutbox).where(sql`signal_id IN (${sql.join(signalIds.map(s => sql`${s.id}`), sql`, `)})`);
         }
         console.log(`  ✅ Outboxes limpiados`);
-        
+
         // 5. Limpiar Cola de Cognición (Prevenir ejecuciones fantasma)
         await db.delete(fluxcoreCognitionQueue).where(eq(fluxcoreCognitionQueue.conversationId, conversationId));
         console.log(`  ✅ Cola de cognición limpiada`);
-        
+
         console.log(`✨ Historial de conversación ${conversationId.slice(0, 8)} limpiado con éxito.`);
     } catch (err: any) {
         console.error(`  ❌ Error durante la limpieza:`, err.message);
@@ -218,125 +218,80 @@ async function clearHistory(conversationId: string) {
 }
 
 async function generateReport(steps: any[], phases: Record<string, any>, aiData: any) {
-    console.log(`\n📊 Generando Reporte Forense...`);
-    
-    // 1. Reconstrucción del Prompt usando el input REAL de la llamada resolutiva (v16.0 Sovereignty)
-    const globalInput = phases['IA_RUNTIME_INVOCATION']?.input;
-    const resolutiveInput = phases['FASE_3_RESOLUTIVE_CALL']?.input;
-    
-    let builtPrompt: any = { systemPrompt: 'N/A', messages: [] };
-    
-    if (resolutiveInput && resolutiveInput.messages && resolutiveInput.messages.length > 0) {
-        // La Fase 3 recibe los mensajes ya purificados (enmascarados)
-        builtPrompt = {
-            systemPrompt: resolutiveInput.messages[0]?.content || 'N/A',
-            messages: resolutiveInput.messages.slice(1)
-        };
-    } else if (globalInput) {
-        // Fallback si la Fase 3 no se ejecutó
-        builtPrompt = promptBuilder.build({
-            policyContext: globalInput.policyContext,
-            authorizedContext: globalInput.authorizedContext,
-            runtimeConfig: globalInput.runtimeConfig,
-            conversationHistory: globalInput.conversationHistory
-        });
-    }
+    console.log(`\n📊 Generando Reporte de Alta Densidad (Expandible)...`);
 
-    // 2. Build Markdown
+    const globalInput = phases['IA_RUNTIME_INVOCATION']?.input;
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `auditoria_forense_${timestamp}.md`;
+    const fileName = `auditoria_inteligente_${timestamp}.md`;
     const filePath = `./docs/reconstruction-phase-1/temp/${fileName}`;
 
-    const provider = aiData?.provider || 'N/A';
-    const model = aiData?.model || 'N/A';
+    let report = `# 🧠 Auditoría Inteligente del Kernel (FluxCore)
+**Turno:** \`${globalInput?.executionId || 'N/A'}\` | **Fecha:** ${new Date().toLocaleString()}
 
-    let report = `# Reporte Forense del Kernel (Fases 0-4)
-**Turno:** \`${globalInput?.executionId || 'N/A'}\`
-**Generado:** ${new Date().toLocaleString()}
-
-## 📥 Ingress
+## 📥 Contexto de Entrada
 - **Mensaje**: "${messageText}"
-- **Emisor**: \`${SENDER_ACCOUNT_ID}\`
-- **Conversación**: \`${CONVERSATION_ID}\`
+- **Runtime**: \`${globalInput?.runtimeConfig?.runtimeId || 'asistentes-local'}\` | **Modelo**: \`${aiData?.provider}/${aiData?.model}\`
 
-## 🛤️ Flujo de Soberanía (Pipeline)
-| Paso | Estado | Latencia | Timestamp |
-| :--- | :--- | :--- | :--- |
-${steps.map(e => `| ${e.step} | **${e.status.toUpperCase()}** | ${e.metadata?.latencyMs || '-'}ms | ${e.timestamp} |`).join('\n')}
+---
 
-## 🧠 Auditoría del Runtime Cognitivo
+## 🛤️ Análisis de Fases (I/O & Razonamiento)
 
 `;
 
-    // 🎯 Detalle de las 4 Fases
     const phaseDisplayNames: Record<string, string> = {
-        'FASE_0_SIEVE': 'Fase 0: Tamiz Semántico (Filtrado de Plantillas)',
-        'FASE_1_ROUTER': 'Fase 1: Intent Router (Evaluación de Intenciones)',
+        'FASE_0_SIEVE': 'Fase 0: Tamiz Semántico (Filtrado)',
+        'FASE_1_ROUTER': 'Fase 1: Intent Router (Ruteo)',
         'FASE_1_5_DETERMINISTIC_SHORTCUT': 'Fase 1.5: Deterministic Shortcut (Fast-Path)',
-        'FASE_2_RAG': 'Fase 2: RAG Determinista (Conocimiento Vectorial)',
-        'FASE_3_RESOLUTIVE_CALL': 'Fase 3: Modo Resolutivo (Generación de Respuesta)',
-        'FASE_4_BODY_TRANSLATION': 'Fase 4: Physical Body Translation (Des-enmascaramiento)',
-        'IA_RUNTIME_INVOCATION': 'Traza Técnica: IA_RUNTIME_INVOCATION (Legacy/Global)'
+        'FASE_2_RAG': 'Fase 2: RAG Determinista (Contexto)',
+        'FASE_3_RESOLUTIVE_CALL': 'Fase 3: Modo Resolutivo (IA)',
+        'FASE_4_BODY_TRANSLATION': 'Fase 4: Physical Translation (Output)'
     };
 
     Object.keys(phaseDisplayNames).forEach(phaseKey => {
         const phase = phases[phaseKey];
-        report += `### ${phaseDisplayNames[phaseKey]}\n`;
         if (phase) {
-            report += `**Estado:** \`${phase.status}\` | **Timestamp:** \`${phase.timestamp}\`
+            report += `### 📍 ${phaseDisplayNames[phaseKey]}\n`;
 
-#### 📥 Reality Input (Entrada)
-\`\`\`json
-${JSON.stringify(phase.input, null, 2)}
-\`\`\`
+            // 🟢 RESUMEN RÁPIDO
+            if (phaseKey === 'FASE_1_ROUTER') {
+                report += `> **Intent**: \`${phase.output.extractedIntent}\` | **Templates**: \`${JSON.stringify(phase.output.matchedTemplateIds)}\`\n\n`;
+            } else if (phaseKey === 'FASE_2_RAG') {
+                report += `> **Chunks**: \`${phase.output.chunksUsed}\` | **Intent Search**: \`${phase.input.intent}\`\n\n`;
+            }
 
-#### 📤 Reality Output (Salida)
-\`\`\`json
-${JSON.stringify(phase.output, null, 2)}
-\`\`\`
+            // 📥 INPUT (COLAPSABLE)
+            report += `<details>\n<summary>🔍 Ver Entrada & Prompt</summary>\n\n`;
+            if (phaseKey === 'FASE_1_ROUTER' && phase.input.routerSystemPrompt) {
+                report += `#### System Prompt (Router):\n\`\`\`markdown\n${phase.input.routerSystemPrompt}\n\`\`\`\n`;
+            } else if (phaseKey === 'FASE_3_RESOLUTIVE_CALL' && phase.input.messages) {
+                report += `#### Full Messages (IA):\n\`\`\`json\n${JSON.stringify(phase.input.messages, null, 2)}\n\`\`\`\n`;
+            }
+            report += `#### JSON Input:\n\`\`\`json\n${JSON.stringify(phase.input, null, 2)}\n\`\`\`\n`;
+            report += `</details>\n\n`;
 
-${phaseKey === 'FASE_0_SIEVE' ? `
-##### 📊 Análisis de Similitud Coseno (Top Matches)
-| Plantilla ID | Score (0-1) |
-| :--- | :--- |
-${(phase.output as any[] || []).map((r: any) => `| \`${r.id}\` | **${(r.score * 100).toFixed(2)}%** |`).join('\n')}
-` : ''}
+            // 📤 OUTPUT (SIEMPRE VISIBLE O COLAPSABLE SI ES GRANDE)
+            if (phaseKey === 'FASE_2_RAG' || phaseKey === 'FASE_0_SIEVE') {
+                report += `<details>\n<summary>📦 Ver Salida Detallada</summary>\n\n\`\`\`json\n${JSON.stringify(phase.output, null, 2)}\n\`\`\`\n</details>\n\n`;
+            } else {
+                report += `**Resultado:**\n\`\`\`json\n${JSON.stringify(phase.output, null, 2)}\n\`\`\`\n\n`;
+            }
 
-${phaseKey === 'FASE_1_ROUTER' ? `
-##### 🤖 Router System Prompt
-\`\`\`markdown
-${(phase.input as any)?.routerSystemPrompt || 'N/A'}
-\`\`\`
-` : ''}
-
-`;
-        } else {
-            report += `*Fase no ejecutada o no capturada.*\n\n`;
+            report += `---\n`;
         }
     });
 
-    report += `## 🤖 Prompt Final (Fase 3)
+    report += `\n## 🏁 Resultado Final de IA
+> ${aiData?.output?.content || JSON.stringify(aiData?.output || {})}
 
-### System Instructions
-\`\`\`markdown
-${builtPrompt.systemPrompt}
-\`\`\`
+<details>
+<summary>⚙️ Metadatos Técnicos</summary>
 
-### Historial Enviado
-${builtPrompt.messages.length > 0 
-    ? builtPrompt.messages.map((m: any) => `**${m.role.toUpperCase()}**: ${m.content}`).join('\n\n')
-    : '*Sin historial detectable*'}
-
-## 🏁 Resultado de IA
-- **Provider**: ${provider}
-- **Model**: ${model}
-- **Respuesta/Acciones**:
-\`\`\`json
-${JSON.stringify(aiData?.output || {}, null, 2)}
-\`\`\`
+- **Usage**: \`${JSON.stringify(aiData?.output?.usage || {})}\`
+- **Finish Reason**: \`${aiData?.output?.finishReason}\`
+</details>
 
 ---
-*Reporte autogenerado por Telemetry Trace Reporter (v16.0 Forensic)*
+*Reporte de Alta Densidad (v17.0 Intelligence)*
 `;
 
     const fs = require('fs');

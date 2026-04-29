@@ -26,8 +26,6 @@ import { retrievalService } from '../../retrieval.service';
 import * as Prompts from './asistentes-local.prompts';
 import { trackCognitiveStep } from '../../../telemetry/tracer';
 import { getModelCapabilities } from '../provider-capabilities';
-import { templateSemanticService } from '../template-semantic.service';
-import { fluxCoreTemplateSettingsService } from '../template-settings.service';
 import { templateRegistryService } from '../template-registry.service';
 
 const MAX_TOOL_ROUNDS = 3;
@@ -403,48 +401,14 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
     readonly displayName = 'Asistentes Local (v8.5)';
 
     async handleMessage(input: RuntimeInput): Promise<ExecutionAction[]> {
-        const { authorizedContext } = input;
-
-        // 1. Inicialización de Soberanía Atomizada (v16.0)
-        // Mapeamos TODAS las plantillas autorizadas de la cuenta, no solo las del asistente.
-        // Esto previene leaks de bloques inyectados (Legacy) que contengan IDs de la cuenta.
-        const maskToIdMap = new Map<string, string>();
-        const idToMaskMap = new Map<string, string>();
-        
-        const accountTemplates = await fluxCoreTemplateSettingsService.listAuthorizedTemplates(authorizedContext.accountId);
-        accountTemplates.forEach(t => {
-            const normalizedId = t.id.toLowerCase();
-            const mask = this.generateMaskID(normalizedId);
-            maskToIdMap.set(mask, normalizedId);
-            idToMaskMap.set(normalizedId, mask);
-        });
-
-        // 2. Ejecutar Pipeline Cognitivo (Cerebro)
-        const actions = await this.executeCognitivePipeline(input, maskToIdMap, idToMaskMap);
-
-        // 3. Resolución Determinista: Des-enmascarar (Cuerpo) (v19.0)
-        // Documentamos explícitamente el paso del mundo cognitivo (Cerebro) al mundo físico (Cuerpo)
-        console.log(`[AsistentesLocal] 🛡️ Resolviendo acciones finales (Des-enmascaramiento)...`);
-        
-        const { trackCognitiveStep } = await import('../../../telemetry/tracer');
-        return await trackCognitiveStep(
-            'FASE_4_BODY_TRANSLATION',
-            {
-                'account.id': authorizedContext.accountId,
-                'conversation.id': input.policyContext.conversationId,
-            },
-            { originalActions: actions },
-            async () => {
-                return this.translateMasksToUUIDs(actions, maskToIdMap);
-            },
-            input.executionId // 🎯 VÍNCULO DETERMINISTA (v10.0)
-        );
+        // 1. Ejecutar Pipeline Cognitivo (Cerebro)
+        // La soberanía de identidad y el tamiz semántico ahora son gestionados
+        // globalmente por el CognitiveDispatcher (Phase 3 Sovereign Architecture).
+        return await this.executeCognitivePipeline(input);
     }
 
     private async executeCognitivePipeline(
-        input: RuntimeInput, 
-        maskToIdMap: Map<string, string>,
-        idToMaskMap: Map<string, string>
+        input: RuntimeInput
     ): Promise<ExecutionAction[]> {
         const { policyContext, authorizedContext, runtimeConfig, conversationHistory } = input;
 
@@ -461,86 +425,28 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         const maxTokens = runtimeConfig.maxTokens ?? 1024;
         const temperature = runtimeConfig.temperature ?? 0.7;
 
-        // 3. Fase 0: Tamiz Semántico (Aguas Arriba)
-        // Reducimos el conjunto de plantillas a las 10 más relevantes semánticamente.
-        let sievedTemplateIds: string[] = authorizedContext.authorizedTemplates || [];
-        let maskedAuthorizedContext = { ...authorizedContext }; 
-
-        console.log(`\n======================================================`);
-        console.log(`🧠 [FASE 0] TAMIZ SEMÁNTICO - EVALUACIÓN`);
-        console.log(`======================================================`);
-        
-        try {
-            const sieveResult = await trackCognitiveStep(
-                'FASE_0_SIEVE',
-                { 
-                    'account.id': authorizedContext.accountId,
-                    'conversation.id': input.policyContext.conversationId,
-                    'templates.total': String(authorizedContext.authorizedTemplates?.length)
-                },
-                { 
-                    lastMessage: lastMessage.content,
-                    availableTemplates: authorizedContext.authorizedTemplates
-                },
-                async () => {
-                    return await templateSemanticService.searchRelevantTemplatesWithScores(
-                        lastMessage.content, 
-                        authorizedContext.accountId, 
-                        10
-                    );
-                },
-                input.executionId // 🎯 VÍNCULO DETERMINISTA (v10.0)
-            );
-            
-            // Filtrado determinista por umbral de similitud (v18.0)
-            // Solo dejamos pasar plantillas que tengan al menos un 10% de relevancia semántica
-            const MINIMUM_SCORE = 0.10; 
-            const filteredResults = sieveResult.filter(r => r.score >= MINIMUM_SCORE);
-            
-            sievedTemplateIds = filteredResults.map(r => r.id);
-            console.log(`✅ Tamiz completado: ${sievedTemplateIds.length} plantillas (Score >= ${MINIMUM_SCORE*100}%).`);
-
-            // Crear contexto enmascarado estable para el resto del pipeline (v12.1 Total Sovereignty)
-            let maskedInstructions = authorizedContext.instructions || '';
-            let maskedRuntimeInstructions = runtimeConfig.instructions || '';
-            let maskedPrivateContext = authorizedContext.businessProfile?.privateContext || '';
-
-            idToMaskMap.forEach((mask, id) => {
-                // Reemplazo insensible a mayúsculas/minúsculas para interceptar leaks
-                const regex = new RegExp(id, 'gi');
-                maskedInstructions = maskedInstructions.replace(regex, mask);
-                maskedRuntimeInstructions = maskedRuntimeInstructions.replace(regex, mask);
-                maskedPrivateContext = maskedPrivateContext.replace(regex, mask);
-            });
-
-            maskedAuthorizedContext = {
-                ...authorizedContext,
-                instructions: maskedInstructions,
-                authorizedTemplates: sievedTemplateIds.map(id => idToMaskMap.get(id.toLowerCase())!),
-                businessProfile: {
-                    ...authorizedContext.businessProfile,
-                    privateContext: maskedPrivateContext,
-                    templates: (authorizedContext.businessProfile?.templates as any[] || []).map(t => {
-                        const mask = idToMaskMap.get(t.templateId.toLowerCase()) || t.templateId;
-                        return { ...t, templateId: mask };
-                    })
-                }
-            };
-            
-            if (runtimeConfig.instructions) {
-                runtimeConfig.instructions = maskedRuntimeInstructions;
-            }
-        } catch (error) {
-            console.error(`[AsistentesLocal] ⚠️ Error en Tamiz Semántico:`, error);
-        }
+        // 3. Fase 0: Tamiz Semántico (Delegado al Dispatcher)
+        // El input ya llega filtrado y enmascarado por la plataforma.
 
         // ── FASE 1: INTENT ROUTER ─────────────────────────────────────────────
-        // Usamos el contexto enmascarado para soberanía (v12.0)
-        const templateDefinitions = getAuthorizedTemplateDefinitions(maskedAuthorizedContext);
+        // Usamos el contexto que ya viene enmascarado desde la aduana (v12.0)
+        const baseTemplateDefinitions = getAuthorizedTemplateDefinitions(authorizedContext);
+        
+        // Inyectar Plantilla de Sistema para Estancamiento Cognitivo (ID: 0000)
+        const STALL_TEMPLATE = {
+            templateId: '0000',
+            name: 'SISTEMA: Estancamiento Cognitivo',
+            instructions: 'INVOCAR ESTA PLANTILLA únicamente si detectas un bucle infinito, si el usuario repite la misma pregunta de forma redundante o si la conversación está estancada sin avanzar. Esta plantilla activa un protocolo de salida y reset de contexto.',
+            content: 'Parece que estamos teniendo dificultades para avanzar con esta consulta. ¿Te gustaría que te comunique con un agente humano o preferís intentar preguntando de otra manera?',
+            variables: []
+        };
+
+        const templateDefinitions = [...baseTemplateDefinitions, STALL_TEMPLATE];
+        
         let matchedTemplateIds: string[] = [];
         let extractedIntent: string | null = null;
 
-        if (templateDefinitions.length > 0) {
+        if (baseTemplateDefinitions.length > 0 || true) { // Siempre correr router para detectar bucles con STALL_TEMPLATE
             const relevantHistory = conversationHistory
                 .slice(-4)
                 .map(h => `${h.role.toUpperCase()}: ${h.content}`)
@@ -548,8 +454,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             
             // Re-mapeo para tokens cortos estables (v12.0 MaskID)
             const templatesText = templateDefinitions.map((t) => {
-                const mask = t.templateId; // Ya vienen enmascaradas del getAuthorizedTemplateDefinitions(maskedAuthorizedContext)
-                return `- ID: ${mask}\n  Nombre: ${t.name}\n  Cuándo usarla: ${t.instructions ?? 'Coincidencia con intención'}`;
+                return `- ID: ${t.templateId}\n  Nombre: ${t.name}\n  Cuándo usarla: ${t.instructions ?? 'Coincidencia con intención'}`;
             }).join('\n\n');
             const routerSystemPrompt = Prompts.buildRouterSystemPrompt(templatesText);
 
@@ -566,7 +471,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                     'model': model
                 },
                 { 
-                    routerSystemPrompt, // 🎯 TRANSPARENCIA: Capturamos el prompt exacto del router
+                    routerSystemPrompt,
                     history: relevantHistory, 
                     candidates: templateDefinitions.map(t => ({ id: t.templateId, name: t.name }))
                 },
@@ -578,11 +483,17 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                         templates: templateDefinitions,
                     });
                 },
-                input.executionId // 🎯 VÍNCULO DETERMINISTA (v10.0)
+                input.executionId
             );
 
             matchedTemplateIds = routerResult.matchedTemplateIds;
             extractedIntent = routerResult.extractedIntent;
+
+            // RAG-FIX: Prioridad absoluta al Estancamiento Cognitivo
+            if (matchedTemplateIds.includes('0000')) {
+                console.log(`[AsistentesLocal] 🚨 Estancamiento Cognitivo detectado por Router. Forzando protocolo de salida.`);
+                matchedTemplateIds = ['0000'];
+            }
 
             console.log(`\n======================================================`);
             console.log(`🧠 [FASE 1] LLM ROUTER - OUTPUT`);
@@ -593,29 +504,50 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
         // ── FASE 2: RAG DETERMINISTA ──────────────────────────────────────────
         let deterministicRagContext = '';
-        if (extractedIntent && extractedIntent.trim().length > 0) {
+        
+        // Detección de Bucle: IA (ID 0000) + Determinista (3 repeticiones)
+        const userMessages = conversationHistory.filter(m => m.role === 'user');
+        const lastThreeUserMatch = userMessages.length >= 3 && 
+            userMessages[userMessages.length - 1].content === userMessages[userMessages.length - 2].content &&
+            userMessages[userMessages.length - 1].content === userMessages[userMessages.length - 3].content;
+
+        const isStalled = matchedTemplateIds.includes('0000') || lastThreeUserMatch;
+        if (lastThreeUserMatch && !matchedTemplateIds.includes('0000')) {
+            console.log(`[AsistentesLocal] 🛡️ Bucle detectado por repetición literal (Caja Blanca).`);
+        }
+
+        // Lógica de Soberanía: Solo RAG si hay ambigüedad (>1 plantilla), variables dinámicas ({{}}), o no hay plantillas (conversación pura)
+        const matchedTemplates = templateDefinitions.filter(t => matchedTemplateIds.includes(t.templateId));
+        const hasDynamicVariables = matchedTemplates.some(t => t.content?.includes('{{') || t.instructions?.includes('{{'));
+        const isAmbiguous = matchedTemplateIds.length > 1;
+        const noTemplatesFound = matchedTemplateIds.length === 0;
+
+        const shouldRunRag = extractedIntent && 
+                             (isAmbiguous || hasDynamicVariables || noTemplatesFound) && 
+                             !isStalled;
+
+        if (shouldRunRag) {
             console.log(`\n======================================================`);
             console.log(`🧠 [FASE 2] RAG DETERMINISTA - SEARCH`);
             console.log(`======================================================`);
             console.log(`Ejecutando Similarity Search Vectorial nativa para: "${extractedIntent}"...`);
+
             try {
                 const ragResult = await trackCognitiveStep(
                     'FASE_2_RAG',
-                    { 
-                        'account.id': authorizedContext.accountId,
-                        'conversation.id': input.policyContext.conversationId,
-                        'intent': extractedIntent
-                    },
+                    { intent: extractedIntent!, vectorStores: runtimeConfig.vectorStoreIds.join(',') },
                     { intent: extractedIntent, vectorStores: runtimeConfig.vectorStoreIds },
                     async () => {
+                        const lastUserMessage = input.conversationHistory[input.conversationHistory.length - 1]?.content || query;
+                        
                         return await retrievalService.buildContext(
-                            extractedIntent,
+                            lastUserMessage,
                             runtimeConfig.vectorStoreIds,
                             authorizedContext.accountId,
                             { topK: 2, maxTokens: 800 }
                         );
                     },
-                    input.executionId // 🎯 VÍNCULO DETERMINISTA (v10.0)
+                    input.executionId
                 );
 
                 if (ragResult.context) {
@@ -624,12 +556,8 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                     console.log(`🧠 [FASE 2] RAG DETERMINISTA - RESULTADOS ENCONTRADOS`);
                     console.log(`======================================================`);
                     console.log(`✅ Chunks extraídos: ${ragResult.chunksUsed}`);
-                    console.log(`[VISTA PREVIA DEL CONTEXTO DE CONOCIMIENTO]:\n${ragResult.context.substring(0, 500)}...\n`);
                 } else {
-                    console.log(`\n======================================================`);
-                    console.log(`🧠 [FASE 2] RAG DETERMINISTA - SIN RESULTADOS`);
-                    console.log(`======================================================`);
-                    console.log(`⚠️ Advertencia: No se encontraron documentos relevantes en la base por encima del umbral de confianza.`);
+                    console.log(`⚠️ Advertencia: No se encontraron documentos relevantes en la base.`);
                 }
             } catch (error: any) {
                 console.error(`[AsistentesLocal] 📛 Error ejecutando RAG Determinista: ${error.message}`);
@@ -637,64 +565,126 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         }
 
         // 4. Preparación de Contexto de Enfoque Cognitivo (v17.1)
-        // Solo inyectaremos al Prompt Builder las plantillas seleccionadas por la Fase 1 !!
-        // Esto optimiza tokens y evita distracciones del modelo.
+        // El CognitiveDispatcher ya filtró las plantillas por relevancia (Tamiz Global).
+        // Aquí simplemente mantenemos las plantillas autorizadas que llegaron en el input.
         
-        // Limpiamos bloques de plantillas heredados/inyectados para evitar duplicidad o leaks
-        const focusedInstructions = templateRegistryService.stripLegacyBlocks(maskedAuthorizedContext.instructions || '');
-
         const strictAuthorizedContext = {
-            ...maskedAuthorizedContext,
-            instructions: focusedInstructions,
-            authorizedTemplates: matchedTemplateIds // Estos ya son MaskIDs
+            ...authorizedContext,
+            instructions: isStalled ? "" : templateRegistryService.stripLegacyBlocks(authorizedContext.instructions || ''),
+            authorizedTemplates: matchedTemplateIds.length > 0 ? matchedTemplateIds : authorizedContext.authorizedTemplates
         };
 
         if (strictAuthorizedContext.businessProfile && strictAuthorizedContext.businessProfile.templates) {
             strictAuthorizedContext.businessProfile = {
                 ...strictAuthorizedContext.businessProfile,
                 templates: (strictAuthorizedContext.businessProfile.templates as any[]).filter(t => 
-                    matchedTemplateIds.includes(t.templateId)
+                    strictAuthorizedContext.authorizedTemplates?.includes(t.templateId)
                 )
             };
+            
+            // También limpiar el contexto privado del perfil si existe
+            if (strictAuthorizedContext.businessProfile.privateContext) {
+                strictAuthorizedContext.businessProfile.privateContext = templateRegistryService.stripLegacyBlocks(strictAuthorizedContext.businessProfile.privateContext as string);
+            }
         }
 
         const strictPolicyContext = {
             ...policyContext,
-            authorizedTemplates: matchedTemplateIds,
+            authorizedTemplates: strictAuthorizedContext.authorizedTemplates,
             resolvedBusinessProfile: {
                 ...policyContext.resolvedBusinessProfile,
                 templates: (policyContext.resolvedBusinessProfile?.templates as any[] || [])
-                    .map(t => {
-                        const mask = idToMaskMap.get(t.templateId.toLowerCase()) || t.templateId;
-                        return { ...t, templateId: mask };
-                    })
-                    .filter(t => matchedTemplateIds.includes(t.templateId)) // 🎯 FILTRO CRÍTICO (v17.1)
+                    .filter(t => strictAuthorizedContext.authorizedTemplates?.includes(t.templateId)),
+                // Pasamos el contexto privado de forma íntegra sin destruirlo
+                privateContext: (policyContext.resolvedBusinessProfile?.privateContext as string || '')
             }
         };
 
+        // 🛡️ Global Loop Guard (v21.3)
+        const lastAssistantMsg = conversationHistory.filter(m => m.role === 'assistant').pop();
+        const templates = [
+            ...(strictAuthorizedContext.businessProfile?.templates as any[] || []),
+            STALL_TEMPLATE
+        ];
+        const targetTemplate = matchedTemplateIds.length === 1 ? templates.find(t => t.templateId === matchedTemplateIds[0]) : null;
+        
+        const isRepetition = lastAssistantMsg && targetTemplate && 
+                            (lastAssistantMsg.content === targetTemplate.content || 
+                             lastAssistantMsg.content?.includes(targetTemplate.content?.slice(0, 20) || '___'));
+
+        let effectiveTemplates = templates;
+        let effectiveTemperature = temperature;
+
+        if (isRepetition || isStalled) {
+            effectiveTemperature = 1.0; 
+            if (targetTemplate && targetTemplate.templateId !== '0000') {
+                effectiveTemplates = templates.filter(t => t.templateId !== targetTemplate.templateId);
+                console.log(`[AsistentesLocal] 🚫 Blacklist temporal activada para plantilla: ${targetTemplate.templateId}`);
+            }
+        }
+
         // 5. Build prompt (Fase 3) usando SOLO las plantillas filtradas
-        // Limpiamos también las instrucciones del runtimeConfig que pueden traer bloques inyectados
         const focusedRuntimeInstructions = templateRegistryService.stripLegacyBlocks(runtimeConfig.instructions || '');
 
-        let { systemPrompt, messages } = promptBuilder.build({
+        // 🧠 LÓGICA DE CONFLICTO: Si estamos en modo 0000, vaciamos plantillas y forzamos directiva
+        let conflictDirective = "";
+        if (isStalled) {
+            effectiveTemplates = []; // Vaciado de contexto
+            conflictDirective = "\n\n⚠️ PROTOCOLO DE EMERGENCIA: Se ha detectado un BUCLE COGNITIVO. El usuario está repitiendo la misma consulta y las respuestas anteriores no han sido satisfactorias. \n1. NO intentes usar plantillas.\n2. NO repitas la información anterior.\n3. RECONOCE el estancamiento de forma humana.\n4. OFRECE escalar con un humano o cambiar drásticamente el enfoque de la conversación.";
+        }
+
+        // 6. Preparación de Parámetros de Ensamblaje (Soberanía Ciega - Pura)
+        let systemPrompt: string;
+        let messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+        let finalTemplates = effectiveTemplates;
+        let finalInstructions = focusedRuntimeInstructions;
+        let finalTemplateEnforcement = Prompts.buildTemplateEnforcement();
+
+        if (isStalled) {
+            console.log(`[AsistentesLocal] 🚨 EVENTO 0000 DETECTADO: Aplicando Arquitectura Antibucle.`);
+            // Aislamos a la IA de herramientas técnicas para forzar resolución humana
+            finalTemplates = []; 
+            finalTemplateEnforcement = ""; 
+            finalInstructions = `\n\n⚠️ INSTRUCCIÓN DEL SISTEMA (MODO RECUPERACIÓN):\nSe ha detectado un estancamiento en la conversación.\n1. DETÉN el bucle.\n2. NO uses plantillas ni comandos técnicos.\n3. ADMITE el estancamiento de forma cordial.\n4. OFRECE una salida humana (derivar a agente) o cambia el enfoque.`;
+            
+            // Limpiamos residuos técnicos en el historial para evitar imitación
+            messages = conversationHistory
+                .filter(m => m.role === 'user' || m.role === 'assistant')
+                .map(m => ({ 
+                    role: m.role as 'user' | 'assistant', 
+                    content: m.content.replace(/CALL_TEMPLATE:[\s\S]*?(\n|$)/g, '').trim() 
+                }));
+        } else {
+            messages = conversationHistory
+                .filter(m => m.role === 'user' || m.role === 'assistant')
+                .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+        }
+
+        // ✅ ENSAMBLAJE ESTÁNDAR (La única vía de Fase 3)
+        const built = promptBuilder.build({
             policyContext: strictPolicyContext,
-            authorizedContext: strictAuthorizedContext,
+            authorizedContext: {
+                ...strictAuthorizedContext,
+                instructions: finalInstructions, // 🚀 PRIORIDAD: Inyectamos la instrucción de recuperación aquí
+                businessProfile: {
+                    ...strictAuthorizedContext.businessProfile,
+                    templates: finalTemplates
+                }
+            } as any,
             runtimeConfig: {
                 ...runtimeConfig,
-                instructions: focusedRuntimeInstructions
+                instructions: finalInstructions
             },
-            conversationHistory,
-            templateEnforcement: Prompts.buildTemplateEnforcement(),
-            ragContext: deterministicRagContext ? Prompts.buildRagContextPrompt(deterministicRagContext) : undefined,
+            conversationHistory: messages as any, // Ya están filtrados
+            templateEnforcement: finalTemplateEnforcement,
+            ragContext: (deterministicRagContext && !isStalled) ? Prompts.buildRagContextPrompt(deterministicRagContext) : undefined,
         });
 
-        // ── PREPARACIÓN SOBERANA (v15.0) ──────────────────────────────────────
-        const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-        const purge = (text: string) => text.replace(uuidRegex, (match) => idToMaskMap.get(match.toLowerCase()) || match);
+        systemPrompt = built.systemPrompt;
+        // PromptBuilder también formatea los mensajes, los tomamos de ahí
+        messages = built.messages;
 
-        systemPrompt = purge(systemPrompt);
-
-        console.log(`[AsistentesLocal] 📜 SYSTEM PROMPT DEBUG (PURIFICADO):`);
+        console.log(`[AsistentesLocal] 📜 SYSTEM PROMPT DEBUG:`);
         console.log(`----------------------------------------`);
         console.log(systemPrompt);
         console.log(`----------------------------------------`);
@@ -716,24 +706,30 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
         console.log(`[AsistentesLocal] → ${provider}/${model} | Tools:${tools.length} | account:${authorizedContext.accountId}`);
 
-        // 5. Tool call loop (max MAX_TOOL_ROUNDS rounds)
         let currentMessages: LLMMessage[] = [
             { role: 'system', content: systemPrompt },
             ...messages,
         ];
+
+        // 🧠 Inyección de Desbloqueo: Sacudón de sistema
+        if (isRepetition || extractedIntent === 'estancamiento_cognitivo') {
+            currentMessages[0].content = "⚠️ ALERTA DE ESTANCAMIENTO CRÍTICO: DEBES ROMPER EL PATRÓN. No repitas saludos. No uses la respuesta anterior. Sé creativo.\n\n" + currentMessages[0].content;
+        }
+
         const queuedTemplateActions: SendTemplateAction[] = [];
 
         // ── ⚡ SHORTCUT DETERMINISTA: Fast-Path (v21.0) ────────────────────────
         // Si hay un Match Perfecto en una plantilla estática y la intención es simple, puenteamos la Fase 3.
-        if (matchedTemplateIds.length === 1) {
+        // NOTA: Excluimos el 0000 porque queremos que la Fase 3 gestione el conflicto semánticamente.
+        if (matchedTemplateIds.length === 1 && matchedTemplateIds[0] !== '0000') {
             const maskId = matchedTemplateIds[0];
-            const templates = strictAuthorizedContext.businessProfile.templates as any[];
-            const targetTemplate = templates.find(t => t.templateId === maskId);
+            const targetTemplate = templates.filter(t => t.templateId !== '0000').find(t => t.templateId === maskId);
 
-            const isStatic = targetTemplate && !targetTemplate.content?.includes('{{');
-            const isSimpleIntent = extractedIntent === 'saludo' || !extractedIntent;
+            const isStatic = targetTemplate && 
+                             !targetTemplate.content?.includes('{{') && 
+                             !targetTemplate.instructions?.includes('{{');
 
-            if (isStatic && isSimpleIntent) {
+            if (isStatic && !isRepetition) {
                 return await trackCognitiveStep(
                     'FASE_1_5_DETERMINISTIC_SHORTCUT',
                     {
@@ -776,12 +772,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             console.log(`[System Prompt Principal (Abreviado)]:\n... ${systemPrompt.substring(0, 300)} ...`);
             console.log(`\n[Contexto RAG Injectado en este turno]:\n${deterministicRagContext ? deterministicRagContext.substring(0, 300) + '...' : '(Vacío - No hay RAG)'}\n`);
 
-            // ── FILTRO SOBERANO DE ÚLTIMA INSTANCIA (v15.0) ─────────────────
-            // Purificamos CUALQUIER leak en los mensajes justo antes del envío.
-            const sovereignMessages = currentMessages.map(m => ({
-                ...m,
-                content: typeof m.content === 'string' ? purge(m.content) : m.content
-            }));
+            const sovereignMessages = currentMessages;
 
             const result = await trackCognitiveStep(
                 'FASE_3_RESOLUTIVE_CALL',
@@ -793,17 +784,17 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                 },
                 { messages: sovereignMessages, tools: tools.map(t => t.function.name) },
                 async () => {
-                    return await llmClient.complete({
-                        provider,
-                        model,
-                        messages: sovereignMessages,
-                        maxTokens,
-                        temperature,
-                        tools: tools.length > 0 ? tools : undefined,
-                        toolChoice: tools.length > 0 ? 'auto' : undefined,
-                    });
+                        return await llmClient.complete({
+                            provider,
+                            model,
+                            messages: sovereignMessages,
+                            maxTokens,
+                            temperature: effectiveTemperature,
+                            tools: tools.length > 0 ? tools : undefined,
+                            toolChoice: tools.length > 0 ? 'auto' : undefined,
+                        });
                 },
-                input.executionId // 🎯 VÍNCULO DETERMINISTA (v10.0)
+                input.executionId
             );
             logLLMCompletion({ phase: 'main', round, result });
 
@@ -1115,24 +1106,6 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         }
     }
 
-    private generateMaskID(uuid: string): string {
-        const cleanId = uuid.replace(/-/g, '');
-        if (cleanId.length < 4) return cleanId.toUpperCase();
-        return (cleanId.substring(0, 2) + cleanId.substring(cleanId.length - 2)).toUpperCase();
-    }
-
-    private translateMasksToUUIDs(actions: ExecutionAction[], maskToIdMap: Map<string, string>): ExecutionAction[] {
-        return actions.map(action => {
-            if (action.type === 'send_template') {
-                const mask = action.templateId.toUpperCase();
-                const realId = maskToIdMap.get(mask);
-                if (realId) {
-                    return { ...action, templateId: realId };
-                }
-            }
-            return action;
-        });
-    }
 }
 
 export const asistentesLocalRuntime = new AsistentesLocalRuntime();

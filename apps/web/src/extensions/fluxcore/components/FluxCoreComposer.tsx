@@ -29,6 +29,9 @@ import type { ComposerMediaItem, UploadAssetFn, UploadAudioFn, ComposerUploadRes
 import type { Template } from '../../../components/templates/types';
 import { usePanelStore } from '../../../store/panelStore';
 import { useUIStore } from '../../../store/uiStore';
+import { TemplateComposerPreview } from '../../../components/chat/TemplateComposerPreview';
+import { useWebSocket } from '../../../hooks/useWebSocket';
+import { ProposedWorkPreview } from './ProposedWorkPreview';
 
 type UserActivityType = 'typing' | 'recording' | 'idle' | 'cancel';
 
@@ -61,6 +64,10 @@ export function FluxCoreComposer(props: {
     const [isAudioRecorderOpen, setIsAudioRecorderOpen] = useState(false);
     const [wasTextTruncated, setWasTextTruncated] = useState(false);
     const [isAIBlockCollapsed, setIsAIBlockCollapsed] = useState(false);
+    const [activeTemplate, setActiveTemplate] = useState<Template | null>(null);
+    const [activeProposedWork, setActiveProposedWork] = useState<any | null>(null);
+    const [isAuthorizing, setIsAuthorizing] = useState(false);
+
     const openTab = usePanelStore((state) => state.openTab);
     const setActiveActivity = useUIStore((state) => state.setActiveActivity);
 
@@ -141,6 +148,19 @@ export function FluxCoreComposer(props: {
         }
     }, [isAudioRecorderOpen, hasText]);
 
+    // 🏗️ WES: Escuchar propuestas de trabajo vía WebSocket
+    useWebSocket({
+        onMessage: (message) => {
+            if (message.type === 'fluxcore:work_proposed') {
+                console.log('🏗️ FluxCore Proposal Received:', message.data);
+                // Solo mostrar si es para esta conversación
+                if (message.data.conversationId === props.conversationId) {
+                    setActiveProposedWork(message.data);
+                }
+            }
+        }
+    });
+
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -211,15 +231,32 @@ export function FluxCoreComposer(props: {
         props.onUserActivity?.('cancel');
     };
 
-    const handleQuickSelect = async (template: Template) => {
+    const handleQuickSelect = (template: Template) => {
         setIsQuickPickerOpen(false);
+        
+        if (template.variables.length === 0) {
+            // Envío directo para plantillas simples
+            void handleSendTemplate({}, template.id);
+        } else {
+            // Previsualización para plantillas con variables
+            setActiveTemplate(template);
+        }
+    };
+
+    const handleSendTemplate = async (variables: Record<string, string>, directId?: string) => {
         if (!props.accountId || !props.conversationId) return;
 
+        const targetId = directId || activeTemplate?.id;
+        if (!targetId) return;
+
         try {
-            await api.executeTemplate(props.accountId, template.id, {
+            await api.executeTemplate(props.accountId, targetId, {
                 conversationId: props.conversationId,
+                variables
             });
-            // La UI se actualizará via WebSocket o refresh del padre
+            setActiveTemplate(null);
+            setIsQuickPickerOpen(false);
+            props.onUserActivity?.('cancel');
         } catch (err) {
             console.error('Failed to execute template:', err);
         }
@@ -229,6 +266,34 @@ export function FluxCoreComposer(props: {
         if (!props.accountId) return;
         await setRule(mode, { relationshipId: props.relationshipId });
         setIsAIModeOpen(false);
+    };
+
+    const handleAuthorizeProposal = async (values: Record<string, any>) => {
+        if (!props.accountId || !activeProposedWork) return;
+
+        setIsAuthorizing(true);
+        try {
+            // 1. Abrir el trabajo (Proposed -> Active)
+            const openResp = await api.openWork(props.accountId, activeProposedWork.proposedWorkId);
+            if (!openResp.success) throw new Error(openResp.error || 'Failed to open work');
+            
+            const workId = openResp.data.id;
+
+            // 2. Commit Delta con valores (posiblemente editados) y transición a COMPLETED
+            const deltaResp = await api.commitDelta(props.accountId, workId, {
+                values,
+                transition: 'COMPLETED'
+            });
+
+            if (!deltaResp.success) throw new Error(deltaResp.error || 'Failed to commit delta');
+
+            console.log('✅ Proposed Work Authorized and Completed!');
+            setActiveProposedWork(null);
+        } catch (err) {
+            console.error('❌ Failed to authorize proposal:', err);
+        } finally {
+            setIsAuthorizing(false);
+        }
     };
 
     const AIIcon =
@@ -536,6 +601,24 @@ export function FluxCoreComposer(props: {
                         Mostrar aviso de IA
                     </button>
                 </div>
+            )}
+
+            {activeTemplate && (
+                <TemplateComposerPreview 
+                    template={activeTemplate} 
+                    onCancel={() => setActiveTemplate(null)}
+                    onSend={handleSendTemplate}
+                    isSending={props.isSending}
+                />
+            )}
+
+            {activeProposedWork && (
+                <ProposedWorkPreview 
+                    proposal={activeProposedWork}
+                    onCancel={() => setActiveProposedWork(null)}
+                    onAuthorize={handleAuthorizeProposal}
+                    isSending={isAuthorizing}
+                />
             )}
 
             {isAIModeOpen ? renderAIModeSelector() : isAudioRecorderOpen ? renderAudioRecorderMode() : isAutomaticMode ? renderAutomaticMode() : renderManualMode()}

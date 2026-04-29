@@ -846,21 +846,10 @@ class AIService {
     // ── 4. Build context ────────────────────────────────────────────────
     const context = await this.buildContext(recipientAccountId, conversationId);
 
-    // WES-170: Recuperar contexto de WES
-    const { workResolver } = await import('../core/WorkResolver');
-    const { fluxcoreWorkDefinitions } = await import('@fluxcore/db');
-
-    // Necesitamos el relationshipId para workResolver.resolve (Canon compliance)
-    const [convRecord] = await db.select({ relationshipId: conversations.relationshipId }).from(conversations).where(eq(conversations.id, conversationId)).limit(1);
-    const relationshipId = convRecord?.relationshipId;
-
-    const wesContext: any = {
-      availableWorkDefinitions: await db.select().from(fluxcoreWorkDefinitions).where(eq(fluxcoreWorkDefinitions.accountId, recipientAccountId)),
-      activeWork: relationshipId ? await workResolver.resolve({ accountId: recipientAccountId, conversationId, relationshipId }).then(res =>
-        res.type === 'RESUME_WORK' ? { id: (res as any).workId, state: 'ACTIVE' } : null
-      ) : null
-    };
-
+    // CONSOLIDATION: WES context (workDefinitions, activeWork) is now resolved by
+    // RuntimeComposition → CognitiveDispatcher → FluxiRuntime.
+    // The legacy Extension path (ai.service → extension.generateResponse) no longer
+    // needs WES context — it only serves @fluxcore/asistentes now.
 
     const event: MessageEvent = {
       messageId: options.triggerMessageId || crypto.randomUUID(),

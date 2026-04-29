@@ -3,16 +3,21 @@
  * 
  * Proporciona servicios necesarios para FluxiRuntime en la nueva arquitectura
  * Resuelve el problema de que FluxiRuntime no puede acceder directamente a WorkEngineService
+ * 
+ * CONSOLIDATION v9.0:
+ * - Removed messageCore (Fluxi no longer bypasses Kernel — all messages go through ActionExecutor)
+ * - workEngineService provides: resolveSemanticMatch(), commitSemanticConfirmation(), 
+ *   proposeWork(), openWork(), commitDelta(), ingestMessage()
  */
 
 import { workEngineService } from '../work-engine.service';
-import { messageCore } from '../../core/message-core';
 
 export function createFluxiRuntimeConfig(accountId: string): any {
     return {
-        // Servicios principales que FluxiRuntime necesita
+        // Core service: WorkEngine handles all transactional operations
+        // Provides: proposeWork, openWork, commitDelta, ingestMessage,
+        //           resolveSemanticMatch, commitSemanticConfirmation (Phase 0)
         workEngineService,
-        messageCore,
         
         // Configuración por defecto para LLM
         provider: 'groq',

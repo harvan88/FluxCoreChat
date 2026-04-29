@@ -1,4 +1,4 @@
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { PublicProfileLayout } from './layouts/PublicProfileLayout';
 import { ProfileChatBlockMobile } from './components/blocks/ProfileChatBlockMobile';
@@ -27,6 +27,8 @@ export function PublicProfilePage() {
 
 function PublicProfileView({ alias }: { alias: string }) {
   const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
+  const conversationId = searchParams.get('C') || "";
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +117,6 @@ function PublicProfileView({ alias }: { alias: string }) {
   }
 
 
-  // Success state - Usar el chat público (sin autenticación)
   return (
     <PublicProfileLayout
       chatBlock={
@@ -123,7 +124,7 @@ function PublicProfileView({ alias }: { alias: string }) {
           <ProfileChatBlockMobile
             key={`mobile:${profile.alias}`}
             alias={profile.alias}
-            conversationId=""
+            conversationId={conversationId}
             accountId={undefined}
             profile={profile}
           />
@@ -131,7 +132,7 @@ function PublicProfileView({ alias }: { alias: string }) {
           <ProfileChatBlockDesktop
             key={`desktop:${profile.alias}`}
             alias={profile.alias}
-            conversationId=""
+            conversationId={conversationId}
             accountId={undefined}
             profile={profile}
           />

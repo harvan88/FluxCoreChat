@@ -154,6 +154,18 @@ coreEventBus.on('telemetry:distributed_trace', (payload) => {
   }
 });
 
+// Escuchar propuestas de WES y enviarlas a los clientes de la conversación
+coreEventBus.on('fluxcore.work_proposed', (payload) => {
+  console.log(`[ws-handler] 🏗️ Broadcasting work proposal: ${payload.proposedWorkId} (${payload.typeId})`);
+  
+  const message = {
+    type: 'fluxcore:work_proposed',
+    data: payload
+  };
+
+  broadcastToConversationClients(payload.conversationId, message);
+});
+
 export function broadcastAll(payload: any): void {
   const message = JSON.stringify(payload);
   for (const ws of activeConnections) {

@@ -233,14 +233,16 @@ export class ChatProjector extends BaseProjector {
         const accountId = evidence.payload.accountId;
         const conversationId = evidence.payload.context?.conversationId;
 
-        if (!accountId) {
-            console.warn(`[ChatProjector] ⚠️ Missing accountId in signal #${signal.sequenceNumber}`);
-            console.warn(`[ChatProjector] 🔍 Evidence raw:`, JSON.stringify(signal.evidenceRaw, null, 2));
+        // 🛡️ VALIDACIÓN DE SOBERANÍA: Si no es un UUID válido, ignorar para no bloquear el proyector
+        const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+        if (!accountId || !isUuid(accountId)) {
+            console.warn(`[ChatProjector] ⚠️ Invalid or missing accountId in signal #${signal.sequenceNumber}: ${accountId}`);
             return;
         }
         
-        if (!conversationId) {
-            console.warn(`[ChatProjector] ⚠️ Missing conversationId in signal #${signal.sequenceNumber}`);
+        if (!conversationId || !isUuid(conversationId)) {
+            console.warn(`[ChatProjector] ⚠️ Invalid or missing conversationId in signal #${signal.sequenceNumber}: ${conversationId}`);
             return;
         }
 

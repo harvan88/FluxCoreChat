@@ -58,6 +58,9 @@ export const fluxcoreDocumentChunks = pgTable('fluxcore_document_chunks', {
   pageNumber: integer('page_number'),
   sectionTitle: varchar('section_title', { length: 255 }),
 
+  // Dimension tracking for multi-resolution RAG
+  dimensions: integer('dimensions'),
+
   // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

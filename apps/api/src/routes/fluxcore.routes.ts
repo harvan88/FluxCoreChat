@@ -13,6 +13,7 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { fluxcoreService } from '../services/fluxcore.service';
 import { getOpenAIAssistant } from '../services/openai-sync.service';
 import { fluxiRoutes } from './fluxcore/works.routes'; // WES-180
+import { definitionsRoutes } from './fluxcore/definitions.routes';
 
 // ============================================================================
 // ASSISTANTS ROUTES
@@ -912,7 +913,7 @@ const vectorStoresRoutes = new Elysia({ prefix: '/vector-stores' })
           }
         }
 
-        const deleted = await fluxcoreService.deleteVectorStoreFile(params.fileId, params.id);
+        const deleted = await fluxcoreService.deleteVectorStoreFile(params.fileId, params.id, accountId);
         if (!deleted) {
           set.status = 404;
           return { success: false, message: 'File not found' };
@@ -1348,14 +1349,15 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
   // GET /fluxcore/tools/definitions
   .get(
     '/definitions',
-    async ({ user, set }) => {
+    async ({ user, query, set }) => {
       if (!user) {
         set.status = 401;
         return { success: false, message: 'Unauthorized' };
       }
 
       try {
-        const definitions = await fluxcoreService.getToolDefinitions();
+        const accountId = query.accountId;
+        const definitions = await fluxcoreService.getToolDefinitions(accountId);
         return { success: true, data: definitions };
       } catch (error: any) {
         set.status = 500;
@@ -1363,6 +1365,9 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
       }
     },
     {
+      query: t.Object({
+        accountId: t.Optional(t.String()),
+      }),
       detail: {
         tags: ['FluxCore'],
         summary: 'List available tool definitions',
@@ -1430,6 +1435,51 @@ const toolsRoutes = new Elysia({ prefix: '/tools' })
       detail: {
         tags: ['FluxCore'],
         summary: 'Create tool connection',
+      },
+    }
+  )
+
+  // PATCH /fluxcore/tools/connections/:id
+  .patch(
+    '/connections/:id',
+    async ({ user, params, body, set, query }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, message: 'Unauthorized' };
+      }
+
+      const accountId = query.accountId;
+      if (!accountId) {
+        set.status = 400;
+        return { success: false, message: 'accountId is required' };
+      }
+
+      try {
+        const connection = await fluxcoreService.updateToolConnection(params.id, accountId, body as any);
+        if (!connection) {
+          set.status = 404;
+          return { success: false, message: 'Connection not found' };
+        }
+        return { success: true, data: connection };
+      } catch (error: any) {
+        set.status = 500;
+        return { success: false, message: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+      query: t.Object({
+        accountId: t.String(),
+      }),
+      body: t.Object({
+        status: t.Optional(t.String()),
+        authConfig: t.Optional(t.Any()),
+      }),
+      detail: {
+        tags: ['FluxCore'],
+        summary: 'Update tool connection',
       },
     }
   )
@@ -1631,4 +1681,20 @@ export const fluxcoreRoutes = new Elysia({ prefix: '/fluxcore' })
   .use(toolsRoutes)
   .use(tracesRoutes)
   .use(suggestionsRoutes)
-  .use(fluxiRoutes); // WES-180
+  .use(fluxiRoutes) // WES-180
+  .use(definitionsRoutes)
+  .post('/emergency-sync', async () => {
+    const { db, fluxcoreWorkDefinitions } = await import('@fluxcore/db');
+    const { eq } = await import('drizzle-orm');
+    const mappings = [
+        { uuid: '808bbf04-bec6-4f36-897e-a77d33db9057', typeId: 'templates' },
+        { uuid: '969eb414-959c-406d-8700-e2ca843c4eb3', typeId: 'platform_manage_template' },
+        { uuid: '0d7150a6-79f3-461e-88b8-11f0f8b15f71', typeId: 'platform_authorize_ai_template' }
+    ];
+    for (const m of mappings) {
+        await db.update(fluxcoreWorkDefinitions)
+            .set({ typeId: m.typeId })
+            .where(eq(fluxcoreWorkDefinitions.id, m.uuid));
+    }
+    return { success: true, message: 'Emergencia resuelta: Identidades vinculadas.' };
+  });

@@ -322,22 +322,15 @@ ${contextParts.join('\n\n---\n\n')}
           c.section_title as "sectionTitle",
           c.metadata,
           CASE
-              WHEN vector_dims(c.embedding) = ${queryEmbedding.length}
-              THEN 1 - (c.embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)})
-              WHEN c.content ILIKE ${keywordPattern} THEN 0.5
-              ELSE 0.0
-          END as similarity,
-          vector_dims(c.embedding) = ${queryEmbedding.length} as dims_match
+              WHEN c.content ILIKE ${keywordPattern} THEN 0.5 + (1 - (c.embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)}))
+              ELSE 1 - (c.embedding <=> ${sql.raw(`'${embeddingStr}'::vector`)})
+          END as similarity
         FROM fluxcore_document_chunks c
-        WHERE c.account_id = ${accountId}::uuid
-          AND c.file_id IN (
-            SELECT file_id 
-            FROM fluxcore_vector_store_files 
-            WHERE vector_store_id = ANY(ARRAY[${sql.raw(vsIdsStr)}]::uuid[])
-          )
+        INNER JOIN fluxcore_vector_store_files vsf ON c.file_id = vsf.file_id
+        WHERE vsf.vector_store_id IN ${sql`(${sql.join(vectorStoreIds.map(id => sql`${id}`), sql`, `)})`}
           AND c.embedding_model = ${embeddingModel}
+          AND c.dimensions = ${queryEmbedding.length}
           AND c.embedding IS NOT NULL
-          AND vector_dims(c.embedding) = ${queryEmbedding.length}
       ) scored
       WHERE scored.similarity >= ${minScore}
       ORDER BY scored.similarity DESC

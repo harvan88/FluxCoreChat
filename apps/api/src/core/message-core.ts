@@ -79,7 +79,7 @@ export class MessageCore {
           try {
             await chatCoreOutboxService.enqueue({
               messageId: message.id,
-              accountId: envelope.targetAccountId || 'unknown', // 🔑 Usar targetAccountId con fallback
+              accountId: envelope.targetAccountId || envelope.senderAccountId, // 🔑 Fallback a sender si no hay target, nunca "unknown"
               userId: envelope.userId || envelope.senderAccountId,
               payload: envelope.content,
               meta: {

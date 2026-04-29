@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react';
 import { useUIStore } from '../store/uiStore';
+import { useAccountStore } from '../store/accountStore';
 import { usePanelStore } from '../store/panelStore';
 import { setCurrentAccountDB, closeAccountDB } from '../db';
 
@@ -46,20 +47,23 @@ export function useContextRefresh() {
     const previousAccountId = selectedAccountId;
 
     try {
-      // 1. Limpiar estado de conversaciones usando método centralizado
-      if (clearConversations) {
-        console.log('[ContextRefresh] Clearing account-specific data');
-        resetAccountData();
+      // 1. Limpiar estado si la cuenta cambió
+      if (newAccountId !== previousAccountId) {
+        if (clearConversations) {
+          console.log('[ContextRefresh] Account changed, clearing account-specific data');
+          resetAccountData();
+        }
+
+        // MA-303: Limpiar paneles/tabs de cuenta anterior
+        if (clearPanels) {
+          console.log('[ContextRefresh] Account changed, resetting panel layout');
+          resetLayout();
+        }
       }
 
-      // MA-303: Limpiar paneles/tabs de cuenta anterior
-      if (clearPanels) {
-        console.log('[ContextRefresh] Resetting panel layout');
-        resetLayout();
-      }
-
-      // 2. Actualizar cuenta seleccionada ANTES del switch de DB/evento
+      // 2. Actualizar cuenta seleccionada en AMBOS stores (Unificar Fuente de Verdad)
       setSelectedAccount(newAccountId);
+      useAccountStore.setState({ activeAccountId: newAccountId });
 
       // 3. Cambiar a la base de datos de la nueva cuenta
       console.log('[ContextRefresh] Switching to new account database');

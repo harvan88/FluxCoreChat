@@ -38,7 +38,7 @@ export function FluxCorePanel({ accountId, accountName, onOpenTab }: FluxCorePan
       case 'vector-stores':
         return <VectorStoresView accountId={accountId} onOpenTab={onOpenTab} />;
       case 'tools':
-        return <ToolsView accountId={accountId} />;
+        return <ToolsView accountId={accountId} onOpenTab={onOpenTab} />;
       case 'agents':
         return <AgentsView accountId={accountId} />;
       case 'debug':

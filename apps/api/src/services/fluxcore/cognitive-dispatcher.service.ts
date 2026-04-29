@@ -18,7 +18,7 @@
  */
 
 import { trace } from '@opentelemetry/api';
-import { db, conversations, messages, aiSuggestions, fluxcoreCognitionQueue } from '@fluxcore/db';
+import { db, conversations, messages, aiSuggestions, fluxcoreCognitionQueue, aiTraces, aiSignals } from '@fluxcore/db';
 import type { ConversationMessage } from '@fluxcore/db';
 import { eq, desc } from 'drizzle-orm';
 import type { RuntimeInput, ExecutionAction } from '../../core/fluxcore-types';
@@ -27,11 +27,12 @@ import { runtimeSelectionService } from '../runtime-selection.service';
 import { runtimeCompositionService } from '../runtime-composition.service';
 import { runtimeGateway } from './runtime-gateway.service';
 import { actionExecutor } from './action-executor.service';
-import { monitoringRegistry } from '../../telemetry/tracer';
+import { monitoringRegistry, trackCognitiveStep } from '../../telemetry/tracer';
 import { aiTraceService } from '../ai-trace.service';
 import { accountLabelService } from '../account-label.service';
 import { runtimeInputFactoryService } from './runtime-input-factory.service';
-import { aiTraceService } from '../ai-trace.service';
+import { sovereignIdentityService } from './sovereign-identity.service';
+import { semanticSieveService } from './semantic-sieve.service';
 import { signCandidate } from './kernel-utils';
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, Evidence } from '../../core/types';
@@ -264,29 +265,11 @@ class CognitiveDispatcherService {
                 // 🎯 Propagar Identidad de Turno (v10.0)
                 input.executionId = messageId;
 
-                // 8. Invoke runtime via gateway (AHORA TOTALMENTE VISIBLE)
-                console.log(`[CognitiveDispatcher] Step 8: Invoking runtime '${runtimeId}'...`);
-                
-                // 🎯 TELEMETRÍA (Fase 1: Runtime Start)
-                try {
-                    const { coreEventBus } = await import('../../core/events');
-                    coreEventBus.emit('telemetry:pipeline_step', {
-                        messageId,
-                        conversationId,
-                        accountId,
-                        step: 'runtime',
-                        status: 'processing',
-                        metadata: { runtimeId },
-                        timestamp: new Date().toISOString()
-                    });
-                } catch (e) {}
-
-                // 🎯 TELEMETRÍA OPENTELEMETRY: Captura del Payload Crudo (Plantillas + Historial)
+                // 🎯 TELEMETRÍA OPENTELEMETRY: Captura del Proceso Cognitivo Unificado (Fase 3: Soberanía)
                 const { trackCognitiveStep } = await import('../../telemetry/tracer');
-                const runtimeStartedAtMs = Date.now();
                 let initialTraceId: string | undefined;
-                
-                const actions = await trackCognitiveStep(
+
+                let actions = await trackCognitiveStep(
                     'IA_RUNTIME_INVOCATION',
                     {
                         'account.id': accountId,
@@ -294,13 +277,96 @@ class CognitiveDispatcherService {
                         'model': input.runtimeConfig.model || 'unknown_model',
                         'runtime.id': runtimeId,
                     },
-                    input,
+                    input, // Capturamos el input original para auditoría
                     async () => {
+                        // ⏱️ Sincronización técnica para telemetría (Garantía de captura Fase 0)
+                        await new Promise(resolve => setTimeout(resolve, 50));
+
+                        // 🔍 Obtención resiliente del mensaje (Garantía Algorítmica)
+                        const messageToSieve = input.lastUserMessage || 
+                                              input.conversationHistory.filter(m => m.role === 'user').pop()?.content;
+
+                        // 🔍 TAMIZ SEMÁNTICO (FASE 0) - Solo para asistentes locales
+                        if (runtimeId === 'asistentes-local' && messageToSieve) {
+                            console.log(`[CognitiveDispatcher] 🧩 Ejecutando Tamiz Semántico (FASE 0) para: "${messageToSieve}"`);
+                            const relevantTemplates = await trackCognitiveStep(
+                                'FASE_0_SIEVE',
+                                { 
+                                    'account.id': accountId,
+                                    'conversation.id': conversationId,
+                                    'templates.total': String(input.authorizedContext.authorizedTemplates?.length || 0)
+                                },
+                                { 
+                                    lastMessage: messageToSieve,
+                                    availableTemplates: input.authorizedContext.authorizedTemplates
+                                },
+                                async () => {
+                                    return await semanticSieveService.sieveTemplates({
+                                        query: messageToSieve,
+                                        accountId,
+                                        limit: 10
+                                    });
+                                },
+                                messageId
+                            );
+                            
+                            const relevantIds = new Set(relevantTemplates.map(t => t.id));
+                            if (input.authorizedContext.authorizedTemplates) {
+                                input.authorizedContext.authorizedTemplates = input.authorizedContext.authorizedTemplates.filter(id => 
+                                    relevantIds.has(id.toLowerCase())
+                                );
+                            }
+                        }
+
+                        // 🛡️ SOBERANÍA DE IDENTIDAD: Enmascaramiento (Fase 3)
+                        console.log(`[CognitiveDispatcher] 🛡️ Aplicando escudo de identidad soberana...`);
+                        const { idToMask, maskToId } = sovereignIdentityService.createMappingContext(input);
+                        
+                        // Enmascarar plantillas autorizadas en el contexto
+                        if (input.authorizedContext.authorizedTemplates) {
+                            input.authorizedContext.authorizedTemplates = input.authorizedContext.authorizedTemplates.map(id => 
+                                idToMask.get(id.toLowerCase()) || id
+                            );
+                        }
+                        
+                        // Enmascarar plantillas en el perfil de negocio
+                        const businessTemplates = (input.authorizedContext.businessProfile as any)?.templates;
+                        if (Array.isArray(businessTemplates)) {
+                            businessTemplates.forEach((t: any) => {
+                                if (t.templateId) {
+                                    t.templateId = idToMask.get(t.templateId.toLowerCase()) || t.templateId;
+                                }
+                            });
+                        }
+
+                        // 🤖 EJECUCIÓN (Cuerpo)
+                        console.log(`[CognitiveDispatcher] 🤖 Invocando runtime: ${runtimeId}...`);
                         const span = trace.getActiveSpan();
                         initialTraceId = span?.spanContext().traceId;
-                        return await runtimeGateway.invoke(runtimeId, input, params.lastSignalSeq || undefined);
+                        
+                        const rawActions = await runtimeGateway.invoke(runtimeId, input, params.lastSignalSeq || undefined);
+
+                        // 🛡️ SOBERANÍA DE IDENTIDAD: Desenmascaramiento (FASE 4) - Solo para asistentes locales
+                        if (runtimeId === 'asistentes-local') {
+                            console.log(`[CognitiveDispatcher] 🛡️ Desenmascarando acciones finales (FASE 4)...`);
+                            return await trackCognitiveStep(
+                                'FASE_4_BODY_TRANSLATION',
+                                {
+                                    'account.id': accountId,
+                                    'conversation.id': conversationId,
+                                },
+                                { originalActions: rawActions },
+                                async () => {
+                                    return sovereignIdentityService.unmaskActions(rawActions, maskToId);
+                                },
+                                messageId
+                            );
+                        }
+
+                        // Para otros runtimes (como Fluxi), devolvemos las acciones directamente
+                        return rawActions;
                     },
-                    messageId // 🎯 VÍNCULO DETERMINISTA (v10.0)
+                    messageId
                 );
 
                 // 🎯 TELEMETRÍA (Fase 1: Runtime Success)

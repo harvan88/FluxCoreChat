@@ -51,6 +51,7 @@ import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConf
 import { FluxiView } from '../fluxcore/views/FluxiView';
 import { FluxiWorkDetail } from '../fluxcore/views/FluxiWorkDetail';
 import { FluxiProposedWorkDetail } from '../fluxcore/views/FluxiProposedWorkDetail';
+import { WESStudio } from '../fluxcore/WESStudio';
 import { TemplateEditor, TemplateManager } from '../templates';
 
 interface DynamicContainerProps {
@@ -202,7 +203,11 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     let identity = `extension:${extensionId}:${viewId}:${selectedAccountId}`;
 
     // Si es un recurso específico (assistant, vector-store, etc), agregar su ID a la identidad
-    const resourceId = extraContext.assistantId || extraContext.vectorStoreId || extraContext.instructionId || extraContext.toolId;
+    const resourceId = extraContext.assistantId || 
+                       extraContext.vectorStoreId || 
+                       extraContext.instructionId || 
+                       extraContext.toolId || 
+                       extraContext.definitionId; // <--- Añadido para WES Studio
     if (resourceId) {
       identity += `:${resourceId}`;
     }
@@ -269,6 +274,27 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
       openOrFocusFluxCoreTab('proposed-work', title, 'Bot', { proposedWorkId: id });
       return;
     }
+
+    if (data?.type === 'wes-studio') {
+      const id = data?.definitionId || tabId;
+      console.log('[DynamicContainer] Opening WES Studio for ID:', id);
+      const identity = `extension:fluxcore:wes-studio:${selectedAccountId}:${id}`;
+      openTab('extensions', {
+        type: 'extension',
+        identity,
+        title: title || 'WES Studio',
+        icon: 'Settings',
+        closable: true,
+        context: {
+          extensionId: '@fluxcore/asistentes',
+          extensionName: 'FluxCore',
+          view: 'wes-studio',
+          accountId: selectedAccountId || tabId.split(':')[2], // Fallback al ID de la cuenta en la identidad
+          definitionId: id,
+        },
+      });
+      return;
+    }
   }, [selectedAccountId, openOrFocusFluxCoreTab]);
 
   const panelComponent = installation?.manifest?.ui?.panel?.component;
@@ -282,6 +308,18 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     );
   }
 
+  // 🛡️ EVITAR PARPADEO: Si no hay instalación pero estamos en una cuenta válida,
+  // es probable que las extensiones aún se estén cargando.
+  if (!installation && installations.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="animate-pulse text-muted text-xs uppercase tracking-widest font-bold">
+          Sincronizando Entorno...
+        </div>
+      </div>
+    );
+  }
+
   if (!extensionId) {
     return (
       <div className="h-full flex items-center justify-center text-muted">
@@ -290,24 +328,21 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     );
   }
 
-  if (!installation) {
-    return (
-      <div className="h-full flex items-center justify-center text-muted">
-        La extensión no está instalada en esta cuenta.
-      </div>
-    );
-  }
+  const accountId = tab.context.accountId || selectedAccountId || '';
 
   const requestedView = typeof tab.context.view === 'string' ? tab.context.view : undefined;
   const view =
     isFluxCore && (requestedView === 'config' || requestedView === 'panel' || requestedView === 'fluxcore')
       ? 'assistants'
       : (requestedView || (isFluxCore ? 'assistants' : 'config'));
-
+      
+  // Debug para confirmar qué vista se está intentando renderizar
+  if (isFluxCore && requestedView === 'wes-studio') {
+     console.log('[DynamicContainer] Resolved view for WES Studio:', view);
+  }
 
   // FluxCore Views - Vistas específicas de la plataforma de orquestación de IA
   if (isFluxCore) {
-    const accountId = selectedAccountId || '';
 
     switch (view) {
       case 'usage':
@@ -385,7 +420,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
           />
         );
       case 'tools':
-        return <ToolsView key={tab.id} accountId={accountId} />;
+        return <ToolsView key={tab.id} accountId={selectedAccountId || ''} onOpenTab={onOpenFluxCoreItemTab} />;
       case 'agents':
         return <AgentsView key={tab.id} accountId={accountId} onOpenTab={onOpenFluxCoreItemTab} />;
       case 'agent':
@@ -415,6 +450,8 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
         return <FluxiWorkDetail accountId={accountId} workId={tab.context.workId as string} />;
       case 'proposed-work':
         return <FluxiProposedWorkDetail accountId={accountId} proposedWorkId={tab.context.proposedWorkId as string} />;
+      case 'wes-studio':
+        return <ToolsView key={tab.id} accountId={accountId} definitionId={tab.context.definitionId as string} onOpenTab={onOpenFluxCoreItemTab} />;
       case 'promptInspector':
         return <FluxCorePromptInspectorPanel accountId={accountId} />;
     }

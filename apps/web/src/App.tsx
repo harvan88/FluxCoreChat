@@ -8,11 +8,18 @@ import { ResetPasswordPage } from './components/auth/ResetPasswordPage';
 import { DesignSystemPage } from './pages/DesignSystemPage';
 import { AccountDeletionPortalPage } from './pages/AccountDeletionPortalPage';
 import { PublicProfilePage } from './public-profile';
+import { AccountSelectorPage } from './pages/AccountSelectorPage';
+import { useContextSync } from './hooks/useContextSync';
+import { useAccountStore } from './store/accountStore';
 
 function App() {
   const { isAuthenticated, initFromStorage } = useAuthStore();
+  const { activeAccountId } = useAccountStore();
   const { resolvedTheme } = useThemeStore();
   const [isInitializing, setIsInitializing] = useState(true);
+  
+  // Sincronización de contexto (Meta-Inspired)
+  useContextSync();
   
   useEffect(() => {
     initFromStorage();
@@ -48,9 +55,12 @@ function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route 
           path="/login" 
-          element={!isAuthenticated ? <AuthPage /> : <Navigate to="/" />} 
+          element={!isAuthenticated ? <AuthPage /> : (activeAccountId ? <Navigate to="/" /> : <Navigate to="/select-account" />)} 
         />
-        <Route path="/p/:alias" element={<PublicProfilePage />} />
+        <Route path="/select-account" element={isAuthenticated ? <AccountSelectorPage /> : <Navigate to="/login" />} />
+        <Route path="/:alias" element={<PublicProfilePage />} />
+        <Route path="/:alias/plantillas" element={<PublicProfilePage />} />
+        <Route path="/:alias/base_de_conocimiento" element={<PublicProfilePage />} />
         <Route 
           path="/*" 
           element={isAuthenticated ? <Layout /> : <Navigate to="/login" />} 
