@@ -1,4 +1,4 @@
-import { db, templates, templateAssets, assets, type Template, type TemplateVariable } from '@fluxcore/db';
+import { db, templates, templateAssets, assets, accounts, type Template, type TemplateVariable } from '@fluxcore/db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { coreEventBus } from '../core/events';
 
@@ -9,6 +9,8 @@ export interface TemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   isActive?: boolean;
+  isPublic?: boolean;
+  triggerKeyword?: string | null;
   allowAutomatedUse?: boolean;
 }
 
@@ -16,6 +18,7 @@ export interface TemplateUpdateInput extends Partial<TemplateInput> { }
 
 export interface TemplateWithAssets extends Template {
   assets: TemplateAssetLink[];
+  accountAlias?: string;
 }
 
 export interface TemplateAssetLink {
@@ -34,12 +37,17 @@ export class TemplateService {
 
   async listTemplates(accountId: string): Promise<TemplateWithAssets[]> {
     const rows = await this.orm
-      .select()
+      .select({
+        template: templates,
+        accountAlias: accounts.alias,
+      })
       .from(templates)
+      .leftJoin(accounts, eq(templates.accountId, accounts.id))
       .where(eq(templates.accountId, accountId))
       .orderBy(desc(templates.updatedAt));
 
-    return this.attachAssets(rows);
+    const templatesWithAlias = rows.map(r => ({ ...r.template, accountAlias: r.accountAlias || undefined }));
+    return this.attachAssets(templatesWithAlias);
   }
 
   async getTemplate(accountId: string, templateId: string): Promise<TemplateWithAssets> {
@@ -51,6 +59,7 @@ export class TemplateService {
   }
 
   async createTemplate(accountId: string, data: TemplateInput): Promise<TemplateWithAssets> {
+    console.log(`[TemplateService] Creating template: "${data.name}" (Account: ${accountId}) - Public: ${data.isPublic}, Trigger: ${data.triggerKeyword}`);
     const payload = normalizeTemplateInput(data);
     const [inserted] = await this.orm
       .insert(templates)
@@ -62,6 +71,8 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? true,
+        isPublic: payload.isPublic ?? false,
+        triggerKeyword: payload.triggerKeyword ?? null,
         allowAutomatedUse: payload.allowAutomatedUse ?? false,
       })
       .returning();
@@ -89,6 +100,8 @@ export class TemplateService {
         variables: payload.variables,
         tags: payload.tags,
         isActive: payload.isActive ?? true,
+        isPublic: payload.isPublic ?? false,
+        triggerKeyword: payload.triggerKeyword ?? null,
         allowAutomatedUse: payload.allowAutomatedUse ?? false,
       };
     });
@@ -121,8 +134,13 @@ export class TemplateService {
       variables: data.variables ?? existing!.variables,
       tags: data.tags ?? existing!.tags,
       isActive: data.isActive ?? existing!.isActive,
+      isPublic: data.isPublic !== undefined ? data.isPublic : existing!.isPublic,
+      triggerKeyword: data.triggerKeyword !== undefined ? data.triggerKeyword : existing!.triggerKeyword,
       allowAutomatedUse: data.allowAutomatedUse ?? (existing as any).allowAutomatedUse,
     });
+
+    console.log(`[TemplateService] Updating template: ${templateId} - Payload Public: ${payload.isPublic}, Trigger: ${payload.triggerKeyword}`);
+
 
     const [updated] = await this.orm
       .update(templates)
@@ -132,8 +150,10 @@ export class TemplateService {
         category: payload.category || null,
         variables: payload.variables,
         tags: payload.tags,
-        isActive: payload.isActive ?? existing!.isActive,
-        allowAutomatedUse: payload.allowAutomatedUse ?? (existing as any).allowAutomatedUse,
+        isActive: payload.isActive,
+        isPublic: payload.isPublic,
+        triggerKeyword: payload.triggerKeyword,
+        allowAutomatedUse: payload.allowAutomatedUse,
         updatedAt: new Date(),
       })
       .where(and(eq(templates.id, templateId), eq(templates.accountId, accountId)))
@@ -169,8 +189,9 @@ export class TemplateService {
     conversationId: string;
     variables?: Record<string, string>;
     generatedBy?: 'human' | 'ai';
+    targetAccountId?: string; // 🔑 Quién recibe (para broadcast)
   }) {
-    const { accountId, templateId, conversationId, variables, generatedBy = 'human' } = params;
+    const { accountId, templateId, conversationId, variables, generatedBy = 'human', targetAccountId } = params;
 
     // 1. Obtener la plantilla con sus assets
     const template = await this.getTemplate(accountId, templateId);
@@ -208,6 +229,7 @@ export class TemplateService {
       },
       type: 'outgoing',
       generatedBy,
+      targetAccountId, // 🔑 PROPAGAR DESTINATARIO
       triggerSignalId: (params as any).triggerSignalId // ✅ Pasar ID de trazabilidad
     });
 
@@ -260,15 +282,20 @@ export class TemplateService {
   }
 
   private async findTemplate(templateId: string) {
-    const [template] = await this.orm
-      .select()
+    const [result] = await this.orm
+      .select({
+        template: templates,
+        accountAlias: accounts.alias,
+      })
       .from(templates)
+      .leftJoin(accounts, eq(templates.accountId, accounts.id))
       .where(eq(templates.id, templateId))
       .limit(1);
-    if (!template) {
+
+    if (!result) {
       throw new Error('Template not found');
     }
-    return template;
+    return { ...result.template, accountAlias: result.accountAlias || undefined };
   }
 
   private async getTemplateAssets(templateId: string): Promise<TemplateAssetLink[]> {
@@ -383,6 +410,8 @@ export function normalizeTemplateInput(input: TemplateInput): Required<Omit<Temp
     variables: input.variables ?? [],
     tags: input.tags ?? [],
     isActive: input.isActive ?? true,
+    isPublic: input.isPublic ?? false,
+    triggerKeyword: input.triggerKeyword ?? null,
     allowAutomatedUse: input.allowAutomatedUse ?? false,
   };
 }

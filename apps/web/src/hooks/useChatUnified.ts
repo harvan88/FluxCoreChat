@@ -297,7 +297,7 @@ export function useChatUnified({
     } finally {
       setIsSending(false);
     }
-  }, [accountId, buildSignature, conversationId, ensurePublicSession, getToken, isAuthenticatedMode, isPublicMode, myActorId]);
+  }, [accountId, buildSignature, conversationId, ensurePublicSession, getToken, isAuthenticatedMode, isPublicMode, myActorId, loadMessages]);
 
   const addReceivedMessage = useCallback((message: Message) => {
     const signature = buildSignature({

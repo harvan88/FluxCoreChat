@@ -29,6 +29,8 @@ export const templates = pgTable('templates', {
     .default(sql`'[]'::jsonb`),
 
   isActive: boolean('is_active').notNull().default(true),
+  isPublic: boolean('is_public').notNull().default(false),
+  triggerKeyword: varchar('trigger_keyword', { length: 255 }),
 
   usageCount: integer('usage_count').notNull().default(0),
 
@@ -38,6 +40,7 @@ export const templates = pgTable('templates', {
 }, (table) => ({
   accountIdx: index('idx_templates_account').on(table.accountId),
   accountNameIdx: index('idx_templates_account_name').on(table.accountId, table.name),
+  triggerIdx: index('idx_templates_trigger').on(table.accountId, table.triggerKeyword),
 }));
 
 export type Template = typeof templates.$inferSelect;

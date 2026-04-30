@@ -40,6 +40,8 @@ import {
 } from '../../lib/icon-library';
 
 import type { ActivityType } from '../../types';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ROUTE_REGISTRY } from '../../config/route-registry';
 
 interface ActivityItem {
   id: ActivityType;
@@ -79,6 +81,8 @@ export function ActivityBar() {
   const { logout } = useAuthStore();
   const { activeAccount } = useAccountStore();
   const openTab = usePanelStore((state) => state.openTab);
+  const navigate = useNavigate();
+  const { alias } = useParams<{ alias: string }>();
 
   // VER-002: Usar selectedAccountId de uiStore (sincronizado por AccountSwitcher)
   const selectedAccountId = uiSelectedAccountId || activeAccount?.id || null;
@@ -227,7 +231,14 @@ export function ActivityBar() {
         {activities.map((activity) => (
           <button
             key={activity.id}
-            onClick={() => setActiveActivity(activity.id)}
+            onClick={() => {
+              const routeDef = ROUTE_REGISTRY.find(r => r.id === activity.id || r.activity === activity.id);
+              if (routeDef && alias) {
+                navigate(`/@/${alias}${routeDef.pattern}`);
+              } else {
+                setActiveActivity(activity.id);
+              }
+            }}
             className={clsx(
               'w-full flex items-center gap-3 rounded-lg transition-all duration-200',
               activityBarExpanded ? 'px-3 py-2.5' : 'px-0 py-2.5 justify-center',

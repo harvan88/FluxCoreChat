@@ -27,8 +27,12 @@ export function AccountSelectorPage() {
     setSelectingId(accountId);
     try {
       await refreshAccountContext(accountId);
-      // Navegar al dashboard con el parámetro de cuenta
-      navigate(`/?a=${accountId}`);
+      const account = accounts.find(a => a.id === accountId);
+      if (account?.alias) {
+        navigate(`/@/${account.alias}/mensajes`);
+      } else {
+        navigate(`/@/${accountId}/mensajes`);
+      }
     } catch (error) {
       console.error('[AccountSelector] Error switching account:', error);
       setSelectingId(null);

@@ -249,13 +249,16 @@ export class ChatProjector extends BaseProjector {
         // targetAccountId = quien ENVIÓ el mensaje (a quien el AI debe responder)
         const targetAccountId = evidence.payload.context?.userId || null;
         
+        // 🎯 INTERCEPCIÓN DETERMINISTA (Keyword Triggers)
+        // Si el mensaje fue interceptado en el origen (MessageCore), no lo encolamos para IA.
+        if (evidence.payload.metadata?.intercepted) {
+            console.log(`[ChatProjector] 🛡️ INTERCEPTED signal #${signal.sequenceNumber} - Keyword trigger handled this turn. Aborting AI cognition.`);
+            return;
+        }
+
         // 🎯 VERIFICAR SI ES AUDIO PENDIENTE DE TRANSCRIPCIÓN
         if (evidence.payload.isPendingAudioTranscription) {
             console.log(`[ChatProjector] 🎵 AUDIO PENDING TRANSCRIPTION - NOT enqueuing for AI response yet`);
-            console.log(`[ChatProjector] 🎵 Waiting for asset:transcription_completed events for assets:`, evidence.payload.audioAssets.map((a: any) => a.assetId));
-            
-            // 🎯 NO encolar para IA - esperar transcripción
-            // El handler handleTranscriptionCompleted se encargará de encolar cuando la transcripción esté lista
             return;
         }
         
@@ -399,6 +402,7 @@ export class ChatProjector extends BaseProjector {
                 // Regular gateway uses accountId; webchat gateway uses tenantId
                 accountId: evidenceRoot?.accountId || evidenceRoot?.tenantId,
                 context: evidenceRoot?.context, // context.userId = sender account
+                metadata: evidenceRoot?.metadata, // 🛡️ EXTRACCION DE METADATA (intercepted, triggerId)
                 // 🎯 NUEVO: Marcar si es audio pendiente de transcripción
                 isPendingAudioTranscription,
                 audioAssets: isPendingAudioTranscription ? content.media.filter((m: any) => m.type === 'audio') : [],

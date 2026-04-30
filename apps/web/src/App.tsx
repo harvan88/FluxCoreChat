@@ -62,8 +62,12 @@ function App() {
         <Route path="/:alias/plantillas" element={<PublicProfilePage />} />
         <Route path="/:alias/base_de_conocimiento" element={<PublicProfilePage />} />
         <Route 
-          path="/*" 
+          path="/@/:alias/*" 
           element={isAuthenticated ? <Layout /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/" 
+          element={isAuthenticated ? <Navigate to="/select-account" /> : <Navigate to="/login" />} 
         />
       </Routes>
     </>

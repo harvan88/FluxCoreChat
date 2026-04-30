@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useState, type ComponentType } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Lock, LockOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
@@ -38,6 +39,7 @@ import { FluxCoreSidebar } from '../fluxcore/FluxCoreSidebar';
 // ViewRegistry and ExtensionHost
 import { viewRegistry } from '../../core/registry/ViewRegistry';
 import { extensionHost } from '../../core/extension-api/ExtensionHost';
+import { ROUTE_REGISTRY } from '../../config/route-registry';
 import type { ActivityType } from '../../types';
 
 // Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
@@ -102,6 +104,9 @@ export function Sidebar() {
   } = useUIStore();
 
   const [fluxCoreActiveView, setFluxCoreActiveView] = useState<FluxCoreView>('usage');
+  
+  const navigate = useNavigate();
+  const { alias } = useParams<{ alias: string }>();
 
   const { installations } = useExtensions(selectedAccountId);
 
@@ -211,46 +216,59 @@ export function Sidebar() {
             onViewChange={(view) => {
               setFluxCoreActiveView(view);
 
-              const { openTab } = usePanelStore.getState();
-              const viewTitles: Record<string, string> = {
-                usage: 'Uso',
-                assistants: 'Asistentes',
-                instructions: 'Instrucciones del sistema',
-                'knowledge-base': 'Base de conocimiento',
-                tools: 'Herramientas',
-                agents: 'Agentes',
-                debug: 'Depuración',
-                policies: 'Políticas (Context)',
-                billing: 'Facturación',
-              };
+              const routeDef = ROUTE_REGISTRY.find(
+                (r) => r.activity === `ext:${extensionId}` && r.subView === view
+              );
 
-              const viewIcons: Record<string, string> = {
-                usage: 'BarChart3',
-                assistants: 'Bot',
-                instructions: 'FileText',
-                'knowledge-base': 'Database',
-                tools: 'Wrench',
-                agents: 'GitBranch',
-                debug: 'Bug',
-                policies: 'Shield',
-                billing: 'CreditCard',
-              };
+              if (routeDef && alias) {
+                navigate(`/@/${alias}${routeDef.pattern}`);
+              } else {
+                // Fallback a openTab directo si no hay ruta registrada
+                const { openTab } = usePanelStore.getState();
+                const viewTitles: Record<string, string> = {
+                  usage: 'Uso',
+                  assistants: 'Asistentes',
+                  instructions: 'Instrucciones del sistema',
+                  'knowledge-base': 'Base de conocimiento',
+                  tools: 'Herramientas',
+                  agents: 'Agentes',
+                  works: 'Fluxi',
+                  debug: 'Depuración',
+                  policies: 'Políticas (Context)',
+                  traces: 'Trazas del runtime',
+                  billing: 'Facturación',
+                };
 
-              const tabIdentity = `extension:${extensionId}:${view}:${selectedAccountId}`;
+                const viewIcons: Record<string, string> = {
+                  usage: 'BarChart3',
+                  assistants: 'Bot',
+                  instructions: 'FileText',
+                  'knowledge-base': 'Database',
+                  tools: 'Wrench',
+                  agents: 'GitBranch',
+                  works: 'LayoutDashboard',
+                  debug: 'Bug',
+                  policies: 'Shield',
+                  traces: 'Activity',
+                  billing: 'CreditCard',
+                };
 
-              openTab('extensions', {
-                type: 'extension',
-                identity: tabIdentity,
-                title: viewTitles[view] || view,
-                icon: viewIcons[view] || 'Settings',
-                closable: true,
-                context: {
-                  extensionId,
-                  extensionName,
-                  view: view,
-                  accountId: selectedAccountId,
-                },
-              });
+                const tabIdentity = `extension:${extensionId}:${view}:${selectedAccountId}`;
+
+                openTab('extensions', {
+                  type: 'extension',
+                  identity: tabIdentity,
+                  title: viewTitles[view] || view,
+                  icon: viewIcons[view] || 'Settings',
+                  closable: true,
+                  context: {
+                    extensionId,
+                    extensionName,
+                    view: view,
+                    accountId: selectedAccountId,
+                  },
+                });
+              }
             }}
             accountName={extensionName}
             accountId={selectedAccountId}

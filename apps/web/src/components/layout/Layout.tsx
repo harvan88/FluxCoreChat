@@ -14,10 +14,16 @@ import { useThemeStore } from '../../store/themeStore';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+import { useUrlStateSync } from '../../hooks/useUrlStateSync';
+import { useUrlBackSync } from '../../hooks/useUrlBackSync';
 
 import type { ActivityType } from '../../types';
 
 export function Layout() {
+  // URL ↔ Estado sync
+  useUrlStateSync();
+  useUrlBackSync();
+
   // Tema
   const { resolvedTheme } = useThemeStore();
   

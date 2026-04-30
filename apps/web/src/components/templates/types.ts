@@ -18,12 +18,15 @@ export interface Template {
   tags: string[];
   assets?: TemplateAsset[];
   isActive: boolean;
+  isPublic: boolean;
+  triggerKeyword: string | null;
   allowAutomatedUse: boolean;
   authorizeForAI: boolean;
   aiUsageInstructions: string | null;
   usageCount: number;
   createdAt: string;
   updatedAt: string;
+  accountAlias?: string;
 }
 
 export interface TemplateVariable {
@@ -57,6 +60,8 @@ export interface CreateTemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   allowAutomatedUse?: boolean;
+  isPublic?: boolean;
+  triggerKeyword?: string;
   authorizeForAI?: boolean;
   aiUsageInstructions?: string;
 }
@@ -68,6 +73,8 @@ export interface UpdateTemplateInput {
   variables?: TemplateVariable[];
   tags?: string[];
   isActive?: boolean;
+  isPublic?: boolean;
+  triggerKeyword?: string;
   allowAutomatedUse?: boolean;
   authorizeForAI?: boolean;
   aiUsageInstructions?: string;

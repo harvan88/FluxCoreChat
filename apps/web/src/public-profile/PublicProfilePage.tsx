@@ -29,6 +29,7 @@ function PublicProfileView({ alias }: { alias: string }) {
   const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
   const conversationId = searchParams.get('C') || "";
+  const initialText = searchParams.get('text') || "";
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,18 +124,20 @@ function PublicProfileView({ alias }: { alias: string }) {
         isMobile ? (
           <ProfileChatBlockMobile
             key={`mobile:${profile.alias}`}
-            alias={profile.alias}
+            targetAlias={profile.alias}
             conversationId={conversationId}
             accountId={undefined}
             profile={profile}
+            initialText={initialText}
           />
         ) : (
           <ProfileChatBlockDesktop
             key={`desktop:${profile.alias}`}
-            alias={profile.alias}
+            targetAlias={profile.alias}
             conversationId={conversationId}
             accountId={undefined}
             profile={profile}
+            initialText={initialText}
           />
         )
       }

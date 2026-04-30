@@ -93,12 +93,17 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
       // 3. Sincronizar con uiStore para que las extensiones se recarguen
       useUIStore.getState().setSelectedAccount(accountId);
       
+      // 4. Navegar al alias de la nueva cuenta
+      const newAccount = accounts.find(a => a.id === accountId);
+      if (newAccount?.alias) {
+        window.location.href = `/@/${newAccount.alias}/mensajes`;
+      }
+
       log('Account changed successfully. activeAccountId:', accountId);
       log('uiStore.selectedAccountId:', useUIStore.getState().selectedAccountId);
       
     } catch (error) {
       console.error('[AccountSwitcher] Error switching account:', error);
-      // En caso de error, mantener cuenta actual si existe
       if (activeAccount) {
         useUIStore.getState().setSelectedAccount(activeAccount.id);
       }

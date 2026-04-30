@@ -68,40 +68,77 @@ export class MessageCore {
 
       // 2. 🔥 NUEVO: Encolar para certificación si es mensaje humano
       if (envelope.generatedBy !== 'ai' && envelope.generatedBy !== 'system') {
-        console.log(`[MessageCore] 🔍 PREPARANDO PARA ENCOLAR EN OUTBOX:`);
-        console.log(`📋 ENVELOPE ANTES DE ENCOLAR:`, JSON.stringify(envelope, null, 2));
-        
-        // Importar dinámicamente para evitar dependencias circulares
-        const { chatCoreOutboxService } = await import('../services/chatcore-outbox.service');
-        
-        // Encolar async (no bloquea respuesta)
-        setImmediate(async () => {
-          try {
-            await chatCoreOutboxService.enqueue({
-              messageId: message.id,
-              accountId: envelope.targetAccountId || envelope.senderAccountId, // 🔑 Fallback a sender si no hay target, nunca "unknown"
-              userId: envelope.userId || envelope.senderAccountId,
-              payload: envelope.content,
-              meta: {
-                ip: envelope.meta?.ip,
-                userAgent: envelope.meta?.userAgent,
-                clientTimestamp: envelope.meta?.clientTimestamp,
-                conversationId: envelope.conversationId,
-                requestId: envelope.meta?.requestId,
-                messageId: message.id, // 🔑 Agregar messageId para vincular
-                // 🔑 AGREGAR MÁS METADATA DE LA VERDAD DEL MUNDO
-                origin: (envelope.meta as any)?.origin || 'unknown',
-                driverId: (envelope.meta as any)?.driverId || 'chatcore/unknown',
-                entryPoint: (envelope.meta as any)?.entryPoint || 'api/unknown',
-                channel: (envelope.meta as any)?.channel || 'unknown', // 🔑 CHANNEL
-                source: (envelope.meta as any)?.source || 'human', // 🔑 SOURCE
-              } as any
+        let interceptedByKeyword = false;
+
+        // 🛡️ INTERCEPTOR DETERMINISTA (Soberanía de ChatCore)
+        // Detectar si el texto es una palabra clave y disparar plantilla directa, 
+        // saltándose completamente a FluxCore (como si un humano lo hubiera enviado).
+        if (envelope.content?.text) {
+          const targetAccount = envelope.targetAccountId || envelope.senderAccountId;
+          const { keywordTriggerService } = await import('../services/keyword-trigger.service');
+          const triggerMatch = await keywordTriggerService.findMatch({
+            text: envelope.content.text,
+            accountId: targetAccount
+          });
+
+          if (triggerMatch) {
+            console.log(`[MessageCore] 🛡️ INTERCEPCIÓN DETERMINISTA: Keyword detectado para plantilla "${triggerMatch.name}". Saltando encolación a FluxCore.`);
+            interceptedByKeyword = true;
+
+            // Disparar la plantilla nativamente (esto llamará internamente a MessageCore.send y luego a receive)
+            setImmediate(async () => {
+              try {
+                const { templateService } = await import('../services/template.service');
+                await templateService.executeTemplate({
+                  templateId: triggerMatch.id,
+                  accountId: targetAccount,
+                  conversationId: envelope.conversationId,
+                  targetAccountId: envelope.senderAccountId, // Responderle al emisor original
+                  generatedBy: 'ai' // Marcado como AI para que no vuelva a entrar al Outbox
+                });
+              } catch (err) {
+                console.error('[MessageCore] ❌ Error ejecutando plantilla interceptada:', err);
+              }
             });
-            console.log(`[MessageCore] ✅ ENCOLADO EN OUTBOX CON META COMPLETO`);
-          } catch (error) {
-            console.error('[MessageCore] Outbox enqueue failed:', error);
           }
-        });
+        }
+
+        if (!interceptedByKeyword) {
+          console.log(`[MessageCore] 🔍 PREPARANDO PARA ENCOLAR EN OUTBOX:`);
+          console.log(`📋 ENVELOPE ANTES DE ENCOLAR:`, JSON.stringify(envelope, null, 2));
+          
+          // Importar dinámicamente para evitar dependencias circulares
+          const { chatCoreOutboxService } = await import('../services/chatcore-outbox.service');
+          
+          // Encolar async (no bloquea respuesta)
+          setImmediate(async () => {
+            try {
+              await chatCoreOutboxService.enqueue({
+                messageId: message.id,
+                accountId: envelope.targetAccountId || envelope.senderAccountId, // 🔑 Fallback a sender si no hay target, nunca "unknown"
+                userId: envelope.userId || envelope.senderAccountId,
+                payload: envelope.content,
+                meta: {
+                  ip: envelope.meta?.ip,
+                  userAgent: envelope.meta?.userAgent,
+                  clientTimestamp: envelope.meta?.clientTimestamp,
+                  conversationId: envelope.conversationId,
+                  requestId: envelope.meta?.requestId,
+                  messageId: message.id, // 🔑 Agregar messageId para vincular
+                  // 🔑 AGREGAR MÁS METADATA DE LA VERDAD DEL MUNDO
+                  origin: (envelope.meta as any)?.origin || 'unknown',
+                  driverId: (envelope.meta as any)?.driverId || 'chatcore/unknown',
+                  entryPoint: (envelope.meta as any)?.entryPoint || 'api/unknown',
+                  channel: (envelope.meta as any)?.channel || 'unknown', // 🔑 CHANNEL
+                  source: (envelope.meta as any)?.source || 'human', // 🔑 SOURCE
+                } as any
+              });
+              console.log(`[MessageCore] ✅ ENCOLADO EN OUTBOX CON META COMPLETO`);
+            } catch (error) {
+              console.error('[MessageCore] Outbox enqueue failed:', error);
+            }
+          });
+        }
       }
 
       // 3. Actualizar conversación y obtener datos

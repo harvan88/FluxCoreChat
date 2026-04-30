@@ -82,14 +82,19 @@ export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
           return { success: false, message: 'visitorToken required' };
         }
 
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.alias);
         const account = await db.query.accounts.findFirst({
-          where: eq(accounts.alias, params.alias),
+          where: isUuid 
+            ? eq(accounts.id, params.alias)
+            : eq(accounts.alias, params.alias),
         });
 
         if (!account) {
+          console.log(`[PublicProfile] ❌ Profile NOT FOUND for alias/ID: ${params.alias}`);
           set.status = 404;
           return { success: false, message: 'Profile not found' };
         }
+        console.log(`[PublicProfile] ✅ Profile FOUND for alias/ID: ${params.alias} -> Account: ${account.id}`);
 
         const ownerActorId = await getOrCreateAccountActorId(account.id, account.displayName || account.alias || undefined);
 
@@ -163,14 +168,19 @@ export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
     '/:alias',
     async ({ params, set }) => {
       try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.alias);
         const account = await db.query.accounts.findFirst({
-          where: eq(accounts.alias, params.alias),
+          where: isUuid
+            ? eq(accounts.id, params.alias)
+            : eq(accounts.alias, params.alias),
         });
 
         if (!account) {
+          console.log(`[PublicProfile] ❌ Profile NOT FOUND for alias/ID: ${params.alias}`);
           set.status = 404;
           return { success: false, message: 'Profile not found' };
         }
+        console.log(`[PublicProfile] ✅ Profile FOUND for alias/ID: ${params.alias} -> Account: ${account.id}`);
 
         const profile = (account.profile && typeof account.profile === 'object')
           ? account.profile as Record<string, any>
@@ -236,9 +246,12 @@ export const publicProfileRoutes = new Elysia({ prefix: '/public/profiles' })
           return { success: false, message: 'visitorToken required' };
         }
 
-        // Find account by alias
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.alias);
+        // Find account by alias or ID
         const account = await db.query.accounts.findFirst({
-          where: eq(accounts.alias, params.alias),
+          where: isUuid
+            ? eq(accounts.id, params.alias)
+            : eq(accounts.alias, params.alias),
           columns: { id: true },
         });
 

@@ -8,7 +8,7 @@ import { useUnifiedChat } from '../../hooks/useUnifiedChat';
 import type { Message } from '../../../types';
 
 interface ProfileChatBlockMobileProps {
-    alias: string;
+    targetAlias: string;
     conversationId?: string;
     accountId?: string;
     profile: {
@@ -18,13 +18,15 @@ interface ProfileChatBlockMobileProps {
         avatarUrl: string | null;
         bio?: string | null;
     };
+    initialText?: string;
 }
 
 export function ProfileChatBlockMobile({
-    alias,
+    targetAlias,
     conversationId,
     accountId,
     profile,
+    initialText,
 }: ProfileChatBlockMobileProps) {
     const {
         message,
@@ -45,7 +47,7 @@ export function ProfileChatBlockMobile({
         isPublicMode,
         publicSession,
         error,
-    } = useUnifiedChat({ alias, conversationId, accountId });
+    } = useUnifiedChat({ alias: targetAlias, conversationId, accountId, initialText });
 
     const lastMessageRef = useRef<HTMLDivElement>(null);
 

@@ -16,16 +16,19 @@ interface UseUnifiedChatOptions {
     alias: string;
     conversationId?: string;
     accountId?: string;
+    initialText?: string;
 }
 
 export function useUnifiedChat({
     alias,
     conversationId: initialConversationId,
     accountId,
+    initialText,
 }: UseUnifiedChatOptions) {
     const [message, setMessage] = useState('');
     const [progress, setProgress] = useState(0);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const hasAutoSent = useRef(false);
 
     const isPublicMode = !accountId;
     const isAuthenticatedMode = !!accountId;
@@ -69,7 +72,7 @@ export function useUnifiedChat({
     const shouldUseRealtime = isAuthenticatedMode || (isPublicMode && !!publicSession?.publicToken && !!resolvedConversationId);
 
     // 3. WebSocket Realtime Logic
-    const { subscribeConversation, unsubscribeConversation } = useWebSocket({
+    const { subscribeConversation, unsubscribeConversation, isConnected } = useWebSocket({
         autoConnect: shouldUseRealtime,
         includeSelectedAccountId: !isPublicMode,
         accountIdOverride: isAuthenticatedMode ? (accountId || null) : null,
@@ -117,6 +120,22 @@ export function useUnifiedChat({
             console.error('[useUnifiedChat] Send error:', err);
         }
     }, [message, sendMessageCore]);
+
+    // 4.5 Auto-send initial text
+    useEffect(() => {
+        // 🔥 Garantía de arquitectura: Esperar a que exista la "mesa" (WebSocket conectado)
+        // antes de "servir el plato" (enviar el mensaje inicial), para que las plantillas no se pierdan.
+        if (initialText && !isLoading && !hasAutoSent.current && resolvedConversationId && isConnected) {
+            console.log(`[useUnifiedChat] 🚀 Auto-sending initial text: "${initialText}"`);
+            hasAutoSent.current = true;
+            handleSend({ text: initialText });
+            
+            // Limpiar la URL para evitar que se vuelva a enviar al recargar
+            const url = new URL(window.location.href);
+            url.searchParams.delete('text');
+            window.history.replaceState({}, document.title, url.toString());
+        }
+    }, [initialText, isLoading, resolvedConversationId, isConnected, handleSend]);
 
     // 5. Asset upload for composer
     const uploadAssetForComposer = useCallback(async ({ file }: { file: File }) => {

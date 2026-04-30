@@ -53,6 +53,7 @@ export class ChatCoreGatewayService {
                     userId: params.userId || params.accountId, // Fallback to account if no user
                 },
                 metadata: {
+                    ...params.meta, // 🔑 PROPAGAR TODO (incluyendo intercepted, triggerId)
                     ip: params.meta.ip,
                     userAgent: params.meta.userAgent,
                     clientTimestamp: params.meta.clientTimestamp,

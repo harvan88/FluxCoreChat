@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 16/04/2026, 18:01
+**Última Actualización:** 29/04/2026, 18:22
 
 ---
 
@@ -34,8 +34,8 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 - **Total Documentos Analizados:** 383
 
 ### **Cobertura del Sistema**
-- **Cobertura UI:** 98.7% (156/158)
-- **Cobertura Backend:** 100.0% (191/191)
+- **Cobertura UI:** 96.9% (156/161)
+- **Cobertura Backend:** 97.4% (191/196)
 
 ---
 
@@ -61,17 +61,24 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🚨 **COMPONENTES SIN DOCUMENTAR**
 
 ### **Backend Crítico**
-- **Total:** 0
-- **Porcentaje:** 0.0%
+- **Total:** 5
+- **Porcentaje:** 2.6%
 - **Lista Prioritaria:**
-- 
+- core/capabilities/platform.capability.ts
+- routes/fluxcore/definitions.routes.ts
+- services/fluxcore/cognitive-parser.service.ts
+- services/fluxcore/semantic-sieve.service.ts
+- services/fluxcore/sovereign-identity.service.ts
 
 ### **UI Components**
-- **Total:** 2
-- **Porcentaje:** 1.3%
+- **Total:** 5
+- **Porcentaje:** 3.1%
 - **Lista:** 
+- components/chat/TemplateComposerPreview.tsx
 - components/fluxcore/shared/EmptyState.tsx
+- components/fluxcore/WESStudio.tsx
 - core/components/LoadingState.tsx
+- extensions/fluxcore/components/ProposedWorkPreview.tsx
 
 ---
 
@@ -117,12 +124,12 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🎯 **RECOMENDACIONES PARA LA IA**
 
 ### **Prioridades Inmediatas**
-1. **Documentar Backend:** Los 0 componentes sin documentación
+1. **Documentar Backend:** Los 5 componentes sin documentación
 2. **Resolver Dudas:** Los 4 documentos con preguntas técnicas
 3. **Completar WIP:** Los 11 documentos incompletos
 
 ### **Estrategia Sugerida**
-1. **Foco en Backend:** 100.0% de cobertura necesita mejora
+1. **Foco en Backend:** 97.4% de cobertura necesita mejora
 2. **Revisión Técnica:** Resolver dudas en 4 documentos
 3. **Mantenimiento:** Mantener 49.6% de calidad promedio
 
@@ -131,7 +138,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 16/4/2026
+- **Fecha:** 29/4/2026
 - **Cambios:** Actualizado con 383 documentos analizados
 - **Impacto:** 17 errores críticos detectados
 
@@ -148,7 +155,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ### **Consistencia de Datos**
 - **Validación UI:** ✅ Válido
 - **Validación Backend:** ✅ Válido
-- **Detalles Genuinos:** UI [Refs/Real]: 156/158 (Huérfanos: 0) | Backend [Refs/Real]: 191/191 (Huérfanos: 0)
+- **Detalles Genuinos:** UI [Refs/Real]: 156/161 (Huérfanos: 0) | Backend [Refs/Real]: 191/196 (Huérfanos: 0)
 
 ---
 
@@ -169,10 +176,10 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ## 🔧 **METADATOS DEL SISTEMA**
 
-- **Total Componentes UI:** 158
-- **Total Componentes Backend:** 191
-- **Ratio Documentación/Componente:** 109.7
-- **Eficiencia del Sistema:** 95.6%
+- **Total Componentes UI:** 161
+- **Total Componentes Backend:** 196
+- **Ratio Documentación/Componente:** 107.3
+- **Eficiencia del Sistema:** 94.1%
 
 ---
 
@@ -181,7 +188,7 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 
 ```markdown
 Basado en el Snapshot:
-- Cobertura Backend: 100.0%
+- Cobertura Backend: 97.4%
 - Errores Críticos: 17
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```

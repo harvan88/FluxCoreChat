@@ -15,7 +15,9 @@ import {
   Copy,
   Check,
   AlertCircle,
-  Hash
+  Hash,
+  Globe,
+  Zap
 } from 'lucide-react';
 import { FluxCoreTemplateConfig } from '../fluxcore/templates/FluxCoreTemplateConfig';
 import clsx from 'clsx';
@@ -47,6 +49,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
   const [authorizeForAI, setAuthorizeForAI] = useState(false);
   const [allowAutomatedUse, setAllowAutomatedUse] = useState(false);
   const [aiUsageInstructions, setAiUsageInstructions] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
+  const [triggerKeyword, setTriggerKeyword] = useState('');
   const [newTag, setNewTag] = useState('');
 
   // UI state
@@ -64,7 +68,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
 
   const originalTemplate = getTemplateById(templateId);
 
-  // Load template data - Only on mount or ID change
+  // Load template data
   useEffect(() => {
     if (originalTemplate && originalTemplate.id !== initializedId.current) {
       setName(originalTemplate.name);
@@ -74,6 +78,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
       setTags([...originalTemplate.tags]);
       setAuthorizeForAI(originalTemplate.authorizeForAI || false);
       setAllowAutomatedUse(originalTemplate.allowAutomatedUse || false);
+      setIsPublic(originalTemplate.isPublic || false);
+      setTriggerKeyword(originalTemplate.triggerKeyword || '');
       setAiUsageInstructions(originalTemplate.aiUsageInstructions || '');
       initializedId.current = originalTemplate.id;
     }
@@ -92,6 +98,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
       JSON.stringify(tags) !== JSON.stringify(originalTemplate.tags) ||
       authorizeForAI !== (originalTemplate.authorizeForAI || false) ||
       allowAutomatedUse !== (originalTemplate.allowAutomatedUse || false) ||
+      isPublic !== (originalTemplate.isPublic || false) ||
+      triggerKeyword !== (originalTemplate.triggerKeyword || '') ||
       aiUsageInstructions !== (originalTemplate.aiUsageInstructions || '');
 
     if (!hasChanges) {
@@ -111,6 +119,8 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
           tags,
           authorizeForAI,
           allowAutomatedUse,
+          isPublic,
+          triggerKeyword: triggerKeyword || null,
           aiUsageInstructions: authorizeForAI ? aiUsageInstructions : undefined,
         };
 
@@ -124,7 +134,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [name, content, category, variables, tags, authorizeForAI, allowAutomatedUse, aiUsageInstructions, originalTemplate, accountId, templateId, updateTemplate]);
+  }, [name, content, category, variables, tags, authorizeForAI, allowAutomatedUse, isPublic, triggerKeyword, aiUsageInstructions, originalTemplate, accountId, templateId, updateTemplate, initializedId]);
 
   // Extract variables from content
   const detectedVariables = useMemo(() => {
@@ -437,6 +447,72 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
                 </div>
               )}
             </CollapsibleSection>
+            
+            {/* Deep Linking & Trigger Section */}
+            <CollapsibleSection
+              title="Deep Linking & Triggers"
+              icon={<Zap size={18} className="text-warning" />}
+              isCustomized={isPublic}
+              onToggleCustomized={setIsPublic}
+              showToggle={true}
+            >
+              <div className="space-y-6">
+                <div className="bg-warning/5 border border-warning/10 p-4 rounded-xl flex items-start gap-4">
+                  <div className="mt-1 text-warning">
+                    <AlertCircle size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-warning mb-1">Estrategia de Captación</h4>
+                    <p className="text-xs text-warning/80 leading-relaxed">
+                      Al activar esta opción, la plantilla podrá dispararse automáticamente mediante una palabra clave 
+                      o ser accedida vía un enlace directo. Esto es ideal para campañas de marketing.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black uppercase tracking-wider text-secondary">
+                      Palabra Clave (Trigger)
+                    </label>
+                    <Input
+                      placeholder="Ej: info, promo san carlos, agendar"
+                      value={triggerKeyword}
+                      onChange={(e) => setTriggerKeyword(e.target.value)}
+                      icon={<Hash size={16} />}
+                      fullWidth
+                    />
+                    <p className="text-[10px] text-muted italic">
+                      Sugerencia: Usa frases cortas y naturales que el cliente escribiría.
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-subtle">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-muted mb-2 block">
+                      Enlace de Campaña (Directo al Chat)
+                    </label>
+                    <div className="flex items-center gap-2 bg-base p-2 rounded-lg border border-subtle">
+                      <code className="text-xs text-primary flex-1 truncate">
+                        {`${window.location.origin}/${originalTemplate.accountAlias || originalTemplate.accountId}${triggerKeyword ? `?text=${encodeURIComponent(triggerKeyword)}` : ''}`}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const url = `${window.location.origin}/${originalTemplate.accountAlias || originalTemplate.accountId}${triggerKeyword ? `?text=${encodeURIComponent(triggerKeyword)}` : ''}`;
+                          navigator.clipboard.writeText(url);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                      >
+                        {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleSection>
+
 
             {/* IA Section */}
             <FluxCoreTemplateConfig

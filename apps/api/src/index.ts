@@ -1,3 +1,4 @@
+console.log('💓 API SERVER HEARTBEAT - RELOADED AT ' + new Date().toISOString());
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
@@ -116,10 +117,12 @@ async function initializeFluxCore() {
 
     runtimeGateway.register(asistentesLocalRuntime);
     
-    // 🎯 NUEVO (v8.5): Inicializar motor semántico para vectores de plantillas
+    // 🎯 NUEVO (v8.5): Inicializar motor semántico y sistema de triggers
     const { templateSemanticService } = await import('./services/fluxcore/template-semantic.service');
-    // Al importar el singleton, se registra el constructor y los listeners.
-    console.log('[Bootstrap] 3/4 Runtime Gateway & Semantic Engine initialized');
+    const { keywordTriggerService } = await import('./services/keyword-trigger.service');
+    console.log('[Bootstrap] KeywordTriggerService instance loaded:', !!keywordTriggerService);
+    
+    console.log('[Bootstrap] 3/4 Runtime Gateway, Semantic Engine & Triggers initialized');
 
     // 4. COGNITION WORKER (The Heartbeat)
     const { cognitionWorker } = await import('./workers/cognition-worker');
