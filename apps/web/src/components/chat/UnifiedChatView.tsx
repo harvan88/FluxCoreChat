@@ -15,6 +15,7 @@ import { Avatar } from '../ui/Avatar';
 import { ChatComposer } from './ChatComposer';
 import { MessageBubble } from './MessageBubble';
 import { ParticipantsActivityBar } from './ParticipantsActivityBar';
+import { ChatAIStatusToggle } from './ChatAIStatusToggle';
 
 const CHAT_SUPPORTED_MIME_TYPES = [
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
@@ -322,7 +323,10 @@ export function UnifiedChatView({
               <p className="text-sm text-muted">{accountId}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            {accountId && relationshipId && (
+              <ChatAIStatusToggle accountId={accountId} relationshipId={relationshipId} />
+            )}
             <div className="w-2 h-2 bg-green-500 rounded-full" />
           </div>
         </div>
