@@ -9,7 +9,6 @@ import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { AIStatusHeader } from './AIStatusHeader';
-import { ConversationRowAIStatus } from './ConversationRowAIStatus';
 import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
 
 import { useExtensions } from '../../hooks/useExtensions';
@@ -267,11 +266,6 @@ export function ConversationsList() {
                       <div className="text-sm text-secondary truncate">
                         {conversation.lastMessageText || 'Sin mensajes'}
                       </div>
-                      <ConversationRowAIStatus
-                        accountId={selectedAccountId!}
-                        relationshipId={conversation.relationshipId}
-                        isFluxCoreEnabled={isFluxCoreEnabled}
-                      />
                     </div>
                     {conversation.unreadCountA > 0 && (
                       <span className="ml-2 bg-accent text-inverse text-xs px-2 py-0.5 rounded-full">
