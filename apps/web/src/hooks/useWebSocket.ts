@@ -299,9 +299,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               case 'user_activity_state':
                 if (onActivityStateCallback) {
                   onActivityStateCallback({
-                    accountId: message.data.accountId,
-                    conversationId: message.data.conversationId,
-                    activity: message.data.activity
+                    accountId: message.accountId,
+                    conversationId: message.conversationId,
+                    activity: message.activity
                   });
                 }
                 return;

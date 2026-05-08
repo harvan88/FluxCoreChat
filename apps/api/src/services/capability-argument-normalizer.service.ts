@@ -3,7 +3,7 @@ function asStringRecord(input: any): Record<string, string> | undefined {
     return undefined;
   }
 
-  const entries = Object.entries(input).filter(([, value]) => typeof value === 'string');
+  const entries = Object.entries(input || {}).filter(([, value]) => typeof value === 'string');
   if (entries.length === 0) {
     return undefined;
   }

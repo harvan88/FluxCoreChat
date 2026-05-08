@@ -21,8 +21,20 @@ export const accounts = pgTable('accounts', {
   aiIncludeBio: boolean('ai_include_bio').default(true).notNull(),
   aiIncludePrivateContext: boolean('ai_include_private_context').default(true).notNull(),
   aiIncludeTimestamp: boolean('ai_include_timestamp').default(true).notNull(),
+  aiIncludeSocialLinks: boolean('ai_include_social_links').default(true).notNull(),
+  aiIncludeLocations: boolean('ai_include_locations').default(true).notNull(),
   // Avatar asset reference (replaces profile.avatarUrl)
   avatarAssetId: uuid('avatar_asset_id').references(() => assets.id, { onDelete: 'set null' }),
+  // Brand & Contact
+  socialLinks: jsonb('social_links')
+    .$type<Record<string, { value: string; aiEnabled: boolean; label?: string }>>()
+    .default({}).notNull(),
+  brandColors: jsonb('brand_colors')
+    .$type<{ primary?: string; secondary?: string; accent?: string }>()
+    .default({}).notNull(),
+  // Regional SSOT (D9, D10)
+  country: varchar('country', { length: 2 }), // ISO 3166-1 alpha-2
+  timezone: varchar('timezone', { length: 50 }), // IANA timezone
 });
 
 export type Account = typeof accounts.$inferSelect;

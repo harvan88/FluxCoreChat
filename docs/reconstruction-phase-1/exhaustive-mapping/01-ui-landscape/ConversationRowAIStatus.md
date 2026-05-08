@@ -1,45 +1,26 @@
 ---
-id: "conversation-row-ai-status"
+id: "ConversationRowAIStatus"
 type: "smart-component"
 status: "stable"
 criticality: "medium"
 location: "apps/web/src/components/conversations/ConversationRowAIStatus.tsx"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Inyección de useAutomation Custom Hook combinada con AIStatusIndicator" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Micro-componente de ciclo de estado en Sidebar" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Manejo de clicks de stopPropagation" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 🤖 ConversationRowAIStatus
 
 ## 🎯 Propósito
-Extracción especializada de lógica. Actúa como el cerebro controlador incrustado dentro de las tarjetas individuales del SideBar de conversaciones. Se encarga única y exclusivamente de gestionar visualmente y mutar vía Hook el "Nivel de Agresividad y Autonomía" del Asistente Bot FluxCore dentro de esa Sala concreta (Piloto Automático, Asistencia de Sugerencias, Off).
-## 🧰 Props
-- `accountId` (string, Requerido): Identificador del usuario.
-- `relationshipId` (string, Requerido): Identificador de la relación o conversación asociada.
-- `isFluxCoreEnabled` (boolean, Requerido): Indicador global de si la IA está activa.
+Proporciona controles granulares para el comportamiento de la IA dentro de una conversación específica. Permite al usuario (o administrador) activar/desactivar la IA, ponerla en modo borrador (Draft) o silenciarla para ese hilo de chat en particular.
 
-## 📦 Estado y Datos
-**Composiciones Desacopladas:**
-- Evita depender en stores globales extrayendo el contexto con `useAutomation(accountId, relationshipId)`.
-- Re-transmite las propiedades extraídas hacia el componente exclusivamente visual `<AIStatusIndicator />` (Patrón Smart + Dumb Components form).
+## ⚙️ Estado y Datos
+*   **Store**: Utiliza `useAutomationStore` para sincronizar el estado local con la API.
+*   **Props**: Recibe `conversationId`.
+*   **Persistencia**: Cada cambio en los toggles dispara una llamada a `/api/automation/rule` para persistir la configuración en la base de datos (Tabla `automation_rules`).
 
-## 🔄 Flujos de Interacción
-1. **La Farsa Matemática Modal (Ciclo Finito):** Al operar un click directo encima del Status Tracker. Aplica un atenuador de burbujas de Red DOM (`e.stopPropagation()`) para prevenir que se seleccione y abra el Chat Accidentalmente. Acto seguido emplea una indexión por Array para ciclar modularmente los modos `auto -> suggest -> off -> auto` usando el operador residual length (`(currentIndex + 1) % modes.length`). 
-2. **Propagación Asíncrona:** Emite el resultado como Promesa Vacía al motor `setRule()` inyectándole el Scope Parametral, ocasionando que la barra principal cambie simultáneamente de color y el bot empiece a obedecer la nueva restricción en microsegundos.
+## 🔄 Flujos (Interacciones)
+1.  **Carga Inicial**: El componente solicita el estado actual de la regla para la conversación al montarse.
+2.  **Toggle Status**: Al cambiar el switch de "Estado", se activa o desactiva completamente el procesamiento de la IA para nuevos mensajes en ese hilo.
+3.  **Toggle Draft**: Permite que la IA genere respuestas pero no las envíe automáticamente, dejándolas en el outbox para revisión humana.
+4.  **Optimistic UI**: Los cambios se reflejan inmediatamente en la UI antes de recibir la confirmación de la API.
 
-## 💡 Ejemplo de Uso
-```tsx
-import { ConversationRowAIStatus } from '../../components/conversations/ConversationRowAIStatus';
-
-<ChatRowCard>
-    <Label>{chat.name}</Label>
-    <ConversationRowAIStatus 
-         accountId={user.id}
-         relationshipId={chat.relId}
-         isFluxCoreEnabled={true}
-    />
-</ChatRowCard>
-```
+## 🎨 Estética
+Diseñado con una estética premium, utiliza micro-animaciones en los switches y badges de estado que cambian de color dinámicamente según la configuración activa.

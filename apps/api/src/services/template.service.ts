@@ -199,8 +199,8 @@ export class TemplateService {
     // 2. Procesar variables en el contenido
     let finalContent = template.content;
     if (variables) {
-      Object.entries(variables).forEach(([key, value]) => {
-        finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), value);
+      Object.entries(variables || {}).forEach(([key, value]) => {
+        finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), String(value ?? ''));
       });
     }
 
@@ -260,8 +260,8 @@ export class TemplateService {
 
     let finalContent = template.content;
     if (variables) {
-      Object.entries(variables).forEach(([key, value]) => {
-        finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), value);
+      Object.entries(variables || {}).forEach(([key, value]) => {
+        finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), String(value ?? ''));
       });
     }
 

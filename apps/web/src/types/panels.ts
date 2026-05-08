@@ -40,6 +40,7 @@ export interface Tab {
   type: TabContextType;
   title: string;
   icon?: string;
+  level?: 2 | 3;                 // Nivel de navegación visual (2=Categoría/Lista, 3=Detalle)
   context: Record<string, any>;  // chatId, contactId, etc.
   metadata?: Record<string, any>; // Información extra para identificación
   closable: boolean;

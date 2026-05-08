@@ -1,11 +1,11 @@
 /**
- * FluxPolicyContextService â€” Canon v8.3
+ * FluxPolicyContextService — Canon v8.3
  *
  * Resolves the flat FluxPolicyContext BEFORE any runtime is invoked.
- * Returns ONLY business governance â€” no LLM config, no technical runtime details.
+ * Returns ONLY business governance — no LLM config, no technical runtime details.
  *
- * Canon Â§4.3: "PolicyContext contains the business governance decisions."
- * Canon Â§4.4: "PolicyContext = HOW and WHEN. RuntimeConfig = WHAT the runtime uses."
+ * Canon §4.3: "PolicyContext contains the business governance decisions."
+ * Canon §4.4: "PolicyContext = HOW and WHEN. RuntimeConfig = WHAT the runtime uses."
  *
  * Data sources:
  *   - ChatCore: account profile, relationship notes (exist without AI)
@@ -19,9 +19,10 @@ import {
     accounts, 
     templates, 
     fluxcoreToolDefinitions, 
-    fluxcoreToolConnections 
+    fluxcoreToolConnections,
+    accountLocations
 } from '@fluxcore/db';
-import { sql, eq, and, inArray } from 'drizzle-orm';
+import { sql, eq, and, inArray, desc } from 'drizzle-orm';
 import type { FluxPolicyContext, RuntimeConfig } from '@fluxcore/db';
 import { assetPolicyService } from './asset-policy.service';
 import { automationController } from './automation-controller.service';
@@ -388,6 +389,12 @@ class FluxPolicyContextService {
                 aiIncludeBio: accounts.aiIncludeBio,
                 aiIncludePrivateContext: accounts.aiIncludePrivateContext,
                 aiIncludeTimestamp: accounts.aiIncludeTimestamp,
+                aiIncludeSocialLinks: accounts.aiIncludeSocialLinks,
+                aiIncludeLocations: accounts.aiIncludeLocations,
+                socialLinks: accounts.socialLinks,
+                brandColors: accounts.brandColors,
+                country: accounts.country,
+                timezone: accounts.timezone,
             })
             .from(accounts)
             .where(eq(accounts.id, accountId))
@@ -396,6 +403,8 @@ class FluxPolicyContextService {
 
         const profile: Record<string, unknown> = {
             aiIncludeTimestamp: account.aiIncludeTimestamp ?? true,
+            country: account.country,
+            timezone: account.timezone,
         };
         const accountProfile = (account.profile || {}) as any;
 
@@ -407,6 +416,31 @@ class FluxPolicyContextService {
         }
         if (account.aiIncludePrivateContext) {
             profile.privateContext = account.privateContext || undefined;
+        }
+
+        // Social links — gated by aiIncludeSocialLinks toggle and granular aiEnabled flags
+        if (account.aiIncludeSocialLinks && account.socialLinks) {
+            const links = account.socialLinks as Record<string, { value: string; aiEnabled: boolean }>;
+            const authorizedLinks: Record<string, string> = {};
+            
+            Object.entries(links || {}).forEach(([key, data]) => {
+                // Support both old string format (migration fallback) and new object format
+                if (typeof data === 'string') {
+                    authorizedLinks[key] = data;
+                } else if (data && typeof data === 'object' && data.aiEnabled !== false) {
+                    authorizedLinks[key] = data.value;
+                }
+            });
+
+            if (Object.keys(authorizedLinks).length > 0) {
+                profile.socialLinks = authorizedLinks;
+            }
+        }
+
+        // Brand colors — always projected (visual identity, not sensitive)
+        const colors = account.brandColors as any;
+        if (colors && Object.keys(colors).length > 0) {
+            profile.brandColors = colors;
         }
 
         if (account.avatarAssetId) {
@@ -422,6 +456,34 @@ class FluxPolicyContextService {
 
             if (signed?.url) {
                 profile.avatarUrl = signed.url;
+            }
+        }
+
+        // Locations — gated by aiIncludeLocations toggle
+        if (account.aiIncludeLocations) {
+            const { accountLocations } = await import('@fluxcore/db');
+            const rawLocations = await db
+                .select({
+                    id: accountLocations.id,
+                    name: accountLocations.name,
+                    address: accountLocations.address,
+                    isDefault: accountLocations.isDefault,
+                })
+                .from(accountLocations)
+                .where(and(
+                    eq(accountLocations.accountId, accountId),
+                    eq(accountLocations.status, 'active')
+                ))
+                .orderBy(desc(accountLocations.isDefault), accountLocations.name);
+
+            if (rawLocations.length > 0) {
+                profile.locations = rawLocations.map(loc => ({
+                    id: loc.id,
+                    name: loc.name,
+                    address: loc.address,
+                    isDefault: loc.isDefault,
+                    // Nota: El estado operativo y horarios se consultan vía Herramientas (is_business_open)
+                }));
             }
         }
 

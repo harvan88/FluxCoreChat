@@ -4,6 +4,9 @@ import { CreditsSection } from './CreditsSection';
 import { KernelSessionsSection } from './KernelSessionsSection';
 import { ThemeSettings } from '../common';
 import { ComponentPreviewGallery } from './ComponentPreviewGallery';
+import { ContactSection } from './ContactSection';
+import { LocationSection } from './LocationSection';
+import { ScheduleSection } from './ScheduleSection';
 import type { Tab } from '../../types/panels';
 
 interface SettingsTabContentProps {
@@ -26,6 +29,12 @@ export function SettingsTabContent({ section }: SettingsTabContentProps) {
     case 'credits':
       return <CreditsSection onBack={handleBack} />;
 
+    case 'contacto':
+      return <ContactSection onBack={handleBack} />;
+    case 'ubicacion':
+      return <LocationSection onBack={handleBack} />;
+    case 'horario':
+      return <ScheduleSection onBack={handleBack} />;
     case 'appearance':
       return (
         <div className="h-full overflow-y-auto p-6">
@@ -62,7 +71,7 @@ export function SettingsTabContent({ section }: SettingsTabContentProps) {
       return (
         <div className="h-full flex items-center justify-center">
           <div className="text-center">
-            <p className="text-lg text-secondary">Configuración</p>
+            <p className="text-lg text-secondary">Ajustes</p>
             <p className="text-sm text-muted mt-2">Selecciona una opción del menú</p>
           </div>
         </div>

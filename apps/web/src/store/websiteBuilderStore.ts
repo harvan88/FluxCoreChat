@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../utils/urls';
+
+const API_URL = getApiUrl();
 
 interface WebsitePage {
   path: string;

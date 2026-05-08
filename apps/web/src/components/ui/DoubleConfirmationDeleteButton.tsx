@@ -39,7 +39,7 @@ export function DoubleConfirmationDeleteButton({
         <div
             ref={containerRef}
             className={clsx("relative flex items-center h-8 transition-all duration-200 ease-out", className)}
-            style={{ width: isConfirming ? '72px' : '32px' }}
+            style={{ width: isConfirming ? '60px' : '32px' }}
         >
             {/* Confirm Button (Check) */}
             <button
@@ -49,7 +49,7 @@ export function DoubleConfirmationDeleteButton({
                     setIsConfirming(false);
                 }}
                 className={clsx(
-                    "absolute left-0 p-1.5 rounded transition-all duration-200",
+                    "absolute left-0 p-1 rounded transition-all duration-200",
                     isConfirming
                         ? "opacity-100 scale-100 text-success hover:bg-success/10 pointer-events-auto"
                         : "opacity-0 scale-75 pointer-events-none"
@@ -67,7 +67,7 @@ export function DoubleConfirmationDeleteButton({
                 }}
                 disabled={disabled}
                 className={clsx(
-                    "absolute right-0 p-1.5 rounded transition-all duration-200 ease-out",
+                    "absolute right-0 p-1 rounded transition-all duration-200 ease-out",
                     !isConfirming
                         ? "opacity-100 scale-100 text-muted hover:text-error hover:bg-error/10 pointer-events-auto"
                         : "opacity-100 scale-100 text-muted hover:text-primary hover:bg-hover pointer-events-auto"

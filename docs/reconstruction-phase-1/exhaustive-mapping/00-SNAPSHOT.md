@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quali
 **Ubicación:** `docs/reconstruction-phase-1/exhaustive-mapping/00-documentation-quality-snapshot.md`
 **Propósito:** Documento dinámico que captura el estado matemático real de la documentación para contexto de la IA
 **Estado:** ✅ STABLE
-**Última Actualización:** 29/04/2026, 18:22
+**Última Actualización:** 08/05/2026, 11:31
 
 ---
 
@@ -29,94 +29,87 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 📈 **MÉTRICAS PRINCIPALES**
 
 ### **Calidad General**
-- **Score Promedio:** 49.6%
-- **Índice de Confianza:** 88.0%
-- **Total Documentos Analizados:** 383
+- **Score Promedio:** 49.2%
+- **Índice de Confianza:** 82.0%
+- **Total Documentos Analizados:** 412
 
 ### **Cobertura del Sistema**
-- **Cobertura UI:** 96.9% (156/161)
-- **Cobertura Backend:** 97.4% (191/196)
+- **Cobertura UI:** 98.8% (171/173)
+- **Cobertura Backend:** 100.0% (203/203)
 
 ---
 
 ## 🔍 **ANÁLISIS POR ESTADOS**
 
 ### **Documentos Estables (Completos)**
-- **Cantidad:** 347
-- **Porcentaje del Total:** 90.6%
-- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountsSection.md, AccountSwitcher.md, ActivityBar.md (+337 más)
+- **Cantidad:** 353
+- **Porcentaje del Total:** 85.7%
+- **Lista:** 00-INDEX.md, 00-PROMPT.md, 00-SNAPSHOT.md, 00-SNAPSHOT.template.md, 00-STANDARD.md, AccountDeletionModal.md, AccountDeletionWizard.md, AccountsSection.md, AccountSwitcher.md, ActivityBar.md (+343 más)
 
 ### **Documentos en Revisión (Con Dudas)**
-- **Cantidad:** 4
-- **Porcentaje del Total:** 1.0%
-- **Lista:** account-avatar.routes.md, asset-gateway.service.md, prompt-builder.service.md, template-registry.service.md
+- **Cantidad:** 5
+- **Porcentaje del Total:** 1.2%
+- **Lista:** account-avatar.routes.md, asset-gateway.service.md, prompt-builder.service.md, services-schedule.md, template-registry.service.md
 
 ### **Documentos WIP (Incompletos)**
-- **Cantidad:** 11
-- **Porcentaje del Total:** 2.9%
-- **Lista:** TemplateBulkImportModal.md, UnifiedKernelMonitor.md, routes-test.md, services-capability-extra-instructions.md, services-capability-instruction.md, services-capability-openai-tool-response.md, services-fluxcore-provider-capabilities.md, services-fluxcore-runtimes-asistentes-local-prompts.md, services-fluxcore-template-semantic.md, services-runtime-composition.md (+1 más)
+- **Cantidad:** 33
+- **Porcentaje del Total:** 8.0%
+- **Lista:** ActionSheet.md, ContactSection.md, DayStatusToggle.md, InteractiveMapTest.md, LocationSection.md, ProposedWorkPreview.md, ScheduleRowManager.md, ScheduleSummary.md, SedeScheduleView.md, SettingsTabContent.md (+23 más)
 
 ---
 
 ## 🚨 **COMPONENTES SIN DOCUMENTAR**
 
 ### **Backend Crítico**
-- **Total:** 5
-- **Porcentaje:** 2.6%
+- **Total:** 0
+- **Porcentaje:** 0.0%
 - **Lista Prioritaria:**
-- core/capabilities/platform.capability.ts
-- routes/fluxcore/definitions.routes.ts
-- services/fluxcore/cognitive-parser.service.ts
-- services/fluxcore/semantic-sieve.service.ts
-- services/fluxcore/sovereign-identity.service.ts
+- 
 
 ### **UI Components**
-- **Total:** 5
-- **Porcentaje:** 3.1%
+- **Total:** 2
+- **Porcentaje:** 1.2%
 - **Lista:** 
-- components/chat/TemplateComposerPreview.tsx
 - components/fluxcore/shared/EmptyState.tsx
-- components/fluxcore/WESStudio.tsx
 - core/components/LoadingState.tsx
-- extensions/fluxcore/components/ProposedWorkPreview.tsx
 
 ---
 
 ## ⚠️ **INCIDENCIAS DETECTADAS**
 
 ### **Errores Críticos**
-- **Total:** 17
+- **Total:** 52
 - **Tipos Comunes:** Falta, Contiene, Inconsistencia
-- **Componentes Afectados:** FluxCoreSidebar.md, TemplateBulkImportModal.md, TemplateBulkImportModal.md, UnifiedKernelMonitor.md, UnifiedKernelMonitor.md (+12 más)
+- **Componentes Afectados:** ActionSheet.md, ActionSheet.md, ContactSection.md, ContactSection.md, DayStatusToggle.md (+47 más)
 
 ### **Advertencias**
-- **Total:** 19
+- **Total:** 48
 - **Tipos Comunes:** Sin, Documento
 - **Detalle:** 
+- 00-INDEX.md: Sin ejemplos de código
+- ActionSheet.md: Sin ejemplos de código
+- ContactSection.md: Sin ejemplos de código
+- DayStatusToggle.md: Sin ejemplos de código
+- InteractiveMapTest.md: Sin ejemplos de código
+- LocationSection.md: Sin ejemplos de código
 - MessageBubble.md: Sin ejemplos de código
-- TemplateBulkImportModal.md: Sin ejemplos de código
-- UnifiedKernelMonitor.md: Sin ejemplos de código
-- account-avatar.routes.md: Documento con dudas técnicas (correctamente marcado como needs_review)
-- ai-template.service.md: Sin ejemplos de código
-- asset-gateway.service.md: Documento con dudas técnicas (correctamente marcado como needs_review)
-- assets-routes.md: Sin ejemplos de código
-- cognitive-dispatcher.service.md: Sin ejemplos de código
-- services-capability-extra-instructions.md: Sin ejemplos de código
-- services-capability-instruction.md: Sin ejemplos de código
-- ... (+9 más)
+- ProposedWorkPreview.md: Sin ejemplos de código
+- ScheduleRowManager.md: Sin ejemplos de código
+- ScheduleSummary.md: Sin ejemplos de código
+- ... (+38 más)
 
 ---
 
 ## 📊 **ANÁLISIS MATEMÁTICO**
 
 ### **Distribución por Tipo**
-- **Core/Subsystem:** 191 documentos
-- **Smart Components:** 156 documentos  
-- **UI Components:** 156 documentos
+- **Core/Subsystem:** 203 documentos
+- **Smart Components:** 171 documentos  
+- **UI Components:** 171 documentos
 
 ### **Eficiencia de Documentación**
 - **Documentos por Día:** Calculado en tiempo real
-- **Tasa de Completitud:** 90.6%
+- **Tasa de Completitud:** 85.7%
 - **Tiempo Promedio por Documento:** Variable según complejidad
 
 ---
@@ -124,23 +117,23 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ## 🎯 **RECOMENDACIONES PARA LA IA**
 
 ### **Prioridades Inmediatas**
-1. **Documentar Backend:** Los 5 componentes sin documentación
-2. **Resolver Dudas:** Los 4 documentos con preguntas técnicas
-3. **Completar WIP:** Los 11 documentos incompletos
+1. **Documentar Backend:** Los 0 componentes sin documentación
+2. **Resolver Dudas:** Los 5 documentos con preguntas técnicas
+3. **Completar WIP:** Los 33 documentos incompletos
 
 ### **Estrategia Sugerida**
-1. **Foco en Backend:** 97.4% de cobertura necesita mejora
-2. **Revisión Técnica:** Resolver dudas en 4 documentos
-3. **Mantenimiento:** Mantener 49.6% de calidad promedio
+1. **Foco en Backend:** 100.0% de cobertura necesita mejora
+2. **Revisión Técnica:** Resolver dudas en 5 documentos
+3. **Mantenimiento:** Mantener 49.2% de calidad promedio
 
 ---
 
 ## 📅 **HISTORIAL DE CAMBIOS**
 
 ### **Última Revisión**
-- **Fecha:** 29/4/2026
-- **Cambios:** Actualizado con 383 documentos analizados
-- **Impacto:** 17 errores críticos detectados
+- **Fecha:** 8/5/2026
+- **Cambios:** Actualizado con 412 documentos analizados
+- **Impacto:** 52 errores críticos detectados
 
 ### **Tendencias**
 - **Mejora en Calidad:** 📉 Necesita atención
@@ -155,7 +148,7 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 ### **Consistencia de Datos**
 - **Validación UI:** ✅ Válido
 - **Validación Backend:** ✅ Válido
-- **Detalles Genuinos:** UI [Refs/Real]: 156/161 (Huérfanos: 0) | Backend [Refs/Real]: 191/196 (Huérfanos: 0)
+- **Detalles Genuinos:** UI [Refs/Real]: 171/173 (Huérfanos: 0) | Backend [Refs/Real]: 203/203 (Huérfanos: 0)
 
 ---
 
@@ -176,10 +169,10 @@ Este documento sirve como **memoria matemática** del sistema de documentación 
 
 ## 🔧 **METADATOS DEL SISTEMA**
 
-- **Total Componentes UI:** 161
-- **Total Componentes Backend:** 196
-- **Ratio Documentación/Componente:** 107.3
-- **Eficiencia del Sistema:** 94.1%
+- **Total Componentes UI:** 173
+- **Total Componentes Backend:** 203
+- **Ratio Documentación/Componente:** 109.6
+- **Eficiencia del Sistema:** 93.6%
 
 ---
 
@@ -188,8 +181,8 @@ Cuando leas este snapshot, puedes usar las métricas para tu razonamiento:
 
 ```markdown
 Basado en el Snapshot:
-- Cobertura Backend: 97.4%
-- Errores Críticos: 17
+- Cobertura Backend: 100.0%
+- Errores Críticos: 52
 Priorizaré resolver los errores críticos antes de avanzar con nuevos componentes.
 ```
 

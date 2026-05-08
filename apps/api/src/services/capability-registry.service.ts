@@ -3,6 +3,7 @@ import {
     SYSTEM_LIST_TEMPLATES,
     SYSTEM_SEARCH_KNOWLEDGE,
     SYSTEM_SEND_TEMPLATE,
+    SYSTEM_IS_BUSINESS_OPEN,
 } from '../core/capabilities';
 import {
     PLATFORM_UPDATE_ACCOUNT_INSTRUCTIONS,
@@ -20,6 +21,7 @@ class CapabilityRegistryService {
         PLATFORM_UPDATE_ACCOUNT_INSTRUCTIONS,
         PLATFORM_MANAGE_TEMPLATE,
         PLATFORM_AUTHORIZE_AI_TEMPLATE,
+        SYSTEM_IS_BUSINESS_OPEN,
     ];
 
     listDefinitions(): CapabilityDefinition[] {

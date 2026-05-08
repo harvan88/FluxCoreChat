@@ -24,6 +24,7 @@ export type { BadgeProps, BadgeVariant, BadgeSize, BadgeStyle } from './Badge';
 // FC-408: Table Component
 export { Table } from './Table';
 export * from './DoubleConfirmationDeleteButton';
+export * from './ActionSheet';
 export type { TableProps, Column, SortDirection } from './Table';
 
 // FC-409: Select Component
@@ -59,3 +60,14 @@ export { ToastStack } from './ToastStack';
 
 // Sidebar components
 export { SidebarNavList } from './sidebar/SidebarNavList';
+
+// Time Management Components
+export { TimeIntervalRow } from './TimeIntervalRow';
+export type { TimeIntervalRowProps } from './TimeIntervalRow';
+
+export { TimeIntervalManager } from './TimeIntervalManager';
+export type { TimeIntervalManagerProps, TimeInterval } from './TimeIntervalManager';
+export { DayStatusToggle } from './DayStatusToggle';
+export { ScheduleRowManager } from './ScheduleRowManager';
+export { ViewHeader } from './ViewHeader';
+export type { ViewHeaderProps } from './ViewHeader';

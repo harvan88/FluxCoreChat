@@ -22,7 +22,8 @@ export function ChatAIStatusToggle({ accountId, relationshipId }: ChatAIStatusTo
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     const modes: AutomationMode[] = ['auto', 'suggest', 'off'];
-    const currentIndex = modes.indexOf(currentMode as AutomationMode);
+    const safeMode = (currentMode as AutomationMode) || 'off';
+    const currentIndex = modes.indexOf(safeMode);
     const nextMode = modes[(currentIndex + 1) % modes.length];
     void setRule(nextMode, { relationshipId });
   };

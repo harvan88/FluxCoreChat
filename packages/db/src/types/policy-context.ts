@@ -43,6 +43,32 @@ export interface ResolvedBusinessProfile {
     timezone?: string;
     avatarUrl?: string;
     aiIncludeTimestamp?: boolean;
+    /** Social links authorized by the operator */
+    socialLinks?: {
+        instagram?: string;
+        facebook?: string;
+        whatsapp?: string;
+        website?: string;
+        tiktok?: string;
+    };
+    /** Brand colors for visual identity */
+    brandColors?: {
+        primary?: string;
+        secondary?: string;
+        accent?: string;
+    };
+    /** Authorized locations */
+    locations?: Array<{
+        name: string;
+        address: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        timezone: string;
+        isMain: boolean;
+        latitude?: number;
+        longitude?: number;
+    }>;
     /** Authorized templates available for this account */
     templates?: Array<{
         templateId: string;

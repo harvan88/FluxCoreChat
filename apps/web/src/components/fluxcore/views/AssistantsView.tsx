@@ -96,7 +96,7 @@ export function AssistantsView({
   const handleSelect = useCallback((assistant: Assistant) => {
     if (onOpenTab) {
       if (assistant.runtime === 'openai') {
-        const identity = `extension:fluxcore:openai-assistant:${accountId}:${assistant.id}`;
+        const identity = `extension:@fluxcore/asistentes:openai-assistant:${accountId}:${assistant.id}`;
         onOpenTab(assistant.id, assistant.name, {
           type: 'openai-assistant',
           identity,
@@ -106,7 +106,7 @@ export function AssistantsView({
         return;
       }
 
-      const identity = `extension:fluxcore:assistant:${accountId}:${assistant.id}`;
+      const identity = `extension:@fluxcore/asistentes:assistant:${accountId}:${assistant.id}`;
       onOpenTab(assistant.id, assistant.name, {
         type: 'assistant',
         identity,
@@ -189,8 +189,8 @@ export function AssistantsView({
         const isOpenAI = runtime === 'openai';
         const type = isOpenAI ? 'openai-assistant' : 'assistant';
         const identity = isOpenAI
-          ? `extension:fluxcore:openai-assistant:${accountId}:${newAssistant.id}`
-          : `extension:fluxcore:assistant:${accountId}:${newAssistant.id}`;
+          ? `extension:@fluxcore/asistentes:openai-assistant:${accountId}:${newAssistant.id}`
+          : `extension:@fluxcore/asistentes:assistant:${accountId}:${newAssistant.id}`;
 
         onOpenTab(newAssistant.id, newAssistant.name, {
           type,

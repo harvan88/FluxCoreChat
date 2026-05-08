@@ -29,7 +29,7 @@ import { getModelCapabilities } from '../provider-capabilities';
 import { templateRegistryService } from '../template-registry.service';
 
 const MAX_TOOL_ROUNDS = 3;
-const ASISTENTES_LOCAL_CAPABILITY_CEILING = ['search_knowledge', 'send_template', 'list_available_templates'];
+const ASISTENTES_LOCAL_CAPABILITY_CEILING = ['search_knowledge', 'send_template', 'list_available_templates', 'is_business_open'];
 
 export type AuthorizedTemplateDefinition = {
     templateId: string;
@@ -65,7 +65,7 @@ function normalizeTemplateVariables(input: unknown): Record<string, string> {
     }
 
     const variables: Record<string, string> = {};
-    for (const [key, value] of Object.entries(input)) {
+    for (const [key, value] of Object.entries(input || {})) {
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
             variables[key] = String(value);
         }
@@ -175,7 +175,7 @@ function removeRanges(text: string, ranges: Array<{ start: number; end: number }
 
 function serializeTemplateVariables(variables?: Record<string, string>): string {
     return JSON.stringify(
-        Object.entries(variables ?? {}).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        Object.entries(variables ?? {}).sort(([leftKey], [rightKey]) => (leftKey || '').localeCompare(rightKey || ''))
     );
 }
 
@@ -306,7 +306,7 @@ function renderTemplateContent(content: string, variables?: Record<string, strin
     let renderedContent = content;
 
     for (const [key, value] of Object.entries(variables ?? {})) {
-        renderedContent = renderedContent.replace(new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, 'g'), value);
+        renderedContent = renderedContent.replace(new RegExp(`\\{\\{${escapeRegExp(key || '')}\\}\\}`, 'g'), String(value ?? ''));
     }
 
     return renderedContent;
@@ -346,8 +346,8 @@ function summarizeResidualFacts(residualText: string): string | null {
             return null;
         }
 
-        const lines = Object.entries(parsed)
-            .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+        const lines = Object.entries(parsed || {})
+            .filter(([key, value]) => key && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'))
             .map(([key, value]) => `- ${key}: ${String(value)}`);
 
         return lines.length > 0 ? lines.join('\n') : null;

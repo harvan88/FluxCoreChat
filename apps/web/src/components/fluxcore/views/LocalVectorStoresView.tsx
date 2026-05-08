@@ -80,7 +80,7 @@ export function LocalVectorStoresView({ accountId, onOpenTab, onClose, vectorSto
     // Handlers
     const handleSelect = (store: VectorStore) => {
         if (onOpenTab) {
-            const identity = `extension:fluxcore:vectorStore:${accountId}:${store.id}`;
+            const identity = `extension:@fluxcore/asistentes:vector-store:${accountId}:${store.id}`;
             onOpenTab(store.id, store.name, {
                 type: 'vectorStore',
                 identity,
@@ -103,7 +103,7 @@ export function LocalVectorStoresView({ accountId, onOpenTab, onClose, vectorSto
 
         if (created) {
             if (onOpenTab) {
-                const identity = `extension:fluxcore:vectorStore:${accountId}:${created.id}`;
+                const identity = `extension:@fluxcore/asistentes:vector-store:${accountId}:${created.id}`;
                 onOpenTab(created.id, created.name, {
                     type: 'vectorStore',
                     identity,

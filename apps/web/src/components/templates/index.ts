@@ -13,5 +13,4 @@ export { useTemplates } from './hooks/useTemplates';
 // Componentes
 export { TemplateManager } from './TemplateManager';
 export { TemplateList } from './TemplateList';
-export { TemplateCard } from './TemplateCard';
 export { TemplateEditor } from './TemplateEditor';

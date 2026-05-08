@@ -129,7 +129,7 @@ class PromptBuilderService {
         }
 
         if (authorizedContext?.systemClock) {
-            lines.push(`\n📅 FECHA Y HORA ACTUAL: ${authorizedContext.systemClock}`);
+            lines.push(`\n📅 CONTEXTO TEMPORAL DE LA CUENTA: ${authorizedContext.systemClock}`);
         }
 
         if (resolvedBusinessProfile.bio) {
@@ -140,6 +140,32 @@ class PromptBuilderService {
             if (cleanedPrivateContext) {
                 lines.push(`\nContexto adicional: ${cleanedPrivateContext}`);
             }
+        }
+
+        // Social links — only present if authorized by aiIncludeSocialLinks toggle
+        if (resolvedBusinessProfile.socialLinks) {
+            const links = resolvedBusinessProfile.socialLinks;
+            const linkLines: string[] = [];
+            if (links.instagram) linkLines.push(`- Instagram: ${links.instagram}`);
+            if (links.facebook) linkLines.push(`- Facebook: ${links.facebook}`);
+            if (links.whatsapp) linkLines.push(`- WhatsApp: ${links.whatsapp}`);
+            if (links.website) linkLines.push(`- Sitio web: ${links.website}`);
+            if (links.tiktok) linkLines.push(`- TikTok: ${links.tiktok}`);
+            if (linkLines.length > 0) {
+                lines.push(`\n### Redes y Contacto\n${linkLines.join('\n')}`);
+            }
+        }
+
+        // Locations - Basic projection
+        if (resolvedBusinessProfile.locations && resolvedBusinessProfile.locations.length > 0) {
+            const locLines: string[] = [];
+            resolvedBusinessProfile.locations.forEach((loc: any) => {
+                let text = `* **${loc.name}**`;
+                if (loc.isDefault) text += ` (Sede Principal)`;
+                text += `\n  - Dirección: ${loc.address}`;
+                locLines.push(text);
+            });
+            lines.push(`\n### Sedes / Ubicaciones físicas\n${locLines.join('\n\n')}`);
         }
 
         return lines.join('\n');

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useParams, matchPath } from 'react-router-dom';
 import { useUIStore } from '../store/uiStore';
 import { usePanelStore } from '../store/panelStore';
-import { ROUTE_REGISTRY, buildTabContext, resolveTabTitle } from '../config/route-registry';
+import { ROUTE_REGISTRY, buildTabContext, resolveTabTitle, resolveTabIcon } from '../config/route-registry';
 import type { ActivityType } from '../types';
 
 /**
@@ -50,13 +50,31 @@ export function useUrlStateSync() {
         const ids = route.supportsMulti ? id.split('+') : [id];
 
         ids.forEach(resourceId => {
+          // Extraer extensionId de la actividad si aplica (formato ext:id)
+          const extensionId = route.activity.startsWith('ext:') ? route.activity.replace('ext:', '') : null;
+
+          // Construir identidad: extensiones incluyen el accountId para evitar colisiones
+          const identity = extensionId 
+            ? `${route.identityPrefix}:${selectedAccountId}:${resourceId}`
+            : `${route.identityPrefix}:${resourceId}`;
+
+          const context = buildTabContext(route.contextBuilder, resourceId, selectedAccountId);
+          
+          // Asegurar que las extensiones tengan su ID y vista en el contexto
+          if (extensionId) {
+            context.extensionId = extensionId;
+            // Si la ruta define un subView pero buildTabContext no lo puso, lo ponemos aquí como fallback
+            if (!context.view && route.subView) context.view = route.subView;
+          }
+
           panelStore.openTab(route.container as any, {
-            identity: `${route.identityPrefix}:${resourceId}`,
+            identity,
             type: route.tabType as any,
             title: resolveTabTitle(route, resourceId, uiStore.conversations),
-            icon: route.defaultIcon || 'Settings',
+            icon: resolveTabIcon(route, resourceId),
+            level: route.navLevel,
             closable: true,
-            context: buildTabContext(route.contextBuilder, resourceId, selectedAccountId),
+            context,
           });
         });
 
@@ -73,7 +91,8 @@ export function useUrlStateSync() {
           type: 'extension' as any,
           identity: `extension:${extensionId}:${route.subView}:${selectedAccountId}`,
           title: route.defaultTitle || route.subView,
-          icon: route.defaultIcon || 'Settings',
+          icon: resolveTabIcon(route, route.subView),
+          level: route.navLevel,
           closable: true,
           context: { extensionId, view: route.subView, accountId: selectedAccountId },
         });

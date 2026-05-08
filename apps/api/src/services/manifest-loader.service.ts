@@ -197,7 +197,7 @@ class ManifestLoaderService {
     }
 
     const config: Record<string, any> = {};
-    for (const [key, schema] of Object.entries(manifest.configSchema)) {
+    for (const [key, schema] of Object.entries(manifest.configSchema || {})) {
       if (schema.default !== undefined) {
         config[key] = schema.default;
       }

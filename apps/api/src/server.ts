@@ -354,12 +354,16 @@ try {
           return new Response('Invalid path', { status: 400 });
         }
 
-        let filePath = path.join(process.cwd(), relativePath);
+        // Determinar ruta absoluta compartida
+        const projectRoot = process.cwd().includes('apps') 
+            ? path.resolve(process.cwd(), '..', '..') 
+            : process.cwd();
+            
+        let filePath = path.join(projectRoot, 'apps', 'api', relativePath);
+        
         if (!fs.existsSync(filePath)) {
-          const fallbackPath = path.join(process.cwd(), 'apps', 'api', relativePath);
-          if (fs.existsSync(fallbackPath)) {
-            filePath = fallbackPath;
-          }
+          // Fallback simple por si ya estamos en api y no usamos el path completo
+          filePath = path.join(process.cwd(), relativePath);
         }
 
         if (!fs.existsSync(filePath)) {
@@ -388,26 +392,30 @@ try {
           return new Response('Invalid checksum', { status: 400 });
         }
 
+        // Determinar ruta absoluta compartida
+        const projectRoot = process.cwd().includes('apps') 
+            ? path.resolve(process.cwd(), '..', '..') 
+            : process.cwd();
+
         const shard1 = checksum.slice(0, 2);
         const shard2 = checksum.slice(2, 4);
 
-        console.log('shard1:', shard1);
-        console.log('shard2:', shard2);
+        const avatarsBase = path.join(projectRoot, 'apps', 'api', 'uploads', 'assets', 'avatars');
 
         // Buscar con posibles extensiones y rutas
         const possiblePaths = [
           // Ruta esperada (con sharding completo)
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.jpg`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.jpeg`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.png`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${shard2}/${checksum}.webp`),
+          path.join(avatarsBase, shard1, shard2, checksum),
+          path.join(avatarsBase, shard1, shard2, `${checksum}.jpg`),
+          path.join(avatarsBase, shard1, shard2, `${checksum}.jpeg`),
+          path.join(avatarsBase, shard1, shard2, `${checksum}.png`),
+          path.join(avatarsBase, shard1, shard2, `${checksum}.webp`),
           // Rutas legacy (sin shard2)
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.jpg`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.jpeg`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.png`),
-          path.join(process.cwd(), `uploads/assets/avatars/${shard1}/${checksum}.webp`),
+          path.join(avatarsBase, shard1, checksum),
+          path.join(avatarsBase, shard1, `${checksum}.jpg`),
+          path.join(avatarsBase, shard1, `${checksum}.jpeg`),
+          path.join(avatarsBase, shard1, `${checksum}.png`),
+          path.join(avatarsBase, shard1, `${checksum}.webp`),
         ];
 
         console.log('POSSIBLE PATHS:');
@@ -571,9 +579,12 @@ const isWorker = role === 'worker' || role === 'standalone';
 console.log(`[Architecture] Node Role: ${role.toUpperCase()}`);
 
 // Start Kernel Runtime components with error protection
-if (isWorker) {
-  (async () => {
-    try {
+(async () => {
+  try {
+    console.log('⚙️  Starting Kernel Bootstrap (Extensions)...');
+    await bootstrapKernel();
+
+    if (isWorker) {
       console.log('⚙️  Starting Kernel components...');
 
       console.log('   - Kernel Dispatcher');
@@ -581,9 +592,6 @@ if (isWorker) {
 
       console.log('   - Projectors');
       startProjectors();
-
-      console.log('   - Kernel Bootstrap');
-      await bootstrapKernel();
 
       console.log('   - Services Initialization');
       automationScheduler.init();
@@ -599,19 +607,19 @@ if (isWorker) {
       cognitionWorker.start();
 
       console.log('✅ Kernel & Services started successfully');
-    } catch (error) {
-      console.error('❌ CRITICAL ERROR during Kernel startup:', error);
-      console.error(error);
+    } else {
+      // En modo API solo necesitamos registrar los runtimes para que los endpoints los expongan,
+      // pero no iniciar los dispatchers o schedulers pesados.
+      console.log('   - FluxCore v8.2 Runtime Registration (API Mode)');
+      runtimeGateway.register(asistentesLocalRuntime);
+      runtimeGateway.register(asistentesOpenAIRuntime);
+      runtimeGateway.register(fluxiRuntime);
     }
-  })();
-} else {
-  // En modo API solo necesitamos registrar los runtimes para que los endpoints los expongan,
-  // pero no iniciar los dispatchers o schedulers pesados.
-  console.log('   - FluxCore v8.2 Runtime Registration (API Mode)');
-  runtimeGateway.register(asistentesLocalRuntime);
-  runtimeGateway.register(asistentesOpenAIRuntime);
-  runtimeGateway.register(fluxiRuntime);
-}
+  } catch (error) {
+    console.error('❌ CRITICAL ERROR during startup:', error);
+    console.error(error);
+  }
+})();
 
 const cleanupTasks: Array<() => Promise<void> | void> = [];
 

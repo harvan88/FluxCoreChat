@@ -1,6 +1,7 @@
 import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, Evidence } from '../../core/types';
 import crypto from 'node:crypto';
+import { canonicalize } from './kernel-utils';
 
 /**
  * FluxCore Cognition Gateway
@@ -136,7 +137,7 @@ export class CognitionGatewayService {
     }
 
     private signCandidate(candidate: KernelCandidateSignal): string {
-        const canonical = this.canonicalize({
+        const canonical = canonicalize({
             factType: candidate.factType,
             source: candidate.source,
             subject: candidate.subject ?? null,
@@ -150,20 +151,6 @@ export class CognitionGatewayService {
             .createHmac('sha256', this.SIGNING_SECRET)
             .update(canonical)
             .digest('hex');
-    }
-
-    private canonicalize(value: unknown): string {
-        if (value === null || typeof value !== 'object') {
-            return JSON.stringify(value);
-        }
-        if (Array.isArray(value)) {
-            return '[' + value.map(v => this.canonicalize(v)).join(',') + ']';
-        }
-        const entries = Object.entries(value as Record<string, unknown>)
-            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-        return '{' + entries
-            .map(([key, val]) => JSON.stringify(key) + ':' + this.canonicalize(val))
-            .join(',') + '}';
     }
 }
 

@@ -153,7 +153,7 @@ export function InstructionDetail({
             <div>
               <p className="text-sm font-medium text-primary">Esta instrucción es gestionada automáticamente</p>
               <p className="text-xs text-secondary mt-0.5">
-                Su contenido se genera dinámicamente desde tu perfil. Para editarlo, ve a Configuración → Perfil → Contexto para la IA.
+                Su contenido se genera dinámicamente desde tu perfil. Para editarlo, ve a Ajustes → Perfil → Contexto para la IA.
               </p>
             </div>
           </div>

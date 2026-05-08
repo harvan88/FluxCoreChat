@@ -9,7 +9,7 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import * as vectorStoreService from './fluxcore/vector-store.service';
 import * as assistantsService from './fluxcore/assistants.service';
 import * as runtimeService from './fluxcore/runtime.service';
@@ -328,12 +328,13 @@ const KNOWLEDGE_TOOL_DEF_ID = 'b7d8c9a0-1e2f-3d4c-5b6a-789012345678';
 const PLATFORM_INSTRUCTIONS_ID = '8f7e6d5c-4b3a-2109-8765-43210fedcba9';
 const PLATFORM_MANAGE_TEMPLATE_ID = '7e6d5c4b-3a21-0987-6543-210fedcba987';
 const PLATFORM_AUTHORIZE_TEMPLATE_ID = '6d5c4b3a-2109-8765-4321-0fedcba98765';
+const SCHEDULES_TOOL_DEF_ID = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
 
 const SUPPORT_ACCOUNT_ID = '5f96c4c5-473b-4574-93ce-53f54225dd18';
 
 async function ensureSystemTools() {
   // 🧹 LIMPIEZA: Eliminar herramientas mock/legacy que ya no se usan
-  const mockSlugs = ['calendar', 'google_calendar', 'web_search', 'search_web'];
+  const mockSlugs = ['calendar', 'google_calendar', 'web_search', 'search_web', 'file_search'];
   await db.delete(fluxcoreToolDefinitions).where(inArray(fluxcoreToolDefinitions.slug, mockSlugs));
 
   const tools = [
@@ -371,6 +372,13 @@ async function ensureSystemTools() {
       name: 'Autorización de Plantillas',
       description: 'Herramienta administrativa para habilitar/deshabilitar plantillas para el uso del motor de IA.',
       category: 'Plataforma',
+    },
+    {
+      id: SCHEDULES_TOOL_DEF_ID,
+      slug: 'is_business_open',
+      name: 'Horarios de Atención',
+      description: 'Permite a la IA consultar si el negocio está abierto en tiempo real o en una fecha específica.',
+      category: 'Información',
     }
   ];
 
@@ -389,6 +397,18 @@ async function ensureSystemTools() {
       });
     }
   }
+
+  // 🧹 LIMPIEZA DE CONEXIONES HUÉRFANAS: Eliminar conexiones que apuntan a definiciones inexistentes
+  // Esto resuelve el problema de "herramienta desconocida" en el UI.
+  await db.execute(sql`
+    DELETE FROM fluxcore_tool_connections 
+    WHERE tool_definition_id NOT IN (SELECT id FROM fluxcore_tool_definitions)
+  `);
+
+  await db.execute(sql`
+    DELETE FROM fluxcore_assistant_tools 
+    WHERE tool_connection_id NOT IN (SELECT id FROM fluxcore_tool_connections)
+  `);
 }
 
 export async function getToolDefinitions(accountId?: string) {

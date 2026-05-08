@@ -4,47 +4,39 @@ type: "database-table"
 status: "stable"
 criticality: "critical"
 location: "packages/db/src/schema/accounts.ts"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Tabla de identidades de actor" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "FK a Users, Assets. Referenciada por Conversations, Credits, AI Entitlements" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Account & Billing Management" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Alias uniqueness (Canonical ID), AI privacy flags, Identity-Avatar linkage" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 📊 Table: accounts
 
 ## 🎯 Propósito
-La tabla `accounts` representa la "personalidad" o el "sujeto de negocio" dentro de FluxCore. Mientras un `user` es la entidad de login, la `account` es la entidad que participa en chats, consume créditos y tiene configuración de IA.
+La tabla `accounts` representa la "personalidad" o el "sujeto de negocio" dentro de FluxCore. Mientras un `user` es la entidad de login, la `account` es la entidad que participa en chats, consume créditos y tiene configuración de IA. En la Fase 3, se convierte en el SSOT (Single Source of Truth) para datos regionales (país y zona horaria).
 
 ## 🚥 Estructura (Discovery)
 | Columna | Tipo | Restricciones | Descripción |
 | :--- | :--- | :--- | :--- |
 | `id` | UUID | Primary Key | ID universal de la cuenta. |
 | `owner_user_id` | UUID | FK (users.id) | Usuario dueño de la cuenta. |
-| `username` | VARCHAR(100) | Unique, Not Null | Nombre de usuario único (legacy/internal). |
-| `display_name` | VARCHAR(255) | Not Null | Nombre legible para otros usuarios. |
-| `alias` | VARCHAR(100) | Unique, Not Null | **ID Canónico**. Identificador público único (v8.x). |
-| `account_type` | VARCHAR(20) | Not Null | `personal` o `business`. |
-| `profile` | JSONB | Not Null | Datos extendidos del perfil. |
-| `private_context` | TEXT | Nullable | Información privada inyectada en el prompt de IA. |
+| `alias` | VARCHAR(100) | Unique, Not Null | **ID Canónico**. Identificador público único. |
+| `country` | VARCHAR(2) | Nullable | **SSOT Regional**. Código ISO 3166-1 alpha-2 (ej: AR, ES). |
+| `timezone` | VARCHAR(50) | Nullable | **SSOT Regional**. Zona horaria IANA (ej: America/Argentina/Buenos_Aires). |
+| `brand_colors` | JSONB | Default {} | Colores corporativos (primary, secondary, accent). |
+| `social_links` | JSONB | Default {} | Enlaces a redes sociales con toggles de visibilidad IA. |
 | `allow_automated_use`| BOOLEAN | Default False | Permite que la IA use esta cuenta automáticamente. |
-| `avatar_asset_id` | UUID | FK (assets.id) | Referencia al archivo de avatar en el sistema de assets. |
+| `avatar_asset_id` | UUID | FK (assets.id) | Referencia al archivo de avatar. |
 
 ## 🧬 Relaciones (Connections)
--   **Belongs To `users`**: Toda cuenta debe tener un humano dueño.
--   **Has One `account_ai_entitlements`**: Define qué modelos de IA puede usar esta cuenta.
--   **Has Many `conversations`**: Chats donde esta cuenta es participante o dueña.
--   **Belongs To `assets`**: El avatar es un recurso gestionado por el sistema de assets.
+- **Belongs To `users`**: Toda cuenta debe tener un humano dueño.
+- **Has Many `account_locations`**: Sedes físicas asociadas.
+- **Has Many `weekly_schedules`**: Horarios asociados (vía ownerId polimórfico).
+- **Belongs To `assets`**: El avatar es un recurso gestionado por el sistema de assets.
 
 ## 🛡️ Reglas de Negocio (Operations)
-1.  **Alias como Identidad**: El `alias` es la ruta pública (`/public/profiles/:alias`). Debe ser validado contra palabras prohibidas de sistema.
-2.  **Privacidad IA**: Existen flags específicos (`ai_include_name`, `ai_include_bio`) que controlan qué porción del perfil es visible para el LLM durante la generación de respuestas.
-3.  **Contexto Privado**: La columna `private_context` se utiliza para almacenar "instrucciones secretas" o datos de trasfondo que solo la IA lee para personalizar su comportamiento actuando como esta cuenta.
+1. **SSOT de Horarios (D9/D10)**: La zona horaria se define a nivel de cuenta y no de sede. Esto garantiza que todas las sedes de una cuenta operen bajo la misma lógica regional y simplifica el cálculo de apertura.
+2. **Restricción de País Único**: Una cuenta está vinculada a un único país para simplificar la lógica de moneda, impuestos y leyes.
+3. **Privacidad IA**: Los flags de visibilidad controlan qué porción de la identidad (incluyendo redes sociales) es inyectada en el contexto del LLM.
 
 ## 💡 Ejemplo de Uso
 ```typescript
-// Obtener cuenta por alias (perfil público)
 import { db, accounts } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 
@@ -52,4 +44,6 @@ const [account] = await db.select()
   .from(accounts)
   .where(eq(accounts.alias, 'mi-negocio'))
   .limit(1);
+
+console.log(`Operando en: ${account.timezone}`);
 ```

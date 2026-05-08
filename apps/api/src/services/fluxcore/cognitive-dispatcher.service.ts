@@ -378,12 +378,12 @@ class CognitiveDispatcherService {
                         accountId,
                         step: 'runtime',
                         status: 'success',
-                        metadata: { runtimeId, traceId: initialTraceId },
+                        metadata: { runtimeId },
                         timestamp: new Date().toISOString()
                     });
                 } catch (e) {}
                 
-                console.log(`[CognitiveDispatcher] ✅ Turn complete. TraceID: ${initialTraceId}. Actions: ${actions.length}`);
+                console.log(`[CognitiveDispatcher] ✅ Turn complete. Actions: ${actions.length}`);
                 actions.forEach((action, i) => {
                     console.log(`  [${i}] type=${action.type}${action.type === 'send_message' ? ` content="${(action as any).content?.slice(0,50)}..."` : ''}`);
                 });
@@ -505,7 +505,6 @@ class CognitiveDispatcherService {
                 // 🎯 LIMPIEZA DE MEMORIA SILENCIOSA (v14.2)
                 try {
                     const { cognitiveCollector } = await import('../../telemetry/tracer');
-                    if (initialTraceId) cognitiveCollector.clear(initialTraceId);
                     if (messageId) cognitiveCollector.clear(messageId);
                 } catch (e) {
                     console.warn('[CognitiveDispatcher] 🧹 Remote cleanup failed (non-critical):', e);
@@ -609,6 +608,16 @@ class CognitiveDispatcherService {
     }
 
     private failResult(error: string, startTime: number): DispatchResult {
+        // 🎯 TELEMETRÍA (Fase 1): Error de despacho
+        try {
+            coreEventBus.emit('telemetry:pipeline_step', {
+                step: 'dispatcher',
+                status: 'error',
+                metadata: { errorDetail: error, errorCode: 'COG_001' },
+                timestamp: new Date().toISOString()
+            });
+        } catch (e) {}
+
         return {
             actions: [{ type: 'no_action', reason: error }],
             runtimeUsed: 'none',

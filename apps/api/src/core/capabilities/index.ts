@@ -22,3 +22,4 @@ export interface FluxCoreCapability {
 export * from './templates.capability';
 export * from './knowledge.capability';
 export * from './platform.capability';
+export * from './schedules.capability';

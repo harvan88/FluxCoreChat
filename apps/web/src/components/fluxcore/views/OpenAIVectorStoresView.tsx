@@ -80,7 +80,7 @@ export function OpenAIVectorStoresView({ accountId, onOpenTab, onClose, vectorSt
     // Handlers
     const handleSelect = (store: VectorStore) => {
         if (onOpenTab) {
-            const identity = `extension:fluxcore:openai-vectorStore:${accountId}:${store.id}`;
+            const identity = `extension:@fluxcore/asistentes:vector-store:${accountId}:${store.id}`;
             onOpenTab(store.id, store.name, {
                 type: 'openai-vector-store',
                 identity,
@@ -103,7 +103,7 @@ export function OpenAIVectorStoresView({ accountId, onOpenTab, onClose, vectorSt
 
         if (created) {
             if (onOpenTab) {
-                const identity = `extension:fluxcore:openai-vectorStore:${accountId}:${created.id}`;
+                const identity = `extension:@fluxcore/asistentes:vector-store:${accountId}:${created.id}`;
                 onOpenTab(created.id, created.name, {
                     type: 'openai-vector-store',
                     identity,

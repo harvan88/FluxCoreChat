@@ -85,10 +85,13 @@ export function useContextRefresh() {
         } 
       }));
 
-      // 6. Forzar recarga de datos de cuenta si es necesario
-      if (clearConversations) {
-        setAccounts([]); // Forzar recarga de cuentas
-      }
+      // 6. Forzar recarga de datos de cuenta
+      console.log('[ContextRefresh] Reloading accounts to ensure fresh data');
+      await useAccountStore.getState().loadAccounts();
+      
+      // Sincronizar uiStore con los datos recién cargados
+      const freshAccounts = useAccountStore.getState().accounts;
+      setAccounts(freshAccounts);
 
       console.log('[ContextRefresh] Context refresh completed successfully');
       

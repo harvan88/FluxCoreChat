@@ -24,7 +24,7 @@ const DEBUG_PREFIX = '[AssetPolicy]';
 const DEFAULT_POLICIES: Record<string, { ttlSeconds: number; contexts: string[] }> = {
     message_attachment: {
         ttlSeconds: 3600, // 1 hora
-        contexts: ['download:web', 'preview:web', 'preview:assistant'],
+        contexts: ['download:web', 'preview:web', 'preview:assistant', 'preview:kernel'],
     },
     template_asset: {
         ttlSeconds: 7200, // 2 horas

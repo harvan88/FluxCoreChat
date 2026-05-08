@@ -200,7 +200,7 @@ export function InstructionsView({
     if (!created) return;
 
     if (onOpenTab) {
-      const identity = `extension:fluxcore:instruction:${accountId}:${created.id}`;
+      const identity = `extension:@fluxcore/asistentes:instruction:${accountId}:${created.id}`;
       onOpenTab(created.id, created.name, {
         type: 'instruction',
         identity,
@@ -215,7 +215,7 @@ export function InstructionsView({
   const handleSelectInstruction = (instruction: Instruction) => {
     setDeleteError(null);
     if (onOpenTab) {
-      const identity = `extension:fluxcore:instruction:${accountId}:${instruction.id}`;
+      const identity = `extension:@fluxcore/asistentes:instruction:${accountId}:${instruction.id}`;
       onOpenTab(instruction.id, instruction.name, {
         type: 'instruction',
         identity,

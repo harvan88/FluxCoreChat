@@ -4,6 +4,7 @@
  */
 
 import { api } from './api';
+import { getApiUrl } from '../utils/urls';
 import type { Account, AccountDeletionJob, ApiResponse } from '../types';
 
 export interface CreateAccountData {
@@ -106,7 +107,7 @@ export const accountsApi = {
   async getActorForAccount(accountId: string): Promise<ApiResponse<{ actorId: string }>> {
     try {
       const token = localStorage.getItem('fluxcore_token');
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const API_URL = getApiUrl();
       
       const response = await fetch(
         `${API_URL}/accounts/${accountId}/actor`,
@@ -139,7 +140,7 @@ export const accountsApi = {
 
     try {
       const token = localStorage.getItem('fluxcore_token');
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const API_URL = getApiUrl();
       
       const response = await fetch(
         `${API_URL}/accounts/search?q=${encodeURIComponent(query.trim())}`,

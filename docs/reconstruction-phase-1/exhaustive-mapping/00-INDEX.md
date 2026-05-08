@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-INDEX.md"
 ## 🎯 Propósito
 Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y proporciona métricas reales del estado de cobertura del proyecto FluxCore.
 
-**Última actualización:** 2026-04-08 (Observability cleanup: monitoring reducido a Kernel Console, Cognitive Pipeline y Documentation Quality)
+**Última actualización:** 2026-05-08 (Infraestructura Distribuida)
 **Validador:** `DocumentationQualityService` (backend)
 
 ---
@@ -20,111 +20,62 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 
 | Paisaje | Documentos | Estado | Fase |
 | :--- | :--- | :--- | :--- |
-| **01-ui-landscape** | 163 docs | ✅ Completado | Fase 1 |
-| **02-backend-landscape** | 185 docs | ✅ Completado | Fase 2 |
+| **01-ui-landscape** | 173 docs | ✅ Completado | Fase 1 |
+| **02-backend-landscape** | 201 docs | ✅ Completado | Fase 2 |
 | **03-database-landscape** | 33 docs | ✅ Completado | Fase 3 |
 | **04-end-to-end-flows** | 1 doc | ⏳ Pendiente | Fase 4 |
 | **05-configuration-state** | 2 docs | ⏳ Parcial | Fase 5 |
-| **TOTAL** | **384 docs** | 🏗️ 3/5 Fases | — |
+| **TOTAL** | **410 docs** | 🏗️ 3/5 Fases | — |
 
 ---
 
-## 🖥️ 1. UI Landscape — Componentes React (163 docs)
+## 🖥️ 1. UI Landscape — Componentes React (173 docs)
 
 **Ubicación:** `01-ui-landscape/`
-**Nomenclatura:** `PascalCase.md` (basado en convención React)
-**Estado:** Fase 1 completada (~95% de componentes detectados).
+**Nomenclatura:** `PascalCase.md`
 
-### Subsistemas Críticos UI:
+### Subsistemas Críticos UI (Actualizado):
 
 ```
-📦 Asset & Media UI
-├── AssetPreview.md
-├── MessageBubble.md
-└── useChatUnified.md
+📦 Shared & Layout UI
+├── CollectionView.md (Actualizado)
+├── Table.md (Actualizado)
+├── ViewHeader.md (NUEVO)
+└── LoadingState.md
 
-🔭 Monitoring & Observability UI
-├── MonitoringSidebar.md
-├── KernelConsole.md
-├── VisualPipeline.md
-├── DocumentationQualityPanel.md
-├── ActivityBar.md
-└── DynamicContainer.md
+⏰ Schedule System UI (NUEVO)
+├── ScheduleEditor.md (Estable)
+├── ScheduleSection.md (Estable)
+├── ScheduleSummary.md
+└── SedeScheduleView.md
 
-🧩 Extension & Modularization UI
-├── ExtensionsPanel.md
-├── FluxCoreSidebar.md
-├── ToolsSidebar.md
-└── useExtensions.md
+📝 Template System UI
+├── TemplateList.md (Actualizado)
+├── TemplateEditor.md (Actualizado)
+├── TemplateManager.md
+└── ConversationRowAIStatus.md (NUEVO)
+
+🔗 UI Logic & Context Hooks (NUEVO)
+├── UseProfile.md (NUEVO)
+├── UseContextSync.md (NUEVO)
+└── UseContextRefresh.md (NUEVO)
 ```
-
-### Observabilidad canónica
-
-- **Kernel Console**
-  - superficie principal de trazas en vivo y payloads crudos.
-- **Cognitive Pipeline**
-  - vista operacional del recorrido de 7 etapas por mensaje.
-- **Documentation Quality**
-  - juez SSOT de cobertura e integridad documental.
-
-Las superficies retiradas de monitoring dejan de formar parte del paisaje canónico y no deben reintroducirse en la documentación oficial.
 
 ---
 
-⚙️ 2. Backend Landscape — Servicios y Rutas (185 docs)
+## ⚙️ 2. Backend Landscape — Servicios y Rutas (201 docs)
 
 **Ubicación:** `02-backend-landscape/`
-**Nomenclatura:** `kebab-case.md` (basado en convención Node/Bun)
-**Estado:** ✅ Fase 2 COMPLETADA y Consolidada (v8.3).
 
-### Subsistemas Críticos Documentados:
-
+### Sistema Universal de Horarios (Fase 3):
 ```
-🤖 AI Response Pipeline (FluxCore)
-├── cognitive-dispatcher.service.md
-├── tracer.md
-├── runtime-input-factory.service.md
-├── runtime-gateway.service.md
-├── action-executor.service.md
-└── cognition-worker.md
-
-🛠️ Capabilities Platform (v8.3 Canon)
-├── capability-registry.service.md
-├── capability-offer.service.md
-├── capability-translation.service.md
-├── capability-execution.service.md
-├── capability-deps-factory.service.md
-├── capability-argument-normalizer.service.md
-└── capability-openai-compat.service.md
-
-📝 Template & Prompt Services
-├── template-registry.service.md (needs_review)
-├── prompt-builder.service.md (needs_review)
-└── template-parsing-problem.md (Issue Crítico)
-
-🧠 Kernel Architecture
-├── kernel.md
-├── base.projector.md
-├── chat-projector.md
-└── projector-runner.md
-
-📦 Core Identity & Management
-├── account.service.md          # Account cycle + Auto-install v8.3
-├── actor.service.md            # Actor resolution (human/bot)
-└── auth.service.md             # JWT & Session management
-
-111: 🔌 Runtime Adapters (Consumidores)
-├── fluxi.runtime.md
-├── asistentes-local.runtime.md (Consumidor Caps)
-├── asistentes-openai.runtime.md (Consumidor Caps)
-├── extension-service.md (Activación silenciosa v8.3)
-├── manifest-loader.service.md (Metadata UI v8.3)
-└── extension-manifest-types.md (Definición v8.3)
-
-📦 Asset Management System
-├── asset-audit-service.md
-├── asset-policy.service.md
-└── assets-routes.md
+⏰ Schedules Engine
+├── schedule-service.md (Estable)
+├── schedules-routes.md (Estable)
+├── location-service.md (Estable)
+├── locations-routes.md (Estable)
+├── distributed-event-bus.md (NUEVO)
+└── ws-handler.md (NUEVO)
 ```
 
 ---
@@ -132,121 +83,23 @@ Las superficies retiradas de monitoring dejan de formar parte del paisaje canón
 ## 🗄️ 3. Database Landscape — Persistencia (33 docs)
 
 **Ubicación:** `03-database-landscape/`
-**Nomenclatura:** `kebab-case.md`
-**Estado:** ✅ Fase 3 COMPLETADA — 100% de tablas exportadas en `index.ts` documentadas.
 
-### Organización por Dominio:
-
+### Sistema Universal de Horarios (Fase 3):
 ```
-🔑 Core Identity
-├── users.md                    # Identidad base (email + hash)
-├── accounts.md                 # Personas de negocio
-├── actors.md                   # Ontología unificada (humanos, bots, extensiones)
-├── workspaces.md               # Colaboración + RBAC
-└── account-ai-entitlements.md  # Feature flags de IA
+📅 Universal Schedule Tables
+├── weekly-schedules.md (NUEVO)
+├── weekly-intervals.md (NUEVO)
+├── special-dates.md (NUEVO)
+└── special-intervals.md (NUEVO)
 
-💬 Messaging & Social
-├── conversations.md            # Hilos de chat
-├── messages.md                 # Mensajes inmutables + versionado
-├── conversation-participants.md # Participantes y roles
-└── relationships.md            # Grafo social bilateral
-
-🧠 Kernel (Sovereign Reality — RFC-0001)
-├── kernel-journal.md           # 🔴 CRITICAL: Journal inmutable, Reality Adapters, Fact Types
-├── fluxcore-identity.md        # 🔴 CRITICAL: Actors, Addresses, Identity Links (Projector Space)
-├── cognition-queue.md          # Cola de turnos cognitivos (at-least-once)
-└── outbox-pattern.md           # Transactional Outbox (chatcore + fluxcore)
-
-🤖 AI Infrastructure
-├── fluxcore-assistants.md      # Configuración de asistentes
-├── fluxcore-instructions.md    # System prompts versionados
-├── fluxcore-vector-stores.md   # RAG (Local + OpenAI dual-backend)
-├── fluxcore-agents.md          # Orquestación de flujos multi-asistente
-└── ai-observability.md         # Traces + Signals semánticos
-
-⚡ Automation & Business
-├── automation-rules.md         # Modos auto/suggest/off (PolicyContext)
-├── account-governance.md       # Runtime config + Policies + Account deletion
-├── wes-system.md               # Work Execution System (FSM transaccional)
-├── credits.md                  # Wallets, Ledger, Sessions
-├── extensions.md               # Plugin system (FC-150/151)
-├── appointments.md             # Sistema de citas/turnos
-└── templates.md                # Plantillas de respuesta + variables
-
-📦 Assets & Media
-└── assets.md                   # Gestión de archivos + deduplication SHA256
-
-🛡️ Support & Audit
-├── support-tables.md           # system_admins, password_reset, website_configs, ai_suggestions, etc.
-├── database-audit-rationale.md # 🔴 CRITICAL: Auditoría de tablas huérfanas y deuda técnica
-└── database-audit-report.md    # Reporte de estado
-
-📋 Reference (Pre-existentes)
-├── schemas-directory.md        # Directorio general de schemas
-├── table-relationships.md      # Relaciones entre tablas
-├── indexes-constraints.md      # Índices y constraints
-└── migrations-history.md       # Historial de migraciones
+🔑 Core Identity & Locations
+├── accounts.md (Actualizado)
+└── locations.md (NUEVO)
 ```
-
----
-
-## 🔄 4. End-to-End Flows — Flujos Completos (1 doc)
-
-**Ubicación:** `04-end-to-end-flows/`
-**Estado:** ⏳ Pendiente (1/5 flujos prometidos).
-
-```
-04-end-to-end-flows/
-├── cognitive-pipeline-flow.md   # ✅ Flujo cognitivo completo
-├── MESSAGE_LIFECYCLE.md         # ⏳ Mensaje desde input hasta persistencia
-├── AUTHENTICATION_FLOW.md       # ⏳ Login → JWT → Validación
-├── REALTIME_UPDATES.md          # ⏳ WebSocket broadcasting
-└── FILE_UPLOAD_FLOW.md          # ⏳ Avatar upload, etc.
-```
-
----
-
-## ⚙️ 5. Configuration State — Configuración (2 docs)
-
-**Ubicación:** `05-configuration-state/`
-**Estado:** ⏳ Parcial.
-
-```
-05-configuration-state/
-├── environment-variables.md    # ✅ Variables .env completas
-└── feature-flags.md            # ✅ Control de funcionalidades
-```
-
----
-
-## 🚀 Próximos Pasos
-
-### Inmediato
-- [x] ✅ Completar Fase 1: UI Landscape (162 docs)
-- [x] ✅ Completar Fase 2: Backend Landscape (180 docs)
-- [x] ✅ Completar Fase 3: Database Landscape (33 docs)
-- [ ] Iniciar Fase 4: End-to-End Flows (4 flujos pendientes)
-
-### Corto plazo
-- [ ] Completar End-to-End Flows (MESSAGE_LIFECYCLE, AUTH, REALTIME, FILE_UPLOAD)
-- [ ] Workers Landscape (workers de fondo y procesos asíncronos)
-- [ ] Cross-reference validation (docs vs código vs DB real)
 
 ---
 
 ## 🔗 Referencias
 - **Estándar:** [00-STANDARD.md](./00-STANDARD.md)
 - **Snapshot:** [00-SNAPSHOT.md](./00-SNAPSHOT.md)
-- **Prompt:** [00-PROMPT.md](./00-PROMPT.md)
 - **Dashboard:** `DocumentationQualityPanel` (monitor en tiempo real)
-
-## 💡 Ejemplo de Uso
-```typescript
-// Acceder a la documentación programáticamente
-import { readdirSync } from 'fs';
-
-const landscapes = readdirSync('docs/reconstruction-phase-1/exhaustive-mapping/')
-  .filter(d => d.match(/^\d{2}-/));
-console.log('Paisajes:', landscapes);
-// => ['01-ui-landscape', '02-backend-landscape', '03-database-landscape', ...]
-```

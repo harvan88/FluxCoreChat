@@ -203,8 +203,13 @@ export const accountsRoutes = new Elysia({ prefix: '/accounts' })
         aiIncludeBio: t.Optional(t.Boolean()),
         aiIncludePrivateContext: t.Optional(t.Boolean()),
         aiIncludeTimestamp: t.Optional(t.Boolean()),
+        aiIncludeSocialLinks: t.Optional(t.Boolean()),
         alias: t.Optional(t.Union([t.String({ minLength: 3, maxLength: 30 }), t.Null()])),
         avatarAssetId: t.Optional(t.String()),
+        socialLinks: t.Optional(t.Any()),
+        brandColors: t.Optional(t.Any()),
+        country: t.Optional(t.Union([t.String(), t.Null()])),
+        timezone: t.Optional(t.Union([t.String(), t.Null()])),
       }),
       detail: {
         tags: ['Accounts'],

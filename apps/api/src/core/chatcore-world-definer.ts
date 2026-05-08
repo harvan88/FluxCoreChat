@@ -109,8 +109,8 @@ export class ChatCoreWorldDefiner {
             if (driverChannel !== 'unknown') return driverChannel;
         }
         
-        // 6. Default para requests HTTP
-        if (context.requestId || meta.ip) {
+        // 6. Default para requests HTTP (con mayor confianza)
+        if (context.requestId || meta.ip || origin || userAgent) {
             return 'web';
         }
         

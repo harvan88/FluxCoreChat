@@ -33,7 +33,9 @@ const buildContentSignature = (message: {
 };
 
 // API base URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../../utils/urls';
+
+const API_URL = getApiUrl();
 
 /**
  * Estado de conexión

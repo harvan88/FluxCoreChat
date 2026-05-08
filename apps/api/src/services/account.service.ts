@@ -6,6 +6,7 @@ import { coreEventBus } from '../core/events';
 import type { Account } from '@fluxcore/db';
 import { extensionService } from './extension.service';
 import { manifestLoader } from './manifest-loader.service';
+import { systemTemplateProvisioner } from './system-template-provisioner.service';
 
 // V2-4.2: Instalación de extensiones preinstaladas en nuevas cuentas
 
@@ -131,8 +132,14 @@ export class AccountService {
       aiIncludeBio?: boolean;
       aiIncludePrivateContext?: boolean;
       aiIncludeTimestamp?: boolean;
+      aiIncludeSocialLinks?: boolean;
+      aiIncludeLocations?: boolean;
       alias?: string | null;
       avatarAssetId?: string;
+      socialLinks?: { instagram?: string; facebook?: string; whatsapp?: string; website?: string; tiktok?: string };
+      brandColors?: { primary?: string; secondary?: string; accent?: string };
+      country?: string | null;
+      timezone?: string | null;
     }
   ) {
     // Verify ownership
@@ -199,6 +206,28 @@ export class AccountService {
       })
       .where(eq(accounts.id, accountId))
       .returning();
+
+    // FC-823: If displayName changed, update location names to keep consistency
+    if (data.displayName && account.displayName !== data.displayName) {
+      const { accountLocations } = await import('@fluxcore/db');
+      const locations = await db.select()
+        .from(accountLocations)
+        .where(eq(accountLocations.accountId, accountId))
+        .orderBy(accountLocations.createdAt);
+
+      for (let i = 0; i < locations.length; i++) {
+        const letter = String.fromCharCode(65 + i);
+        const newName = `${updated.displayName} - Sede ${letter}`;
+        await db.update(accountLocations)
+          .set({ name: newName })
+          .where(eq(accountLocations.id, locations[i].id));
+      }
+    }
+
+    // PC-823: If aiIncludeLocations changed to true, provision the system template
+    if (data.aiIncludeLocations === true && !account.aiIncludeLocations) {
+      await systemTemplateProvisioner.ensureScheduleTemplate(accountId);
+    }
 
     // PC-823: Emit domain event for PolicyContext invalidation
     coreEventBus.emit('account.profile.updated', {

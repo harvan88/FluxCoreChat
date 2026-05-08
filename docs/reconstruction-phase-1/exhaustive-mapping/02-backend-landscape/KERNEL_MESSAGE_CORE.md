@@ -40,7 +40,7 @@ location: "apps/api/src/core/message-core.ts"
 
 ### 1. Dependencias que consume:
 - **Base de Datos:** Para persistencia de mensajes
-- **Event System:** Para emisión de eventos de mensaje
+- **Event System (Redis):** Para emisión distribuida de eventos
 - **Validation Services:** Para validación de contenido
 
 ### 2. Quién depende de él:
@@ -75,17 +75,18 @@ await messageCore.process(message);
 ## 📋 Estado Actual
 
 - **✅ Implementado y funcional**
+- **✅ Arquitectura Distribuida (Redis)**
 - **✅ Integrado con ChatProjector**
 - **✅ Soporta múltiples tipos de contenido**
-- **✅ Validación automática**
 
 ---
 
 ## 🚨 Notas Importantes
 
-- **Single Source of Truth:** MessageCore es la única fuente de verdad para mensajes
-- **Event-Driven:** Emite eventos para cada cambio de estado
-- **Scalable:** Diseñado para alto volumen de mensajes
+- **Single Source of Truth:** MessageCore es la única fuente de verdad para mensajes.
+- **Distributed Event-Driven:** Emite eventos vía Redis para sincronización cross-process.
+- **Clean Abstraction:** Se eliminó la gestión directa de sockets (`rooms`) en favor de un bus de eventos desacoplado.
+- **Scalable:** Diseñado para alto volumen en entornos multi-proceso.
 
 
 ## 🔗 Capa 2: Conexiones e Interdependencias

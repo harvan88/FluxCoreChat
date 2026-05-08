@@ -19,6 +19,8 @@ import {
   SidebarNavList,
   Switch,
   DoubleConfirmationDeleteButton,
+  TimeIntervalRow,
+  TimeIntervalManager,
 } from '../ui';
 
 interface ComponentPreviewSpec {
@@ -246,6 +248,101 @@ function SidebarNavListPreview() {
   );
 }
 
+function TimeIntervalRowPreview() {
+  const [start, setStart] = useState('09:00');
+  const [end, setEnd] = useState('18:00');
+
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-medium text-primary">Intervalo Individual</div>
+      <div className="space-y-4">
+        {/* Desktop version */}
+        <div>
+          <p className="text-xs text-muted mb-2">Desktop (Doble confirmación):</p>
+          <TimeIntervalRow
+            start={start}
+            end={end}
+            onStartChange={setStart}
+            onEndChange={setEnd}
+            onDelete={() => {
+              setStart('09:00');
+              setEnd('18:00');
+            }}
+          />
+        </div>
+        
+        {/* Mobile version */}
+        <div>
+          <p className="text-xs text-muted mb-2">Mobile (Eliminación simple):</p>
+          <TimeIntervalRow
+            start={start}
+            end={end}
+            onStartChange={setStart}
+            onEndChange={setEnd}
+            onDelete={() => {
+              setStart('09:00');
+              setEnd('18:00');
+            }}
+            useSimpleDelete={true}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TimeIntervalManagerPreview() {
+  const [intervals, setIntervals] = useState([
+    { start: '09:00', end: '12:00' },
+    { start: '14:00', end: '18:00' }
+  ]);
+
+  const handleAddInterval = () => {
+    setIntervals([...intervals, { start: '20:00', end: '22:00' }]);
+  };
+
+  const handleUpdateInterval = (index: number, interval: any) => {
+    const newIntervals = [...intervals];
+    newIntervals[index] = interval;
+    setIntervals(newIntervals);
+  };
+
+  const handleDeleteInterval = (index: number) => {
+    setIntervals(intervals.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-medium text-primary">Gestor de Intervalos</div>
+      <div className="space-y-4">
+        {/* Desktop version */}
+        <div>
+          <p className="text-xs text-muted mb-2">Desktop (Doble confirmación):</p>
+          <TimeIntervalManager
+            intervals={intervals}
+            onAddInterval={handleAddInterval}
+            onUpdateInterval={handleUpdateInterval}
+            onDeleteInterval={handleDeleteInterval}
+            useSimpleDelete={false}
+          />
+        </div>
+        
+        {/* Mobile version */}
+        <div>
+          <p className="text-xs text-muted mb-2">Mobile (Eliminación simple):</p>
+          <TimeIntervalManager
+            intervals={intervals}
+            onAddInterval={handleAddInterval}
+            onUpdateInterval={handleUpdateInterval}
+            onDeleteInterval={handleDeleteInterval}
+            useSimpleDelete={true}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const componentsCatalog: ComponentPreviewSpec[] = [
   {
     id: 'button',
@@ -324,6 +421,20 @@ const componentsCatalog: ComponentPreviewSpec[] = [
     description: 'Lista vertical compacta para menús de sidebar y paneles de configuración.',
     preview: SidebarNavListPreview,
   },
+  {
+    id: 'time-interval-row',
+    name: 'TimeIntervalRow',
+    category: 'Gestión de Tiempo',
+    description: 'Fila individual de intervalo de tiempo con inputs de hora y botón de eliminación.',
+    preview: TimeIntervalRowPreview,
+  },
+  {
+    id: 'time-interval-manager',
+    name: 'TimeIntervalManager',
+    category: 'Gestión de Tiempo',
+    description: 'Gestor reutilizable de múltiples intervalos de tiempo con estado deshabilitado.',
+    preview: TimeIntervalManagerPreview,
+  },
 ];
 
 export function ComponentPreviewGallery() {
@@ -364,7 +475,7 @@ export function ComponentPreviewGallery() {
           onClick={handleClose}
         >
           <div
-            className="w-full max-w-3xl rounded-2xl bg-surface border border-subtle shadow-2xl"
+            className="w-full max-w-3xl rounded-2xl bg-base border border-subtle shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-subtle px-6 py-4">
@@ -383,7 +494,7 @@ export function ComponentPreviewGallery() {
 
             <div className="p-6 space-y-4">
               <p className="text-sm text-secondary">{activeComponent.description}</p>
-              <div className="rounded-xl border border-dashed border-subtle bg-elevated p-4">
+              <div className="rounded-xl border border-dashed border-subtle p-4">
                 {(() => {
                   const PreviewComponent = activeComponent.preview;
                   return <PreviewComponent />;

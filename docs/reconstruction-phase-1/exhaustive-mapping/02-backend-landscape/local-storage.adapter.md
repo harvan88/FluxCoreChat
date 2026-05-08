@@ -19,22 +19,21 @@ Este adaptador implementa la interfaz `IStorageAdapter` para el almacenamiento d
 
 ## 🚥 Seguridad y Aislamiento
 Implementa protecciones rigurosas contra ataques comunes:
--   **Anti-Path-Traversal**: Valida que ninguna ruta contenga `..` o caracteres que permitan salir del directorio base configurado (`uploads/assets`).
--   **URL Signing**: Genera URLs temporales seguras usando firmas HMAC (SHA256) con un secreto de sistema. Esto evita que usuarios no autorizados adivinen URLs de archivos privados.
+-   **Anti-Path-Traversal**: Valida que ninguna ruta contenga `..` o caracteres que permitan salir del directorio base.
+-   **URL Signing**: Genera URLs temporales seguras usando firmas HMAC (SHA256).
+-   **Port-Aware URLs**: Detecta el puerto del servidor (`FLUXCORE_PORT`) para asegurar que las URLs generadas en procesos secundarios (como el Kernel) apunten correctamente al servidor de assets en la API (usualmente puerto 3001).
 
 ## 🧬 Gestión de Metadatos
-Debido a que el sistema de archivos tradicional no soporta metadatos personalizados (como `Content-Type`), el adaptador utiliza un sistema de archivos sombra:
--   Cada archivo `image.jpg` tiene un compañero secreto `image.jpg.meta.json`.
--   Este JSON guarda el tipo MIME original, la fecha de subida y metadatos adicionales de negocio, manteniendo la paridad de características con S3.
-
-## 🛡️ Manejo de Streams
-Para evitar el agotamiento de memoria RAM en el servidor con archivos grandes, el adaptador soporta `createReadStream`. Esto permite que el servidor web transmita los datos directamente desde el disco al cliente de forma progresiva (chunked), garantizando estabilidad bajo carga.
+Cada archivo `image.jpg` tiene un compañero `image.jpg.meta.json` que guarda el tipo MIME original y metadatos adicionales, manteniendo la paridad de características con S3.
 
 ## 💡 Ejemplo de Uso
 ```typescript
-// El adaptador/runtime se registra en el sistema
-import { runtime } from 'apps/api/src/services/storage/local-storage.adapter.ts';
+import { LocalStorageAdapter } from './local-storage.adapter';
 
-// Invocado por el RuntimeGateway según la configuración de cuenta
-const actions = await runtime.handleMessage(runtimeInput);
+const storage = new LocalStorageAdapter({
+  basePath: '/absolute/path/to/uploads',
+  baseUrl: 'http://localhost:3001/uploads/assets'
+});
+
+const url = await storage.getSignedUrl('my-image.png', { expiresInSeconds: 3600 });
 ```

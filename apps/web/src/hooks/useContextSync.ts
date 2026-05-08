@@ -34,27 +34,41 @@ export function useContextSync() {
     const urlWorkspaceId = searchParams.get('w');
 
     const initSync = async () => {
-      // Si hay cuenta en URL y no coincide con NINGUNO de los stores, forzar refresh
-      const needsSync = urlAccountId && (urlAccountId !== selectedAccountId || urlAccountId !== activeAccountId);
+      // 0. Resolución de Alias (@alias en el path)
+      const aliasMatch = location.pathname.match(/^\/@\/([^/]+)/);
+      const urlAlias = aliasMatch ? aliasMatch[1] : null;
+      
+      let targetAccountId = urlAccountId;
+
+      if (urlAlias) {
+        const { accounts } = useUIStore.getState();
+        const accountByAlias = accounts.find(a => a.alias === urlAlias);
+        if (accountByAlias) {
+          targetAccountId = accountByAlias.id;
+        }
+      }
+
+      // Si hay cuenta en URL (o alias) y no coincide con NINGUNO de los stores, forzar refresh
+      const needsSync = targetAccountId && (targetAccountId !== selectedAccountId || targetAccountId !== activeAccountId);
 
       if (needsSync) {
-        console.log('[ContextSync] URL/Store mismatch found, refreshing context:', urlAccountId);
+        console.log('[ContextSync] URL/Alias/Store mismatch found, refreshing context:', targetAccountId);
         isSyncing.current = true;
-        await refreshAccountContext(urlAccountId!);
+        await refreshAccountContext(targetAccountId!);
         
         if (urlWorkspaceId) {
             useWorkspaceStore.getState().setActiveWorkspace(urlWorkspaceId);
         }
         isSyncing.current = false;
-      } else if (!urlAccountId && (selectedAccountId || activeAccountId)) {
+      } else if (!targetAccountId && (selectedAccountId || activeAccountId)) {
         // Si no hay en URL pero sí en Store, actualizar URL (usar cualquiera que esté disponible)
-        const currentId = urlAccountId || selectedAccountId || activeAccountId;
+        const currentId = targetAccountId || selectedAccountId || activeAccountId;
         setSearchParams(prev => {
           if (currentId) prev.set('a', currentId);
           if (activeWorkspaceId) prev.set('w', activeWorkspaceId);
           return prev;
         }, { replace: true });
-      } else if (!urlAccountId && !selectedAccountId && !activeAccountId && isAuthenticated) {
+      } else if (!targetAccountId && !selectedAccountId && !activeAccountId && isAuthenticated) {
           // Si no hay nada, redirigir a selector si estamos en una ruta que requiere contexto
           const requiresContext = location.pathname === '/';
           if (requiresContext) {

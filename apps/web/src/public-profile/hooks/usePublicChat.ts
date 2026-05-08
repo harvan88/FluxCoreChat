@@ -4,8 +4,10 @@ import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import type { Message } from '../../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
+import { getApiUrl, getWsUrl } from '../../utils/urls';
+
+const API_URL = getApiUrl();
+const WS_URL = getWsUrl();
 
 export interface PublicProfile {
   id: string;

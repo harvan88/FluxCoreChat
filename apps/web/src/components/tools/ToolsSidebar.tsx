@@ -1,8 +1,9 @@
 import { FileTextIcon, FluxCoreIcon } from '../../lib/icon-library';
+import { useLocation } from 'react-router-dom';
 import { SidebarNavList } from '../ui/sidebar/SidebarNavList';
+import { useExtensions } from '../../hooks/useExtensions';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
-import { useExtensions } from '../../hooks/useExtensions';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 
 interface ToolsSidebarProps {
@@ -11,26 +12,15 @@ interface ToolsSidebarProps {
 
 export function ToolsSidebar({ accountId }: ToolsSidebarProps) {
   const layout = usePanelStore((state) => state.layout);
-  const openTab = usePanelStore((state) => state.openTab);
   const { activeActivity, setActiveActivity } = useUIStore();
   const { installations } = useExtensions(accountId || undefined);
 
   const isFluxCoreInstalled = installations.some(i => i.extensionId === '@fluxcore/asistentes');
 
+  const location = useLocation();
+
   const activeToolId = (() => {
-    const focusedId = layout.focusedContainerId;
-    const containers = layout.containers;
-    const container = focusedId
-      ? containers.find((c) => c.id === focusedId)
-      : containers[0];
-    const activeTab = container?.tabs.find((tab) => tab.id === container.activeTabId);
-    if (!activeTab) return null;
-
-    if (activeTab.type === 'template-panel') return 'templates';
-    if (typeof activeTab.identity === 'string' && activeTab.identity.startsWith('template-panel:')) {
-      return 'templates';
-    }
-
+    if (location.pathname.includes('/herramientas/plantillas')) return 'templates';
     return null;
   })();
 
@@ -41,19 +31,7 @@ export function ToolsSidebar({ accountId }: ToolsSidebarProps) {
       icon: <FileTextIcon size={18} />,
       disabled: !accountId,
       active: activeToolId === 'templates',
-      onSelect: () => {
-        if (!accountId) return;
-        openTab('editor', {
-          type: 'template-panel',
-          identity: `template-panel:${accountId}`,
-          title: 'Plantillas',
-          icon: 'FileText',
-          closable: true,
-          context: {
-            accountId,
-          },
-        });
-      },
+      routeId: 'tools.templates',
     },
   ];
 

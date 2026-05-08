@@ -10,7 +10,7 @@ import { Plus, FileText, RefreshCw, UploadCloud } from 'lucide-react';
 import { TemplateList } from './TemplateList';
 import { TemplateBulkImportModal } from './TemplateBulkImportModal';
 import { useTemplateStore } from './store/templateStore';
-import { usePanelStore } from '../../store/panelStore';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { EmptyState, LoadingState, ErrorState } from '../../core/components';
 import type { Template } from './types';
@@ -36,7 +36,8 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
     getFilteredTemplates,
   } = useTemplateStore();
 
-  const { openTab } = usePanelStore();
+  const navigate = useNavigate();
+  const { alias } = useParams<{ alias: string }>();
 
   const filteredTemplates = getFilteredTemplates();
   // We no longer need selectedTemplateId for view switching, 
@@ -55,14 +56,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
   }, [accountId, fetchTemplates, selectTemplate]);
 
   const openTemplateEditor = (templateId: string, templateName: string) => {
-    openTab('editor', {
-      type: 'template-editor',
-      identity: `template-editor:${templateId}`,
-      title: templateName,
-      icon: 'FileText',
-      closable: true,
-      context: { templateId, accountId },
-    });
+    navigate(`/@/${alias}/herramientas/${templateId}`);
   };
 
   const handleCreateNew = async () => {
@@ -110,48 +104,30 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
     fetchTemplates(accountId);
   };
 
-  let content = null;
+  const headerActions = (
+    <>
+      <button
+        onClick={handleRefresh}
+        className="p-1.5 text-muted hover:text-primary rounded-lg hover:bg-hover transition-colors"
+        title="Actualizar"
+      >
+        <RefreshCw size={16} />
+      </button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setIsImportModalOpen(true)}
+        disabled={isCreating}
+        className="hidden sm:flex"
+      >
+        <UploadCloud size={14} className="mr-1" />
+        Importar JSON
+      </Button>
+    </>
+  );
 
-  // Loading state
-  if (isLoading) {
-    content = (
-      <div className="flex-1 flex items-center justify-center">
-        <LoadingState message="Cargando plantillas..." />
-      </div>
-    );
-  }
-  // Error state
-  else if (error) {
-    content = (
-      <div className="flex-1 flex items-center justify-center p-4">
-        <ErrorState
-          message={error || 'Error al cargar plantillas'}
-          onRetry={handleRefresh}
-        />
-      </div>
-    );
-  }
-  // Empty state
-  else if (filteredTemplates.length === 0 && !filters.search && !filters.category) {
-    content = (
-      <div className="flex-1 flex items-center justify-center p-4">
-        <EmptyState
-          title="Sin plantillas"
-          subtitle="Crea tu primera plantilla para agilizar tus respuestas"
-          icon={<FileText size={48} className="text-muted" />}
-          action={
-            <Button onClick={handleCreateNew} disabled={isCreating}>
-              <Plus size={16} className="mr-2" />
-              Crear plantilla
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
-  // Normal state with list
-  else {
-    content = (
+  return (
+    <div className="h-full flex flex-col">
       <div className="flex-1 overflow-hidden">
         <TemplateList
           templates={filteredTemplates}
@@ -160,24 +136,15 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
           sort={sort}
           onFiltersChange={setFilters}
           onSortChange={setSort}
-          onSelect={(template) => handleEdit(template)}  /* Click opens editor tab */
+          onSelect={handleEdit}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
+          headerActions={headerActions}
+          createLabel="Nueva"
+          onCreate={handleCreateNew}
         />
       </div>
-    );
-  }
-
-  return (
-    <div className="h-full flex flex-col">
-      <Header 
-        onCreateNew={handleCreateNew} 
-        isCreating={isCreating} 
-        onRefresh={handleRefresh} 
-        onOpenImport={() => setIsImportModalOpen(true)}
-      />
-      {content}
 
       {/* Modals always rendered */}
       <TemplateBulkImportModal
@@ -185,52 +152,6 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
       />
-    </div>
-  );
-}
-
-// Header subcomponent
-function Header({
-  onCreateNew,
-  isCreating,
-  onRefresh,
-  onOpenImport
-}: {
-  onCreateNew: () => void;
-  isCreating: boolean;
-  onRefresh: () => void;
-  onOpenImport: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-subtle">
-      <h2 className="font-semibold text-primary">Plantillas</h2>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onRefresh}
-          className="p-1.5 text-muted hover:text-primary rounded-lg hover:bg-hover transition-colors"
-          title="Actualizar"
-        >
-          <RefreshCw size={16} />
-        </button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onOpenImport}
-          disabled={isCreating}
-          className="hidden sm:flex"
-        >
-          <UploadCloud size={14} className="mr-1" />
-          Importar JSON
-        </Button>
-        <Button
-          size="sm"
-          onClick={onCreateNew}
-          disabled={isCreating}
-        >
-          <Plus size={14} className="mr-1" />
-          Nueva
-        </Button>
-      </div>
     </div>
   );
 }

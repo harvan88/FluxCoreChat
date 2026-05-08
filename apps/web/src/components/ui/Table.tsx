@@ -29,6 +29,12 @@ export interface Column<T = any> {
   sortable?: boolean;
   /** Alineación del contenido */
   align?: 'left' | 'center' | 'right';
+  /** Truncar contenido con puntos suspensivos */
+  truncate?: boolean;
+  /** Clase CSS adicional para la columna (útil para responsive) */
+  className?: string;
+  /** Columna fija (izquierda o derecha) */
+  sticky?: 'left' | 'right';
 }
 
 export interface TableProps<T = any> extends Omit<HTMLAttributes<HTMLTableElement>, 'children'> {
@@ -52,6 +58,12 @@ export interface TableProps<T = any> extends Omit<HTMLAttributes<HTMLTableElemen
   onRowClick?: (row: T) => void;
   /** Hover en filas */
   hoverable?: boolean;
+  /** Mostrar bordes entre filas */
+  showBorders?: boolean;
+  /** Encabezado fijo al hacer scroll */
+  stickyHeader?: boolean;
+  /** Modo compacto con menos padding */
+  dense?: boolean;
 }
 
 export const Table = forwardRef<HTMLTableElement, TableProps>(
@@ -67,6 +79,9 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
       onSelectionChange,
       onRowClick,
       hoverable = true,
+      showBorders = true,
+      stickyHeader = true,
+      dense = false,
       className,
       ...props
     },
@@ -77,7 +92,6 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
 
     const handleSort = (columnId: string) => {
       if (sortColumn === columnId) {
-        // Cycle: asc -> desc -> null
         if (sortDirection === 'asc') {
           setSortDirection('desc');
         } else if (sortDirection === 'desc') {
@@ -112,7 +126,6 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
       onSelectionChange(newSelected);
     };
 
-    // Sort data
     const sortedData = sortColumn && sortDirection
       ? [...data].sort((a, b) => {
           const column = columns.find(c => c.id === sortColumn);
@@ -121,7 +134,6 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
           const aVal = column.accessor(a);
           const bVal = column.accessor(b);
           
-          // Handle null/undefined values
           if (aVal == null && bVal == null) return 0;
           if (aVal == null) return 1;
           if (bVal == null) return -1;
@@ -134,7 +146,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
 
     const renderSortIcon = (columnId: string) => {
       if (sortColumn !== columnId) {
-        return <ChevronsUpDown size={14} className="text-muted" />;
+        return <ChevronsUpDown size={14} className="text-muted opacity-30" />;
       }
       return sortDirection === 'asc' 
         ? <ChevronUp size={14} className="text-accent" />
@@ -142,20 +154,27 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
     };
 
     return (
-      <div className="w-full overflow-x-auto">
+      <div className="w-full relative">
         <table
           ref={ref}
           className={clsx(
-            'w-full border-collapse',
+            'w-full border-collapse text-left min-w-[800px]', 
             className
           )}
           {...props}
         >
           {/* Header */}
-          <thead className="bg-elevated border-b border-subtle">
+          <thead className={clsx(
+            'z-10',
+            stickyHeader && 'sticky top-0'
+          )}>
             <tr>
               {selectable && (
-                <th className="px-4 py-3 text-left w-12">
+                <th className={clsx(
+                  'px-4 py-3 w-12 bg-surface',
+                  dense && 'py-2 px-3',
+                  showBorders && 'border-b border-subtle'
+                )}>
                   <input
                     type="checkbox"
                     checked={selectedRows.size === data.length && data.length > 0}
@@ -168,15 +187,24 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
                 <th
                   key={column.id}
                   className={clsx(
-                    'px-4 py-3 text-sm font-semibold text-primary',
+                    'px-4 py-3 text-[13px] text-muted bg-surface transition-colors',
                     column.align === 'center' && 'text-center',
                     column.align === 'right' && 'text-right',
-                    column.sortable && 'cursor-pointer select-none hover:bg-hover',
+                    column.sortable && 'cursor-pointer select-none hover:text-primary',
+                    dense && 'py-2 px-3',
+                    showBorders && 'border-b border-subtle',
+                    column.sticky === 'left' && 'sticky left-0 z-30',
+                    column.sticky === 'right' && 'sticky right-0 z-30',
+                    column.className
                   )}
                   style={{ width: column.width }}
                   onClick={() => column.sortable && handleSort(column.id)}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className={clsx(
+                    'flex items-center gap-2',
+                    column.align === 'center' && 'justify-center',
+                    column.align === 'right' && 'justify-end'
+                  )}>
                     <span>{column.header}</span>
                     {column.sortable && renderSortIcon(column.id)}
                   </div>
@@ -186,21 +214,24 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
           </thead>
 
           {/* Body */}
-          <tbody>
+          <tbody className="">
             {loading ? (
               <tr>
                 <td
                   colSpan={columns.length + (selectable ? 1 : 0)}
-                  className="px-4 py-8 text-center text-muted"
+                  className="px-4 py-12 text-center"
                 >
-                  Cargando...
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-muted font-medium">Cargando datos...</span>
+                  </div>
                 </td>
               </tr>
             ) : sortedData.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length + (selectable ? 1 : 0)}
-                  className="px-4 py-8 text-center text-muted"
+                  className="px-4 py-16 text-center text-muted italic text-sm"
                 >
                   {emptyMessage}
                 </td>
@@ -214,15 +245,19 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
                   <tr
                     key={rowKey}
                     className={clsx(
-                      'border-b border-subtle transition-colors',
-                      hoverable && 'hover:bg-hover',
+                      'group transition-colors',
+                      showBorders && 'border-b border-subtle last:border-b-0',
                       onRowClick && 'cursor-pointer',
-                      isSelected && 'bg-accent/10'
+                      hoverable && 'hover:bg-hover',
+                      isSelected && 'bg-accent/[0.03]'
                     )}
                     onClick={() => onRowClick?.(row)}
                   >
                     {selectable && (
-                      <td className="px-4 py-3">
+                      <td className={clsx(
+                        'px-4 py-3',
+                        dense && 'py-2 px-3'
+                      )}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -239,12 +274,23 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
                       <td
                         key={column.id}
                         className={clsx(
-                          'px-4 py-3 text-sm text-secondary',
+                          'px-4 py-3 text-sm text-secondary transition-colors group-hover:text-primary',
                           column.align === 'center' && 'text-center',
-                          column.align === 'right' && 'text-right'
+                          column.align === 'right' && 'text-right',
+                          column.truncate && 'truncate max-w-[200px]', // default max-width for truncation if enabled
+                          dense && 'py-2 px-3',
+                          column.sticky === 'left' && 'sticky left-0 z-10 bg-surface',
+                          column.sticky === 'right' && 'sticky right-0 z-10 bg-surface',
+                          column.className
                         )}
                       >
-                        {column.accessor(row)}
+                        {column.truncate && typeof column.accessor(row) === 'string' ? (
+                          <div className="truncate" title={column.accessor(row) as string}>
+                            {column.accessor(row)}
+                          </div>
+                        ) : (
+                          column.accessor(row)
+                        )}
                       </td>
                     ))}
                   </tr>

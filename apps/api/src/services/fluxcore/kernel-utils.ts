@@ -10,8 +10,8 @@ import crypto from 'node:crypto';
  * Usada por Kernel y todos los Reality Adapters
  */
 export function canonicalize(value: unknown): string {
-    if (value === null || typeof value !== 'object') {
-        return JSON.stringify(value);
+    if (value === null || value === undefined || typeof value !== 'object') {
+        return JSON.stringify(value ?? null);
     }
 
     if (Array.isArray(value)) {
@@ -19,6 +19,7 @@ export function canonicalize(value: unknown): string {
     }
 
     const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([_, v]) => v !== undefined)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
     return '{' + entries

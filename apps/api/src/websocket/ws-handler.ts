@@ -17,7 +17,6 @@ import { eq, inArray } from 'drizzle-orm';
 import { resolveActorId } from '../utils/actor-resolver';
 import { monitoringRegistry, cognitiveCollector } from '../telemetry/tracer';
 import { aiTraceService } from '../services/ai-trace.service';
-import { aiTraceService } from '../services/ai-trace.service';
 
 interface WSMessage {
   type:
@@ -90,14 +89,12 @@ coreEventBus.on('telemetry:pipeline_step', (payload) => {
       const telemetryConversationId = ws.data?.telemetryConversationId;
 
       // 1. Si está suscrito a una conversación específica, enviamos TODO el flujo de esa conv.
-      // Ignoramos el accountId en este punto porque el asistente tiene un ID diferente al cliente.
       if (telemetryConversationId && payload.conversationId === telemetryConversationId) {
         ws.send(message);
         continue;
       }
 
       // 2. Si es una suscripción global (administrador) o la cuenta coincide
-      // Permitimos ver todo si es Harvan o si coincide el accountId del payload
       if (!telemetryConversationId) {
         if (socketAccountId === HARVAN_ACCOUNT_ID || payload.accountId === socketAccountId) {
           ws.send(message);
@@ -107,6 +104,41 @@ coreEventBus.on('telemetry:pipeline_step', (payload) => {
       kernelConsoleSubscriptions.delete(ws);
     }
   }
+});
+
+// 🔥 NUEVO: Escuchar mensajes recibidos (incluyendo los de la IA que vienen de otros procesos)
+coreEventBus.on('core:message_received', ({ envelope, result }) => {
+  if (!result.success) return;
+
+  const payload = {
+    type: 'message:new',
+    data: {
+      id: result.messageId,
+      conversationId: envelope.conversationId,
+      senderAccountId: envelope.senderAccountId,
+      targetAccountId: envelope.targetAccountId,
+      content: envelope.content,
+      type: envelope.type,
+      generatedBy: envelope.generatedBy || 'human',
+      createdAt: new Date().toISOString()
+    }
+  };
+
+  console.log(`[ws-handler] 📢 EventBus: Broadcasting new message ${result.messageId} (by=${envelope.generatedBy})`);
+  
+  // Transmitir a la conversación
+  broadcastToConversationClients(envelope.conversationId, payload);
+});
+
+// 🔥 NUEVO: Escuchar actualizaciones de mensajes (ej: transcripciones)
+coreEventBus.on('core:message_updated', (payload) => {
+  const wsPayload = {
+    type: 'message:updated',
+    data: payload
+  };
+  
+  console.log(`[ws-handler] 📢 EventBus: Broadcasting updated message ${payload.messageId}`);
+  broadcastToConversationClients(payload.conversationId, wsPayload);
 });
 
 // Escuchar trazas distribuidas (OpenTelemetry en cascada)
@@ -164,6 +196,20 @@ coreEventBus.on('fluxcore.work_proposed', (payload) => {
   };
 
   broadcastToConversationClients(payload.conversationId, message);
+});
+
+// Escuchar eventos de actividad distribuida
+coreEventBus.on('core:activity', (payload) => {
+  const wsPayload = {
+    type: 'user_activity_state',
+    conversationId: payload.conversationId,
+    accountId: payload.accountId,
+    activity: payload.activity,
+    metadata: payload.metadata
+  };
+  
+  // Transmitir a los clientes locales de esta conversación
+  broadcastToConversationClients(payload.conversationId, wsPayload);
 });
 
 export function broadcastAll(payload: any): void {

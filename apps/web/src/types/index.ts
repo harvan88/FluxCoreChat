@@ -75,6 +75,8 @@ export interface Account {
   aiIncludeTimestamp: boolean;
   createdAt: string;
   updatedAt: string;
+  country?: string | null;
+  timezone?: string | null;
   // New asset-based avatar field
   avatarAssetId?: string;
 }

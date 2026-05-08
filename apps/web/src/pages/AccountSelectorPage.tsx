@@ -118,7 +118,12 @@ export function AccountSelectorPage() {
         {/* Footer / Logout Option */}
         <div className="mt-12 text-center">
           <button 
-            onClick={() => navigate('/login')}
+            type="button"
+            onClick={() => {
+              const { logout } = useAuthStore.getState();
+              logout();
+              navigate('/login');
+            }}
             className="text-muted hover:text-primary transition-colors text-sm font-medium"
           >
             ¿No es tu cuenta? Cerrar sesión

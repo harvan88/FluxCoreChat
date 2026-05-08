@@ -32,10 +32,13 @@ export interface CollapsibleSectionProps {
   className?: string;
   /** Si la sección está deshabilitada */
   disabled?: boolean;
+  /** Subtítulo opcional (más discreto) */
+  subtitle?: string;
 }
 
 export function CollapsibleSection({
   title,
+  subtitle,
   children,
   defaultExpanded = false,
   isCustomized = false,
@@ -71,7 +74,7 @@ export function CollapsibleSection({
           ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-hover cursor-pointer'}
         `}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-grow">
           {/* Toggle switch */}
           {showToggle && (
             <Switch
@@ -96,10 +99,17 @@ export function CollapsibleSection({
             </span>
           )}
 
-          {/* Title */}
-          <span className="text-primary font-medium text-sm truncate">
-            {title}
-          </span>
+          {/* Title & Subtitle Container */}
+          <div className="flex flex-col min-w-0">
+            <span className="text-primary font-medium text-sm truncate">
+              {title}
+            </span>
+            {subtitle && (
+              <span className="text-muted text-xs truncate">
+                {subtitle}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Expand/Collapse indicator */}

@@ -155,7 +155,7 @@ const mobileActivities: MobileActivityItem[] = [
   { id: 'conversations', icon: <MessageSquare size={20} />, label: 'Mensajes' },
   { id: 'contacts', icon: <Users size={20} />, label: 'Contactos' },
   { id: 'extensions', icon: <Puzzle size={20} />, label: 'Extensiones' },
-  { id: 'settings', icon: <Settings size={20} />, label: 'Configuración' },
+  { id: 'settings', icon: <Settings size={20} />, label: 'Ajustes' },
 ];
 
 function MobileActivityBar() {

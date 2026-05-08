@@ -85,7 +85,7 @@ function resolveSidebarTitle(
     conversations: 'Conversaciones',
     contacts: 'Contactos',
     extensions: 'Extensiones',
-    settings: 'Configuración',
+    settings: 'Ajustes',
     monitoring: 'Monitoreo',
   };
 
@@ -102,8 +102,6 @@ export function Sidebar() {
     toggleSidebar,
     isMobile,
   } = useUIStore();
-
-  const [fluxCoreActiveView, setFluxCoreActiveView] = useState<FluxCoreView>('usage');
   
   const navigate = useNavigate();
   const { alias } = useParams<{ alias: string }>();
@@ -212,64 +210,6 @@ export function Sidebar() {
       if (panelComponent === 'FluxCorePanel') {
         return (
           <FluxCoreSidebar
-            activeView={fluxCoreActiveView}
-            onViewChange={(view) => {
-              setFluxCoreActiveView(view);
-
-              const routeDef = ROUTE_REGISTRY.find(
-                (r) => r.activity === `ext:${extensionId}` && r.subView === view
-              );
-
-              if (routeDef && alias) {
-                navigate(`/@/${alias}${routeDef.pattern}`);
-              } else {
-                // Fallback a openTab directo si no hay ruta registrada
-                const { openTab } = usePanelStore.getState();
-                const viewTitles: Record<string, string> = {
-                  usage: 'Uso',
-                  assistants: 'Asistentes',
-                  instructions: 'Instrucciones del sistema',
-                  'knowledge-base': 'Base de conocimiento',
-                  tools: 'Herramientas',
-                  agents: 'Agentes',
-                  works: 'Fluxi',
-                  debug: 'Depuración',
-                  policies: 'Políticas (Context)',
-                  traces: 'Trazas del runtime',
-                  billing: 'Facturación',
-                };
-
-                const viewIcons: Record<string, string> = {
-                  usage: 'BarChart3',
-                  assistants: 'Bot',
-                  instructions: 'FileText',
-                  'knowledge-base': 'Database',
-                  tools: 'Wrench',
-                  agents: 'GitBranch',
-                  works: 'LayoutDashboard',
-                  debug: 'Bug',
-                  policies: 'Shield',
-                  traces: 'Activity',
-                  billing: 'CreditCard',
-                };
-
-                const tabIdentity = `extension:${extensionId}:${view}:${selectedAccountId}`;
-
-                openTab('extensions', {
-                  type: 'extension',
-                  identity: tabIdentity,
-                  title: viewTitles[view] || view,
-                  icon: viewIcons[view] || 'Settings',
-                  closable: true,
-                  context: {
-                    extensionId,
-                    extensionName,
-                    view: view,
-                    accountId: selectedAccountId,
-                  },
-                });
-              }
-            }}
             accountName={extensionName}
             accountId={selectedAccountId}
           />

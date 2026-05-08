@@ -9,7 +9,7 @@
  */
 
 import { useState, type ReactNode, isValidElement } from 'react';
-import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare, GitBranch, Shield, MessageCircle, Activity, LayoutDashboard, Zap } from 'lucide-react';
+import { Pin, PinOff, Maximize2, Minimize2, X, Bot, FileText, Database, Wrench, BarChart3, Bug, CreditCard, Settings, MessageSquare, GitBranch, Shield, MessageCircle, Activity, LayoutDashboard, Zap, Share2, MapPin, Building, User, Bell, Palette, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import { usePanelStore, useContainers } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
@@ -211,6 +211,13 @@ function TabItem({
       Activity: <Activity size={14} />,
       LayoutDashboard: <LayoutDashboard size={14} />,
       Zap: <Zap size={14} />,
+      Share2: <Share2 size={14} />,
+      MapPin: <MapPin size={14} />,
+      Building: <Building size={14} />,
+      User: <User size={14} />,
+      Bell: <Bell size={14} />,
+      Palette: <Palette size={14} />,
+      Clock: <Clock size={14} />,
     };
 
     return map[icon] ?? icon;
@@ -251,7 +258,7 @@ function TabItem({
     >
       {/* Icon */}
       {displayIcon && (
-        <span className="text-sm flex-shrink-0">{displayIcon}</span>
+        <span className={clsx("text-sm flex-shrink-0", tab.level === 2 && "text-accent")}>{displayIcon}</span>
       )}
 
       {/* Title */}

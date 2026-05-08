@@ -322,7 +322,7 @@ class UIOrchestatorImpl implements IUIOrchestrator {
     const result = openTab('settings', {
       type: 'settings',
       identity: `settings:${section}`,
-      title: options.title || sectionTitles[section] || 'Configuración',
+      title: options.title || sectionTitles[section] || 'Ajustes',
       icon: options.icon || 'Settings',
       closable: true,
       context: {

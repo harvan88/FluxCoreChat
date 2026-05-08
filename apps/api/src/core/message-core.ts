@@ -31,7 +31,6 @@ export class MessageCore {
   private conversationNotificationCallbacks: Map<string, Set<(data: any) => void>> = new Map();
   // R-02.3: autoReplyQueue movida a MessageDispatchService (via Runtime Gateway)
   private conversations = new Map<string, { relationshipId: string | null; visitorToken?: string | null }>();
-  private rooms: Map<string, any[]> = new Map();
 
   /**
    * Recibe y procesa un mensaje
@@ -380,32 +379,16 @@ export class MessageCore {
   }
 
   /**
-   * Transmite estado de actividad a participantes
+   * Transmite estado de actividad a participantes (DISTRIBUIDO)
    */
   broadcastActivity(conversationId: string, payload: any) {
-    const conv = this.conversations.get(conversationId);
-    if (conv) {
-      if (conv.relationshipId) {
-        this.broadcastToRelationshipSubscribers(conv.relationshipId, {
-          type: 'user_activity_state',
-          ...payload,
-          conversationId,
-        });
-      }
-      this.broadcastToConversationSubscribers(conversationId, {
-        type: 'user_activity_state',
-        ...payload,
-        conversationId,
-      });
-    } else {
-      // Fallback: Broadcast to all connections in the conversation room
-      console.warn(`[WARN] Broadcasting activity without registration for conversation ${conversationId}`);
-      this.broadcastToRoom(conversationId, {
-        type: 'user_activity_state',
-        ...payload,
-        conversationId
-      });
-    }
+    // 🔥 NUEVO: Emitir vía EventBus para que todos los procesos API lo vean
+    coreEventBus.emit('core:activity', {
+      conversationId,
+      accountId: payload.accountId,
+      activity: payload.activity,
+      metadata: payload.metadata
+    });
   }
 
   /**
@@ -492,13 +475,6 @@ export class MessageCore {
       console.error('[MessageCore] ❌ Error resolving target account:', error);
       return undefined;
     }
-  }
-
-  private broadcastToRoom(roomId: string, message: any) {
-    const connections = this.rooms.get(roomId) || [];
-    connections.forEach(conn => {
-      conn.send(JSON.stringify(message));
-    });
   }
 }
 

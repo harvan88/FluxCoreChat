@@ -591,6 +591,76 @@ class ApiService {
     });
   }
 
+  // Locations
+  async getLocations(accountId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/locations/${accountId}`);
+  }
+
+  async createLocation(accountId: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<any>(`/locations/${accountId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateLocation(accountId: string, locationId: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<any>(`/locations/${accountId}/${locationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteLocation(accountId: string, locationId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/locations/${accountId}/${locationId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async geocode(params: { address?: string; latlng?: string }): Promise<ApiResponse<any>> {
+    const query = new URLSearchParams();
+    if (params.address) query.set('address', params.address);
+    if (params.latlng) query.set('latlng', params.latlng);
+    return this.request<any>(`/locations/geocode?${query.toString()}`);
+  }
+
+  // Schedules
+  async getSchedules(ownerType: string, ownerId: string): Promise<ApiResponse<any>> {
+    return this.request<any>(`/schedules/${ownerType}/${ownerId}`);
+  }
+
+  async clearAllSchedules(ownerType: string, ownerId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/schedules/${ownerType}/${ownerId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateWeeklySchedule(ownerType: string, ownerId: string, days: any[]): Promise<ApiResponse<void>> {
+    return this.request<void>(`/schedules/${ownerType}/${ownerId}/weekly`, {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    });
+  }
+
+  async updateWeeklyIntervals(ownerType: string, ownerId: string, dayOfWeek: number, intervals: any[]): Promise<ApiResponse<void>> {
+    return this.request<void>(`/schedules/${ownerType}/${ownerId}/weekly/${dayOfWeek}/intervals`, {
+      method: 'POST',
+      body: JSON.stringify({ intervals }),
+    });
+  }
+
+  async upsertSpecialDate(ownerType: string, ownerId: string, data: any): Promise<ApiResponse<any>> {
+    return this.request<any>(`/schedules/${ownerType}/${ownerId}/special`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSpecialDate(specialDateId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/schedules/special/${specialDateId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Convert account to business
   async convertToBusiness(accountId: string): Promise<ApiResponse<Account>> {
     return this.request<Account>(`/accounts/${accountId}/convert-to-business`, {
@@ -932,7 +1002,7 @@ class ApiService {
   }
 
   private async uploadAssetFile(accountId: string, sessionId: string, file: File): Promise<ApiResponse<{ success: true }>> {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const API_URL = getApiUrl();
     const formData = new FormData();
     formData.append('file', file);
 

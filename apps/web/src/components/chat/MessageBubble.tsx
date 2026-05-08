@@ -11,6 +11,7 @@ import clsx from 'clsx';
 import type { Message, MessageStatus } from '../../types';
 import { AssetPreview } from './AssetPreview';
 import { DeleteMessageModal } from '../ui/DeleteMessageModal';
+import { getApiUrl } from '../../utils/urls';
 
 interface MessageBubbleProps {
   message: Message;
@@ -62,7 +63,7 @@ export function MessageBubble({
   backgroundSize: '100vw 100vh',
   };
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const apiUrl = getApiUrl();
   const resolveMediaUrl = (url: string) => {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     if (url.startsWith('/')) return `${apiUrl}${url}`;

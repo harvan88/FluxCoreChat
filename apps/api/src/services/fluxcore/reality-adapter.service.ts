@@ -3,6 +3,7 @@ import { kernel } from '../../core/kernel';
 import type { KernelCandidateSignal, PhysicalFactType } from '../../core/types';
 import { messageCore } from '../../core/message-core';
 import type { NormalizedMessage, NormalizedStatusEvent } from '../../../../../packages/adapters/src';
+import { canonicalize } from './kernel-utils';
 
 // Constants matching the bootstrapped adapter in DB
 const ADAPTER_ID = 'fluxcore/whatsapp-gateway';
@@ -167,7 +168,7 @@ export class RealityAdapterService {
     }
 
     private signSignal(signal: KernelCandidateSignal): string {
-        const content = this.canonicalize({
+        const content = canonicalize({
             factType: signal.factType,
             source: signal.source,
             subject: signal.subject ?? null,
@@ -181,27 +182,6 @@ export class RealityAdapterService {
             .createHmac('sha256', SIGNING_SECRET)
             .update(content)
             .digest('hex');
-    }
-
-    /**
-     * Canonical JSON serialization.
-     * MUST match Kernel.canonicalize() exactly to ensure signature verification passes.
-     */
-    private canonicalize(value: unknown): string {
-        if (value === null || typeof value !== 'object') {
-            return JSON.stringify(value);
-        }
-
-        if (Array.isArray(value)) {
-            return '[' + value.map((v) => this.canonicalize(v)).join(',') + ']';
-        }
-
-        const entries = Object.entries(value as Record<string, unknown>)
-            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-
-        return '{' + entries
-            .map(([key, val]) => JSON.stringify(key) + ':' + this.canonicalize(val))
-            .join(',') + '}';
     }
 }
 

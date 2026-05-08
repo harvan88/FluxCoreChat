@@ -31,6 +31,9 @@ import { ThemeSettings } from '../common';
 import { ExpandedEditor } from '../editors/ExpandedEditor';
 import { OpenAIAssistantEditor } from '../editors/OpenAIAssistantEditor';
 import { ComponentPreviewGallery } from '../settings/ComponentPreviewGallery';
+import { ContactSection } from '../settings/ContactSection';
+import { LocationSection } from '../settings/LocationSection';
+import { ScheduleSection } from '../settings/ScheduleSection';
 import { UnifiedKernelMonitor } from '../monitor/UnifiedKernelMonitor';
 import { DocumentationQualityPanel } from '../monitor/DocumentationQualityPanel';
 
@@ -278,7 +281,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     if (data?.type === 'wes-studio') {
       const id = data?.definitionId || tabId;
       console.log('[DynamicContainer] Opening WES Studio for ID:', id);
-      const identity = `extension:fluxcore:wes-studio:${selectedAccountId}:${id}`;
+      const identity = `extension:@fluxcore/asistentes:wes-studio:${selectedAccountId}:${id}`;
       openTab('extensions', {
         type: 'extension',
         identity,
@@ -618,8 +621,61 @@ function TabContent({ tab, containerId }: TabContentProps) {
 
     case 'settings': {
       const section = typeof tab.context?.section === 'string' ? tab.context.section : undefined;
-      return <SettingsTabContent section={section} />;
+      return (
+        <SettingsTabContent 
+          section={section} 
+          onOpenTab={(tabId, title, data) => {
+            const { openTab } = usePanelStore.getState();
+            
+            // Si es el detalle de una ubicación (sede)
+            if (data?.type === 'location') {
+              openTab('settings', {
+                type: 'location-detail',
+                identity: `location:${data.locationId}`,
+                title: title || 'Sede',
+                icon: 'MapPin',
+                closable: true,
+                context: { 
+                  locationId: data.locationId, 
+                  accountId: selectedAccountId 
+                }
+              });
+            }
+
+            // Si es el detalle de horarios de una sede
+            if (data?.type === 'schedule') {
+              openTab('settings', {
+                type: 'schedule-detail',
+                identity: `schedule:${data.locationId}`,
+                title: title || 'Horarios',
+                icon: 'Clock',
+                closable: true,
+                context: { 
+                  locationId: data.locationId, 
+                  accountId: selectedAccountId 
+                }
+              });
+            }
+          }} 
+        />
+      );
     }
+
+    case 'location-detail':
+      return (
+        <LocationSection 
+          locationId={tab.context.locationId} 
+          onBack={() => closeTab(containerId, tab.id)} 
+        />
+      );
+
+    case 'schedule-detail':
+      return (
+        <ScheduleSection 
+          locationId={tab.context.locationId} 
+          onBack={() => closeTab(containerId, tab.id)} 
+        />
+      );
 
     case 'editor': {
       const editorProps = tab.context || {};
@@ -644,22 +700,25 @@ function TabContent({ tab, containerId }: TabContentProps) {
       );
     }
 
-    case 'template-panel': {
+    case 'template_panel': {
       const accountId = typeof tab.context.accountId === 'string' ? tab.context.accountId : '';
       return <TemplateManager accountId={accountId} />;
     }
 
-    case 'template-editor':
+    case 'template_editor': {
+      const accountId = typeof tab.context.accountId === 'string' ? tab.context.accountId : '';
       return (
         <TemplateEditor
           templateId={tab.context.templateId || ''}
-          accountId={tab.context.accountId || ''}
+          accountId={accountId}
           onClose={() => {
             const { closeTab } = usePanelStore.getState();
             closeTab(containerId, tab.id);
           }}
         />
       );
+    }
+
 
     case 'openai-assistant-editor':
       return (
@@ -716,7 +775,7 @@ function EmptyContainer({ type }: EmptyContainerProps) {
       subtitle: 'Agrega contactos desde la barra lateral',
     },
     settings: {
-      title: 'Configuración',
+      title: 'Ajustes',
       subtitle: 'Selecciona una opción del menú',
     },
     extensions: {
@@ -753,9 +812,10 @@ function EmptyContainer({ type }: EmptyContainerProps) {
 
 interface SettingsTabContentProps {
   section?: string;
+  onOpenTab?: (id: string, title: string, data: any) => void;
 }
 
-function SettingsTabContent({ section }: SettingsTabContentProps) {
+function SettingsTabContent({ section, onOpenTab }: SettingsTabContentProps) {
   // Wrapper para secciones que necesitan onBack (lo ignoramos en este contexto)
   const handleBack = () => {
     // En el contexto de tabs, no hay "back" - el usuario cierra el tab
@@ -770,6 +830,14 @@ function SettingsTabContent({ section }: SettingsTabContentProps) {
 
     case 'credits':
       return <CreditsSection onBack={handleBack} />;
+
+    case 'contacto':
+      return <ContactSection onBack={handleBack} />;
+
+    case 'ubicacion':
+      return <LocationSection onBack={handleBack} onOpenTab={onOpenTab} />;
+    case 'horario':
+      return <ScheduleSection onBack={handleBack} onOpenTab={onOpenTab} />;
 
     case 'appearance':
       return (
@@ -807,7 +875,7 @@ function SettingsTabContent({ section }: SettingsTabContentProps) {
       return (
         <div className="h-full flex items-center justify-center">
           <div className="text-center">
-            <p className="text-lg text-secondary">Configuración</p>
+            <p className="text-lg text-secondary">Ajustes</p>
             <p className="text-sm text-muted mt-2">Selecciona una opción del menú</p>
           </div>
         </div>

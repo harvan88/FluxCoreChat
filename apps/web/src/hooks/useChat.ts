@@ -7,7 +7,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Message } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../utils/urls';
+
+const API_URL = getApiUrl();
 
 interface UseChatOptions {
   conversationId: string;

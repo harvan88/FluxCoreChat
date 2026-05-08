@@ -55,7 +55,7 @@ const baseActivities: ActivityItem[] = [
   { id: 'contacts', icon: <ContactsIcon size={22} />, label: 'Contactos' },
   { id: 'tools', icon: <ToolsIcon size={22} />, label: 'Herramientas' },
   { id: 'extensions', icon: <ExtensionsIcon size={22} />, label: 'Extensiones' },
-  { id: 'settings', icon: <SettingsIcon size={22} />, label: 'Configuración' },
+  { id: 'settings', icon: <SettingsIcon size={22} />, label: 'Ajustes' },
 ];
 
 // Mapeo de nombres de iconos a componentes Lucide

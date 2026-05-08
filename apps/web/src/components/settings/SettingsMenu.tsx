@@ -13,6 +13,7 @@ import {
   BuildingIcon,
   CreditsIcon,
 } from '../../lib/icon-library';
+import { Share2, MapPin, Clock } from 'lucide-react';
 import { SidebarNavList } from '../ui/sidebar/SidebarNavList';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 import { usePanelStore } from '../../store/panelStore';
@@ -24,7 +25,10 @@ type SettingsTabType =
   | 'settings-notifications'
   | 'settings-privacy'
   | 'settings-appearance'
-  | 'settings-kernel';
+  | 'settings-kernel'
+  | 'settings-contacto'
+  | 'settings-ubicacion'
+  | 'settings-horario';
 
 interface SettingsSection {
   id: string;
@@ -39,6 +43,24 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     tabType: 'settings-profile',
     icon: <UserIcon size={20} />,
     label: 'Perfil',
+  },
+  {
+    id: 'contacto',
+    tabType: 'settings-contacto',
+    icon: <Share2 size={20} />,
+    label: 'Contacto y Redes',
+  },
+  {
+    id: 'ubicacion',
+    tabType: 'settings-ubicacion',
+    icon: <MapPin size={20} />,
+    label: 'Ubicación',
+  },
+  {
+    id: 'horario',
+    tabType: 'settings-horario',
+    icon: <Clock size={20} />,
+    label: 'Horario',
   },
   {
     id: 'accounts',
@@ -78,9 +100,11 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   },
 ];
 
+import { useLocation } from 'react-router-dom';
+
 export function SettingsMenu() {
   const { user } = useAuthStore();
-  const { openTab, layout } = usePanelStore((state) => ({ openTab: state.openTab, layout: state.layout }));
+  const location = useLocation();
 
   const hasCreditsAccess = Boolean(user?.systemAdminScopes?.['*'] || user?.systemAdminScopes?.credits);
 
@@ -88,29 +112,14 @@ export function SettingsMenu() {
     ? SETTINGS_SECTIONS
     : SETTINGS_SECTIONS.filter((item) => item.id !== 'credits');
 
-  const settingsContainer = layout.containers.find((container) => container.type === 'settings');
-
   const activeSettingsSection = (() => {
-    if (!settingsContainer) return null;
-
-    const activeTab = settingsContainer.tabs.find((tab) => tab.id === settingsContainer.activeTabId);
-
-    if (!activeTab || activeTab.type !== 'settings') return null;
-
-    return typeof activeTab.context?.section === 'string' ? activeTab.context.section : null;
+    for (const section of visibleSections) {
+      if (location.pathname.includes(`/ajustes/${section.id}`)) {
+        return section.id;
+      }
+    }
+    return null;
   })();
-
-  const handleOpenSettingsTab = (item: SettingsSection) => {
-    openTab('settings', {
-      type: 'settings',
-      title: item.label,
-      identity: `settings:${item.id}`,
-      closable: true,
-      context: {
-        section: item.id,
-      },
-    });
-  };
 
   return (
     <div className="flex flex-col h-full">
@@ -124,7 +133,8 @@ export function SettingsMenu() {
           label: item.label,
           icon: item.icon,
           active: activeSettingsSection === item.id,
-          onSelect: () => handleOpenSettingsTab(item),
+          routeId: 'settings.detail',
+          routeParams: { id: item.id },
         }))}
       />
 

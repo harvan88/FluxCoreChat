@@ -10,6 +10,8 @@ export * from './account-ai-entitlements';
 export * from './credits';
 export * from './system-admins';
 export * from './account-deletion';
+export * from './locations';
+export * from './schedules';
 
 // Hito 4: Sistema de Extensiones
 export * from './extensions';

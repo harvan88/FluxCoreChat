@@ -45,17 +45,21 @@ export function getStorageAdapter(options?: StorageFactoryOptions): IStorageAdap
     }
 
     if (provider === 'local') {
-        const isAlreadyInApi = process.cwd().endsWith('apps\\api') || process.cwd().endsWith('apps/api');
-        const defaultPath = isAlreadyInApi
-            ? path.join(process.cwd(), 'uploads', 'assets')
-            : path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets');
+        const port = process.env.FLUXCORE_PORT || '3001';
+        
+        // Determinar ruta absoluta compartida
+        const projectRoot = process.cwd().includes('apps') 
+            ? path.join(process.cwd(), '..', '..') 
+            : process.cwd();
+        
+        const defaultPath = path.join(projectRoot, 'apps', 'api', 'uploads', 'assets');
 
         _instance = new LocalStorageAdapter({
             basePath: options?.localBasePath || defaultPath,
-            baseUrl: options?.localBaseUrl || 'http://localhost:3000/uploads/assets',
+            baseUrl: options?.localBaseUrl || `http://localhost:${port}/uploads/assets`,
             secret: options?.signingSecret,
         });
-        console.log(`${DEBUG_PREFIX} Using Local adapter`);
+        console.log(`${DEBUG_PREFIX} Using Local adapter with port ${port}`);
         return _instance;
     }
 
@@ -72,17 +76,19 @@ export function getStorageAdapter(options?: StorageFactoryOptions): IStorageAdap
             }
         }
 
-        const isAlreadyInApi = process.cwd().endsWith('apps\\api') || process.cwd().endsWith('apps/api');
-        const defaultPath = isAlreadyInApi
-            ? path.join(process.cwd(), 'uploads', 'assets')
-            : path.join(process.cwd(), 'apps', 'api', 'uploads', 'assets');
+        const port = process.env.FLUXCORE_PORT || '3001';
+        const projectRoot = process.cwd().includes('apps') 
+            ? path.join(process.cwd(), '..', '..') 
+            : process.cwd();
+        
+        const defaultPath = path.join(projectRoot, 'apps', 'api', 'uploads', 'assets');
 
         _instance = new LocalStorageAdapter({
             basePath: options?.localBasePath || defaultPath,
-            baseUrl: options?.localBaseUrl || 'http://localhost:3000/uploads/assets',
+            baseUrl: options?.localBaseUrl || `http://localhost:${port}/uploads/assets`,
             secret: options?.signingSecret,
         });
-        console.log(`${DEBUG_PREFIX} Using Local adapter (auto-detected)`);
+        console.log(`${DEBUG_PREFIX} Using Local adapter (auto-detected) with port ${port}`);
         return _instance;
     }
 

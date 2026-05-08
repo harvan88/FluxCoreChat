@@ -1,46 +1,44 @@
 ---
 id: "collection-view"
-type: "ui-component"
+type: "smart-component"
 status: "stable"
 criticality: "high"
 location: "apps/web/src/components/fluxcore/shared/CollectionView.tsx"
-layers:
-  discovery: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Descubierto" }
-  connections: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Desacoplado vía Genéricos T" }
-  subsystem: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "El View Master de las tablas de datos" }
-  operations: { status: "complete", completed_date: "2026-03-24", confidence: 100, notes: "Slots inyectables de Layout" }
-evolution: { current_layer: 4, total_layers: 4, completion_percentage: 100 }
 ---
 
 # 🤖 CollectionView
 
 ## 🎯 Propósito
-Es el "Single Source of Truth" de Listados/Dashboarding de Datos visuales para todos los módulos transversales de la plataforma (Agentes, Asistentes, Bases de Vectores, Herramientas, Instrucciones). En lugar de que cada programador dibuje su tabla perdiendo coherencia gráfica, este mega-componente genérico encajona a todos en un único modelo mental (`Header → Content → Table`), establenciendo directrices fijas de transiciones, breakpoints y estados de carga u orfandad paramétrica (`EmptyStates`/`LoadingStates`).
-
-## 📦 Estado y Datos
-**Arquitectura Generica `<T>`:**
-- El componente no sabe qué dibuja. Utiliza Typescript Generic `props: CollectionViewProps<T>`, exigiendo recibir un array `columns: CollectionColumn<T>[]` que provea de accessors limpios (E.g. `(row) => row.name`).
-- No gestiona ni atrapa data subyacente. Exige que el programador en el componente padre implemente callbacks pesados: `getRowKey: (row: T) => string`.
-
-## 🔄 Flujos de Interacción
-1. **Paginación Visual de Estados Finales:** Previene el Flash Of Unstyled Content evaluando estrictamente las props de entrada. Si `loading={true}` e igual a longitud 0, renderiza el Header flotante más un Body de Spinners. Si la carga acaba y longitud sigue en 0, renderiza el Cartel Gigante (`EmptyState`) instando a construir el primer elemento.
-2. **Motor de Responsividad de Columnas (`hideBelowClass`):** Elimina la necesidad de escribir Media Queries asimilando valores paramédicos en las definiciones: `hideBelow: 'md'`. Las Oculta silenciando en Tailwind (`hidden md:table-cell`).
-3. **Composición por Slotting Action:** En vez de acoplarse con botones duros, ofrece `renderActions={(row) => ... }`. Una celda pegajosa verticalmente anclada (`sticky right-0`) que asimila los Fragmentos JSX que dictamina un Controlador Padre asimilando correctamente su patrón de arquitectura limpia (Inversion of Control de la botonera operativa).
+Componente maestro de alto nivel para el renderizado de listados y dashboards. Encapsula la lógica de cabecera (`ViewHeader`), filtrado, estados de carga y el motor de tablas responsivas. Su objetivo es unificar la experiencia de usuario en todos los módulos de FluxCore (Plantillas, Asistentes, Conocimiento).
 
 ## 💡 Ejemplo de Uso
 ```tsx
-import { CollectionView } from '../../components/fluxcore/shared/CollectionView';
+import { Database } from 'lucide-react';
+import { CollectionView } from '../shared/CollectionView';
 
-<CollectionView<User> 
-    title="Cuentas Bancarias"
-    data={records}
-    loading={isLoading}
-    getRowKey={(r) => r.accountId}
-    columns={[
-       { id: 'bank', header: 'Banco', accessor: r => <b className="text-primary">{r.bankName}</b> },
-       { id: 'balance', header: 'Monto', hideBelow: 'md', accessor: r => r.balance }
-    ]}
-    onCreate={() => openModal()}
-    renderActions={(row) => <Button onClick={() => share(row)}>Compartir</Button>}
+<CollectionView<VectorStore>
+    icon={Database}
+    title="Base de conocimiento"
+    data={stores}
+    loading={loading}
+    getRowKey={(row) => row.id}
+    columns={columns}
+    onCreate={handleCreate}
+    renderActions={(row) => <EntityActions onDelete={() => handleDelete(row.id)} />}
 />
 ```
+
+## 📦 Estado y Datos
+- **Arquitectura Genérica `<T>`**: Funciona con cualquier tipo de dato mediante el uso de genéricos de TypeScript, exigiendo únicamente una función `getRowKey` y una definición de columnas.
+- **Detección de Vacíos**: Si la propiedad `data` es un arreglo vacío y `loading` es false, el componente renderiza automáticamente un `EmptyState` personalizado.
+
+## 🔄 Flujos de Interacción
+1. **Vista Híbrida (Responsive)**: 
+   - **Desktop**: Renderiza una rejilla de datos completa utilizando el componente `Table`.
+   - **Mobile**: Transiciona automáticamente a una vista de tarjetas (`List`) simplificada para mejorar la usabilidad en pantallas pequeñas.
+2. **Control de Columnas Responsivas**: Permite ocultar columnas específicas en diferentes breakpoints mediante la propiedad `hideBelow` en la definición de cada columna.
+3. **Inyección de Acciones**: Proporciona slots (`renderActions`, `renderMobileActions`) para inyectar botones de operación sin acoplar el componente a la lógica de negocio específica de cada entidad.
+
+## 🛡️ Notas Arquitectónicas
+- **Integración con ViewHeader**: Utiliza el componente `ViewHeader` para mantener una consistencia visual absoluta en los títulos y acciones globales de la vista.
+- **Estandarización de Bordes**: El contenedor principal utiliza `.border-subtle` con opacidad refinada, eliminando el ruido visual y manteniendo la estética Bauhaus.

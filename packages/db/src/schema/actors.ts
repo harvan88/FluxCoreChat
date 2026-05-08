@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, text, real } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { accounts } from './accounts';
 
@@ -25,6 +25,12 @@ export const actors = pgTable('actors', {
   linkedAccountId: uuid('linked_account_id').references(() => accounts.id), // cuenta real vinculada
   linkedAt: timestamp('linked_at'), // cuándo se vinculó la cuenta
   migratedFrom: uuid('migrated_from'), // referencia temporal a fluxcore_actors.id
+
+  // 📍 Real-time Presence & Location (ChatCore Ownership)
+  lastLat: real('last_lat'),
+  lastLon: real('last_lon'),
+  lastAddress: text('last_address'),
+  lastLocationAt: timestamp('last_location_at'),
 });
 
 export type Actor = typeof actors.$inferSelect;

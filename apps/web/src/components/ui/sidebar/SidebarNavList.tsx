@@ -1,5 +1,7 @@
 import clsx from 'clsx';
 import type { HTMLAttributes, ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { buildRoute } from '../../../config/route-registry';
 
 export interface SidebarNavItem {
   id: string;
@@ -9,6 +11,8 @@ export interface SidebarNavItem {
   active?: boolean;
   disabled?: boolean;
   onSelect?: () => void;
+  routeId?: string; // ID de la ruta en route-registry.ts
+  routeParams?: Record<string, string>; // Parámetros para la ruta
   /** Optional trailing element (Switch, Badge, etc.) */
   trailing?: ReactNode;
 }
@@ -25,6 +29,25 @@ export function SidebarNavList({
   ...rest
 }: SidebarNavListProps) {
   const Container = as;
+  const navigate = useNavigate();
+  const { alias } = useParams<{ alias: string }>();
+
+  const handleSelect = (item: SidebarNavItem) => {
+    if (item.disabled) return;
+    
+    if (item.onSelect) {
+      item.onSelect();
+    }
+    
+    if (item.routeId) {
+      const path = buildRoute(item.routeId, item.routeParams);
+      // Prepend alias if in multi-tenant context
+      const fullPath = alias && !path.startsWith(`/@/${alias}`) 
+        ? `/@/${alias}${path}` 
+        : path;
+      navigate(fullPath);
+    }
+  };
 
   return (
     <Container
@@ -34,7 +57,7 @@ export function SidebarNavList({
       {items.map((item) => (
         <button
           key={item.id}
-          onClick={item.onSelect}
+          onClick={() => handleSelect(item)}
           disabled={item.disabled}
           className={clsx(
             'w-full flex items-center gap-3 px-4 py-2.5 border border-transparent text-left transition-colors duration-150',

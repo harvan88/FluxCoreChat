@@ -7,6 +7,9 @@ export interface CapabilityExecutionContext {
 }
 
 import { ExecutionAction } from '../core/fluxcore-types';
+import { scheduleService } from './schedule.service';
+import { db, accountLocations } from '@fluxcore/db';
+import { eq, and } from 'drizzle-orm';
 
 export interface CapabilityExecutionResult {
   outcome: 'success' | 'not_found' | 'error';
@@ -94,6 +97,53 @@ class CapabilityExecutionService {
             data: {
               templates,
             },
+          };
+        }
+
+        case 'is_business_open': {
+          let ownerId = params.locationId;
+          let ownerType = 'location';
+
+          // Si no se especifica sucursal, buscar la principal de la cuenta
+          if (!ownerId) {
+            const [mainLoc] = await db
+              .select({ id: accountLocations.id })
+              .from(accountLocations)
+              .where(and(
+                eq(accountLocations.accountId, context.accountId),
+                eq(accountLocations.isDefault, true)
+              ))
+              .limit(1);
+            
+            if (mainLoc) {
+              ownerId = mainLoc.id;
+            } else {
+              // Si no hay default, usar la primera activa
+              const [anyLoc] = await db
+                .select({ id: accountLocations.id })
+                .from(accountLocations)
+                .where(and(
+                  eq(accountLocations.accountId, context.accountId),
+                  eq(accountLocations.status, 'active')
+                ))
+                .limit(1);
+              
+              if (anyLoc) {
+                ownerId = anyLoc.id;
+              }
+            }
+          }
+
+          if (!ownerId) {
+            return { outcome: 'not_found', message: 'No location found for this account' };
+          }
+
+          const atDate = params.at ? new Date(params.at) : undefined;
+          const result = await scheduleService.isBusinessOpen(ownerType, ownerId, atDate);
+
+          return {
+            outcome: 'success',
+            data: result
           };
         }
 

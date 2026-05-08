@@ -109,7 +109,7 @@ export function AgentsView({ accountId, onOpenTab }: AgentsViewProps) {
       onOpenTab(agentId, name, {
         type: 'agent',
         agentId,
-        identity: `extension:fluxcore:agent:${accountId}:${agentId}`
+        identity: `extension:@fluxcore/asistentes:agent:${accountId}:${agentId}`
       });
     }
   };

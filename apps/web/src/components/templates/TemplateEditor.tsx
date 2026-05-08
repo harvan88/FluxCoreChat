@@ -27,6 +27,7 @@ import { CollapsibleSection } from '../ui/CollapsibleSection';
 import { useTemplateStore } from './store/templateStore';
 import { TemplateAssetPicker } from './TemplateAssetPicker';
 import { TemplatePreview } from './TemplatePreview';
+import { LoadingState } from '../../core/components';
 import type { TemplateVariable, UpdateTemplateInput } from './types';
 import { TEMPLATE_CATEGORIES, VARIABLE_TYPES } from './types';
 
@@ -37,7 +38,7 @@ interface TemplateEditorProps {
 }
 
 export function TemplateEditor({ templateId, accountId, onClose }: TemplateEditorProps) {
-  const { getTemplateById, updateTemplate, fetchTemplates, templates } = useTemplateStore();
+  const { getTemplateById, updateTemplate, fetchTemplates, templates, isLoading } = useTemplateStore();
   const initializedId = useRef<string | null>(null);
 
   // Form state
@@ -192,6 +193,13 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
   };
 
   if (!originalTemplate) {
+    if (isLoading || templates.length === 0) {
+      return (
+        <div className="h-full flex items-center justify-center">
+          <LoadingState message="Cargando plantilla..." />
+        </div>
+      );
+    }
     return (
       <div className="h-full flex items-center justify-center text-muted">
         <p>Plantilla no encontrada</p>

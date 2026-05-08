@@ -34,35 +34,35 @@ import { useAIStatus } from '../../hooks/fluxcore/useAIStatus';
 import { useExtensions } from '../../hooks/useExtensions';
 import { FluxCoreIcon } from '../../lib/icon-library';
 
+import { useLocation } from 'react-router-dom';
+import { ROUTE_REGISTRY } from '../../config/route-registry';
+
 interface FluxCoreSidebarProps {
-  activeView: FluxCoreView;
-  onViewChange: (view: FluxCoreView) => void;
   accountName?: string;
   accountId?: string | null;
   isLocked?: boolean;
 }
 
 const navItems: SidebarNavItem[] = [
-  { id: 'usage', label: 'Uso', icon: <BarChart3 size={18} /> },
-  { id: 'assistants', label: 'Asistentes', icon: <Bot size={18} /> },
-  { id: 'instructions', label: 'Instrucciones del sistema', icon: <FileText size={18} /> },
-  { id: 'knowledge-base', label: 'Base de conocimiento', icon: <Database size={18} /> },
-  { id: 'tools', label: 'Herramientas Fluxcore', icon: <Wrench size={18} /> },
-  { id: 'agents', label: 'Agentes', icon: <GitBranch size={18} /> },
-  { id: 'works', label: 'Fluxi', icon: <LayoutDashboard size={18} /> },
-  { id: 'debug', label: 'Depuración del asistente', icon: <Bug size={18} /> },
-  { id: 'policies', label: 'Políticas (Context)', icon: <Shield size={18} /> },
-  { id: 'traces', label: 'Trazas del runtime', icon: <Activity size={18} /> },
-  { id: 'billing', label: 'Facturación', icon: <CreditCard size={18} /> },
+  { id: 'usage', label: 'Uso', icon: <BarChart3 size={18} />, routeId: 'fluxcore.usage' },
+  { id: 'assistants', label: 'Asistentes', icon: <Bot size={18} />, routeId: 'fluxcore.assistants' },
+  { id: 'instructions', label: 'Instrucciones del sistema', icon: <FileText size={18} />, routeId: 'fluxcore.instructions' },
+  { id: 'knowledge-base', label: 'Base de conocimiento', icon: <Database size={18} />, routeId: 'fluxcore.knowledge' },
+  { id: 'tools', label: 'Herramientas Fluxcore', icon: <Wrench size={18} />, routeId: 'fluxcore.tools' },
+  { id: 'agents', label: 'Agentes', icon: <GitBranch size={18} />, routeId: 'fluxcore.agents' },
+  { id: 'works', label: 'Fluxi', icon: <LayoutDashboard size={18} />, routeId: 'fluxcore.works' },
+  { id: 'debug', label: 'Depuración del asistente', icon: <Bug size={18} />, routeId: 'fluxcore.debug' },
+  { id: 'policies', label: 'Políticas (Context)', icon: <Shield size={18} />, routeId: 'fluxcore.policies' },
+  { id: 'traces', label: 'Trazas del runtime', icon: <Activity size={18} />, routeId: 'fluxcore.traces' },
+  { id: 'billing', label: 'Facturación', icon: <CreditCard size={18} />, routeId: 'fluxcore.billing' },
 ];
 
 export function FluxCoreSidebar({
-  activeView,
-  onViewChange,
   accountName = 'FluxCore',
   accountId,
   isLocked = false,
 }: FluxCoreSidebarProps) {
+  const location = useLocation();
   const { status } = useAIStatus({ accountId });
   const { installations, toggle } = useExtensions(accountId || undefined);
   
@@ -114,11 +114,16 @@ export function FluxCoreSidebar({
       <SidebarNavList
         as="nav"
         className="flex-1"
-        items={filteredNavItems.map((item) => ({
-          ...item,
-          active: activeView === item.id,
-          onSelect: () => onViewChange(item.id as FluxCoreView),
-        }))}
+        items={filteredNavItems.map((item) => {
+          const routeDef = ROUTE_REGISTRY.find(r => r.id === item.routeId);
+          const isActive = routeDef ? location.pathname.includes(routeDef.pattern) : false;
+          
+          return {
+            ...item,
+            active: isActive,
+            // routeId is already included in item, SidebarNavList will handle navigation automatically
+          };
+        })}
       />
 
       {/* Footer */}

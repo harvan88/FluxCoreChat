@@ -1,6 +1,7 @@
 /**
  * FC-800: ProfileSection - Sección completa de perfil
  * Incluye: BioEditor (FC-801), AIContextEditor (FC-803), BusinessToggle (FC-806)
+ * Real-time authorized locations presence (Fase 2)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,8 +18,12 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  MapPin,
+  Truck,
 } from 'lucide-react';
 import { useProfile } from '../../hooks/useProfile';
+import { useLocations } from '../../hooks/useLocations';
+import { getApiUrl } from '../../utils/urls';
 import { usePanelStore } from '../../store/panelStore';
 import { Button, Input, Card, Textarea, CopyButton } from '../ui';
 import { Switch } from '../ui/Switch';
@@ -33,12 +38,17 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const {
     profile,
     account,
-    isLoading,
+    isLoading: isProfileLoading,
     isSaving,
-    error,
+    error: profileError,
     updateProfile,
     loadProfile,
   } = useProfile();
+
+  const {
+    locations,
+    isLoading: isLocationsLoading,
+  } = useLocations();
 
   const { openTab } = usePanelStore();
 
@@ -53,15 +63,18 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const [aiIncludeBio, setAiIncludeBio] = useState(true);
   const [aiIncludePrivateContext, setAiIncludePrivateContext] = useState(true);
   const [aiIncludeTimestamp, setAiIncludeTimestamp] = useState(true);
+  const [aiIncludeLocations, setAiIncludeLocations] = useState(true);
   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
   const [alias, setAlias] = useState('');
   const [aliasStatus, setAliasStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved' | 'current'>('idle');
+  const [country, setCountry] = useState('');
+  const [timezone, setTimezone] = useState('');
   const [aliasMessage, setAliasMessage] = useState<string | null>(null);
   const aliasCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const API_URL = getApiUrl();
 
   // Debounced alias availability check
   const checkAliasAvailability = useCallback(async (value: string) => {
@@ -70,7 +83,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       setAliasMessage(null);
       return;
     }
-    // If same as current alias, mark as current
     if (account && value === (account.alias || '')) {
       setAliasStatus('current');
       setAliasMessage('Este es tu alias actual.');
@@ -108,7 +120,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     aliasCheckTimer.current = setTimeout(() => checkAliasAvailability(cleaned), 400);
   };
 
-  // Handle open expanded editor
   const handleOpenExpandedEditor = () => {
     openTab('editor', {
       type: 'editor',
@@ -127,7 +138,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     });
   };
 
-  // Sync local state with profile
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.displayName || '');
@@ -145,11 +155,13 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       setAiIncludeBio(profile.aiIncludeBio ?? true);
       setAiIncludePrivateContext(profile.aiIncludePrivateContext ?? true);
       setAiIncludeTimestamp(profile.aiIncludeTimestamp ?? true);
+      setAiIncludeLocations(account?.aiIncludeLocations ?? true);
       setIsBusinessEnabled(profile.accountType === 'business');
+      setCountry(profile.country || '');
+      setTimezone(profile.timezone || '');
     }
-  }, [profile]);
+  }, [profile, account]);
 
-  // Track changes
   useEffect(() => {
     if (profile) {
       const changed =
@@ -162,16 +174,16 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         aiIncludeName !== (profile.aiIncludeName ?? true) ||
         aiIncludeBio !== (profile.aiIncludeBio ?? true) ||
         aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true) ||
-        aiIncludeTimestamp !== (profile.aiIncludeTimestamp ?? true);
+        aiIncludeTimestamp !== (profile.aiIncludeTimestamp ?? true) ||
+        aiIncludeLocations !== (account?.aiIncludeLocations ?? true) ||
+        country !== (profile.country || '') ||
+        timezone !== (profile.timezone || '');
       setHasChanges(changed);
     }
-  }, [displayName, bio, alias, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, profile, account]);
+  }, [displayName, bio, alias, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, aiIncludeLocations, country, timezone, profile, account]);
 
-  // Handle save
   const handleSave = async () => {
-    // Si cualquiera de los permisos granulares está activo, la cuenta está autorizada para uso automatizado
     const isDelegated = aiIncludeName || aiIncludeBio || aiIncludePrivateContext;
-
     const updateData: any = {
       displayName,
       bio,
@@ -182,25 +194,24 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       aiIncludeBio,
       aiIncludePrivateContext,
       aiIncludeTimestamp,
+      aiIncludeLocations,
+      country,
+      timezone,
     };
-    // Include alias if changed
     if (alias !== (account?.alias || '')) {
       updateData.alias = alias || null;
     }
     const success = await updateProfile(updateData);
-
     if (success) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     }
   };
 
-  // Handle copy context
   const handleCopyContext = () => {
     navigator.clipboard.writeText(privateContext);
   };
 
-  // Handle download context
   const handleDownloadContext = () => {
     const blob = new Blob([privateContext], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -211,10 +222,9 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     URL.revokeObjectURL(url);
   };
 
-  // Calculate tokens (approximate)
   const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
-  if (isLoading) {
+  if (isProfileLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-accent" />
@@ -234,9 +244,9 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       </button>
 
       {/* Error message */}
-      {error && (
+      {(profileError) && (
         <div className="mx-4 mt-4 p-3 bg-error/10 border border-error/20 rounded-lg text-error text-sm flex-shrink-0">
-          {error}
+          {profileError}
         </div>
       )}
 
@@ -250,7 +260,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             onUpload={({ url, assetId }) => {
               setAvatarUrl(url);
               setAvatarAssetId(assetId);
-              console.log('[ProfileSection] Avatar updated:', { url, assetId });
               loadProfile();
             }}
           />
@@ -292,26 +301,9 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                 <CopyButton 
                   text={alias}
                   disabled={!alias || alias.length < 3}
-                  title="Copiar alias"
+                  title="Copiar"
                   size="sm"
                   className="ml-2"
-                  debug={process.env.NODE_ENV === 'development'}
-                  onError={(error) => {
-                    console.error('[ProfileSection] Error al copiar alias:', {
-                      error,
-                      message: error.message,
-                      stack: error.stack,
-                      alias: alias,
-                      aliasLength: alias?.length || 0
-                    });
-                    // Opcional: Mostrar toast al usuario
-                    // toast.error('No se pudo copiar el alias');
-                  }}
-                  onSuccess={() => {
-                    console.log('[ProfileSection] Alias copiado exitosamente');
-                    // Opcional: Mostrar confirmación al usuario
-                    // toast.success('Alias copiado');
-                  }}
                 />
               </div>
             </div>
@@ -326,9 +318,6 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                 {aliasMessage}
               </p>
             )}
-            <p className="text-[11px] text-muted">
-              Este será tu alias público. Las personas podrán usarlo para encontrarte.
-            </p>
           </div>
 
           {/* Display Name */}
@@ -351,7 +340,51 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             />
           </div>
 
-          {/* Bio / Presentación (FC-801) */}
+          {/* Regional Settings Card */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-muted uppercase tracking-widest">Configuración Regional (SSOT)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-primary">País</label>
+                <select 
+                  value={country} 
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full bg-surface border border-subtle rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
+                >
+                  <option value="">Seleccionar país...</option>
+                  <option value="AR">Argentina</option>
+                  <option value="ES">España</option>
+                  <option value="MX">México</option>
+                  <option value="CO">Colombia</option>
+                  <option value="US">Estados Unidos</option>
+                  <option value="CL">Chile</option>
+                  <option value="UY">Uruguay</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-primary">Zona Horaria</label>
+                <select 
+                  value={timezone} 
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full bg-surface border border-subtle rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
+                >
+                  <option value="">Seleccionar zona...</option>
+                  <option value="America/Argentina/Buenos_Aires">Buenos Aires (GMT-3)</option>
+                  <option value="Europe/Madrid">Madrid (GMT+1)</option>
+                  <option value="America/Mexico_City">Ciudad de México (GMT-6)</option>
+                  <option value="America/Bogota">Bogotá (GMT-5)</option>
+                  <option value="America/Santiago">Santiago (GMT-3)</option>
+                  <option value="America/Montevideo">Montevideo (GMT-3)</option>
+                  <option value="UTC">UTC / Greenwich</option>
+                </select>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted leading-relaxed">
+              * Estos valores son la <strong>Fuente Única de Verdad</strong> para todos tus horarios y procesos automáticos.
+            </p>
+          </div>
+
+          {/* Bio */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-primary">Presentación</label>
@@ -366,90 +399,94 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             <Textarea
               value={bio}
               onChange={(e) => setBio(e.target.value.slice(0, 150))}
-              placeholder="Esta presentación la verán las personas que visiten tu perfil"
+              placeholder="Descripción pública..."
               rows={3}
               maxLength={150}
               helperText={`${bio.length}/150`}
             />
           </div>
 
-          {/* Business Toggle (FC-806) */}
-          <Card variant="bordered" className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Building2 size={20} className="text-secondary" />
-                <div>
-                  <div className="text-primary font-medium">Cuenta de negocio</div>
-                  <div className="text-sm text-muted">Activa funciones empresariales</div>
-                </div>
-              </div>
-              <Switch
-                checked={isBusinessEnabled}
-                onCheckedChange={setIsBusinessEnabled}
-              />
-            </div>
-            {isBusinessEnabled && (
-              <div className="mt-3 pt-3 border-t border-subtle">
-                <a
-                  href="#accounts"
-                  className="text-sm text-accent hover:underline"
-                >
-                  Ir a configuración de cuentas →
-                </a>
-              </div>
-            )}
-          </Card>
-
-          {/* AI Context Editor (FC-803) - Only visible if authorized */}
+          {/* AI Context Editor */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-primary flex items-center gap-2">
-                Contexto para la IA
-              </label>
+              <label className="text-sm font-medium text-primary">Contexto privado para IA</label>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 mr-2">
-                  <button
-                    onClick={handleCopyContext}
-                    className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
-                    title="Copiar"
-                  >
-                    <Copy size={14} />
-                  </button>
-                  <button
-                    onClick={handleDownloadContext}
-                    className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
-                    title="Descargar"
-                  >
-                    <Download size={14} />
-                  </button>
-                  <button
-                    onClick={handleOpenExpandedEditor}
-                    className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded transition-colors"
-                    title="Expandir editor"
-                  >
-                    <Maximize2 size={14} />
-                  </button>
+                  <button onClick={handleCopyContext} className="p-1.5 text-muted hover:text-primary rounded"><Copy size={14} /></button>
+                  <button onClick={handleOpenExpandedEditor} className="p-1.5 text-muted hover:text-primary rounded"><Maximize2 size={14} /></button>
                 </div>
                 <div className="h-4 w-px bg-subtle mx-1" />
                 <div className="flex items-center gap-2 ml-1">
                   <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
-                  <Switch
-                    checked={aiIncludePrivateContext}
-                    onCheckedChange={setAiIncludePrivateContext}
-                  />
+                  <Switch checked={aiIncludePrivateContext} onCheckedChange={setAiIncludePrivateContext} />
                 </div>
               </div>
             </div>
-
             <Textarea
               value={privateContext}
               onChange={(e) => setPrivateContext(e.target.value.slice(0, 5000))}
-              placeholder="Esta información no la verán las personas que visiten tu perfil. Es el contexto que usará la IA..."
-              rows={6}
+              placeholder="Este contexto ayuda a la IA a entenderte mejor..."
+              rows={4}
               maxLength={5000}
               className="font-mono text-sm"
-              helperText={`${privateContext.split('\n').length} líneas • ~${estimateTokens(privateContext)} tokens • ${privateContext.length}/5000`}
+              helperText={`~${estimateTokens(privateContext)} tokens`}
             />
+          </div>
+
+          {/* AI Locations Gated Presence */}
+          <div className="space-y-3">
+            <Card variant="bordered" className={`p-4 border-accent/20 transition-all duration-300 ${aiIncludeLocations ? 'bg-accent/5' : 'bg-hover/20 grayscale'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${aiIncludeLocations ? 'bg-accent/20 text-accent' : 'bg-subtle text-muted'}`}>
+                    <MapPin size={16} />
+                  </div>
+                  <div>
+                    <div className="text-primary font-medium text-sm">Sedes Físicas Autorizadas</div>
+                    <div className="text-[11px] text-muted">¿La IA puede mencionar tus locales?</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                  <Switch
+                    checked={aiIncludeLocations}
+                    onCheckedChange={setAiIncludeLocations}
+                  />
+                </div>
+              </div>
+
+              {/* Real-time Authorized List */}
+              {aiIncludeLocations && (
+                <div className="mt-4 space-y-2 animate-in slide-in-from-top-2 duration-300">
+                  <div className="h-px bg-accent/10 mb-3" />
+                  {isLocationsLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 size={16} className="animate-spin text-accent" />
+                    </div>
+                  ) : locations.filter(l => l.status === 'active').length > 0 ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      {locations.filter(l => l.status === 'active').map((loc) => (
+                        <div key={loc.id} className="flex items-center justify-between p-2 rounded bg-background/50 border border-subtle hover:border-accent/30 transition-colors">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <div className="w-2 h-2 rounded-full bg-success animate-pulse flex-shrink-0" title="En tiempo real" />
+                            <div className="overflow-hidden">
+                              <p className="text-[11px] font-bold text-primary truncate">{loc.name}</p>
+                              <p className="text-[10px] text-muted truncate">{loc.address}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                            <Truck size={10} className="text-muted" />
+                            <span className="text-[9px] font-bold text-muted uppercase">{loc.serviceType}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-center text-muted py-2 italic">Sin sedes activas para mostrar.</p>
+                  )}
+                </div>
+              )}
+            </Card>
           </div>
 
           {/* AI Timestamp Toggle */}
@@ -457,11 +494,11 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-                  <span className="text-xs font-bold">⏰</span>
+                   <span className="text-xs font-bold">⏰</span>
                 </div>
                 <div>
-                  <div className="text-primary font-medium text-sm">Mostrar hora a la IA</div>
-                  <div className="text-[11px] text-muted">Permite que el asistente sepa la fecha y hora actual para responder mejor.</div>
+                  <div className="text-primary font-medium text-sm">Conciencia Temporal</div>
+                  <div className="text-[11px] text-muted">La IA sabrá qué hora es ahora.</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -483,20 +520,11 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
               className="w-full"
             >
               {isSaving ? (
-                <>
-                  <Loader2 size={16} className="animate-spin mr-2" />
-                  Guardando...
-                </>
+                <><Loader2 size={16} className="animate-spin mr-2" /> Guardando...</>
               ) : saveSuccess ? (
-                <>
-                  <Check size={16} className="mr-2" />
-                  Guardado
-                </>
+                <><Check size={16} className="mr-2" /> Cambios Guardados</>
               ) : (
-                <>
-                  <Save size={16} className="mr-2" />
-                  Guardar cambios
-                </>
+                <><Save size={16} className="mr-2" /> Guardar Perfil</>
               )}
             </Button>
           </div>

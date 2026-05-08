@@ -13,7 +13,9 @@ import { Check, X, Pencil, Loader2, BotMessageSquare, ChevronDown, ChevronUp, Se
 import clsx from 'clsx';
 import { useAuthStore } from '../../../store/authStore';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../../../utils/urls';
+
+const API_URL = getApiUrl();
 const POLL_INTERVAL_MS = 4000;
 
 interface Suggestion {

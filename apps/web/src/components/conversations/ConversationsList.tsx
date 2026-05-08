@@ -11,6 +11,9 @@ import { Avatar } from '../ui/Avatar';
 import { AIStatusHeader } from './AIStatusHeader';
 import { DoubleConfirmationDeleteButton } from '../ui/DoubleConfirmationDeleteButton';
 
+import { useAutomationStore } from '../../store/automationStore';
+import { ConversationRowAIStatus } from './ConversationRowAIStatus';
+
 import { useExtensions } from '../../hooks/useExtensions';
 import { useScroll } from '../../hooks/useScroll';
 import clsx from 'clsx';
@@ -24,7 +27,7 @@ export function ConversationsList() {
     selectedAccountId,
   } = useUIStore();
 
-
+  const fetchRules = useAutomationStore(state => state.fetchRules);
 
   // Check extensions
   const { installations } = useExtensions(selectedAccountId);
@@ -44,7 +47,7 @@ export function ConversationsList() {
 
   // Cargar conversaciones desde API real
   useEffect(() => {
-    async function loadConversations() {
+    async function loadData() {
       if (!selectedAccountId) {
         console.log('[ConversationsList] No account selected, skipping load');
         setConversations([]);
@@ -57,29 +60,29 @@ export function ConversationsList() {
       setError(null);
 
       try {
-        console.log('[ConversationsList] Loading conversations for account:', selectedAccountId);
-        // MA-203: Pasar accountId para filtrar por cuenta específica
-        const response = await api.getConversations(selectedAccountId);
-
-        if (response.success && response.data) {
-          console.log('[ConversationsList] Loaded conversations:', response.data.length);
-          setConversations(response.data);
-        } else {
-          console.error('[ConversationsList] API error:', response.error);
-          setError(response.error || 'Error al cargar conversaciones');
-          setConversations([]); // Limpiar cualquier dato previo
-        }
+        console.log('[ConversationsList] Loading data for account:', selectedAccountId);
+        // Fetch conversations and automation rules in parallel
+        await Promise.all([
+          api.getConversations(selectedAccountId).then(response => {
+            if (response.success && response.data) {
+              setConversations(response.data);
+            } else if (response.error) {
+              setError(response.error || 'Error al cargar conversaciones');
+            }
+          }),
+          fetchRules(selectedAccountId)
+        ]);
       } catch (error) {
         console.error('[ConversationsList] Exception:', error);
-        setError('Error al cargar conversaciones');
+        setError('Error al cargar datos');
         setConversations([]);
       } finally {
         setIsLoading(false);
       }
     }
 
-    loadConversations();
-  }, [selectedAccountId, setConversations]);
+    loadData();
+  }, [selectedAccountId, setConversations, fetchRules]);
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -266,6 +269,14 @@ export function ConversationsList() {
                       <div className="text-sm text-secondary truncate">
                         {conversation.lastMessageText || 'Sin mensajes'}
                       </div>
+                      {/* AI STATUS TOGGLE PER CONVERSATION */}
+                      {selectedAccountId && (
+                        <ConversationRowAIStatus
+                          accountId={selectedAccountId}
+                          relationshipId={conversation.relationshipId}
+                          isFluxCoreEnabled={isFluxCoreEnabled}
+                        />
+                      )}
                     </div>
                     {conversation.unreadCountA > 0 && (
                       <span className="ml-2 bg-accent text-inverse text-xs px-2 py-0.5 rounded-full">

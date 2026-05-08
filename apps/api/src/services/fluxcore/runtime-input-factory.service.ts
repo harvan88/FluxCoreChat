@@ -19,22 +19,35 @@ class RuntimeInputFactoryService {
     async build(params: BuildRuntimeInputParams): Promise<RuntimeInput> {
         const { accountId, conversationId, runtimeId, policyContext, runtimeConfig, conversationHistory, lastUserMessage } = params;
 
-        // Proyección de la Realidad Física: Hora Actual (Argentina)
+        // Proyección de la Realidad Física: Hora Actual según Zona Horaria de la Cuenta
         const now = new Date();
-        let nowArgentina: string;
+        let currentSystemTime: string;
         try {
-            nowArgentina = new Intl.DateTimeFormat('sv-SE', {
-                timeZone: 'America/Argentina/Buenos_Aires',
+            // Obtenemos la zona horaria de la cuenta, con fallback a UTC si no está configurada
+            const accountTimezone = (policyContext.resolvedBusinessProfile as any).timezone || 'UTC';
+            
+            const dateStr = new Intl.DateTimeFormat('es-AR', {
+                timeZone: accountTimezone,
                 year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
+                month: 'long',
+                day: 'numeric'
+            }).format(now);
+
+            const timeStr = new Intl.DateTimeFormat('es-AR', {
+                timeZone: accountTimezone,
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
+                hour12: false
             }).format(now);
+            
+            const weekday = new Intl.DateTimeFormat('es-AR', {
+                timeZone: accountTimezone,
+                weekday: 'long'
+            }).format(now);
+            
+            currentSystemTime = `Hoy es ${weekday}, ${dateStr}. La hora local actual en la zona de la cuenta es ${timeStr}.`;
         } catch (_err) {
-            nowArgentina = now.toISOString();
+            currentSystemTime = now.toISOString();
         }
 
         const authorizedContext: AuthorizedRuntimeContext = {
@@ -45,7 +58,7 @@ class RuntimeInputFactoryService {
             contactRules: policyContext.contactRules,
             authorizedTemplates: policyContext.authorizedTemplates,
             instructions: runtimeConfig.instructions,
-            systemClock: policyContext.resolvedBusinessProfile.aiIncludeTimestamp !== false ? nowArgentina : undefined,
+            systemClock: policyContext.resolvedBusinessProfile.aiIncludeTimestamp !== false ? currentSystemTime : undefined,
             responder: {
                 runtimeId,
                 assistantId: runtimeConfig.assistantId,

@@ -25,7 +25,7 @@
   --bg-active: #2a2a2a;
   
   /* Bordes - Sutiles, bajo contraste */
-  --border-subtle: #1f1f1f;
+  --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: #2a2a2a;
   --border-strong: #3a3a3a;
   
@@ -79,7 +79,7 @@
   --bg-active: #e0e0e0;
   
   /* Bordes */
-  --border-subtle: #f0f0f0;
+  --border-subtle: rgba(0, 0, 0, 0.05);
   --border-default: #e5e5e5;
   --border-strong: #d4d4d4;
   
@@ -215,6 +215,39 @@ body {
 .bg-color-warning-muted { background-color: var(--color-warning-muted); }
 .bg-color-error-muted { background-color: var(--color-error-muted); }
 .bg-color-info-muted { background-color: var(--color-info-muted); }
+
+/* ============================================================================
+   LAYOUT UTILITIES - Sistema Canónico
+   Usar SOLO estas clases para layout, NO Tailwind directos
+   ============================================================================ */
+
+/* Dimensiones */
+.h-full { height: 100%; }
+.w-full { width: 100%; }
+.max-w-4xl { max-width: 56rem; }
+.max-w-2xl { max-width: 42rem; }
+
+/* Overflow */
+.overflow-y-auto { overflow-y: auto; }
+.overflow-hidden { overflow: hidden; }
+
+/* Posicionamiento */
+.mx-auto { margin-left: auto; margin-right: auto; }
+.text-center { text-align: center; }
+
+/* Bordes */
+.border-dashed { border-style: dashed; }
+.border-2 { border-width: 2px; }
+
+/* Display */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-4 { gap: 1rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-2 { gap: 0.5rem; }
 
 /* ============================================================================
    LEGACY COMPATIBILITY - Mapeo de clases antiguas a nuevas

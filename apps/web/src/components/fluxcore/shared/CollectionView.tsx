@@ -14,10 +14,10 @@
  * opacity transitions, and the canonical DoubleConfirmationDeleteButton.
  */
 
-import { type ReactNode, type ElementType } from 'react';
-import { Plus } from 'lucide-react';
+import { type ReactNode, type ElementType, useState } from 'react';
+import { Plus, MoreVertical } from 'lucide-react';
 import clsx from 'clsx';
-import { Button } from '../../ui';
+import { Button, ViewHeader, Table, ActionSheet } from '../../ui';
 import { EmptyState } from './EmptyState';
 import { LoadingState } from './LoadingState';
 
@@ -44,9 +44,9 @@ export interface CollectionViewProps<T> {
   /** Collection title shown in the header */
   title: string;
   /** Label for the create button */
-  createLabel: string;
+  createLabel?: string;
   /** Callback when the create button is clicked */
-  onCreate: () => void;
+  onCreate?: () => void;
   /** Data array */
   data: T[];
   /** Unique key extractor per row */
@@ -74,6 +74,20 @@ export interface CollectionViewProps<T> {
   className?: string;
   /** Optional: override the create button variant */
   createVariant?: 'primary' | 'secondary';
+  /** Optional: Custom mobile item renderer */
+  renderMobileItem?: (row: T) => ReactNode;
+  /** Optional: Actions for the ActionSheet (mobile only) */
+  mobileActions?: (row: T) => Array<{
+    id: string;
+    label: string;
+    icon?: any;
+    onClick: () => void;
+    variant?: 'default' | 'danger';
+  }>;
+  /** Optional: Extra actions to show in the header */
+  headerActions?: ReactNode;
+  /** Optional: Filter bar to show between header and content */
+  filterBar?: ReactNode;
 }
 
 // ─── Responsive class helpers ───────────────────────────────────────────────
@@ -101,18 +115,24 @@ export function CollectionView<T>({
   renderMobileActions,
   className,
   createVariant = 'primary',
+  renderMobileItem,
+  mobileActions,
+  headerActions,
+  filterBar,
 }: CollectionViewProps<T>) {
+  const [activeActionSheetRow, setActiveActionSheetRow] = useState<T | null>(null);
+
   // ── Loading ─────────────────────────────────────────────────────────────
   if (loading && data.length === 0) {
     return (
       <div className={clsx('h-full flex flex-col', className)}>
-        <Header
+        <ViewHeader
           icon={Icon}
           title={title}
           count={0}
-          createLabel={createLabel}
-          onCreate={onCreate}
-          createVariant={createVariant}
+          actionLabel={createLabel}
+          onAction={onCreate}
+          actionVariant={createVariant}
         />
         <div className="flex-1 overflow-auto p-6">
           <LoadingState message={`Cargando ${title.toLowerCase()}...`} />
@@ -125,13 +145,13 @@ export function CollectionView<T>({
   if (!loading && data.length === 0) {
     return (
       <div className={clsx('h-full flex flex-col', className)}>
-        <Header
+        <ViewHeader
           icon={Icon}
           title={title}
           count={0}
-          createLabel={createLabel}
-          onCreate={onCreate}
-          createVariant={createVariant}
+          actionLabel={createLabel}
+          onAction={onCreate}
+          actionVariant={createVariant}
         />
         <div className="flex-1 overflow-auto p-6">
           <EmptyState
@@ -149,114 +169,114 @@ export function CollectionView<T>({
   // ── Table ───────────────────────────────────────────────────────────────
   return (
     <div className={clsx('h-full flex flex-col', className)}>
-      <Header
+      <ViewHeader
         icon={Icon}
         title={title}
         count={data.length}
         createLabel={createLabel}
         onCreate={onCreate}
         createVariant={createVariant}
-      />
+      >
+        {headerActions}
+      </ViewHeader>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="bg-surface rounded-lg border border-subtle">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-subtle">
-                {columns.map((col) => (
-                  <th
-                    key={col.id}
-                    className={clsx(
-                      'px-4 py-3 text-left text-xs font-medium text-muted uppercase',
-                      hideBelowClass(col.hideBelow),
-                    )}
-                    style={col.width ? { width: col.width } : undefined}
-                  >
-                    {col.header}
-                  </th>
-                ))}
-                {renderActions && (
-                  <th className="px-4 py-3 sticky right-0 bg-surface" />
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row) => {
-                const key = getRowKey(row);
-                return (
-                  <tr
-                    key={key}
-                    className={clsx(
-                      'group border-b border-subtle last:border-b-0 hover:bg-hover transition-colors',
-                      onRowClick && 'cursor-pointer',
-                    )}
-                    onClick={() => onRowClick?.(row)}
-                  >
-                    {columns.map((col, colIdx) => (
-                      <td
-                        key={col.id}
-                        className={clsx(
-                          'px-4 py-3',
-                          hideBelowClass(col.hideBelow),
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">{col.accessor(row)}</div>
-                          {/* Mobile actions — only inside the first column */}
-                          {colIdx === 0 && renderMobileActions && (
-                            <div className="flex items-center gap-1 md:hidden">
-                              {renderMobileActions(row)}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    ))}
-                    {renderActions && (
-                      <td className="px-4 py-3 hidden md:table-cell sticky right-0 bg-surface group-hover:bg-hover">
-                        <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                          {renderActions(row)}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {filterBar}
+
+      {/* VISTA DESKTOP: TABLA */}
+      <div className="hidden md:block flex-1 overflow-auto p-6">
+        <div className="bg-surface rounded-xl border border-subtle overflow-hidden">
+          <Table<T>
+            data={data}
+            columns={[
+              ...columns.map(col => ({
+                id: col.id,
+                header: col.header,
+                accessor: (row: T) => (
+                  <div className="min-w-0">{col.accessor(row)}</div>
+                ),
+                width: col.width,
+                className: hideBelowClass(col.hideBelow),
+                sortable: true
+              })),
+              ...(renderActions ? [{
+                id: 'actions',
+                header: '',
+                accessor: (row: T) => (
+                  <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    {renderActions(row)}
+                  </div>
+                ),
+                sticky: 'right' as const,
+                className: 'hidden md:table-cell',
+                align: 'right' as const
+              }] : [])
+            ]}
+            getRowKey={getRowKey}
+            onRowClick={onRowClick}
+            loading={loading}
+            emptyMessage={emptyDescription}
+            hoverable={true}
+            showBorders={true}
+            stickyHeader={true}
+          />
         </div>
       </div>
-    </div>
-  );
-}
 
-// ─── Header sub-component ───────────────────────────────────────────────────
-
-interface HeaderProps {
-  icon: ElementType;
-  title: string;
-  count: number;
-  createLabel: string;
-  onCreate: () => void;
-  createVariant: 'primary' | 'secondary';
-}
-
-function Header({ icon: Icon, title, count, createLabel, onCreate, createVariant }: HeaderProps) {
-  return (
-    <div className="px-6 py-4 border-b border-subtle flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <Icon size={18} className="text-accent" />
-        <h2 className="text-lg font-semibold text-primary">{title}</h2>
-        {count > 0 && (
-          <span className="text-xs text-muted">({count})</span>
-        )}
+      {/* VISTA MOBILE: LISTA */}
+      <div className="md:hidden flex-1 overflow-y-auto divide-y divide-subtle/10 pb-20">
+        {data.map((row) => (
+          <div key={getRowKey(row)} className="active:bg-hover transition-colors">
+            {renderMobileItem ? (
+              renderMobileItem(row)
+            ) : (
+              <div 
+                className="flex items-center gap-4 p-4"
+                onClick={() => onRowClick?.(row)}
+              >
+                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent flex-shrink-0">
+                  <Icon size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-primary truncate">
+                    {/* Default to first column content */}
+                    {columns[0]?.accessor(row)}
+                  </div>
+                  {columns[1] && (
+                    <div className="text-xs text-secondary truncate mt-0.5">
+                      {columns[1].accessor(row)}
+                    </div>
+                  )}
+                </div>
+                {mobileActions && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveActionSheetRow(row);
+                    }}
+                    className="p-2 text-muted active:text-primary transition-colors"
+                  >
+                    <MoreVertical size={20} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
-      <Button size="sm" variant={createVariant} onClick={onCreate}>
-        <Plus size={16} className="mr-1" />
-        {createLabel}
-      </Button>
+
+      {/* MOBILE ACTION SHEET */}
+      {mobileActions && activeActionSheetRow && (
+        <ActionSheet
+          isOpen={!!activeActionSheetRow}
+          onClose={() => setActiveActionSheetRow(null)}
+          title="Opciones"
+          items={mobileActions(activeActionSheetRow)}
+        />
+      )}
     </div>
   );
 }
+
 
 // ─── Re-exports for convenience ─────────────────────────────────────────────
 

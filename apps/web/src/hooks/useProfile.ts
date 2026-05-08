@@ -9,6 +9,14 @@ import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import type { Account } from '../types';
 
+export type SocialLinks = Record<string, { value: string; aiEnabled: boolean; label?: string }>;
+
+export interface BrandColors {
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+}
+
 export interface ProfileData {
   displayName: string;
   bio: string;
@@ -18,9 +26,14 @@ export interface ProfileData {
   aiIncludeBio: boolean;
   aiIncludePrivateContext: boolean;
   aiIncludeTimestamp: boolean;
+  aiIncludeSocialLinks: boolean;
   accountType: 'personal' | 'business';
   avatarUrl?: string;
   avatarAssetId?: string;
+  country?: string | null;
+  timezone?: string | null;
+  socialLinks: SocialLinks;
+  brandColors: BrandColors;
   profile: {
     bio?: string;
     contact?: {
@@ -103,8 +116,13 @@ export function useProfile(): UseProfileReturn {
           aiIncludeBio: targetAccount.aiIncludeBio ?? true,
           aiIncludePrivateContext: targetAccount.aiIncludePrivateContext ?? true,
           aiIncludeTimestamp: targetAccount.aiIncludeTimestamp ?? true,
+          aiIncludeSocialLinks: (targetAccount as any).aiIncludeSocialLinks ?? true,
           accountType: targetAccount.accountType as 'personal' | 'business',
           avatarUrl: targetAccount.profile?.avatarUrl,
+          country: targetAccount.country,
+          timezone: targetAccount.timezone,
+          socialLinks: (targetAccount as any).socialLinks || {},
+          brandColors: (targetAccount as any).brandColors || {},
           profile: targetAccount.profile || {},
         };
 
@@ -158,11 +176,31 @@ export function useProfile(): UseProfileReturn {
         updateData.aiIncludeTimestamp = data.aiIncludeTimestamp;
       }
 
+      if (data.aiIncludeSocialLinks !== undefined) {
+        (updateData as any).aiIncludeSocialLinks = data.aiIncludeSocialLinks;
+      }
+
+      if (data.socialLinks !== undefined) {
+        (updateData as any).socialLinks = data.socialLinks;
+      }
+
+      if (data.brandColors !== undefined) {
+        (updateData as any).brandColors = data.brandColors;
+      }
+
       if (data.avatarAssetId !== undefined) {
         // Solo enviar avatarAssetId si es un UUID válido
         if (data.avatarAssetId && data.avatarAssetId !== '' && data.avatarAssetId !== 'undefined') {
           updateData.avatarAssetId = data.avatarAssetId;
         }
+      }
+      
+      if (data.country !== undefined) {
+        updateData.country = data.country;
+      }
+      
+      if (data.timezone !== undefined) {
+        updateData.timezone = data.timezone;
       }
 
       if ((data as any).alias !== undefined) {
@@ -186,6 +224,12 @@ export function useProfile(): UseProfileReturn {
         setAccount(response.data);
         const { avatarUrl: _ignoredAvatarUrl, ...dataWithoutAvatarUrl } = data;
         setProfile(prev => (prev ? { ...prev, ...dataWithoutAvatarUrl } : null));
+        
+        // 🔥 SYNC: Actualizar stores globales
+        useUIStore.getState().updateAccount(account.id, response.data);
+        const { useAccountStore } = await import('../store/accountStore');
+        useAccountStore.getState().updateAccountState(account.id, response.data);
+        
         return true;
       } else {
         setError(response.error || 'Error al guardar');

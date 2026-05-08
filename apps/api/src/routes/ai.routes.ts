@@ -45,8 +45,9 @@ export const aiRoutes = new Elysia({ prefix: '/ai' })
         },
       };
     } catch (error: any) {
+      console.error('[AI_STATUS_ERROR]', error);
       set.status = 500;
-      return { success: false, message: error.message };
+      return { success: false, message: error.message, stack: error.stack };
     }
   }, {
     query: t.Object({

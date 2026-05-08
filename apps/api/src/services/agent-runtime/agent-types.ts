@@ -94,7 +94,7 @@ function resolveInputs(
   if (!inputs) return {};
   const ctx = bus.toResolutionContext();
   const resolved: Record<string, any> = {};
-  for (const [key, template] of Object.entries(inputs)) {
+  for (const [key, template] of Object.entries(inputs || {})) {
     resolved[key] = resolveTemplate(template, ctx);
   }
   return resolved;
@@ -126,7 +126,7 @@ export class LLMAgent implements AgentExecutor {
     const inputs = resolveInputs(step.inputs, bus);
 
     // Build user message from resolved inputs
-    const inputText = Object.entries(inputs)
+    const inputText = Object.entries(inputs || {})
       .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
       .join('\n');
 
@@ -295,7 +295,7 @@ export class ToolAgent implements AgentExecutor {
 
     // Resolve template values in params
     const ctx = bus.toResolutionContext();
-    for (const [k, v] of Object.entries(params)) {
+    for (const [k, v] of Object.entries(params || {})) {
       if (typeof v === 'string') {
         params[k] = resolveTemplate(v, ctx);
       }
@@ -384,7 +384,7 @@ export class RouterAgent implements AgentExecutor {
     if (violation) return { output: null, error: violation.message };
 
     const inputs = resolveInputs(step.inputs, bus);
-    const inputText = Object.entries(inputs)
+    const inputText = Object.entries(inputs || {})
       .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
       .join('\n');
 

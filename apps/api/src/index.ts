@@ -20,6 +20,7 @@ import { adaptersRoutes } from './routes/adapters.routes';
 import { workspacesRoutes } from './routes/workspaces.routes';
 import { automationRoutes } from './routes/automation.routes';
 import { templatesRoutes } from './routes/templates.routes';
+import { locationsRoutes } from './routes/locations.routes';
 import { fluxiRoutes } from './routes/fluxcore/works.routes'; // WES-180
 import { definitionsRoutes } from './routes/fluxcore/definitions.routes'; // WES-Studio
 import { messageCore } from './core/message-core';
@@ -91,6 +92,7 @@ const app = new Elysia()
   .use(workspacesRoutes)
   .use(automationRoutes)
   .use(templatesRoutes)
+  .use(locationsRoutes)
   .group('/fluxcore', app => app
     .use(fluxiRoutes)
     .use(definitionsRoutes)
