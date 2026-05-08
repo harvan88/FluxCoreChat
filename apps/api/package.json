@@ -4,12 +4,12 @@
   "description": "FluxCore API - Backend con Elysia",
   "type": "module",
   "scripts": {
-    "kernel:dev": "bun --env-file ../../.env --watch src/kernel-runtime.ts",
-    "api:dev": "bun --env-file ../../.env --watch src/server.ts",
+    "kernel:dev": "FLUXCORE_ROLE=worker bun --env-file ../../.env --watch src/kernel-runtime.ts",
+    "api:dev": "FLUXCORE_ROLE=api bun --env-file ../../.env --watch src/server.ts",
     "dev": "bun run api:dev",
     "build": "bun build src/server.ts --outdir dist --target bun",
-    "start": "bun run dist/server.js",
-    "kernel:start": "bun --env-file ../../.env src/kernel-runtime.ts",
+    "start": "FLUXCORE_ROLE=api bun run dist/server.js",
+    "kernel:start": "FLUXCORE_ROLE=worker bun --env-file ../../.env src/kernel-runtime.ts",
     "lint": "tsc --noEmit -p tsconfig.lint.json",
     "clean": "rm -rf dist"
   },
@@ -29,9 +29,11 @@
     "elysia": "0.8.17",
     "gray-matter": "^4.0.3",
     "ioredis": "^5.4.2",
+    "luxon": "^3.7.2",
     "openai": "^6.16.0"
   },
   "devDependencies": {
+    "@types/luxon": "^3.7.1",
     "@types/node": "^20.10.0",
     "bun-types": "^1.0.0",
     "chokidar": "^5.0.0",

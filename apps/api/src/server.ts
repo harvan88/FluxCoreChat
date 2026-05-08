@@ -35,6 +35,7 @@ import { accountAvatarRoutes } from './routes/account-avatar.routes';
 import { conversationsRoutes } from './routes/conversations.routes';
 import { contactsRoutes } from './routes/contacts.routes';
 import { automationRoutes } from './routes/automation.routes';
+import { locationsRoutes } from './routes/locations.routes';
 import { adaptersRoutes } from './routes/adapters.routes';
 import { extensionRoutes } from './routes/extensions.routes';
 import { aiRoutes } from './routes/ai.routes';
@@ -55,6 +56,7 @@ import { templatesRoutes } from './routes/templates.routes';
 import { ragConfigRoutes } from './routes/rag-config.routes';
 import { publicProfileRoutes } from './routes/public-profile.routes';
 import { actorsRoutes } from './routes/actors.routes';
+import { schedulesRoutes } from './routes/schedules.routes';
 import { documentationQualityRoutes } from './routes/fluxcore/documentation-quality.routes';
 import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
 import { automationScheduler } from './services/automation-scheduler.service';
@@ -152,7 +154,7 @@ async function resolveWebSocketIdentityFromToken(token: string, source: string):
 if (fs.existsSync(rootEnvPath)) {
   try {
     const parsed = parseDotenv(fs.readFileSync(rootEnvPath, 'utf8'));
-    for (const [key, value] of Object.entries(parsed)) {
+    for (const [key, value] of Object.entries(parsed || {})) {
       const current = process.env[key];
       if (typeof current !== 'string' || current.length === 0 || isPlaceholderEnvValue(current)) {
         process.env[key] = value;
@@ -163,7 +165,7 @@ if (fs.existsSync(rootEnvPath)) {
   }
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.FLUXCORE_PORT || process.env.PORT || 3001;
 
 // DiagnÃ³stico de variables de entorno para AI
 console.log('ðŸ”‘ Environment check:');
@@ -263,6 +265,7 @@ const elysiaApp = new Elysia()
   .use(documentationQualityRoutes)
   .use(contactsRoutes)
   .use(automationRoutes)
+  .use(locationsRoutes)
   .use(adaptersRoutes)
   .use(extensionRoutes)
   .use(aiRoutes)
@@ -275,6 +278,7 @@ const elysiaApp = new Elysia()
   .use(fluxcoreRuntimeRoutes)
   .use(fluxcoreRoutes)
   .use(kernelSessionsRoutes)
+  .use(schedulesRoutes)
   .group('/fluxcore', (app) => app.use(fluxcoreAgentRoutes))
   .use(testRoutes)
   .use(testChatCoreRoutes)
@@ -554,46 +558,60 @@ process.on('uncaughtException', (err) => {
   console.error('ðŸ”¥ UNCAUGHT EXCEPTION:', err);
 });
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('ðŸ”¥ UNHANDLED REJECTION:', reason);
+  console.error('🔥 UNHANDLED REJECTION:', reason);
 });
 
-console.log(`ðŸš€ FluxCore API running at http://localhost:${server.port}`);
-console.log(`ðŸ“š Swagger docs at http://localhost:${server.port}/swagger`);
-console.log(`ðŸ”Œ WebSocket at ws://localhost:${server.port}/ws`);
+console.log(`🚀 FluxCore API running at http://localhost:${server.port}`);
+console.log(`📚 Swagger docs at http://localhost:${server.port}/swagger`);
+console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
+
+const role = process.env.FLUXCORE_ROLE || 'standalone';
+const isWorker = role === 'worker' || role === 'standalone';
+
+console.log(`[Architecture] Node Role: ${role.toUpperCase()}`);
 
 // Start Kernel Runtime components with error protection
-(async () => {
-  try {
-    console.log('âš™ï¸ Starting Kernel components...');
+if (isWorker) {
+  (async () => {
+    try {
+      console.log('⚙️  Starting Kernel components...');
 
-    console.log('   - Kernel Dispatcher');
-    await kernelDispatcher.start();
+      console.log('   - Kernel Dispatcher');
+      await kernelDispatcher.start();
 
-    console.log('   - Projectors');
-    startProjectors();
+      console.log('   - Projectors');
+      startProjectors();
 
-    console.log('   - Kernel Bootstrap');
-    await bootstrapKernel();
+      console.log('   - Kernel Bootstrap');
+      await bootstrapKernel();
 
-    console.log('   - Services Initialization');
-    automationScheduler.init();
-    wesScheduler.init();
-    mediaOrchestrator.init();
+      console.log('   - Services Initialization');
+      automationScheduler.init();
+      wesScheduler.init();
+      mediaOrchestrator.init();
 
-    console.log('   - FluxCore v8.2 Runtime Registration');
-    runtimeGateway.register(asistentesLocalRuntime);
-    runtimeGateway.register(asistentesOpenAIRuntime);
-    runtimeGateway.register(fluxiRuntime);
+      console.log('   - FluxCore v8.2 Runtime Registration');
+      runtimeGateway.register(asistentesLocalRuntime);
+      runtimeGateway.register(asistentesOpenAIRuntime);
+      runtimeGateway.register(fluxiRuntime);
 
-    console.log('   - CognitionWorker (Always ON)');
-    cognitionWorker.start();
+      console.log('   - CognitionWorker (Always ON)');
+      cognitionWorker.start();
 
-    console.log('âœ… Kernel & Services started successfully');
-  } catch (error) {
-    console.error('âŒ CRITICAL ERROR during Kernel startup:', error);
-    console.error(error);
-  }
-})();
+      console.log('✅ Kernel & Services started successfully');
+    } catch (error) {
+      console.error('❌ CRITICAL ERROR during Kernel startup:', error);
+      console.error(error);
+    }
+  })();
+} else {
+  // En modo API solo necesitamos registrar los runtimes para que los endpoints los expongan,
+  // pero no iniciar los dispatchers o schedulers pesados.
+  console.log('   - FluxCore v8.2 Runtime Registration (API Mode)');
+  runtimeGateway.register(asistentesLocalRuntime);
+  runtimeGateway.register(asistentesOpenAIRuntime);
+  runtimeGateway.register(fluxiRuntime);
+}
 
 const cleanupTasks: Array<() => Promise<void> | void> = [];
 
@@ -601,26 +619,28 @@ const addCleanupTask = (task: () => Promise<void> | void) => {
   cleanupTasks.push(task);
 };
 
-const useAccountDeletionQueue = featureFlags.accountDeletionQueue;
+if (isWorker) {
+  const useAccountDeletionQueue = featureFlags.accountDeletionQueue;
 
-if (useAccountDeletionQueue) {
-  startAccountDeletionQueue();
-  addCleanupTask(async () => {
-    await stopAccountDeletionQueue();
-    await closeRedisConnection();
-  });
-  console.log('ðŸ§¹ AccountDeletion processing running on BullMQ queue');
-} else {
-  accountDeletionWorker.start();
-  addCleanupTask(() => accountDeletionWorker.stop());
-  addCleanupTask(() => wesScheduler.stop());
-  addCleanupTask(() => cognitionWorker.stop());
-  console.log('ðŸ§¹ AccountDeletion processing running on interval worker');
+  if (useAccountDeletionQueue) {
+    startAccountDeletionQueue();
+    addCleanupTask(async () => {
+      await stopAccountDeletionQueue();
+      await closeRedisConnection();
+    });
+    console.log('🧹 AccountDeletion processing running on BullMQ queue');
+  } else {
+    accountDeletionWorker.start();
+    addCleanupTask(() => accountDeletionWorker.stop());
+    addCleanupTask(() => wesScheduler.stop());
+    addCleanupTask(() => cognitionWorker.stop());
+    console.log('🧹 AccountDeletion processing running on interval worker');
+  }
+
+  // Iniciar ChatCore Outbox Worker para certificación en Kernel
+  chatCoreOutboxService.startWorker();
+  console.log('📮 ChatCore Outbox worker started for Kernel certification');
 }
-
-// Iniciar ChatCore Outbox Worker para certificaciÃ³n en Kernel
-chatCoreOutboxService.startWorker();
-console.log('ðŸ“® ChatCore Outbox worker started for Kernel certification');
 
 const handleShutdown = async (signal: NodeJS.Signals) => {
   console.log(`[shutdown] received ${signal}, cleaning up...`);

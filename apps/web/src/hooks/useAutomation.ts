@@ -6,7 +6,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getApiUrl } from '../utils/urls';
+const API_URL = getApiUrl();
 
 /**
  * Modos de automatización
@@ -68,6 +69,8 @@ export interface TriggerEvaluation {
   reason: string;
 }
 
+const getAuthToken = () => localStorage.getItem('fluxcore_token');
+
 /**
  * Hook para gestionar automatización
  */
@@ -76,8 +79,6 @@ export function useAutomation(accountId: string | null, relationshipId?: string)
   const [currentMode, setCurrentMode] = useState<AutomationMode>('off');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const getAuthToken = () => localStorage.getItem('fluxcore_token');
 
   // Cargar reglas de automatización
   const loadRules = useCallback(async () => {
@@ -320,7 +321,7 @@ export function useAutomation(accountId: string | null, relationshipId?: string)
     } finally {
       setIsLoading(false);
     }
-  }, [getAuthToken, loadRules]);
+  }, [loadRules]);
 
   const resetError = useCallback(() => setError(null), []);
 
@@ -373,7 +374,8 @@ export function useAutomation(accountId: string | null, relationshipId?: string)
 
     window.addEventListener(AUTOMATION_UPDATE_EVENT, handleUpdate);
     return () => window.removeEventListener(AUTOMATION_UPDATE_EVENT, handleUpdate);
-  }, [loadRules, loadMode, accountId, relationshipId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, relationshipId]);
 
   // Obtener regla global (sin relationship)
   const globalRule = rules.find(r => r.relationshipId === null);
