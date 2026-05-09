@@ -13,7 +13,7 @@ import { useLocations } from '../../hooks/useLocations';
 import type { LocationData as Location } from '../../hooks/useLocations';
 import { Button, Input } from '../ui';
 import { CollectionView, type CollectionColumn } from '../../components/fluxcore/shared/CollectionView';
-import { usePanelStore } from '../../store/panelStore';
+// import { usePanelStore } from '../../store/panelStore';
 
 function MapHandler({ center, onPanStart, onPanEnd }: { center: { lat: number; lng: number } | null; onPanStart: () => void; onPanEnd: () => void }) {
     const map = useMap();
@@ -29,14 +29,14 @@ function MapHandler({ center, onPanStart, onPanEnd }: { center: { lat: number; l
 }
 
 interface LocationSectionProps {
-  onBack: () => void;
+  onBack?: () => void;
   onOpenTab?: (id: string, title: string, data: any) => void;
   locationId?: string;
   tabId?: string;
   containerId?: string;
 }
 
-export function LocationSection({ onBack, onOpenTab, locationId, tabId, containerId }: LocationSectionProps) {
+export function LocationSection({ onBack, onOpenTab, locationId }: LocationSectionProps) {
   const {
     locations,
     isLoading,
@@ -47,7 +47,7 @@ export function LocationSection({ onBack, onOpenTab, locationId, tabId, containe
     generateNextSedeName,
   } = useLocations();
 
-  const { closeTab } = usePanelStore();
+//   const { closeTab } = usePanelStore();
   const googleKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -87,7 +87,7 @@ export function LocationSection({ onBack, onOpenTab, locationId, tabId, containe
 
   const handleFinish = () => {
     console.log('[DEBUG_LOCACIONES] ACCIÓN: Finalizando y cerrando pestaña');
-    onBack();
+    onBack?.();
   };
 
   const handleEdit = (location: Location) => {

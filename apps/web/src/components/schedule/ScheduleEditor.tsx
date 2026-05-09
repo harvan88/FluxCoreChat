@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Clock, 
   Trash2, 
-  Save, 
-  Plus,
-  Calendar
+  Plus
 } from 'lucide-react';
 import { Button, Input, ScheduleRowManager, RadioGroup } from '../ui';
 import { useSchedules } from '../../hooks/useSchedules';
@@ -18,7 +15,7 @@ interface WeeklyEditorProps {
   onCancel: () => void;
 }
 
-export function WeeklyEditor({ ownerId, initialStatus, timezone, onSave, onCancel }: WeeklyEditorProps) {
+export function WeeklyEditor({ ownerId, initialStatus, onSave, onCancel }: WeeklyEditorProps) {
   const { schedule, updateWeeklyStatus, updateIntervals } = useSchedules('location', ownerId);
   const { updateLocation } = useLocations();
   const [isSaving, setIsSaving] = useState(false);
@@ -202,7 +199,7 @@ export function SpecialEditor({ ownerId, onSave, onCancel }: SpecialEditorProps)
                     type="date" 
                     value={item.date?.split('T')[0]} 
                     onChange={e => setDrafts(prev => prev.map(d => d.id === item.id ? { ...d, date: e.target.value } : d))} 
-                    className="w-32"
+                    className="flex-1"
                   />
                 </div>
               )}
@@ -221,7 +218,7 @@ export function SpecialEditor({ ownerId, onSave, onCancel }: SpecialEditorProps)
                 return { ...d, intervals: newInts };
               }))}
             />
-            <Button variant="ghost" size="icon" className="absolute top-0 right-0 opacity-0 group-hover:opacity-100" onClick={async () => {
+            <Button variant="ghost" size="sm" className="absolute top-0 right-0 opacity-0 group-hover:opacity-100" onClick={async () => {
               if (item.id && !item.id.toString().startsWith('temp-')) await deleteSpecial(item.id);
               setDrafts(prev => prev.filter(d => d.id !== item.id));
             }}>

@@ -26,6 +26,7 @@ import { sql, eq, and, inArray, desc } from 'drizzle-orm';
 import type { FluxPolicyContext, RuntimeConfig } from '@fluxcore/db';
 import { assetPolicyService } from './asset-policy.service';
 import { automationController } from './automation-controller.service';
+import { templateService } from './template.service';
 
 
 class FluxPolicyContextService {
@@ -649,13 +650,13 @@ class FluxPolicyContextService {
         }
 
         // Return rich objects for PromptBuilder knowledge section
-        return combined.map(t => ({
+        return Promise.all(combined.map(async t => ({
             templateId: t.id,
             name: t.name,
             instructions: (t as any).aiUsageInstructions,
             variables: t.variables || [],
-            content: t.content
-        }));
+            content: await templateService.resolveSystemVariables(t.content, accountId)
+        })));
     }
 }
 

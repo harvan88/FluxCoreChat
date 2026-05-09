@@ -67,7 +67,7 @@ export function PublicProfileComposer({
                             void handleSend();
                         }
                     }}
-                    onClick={(e) => {
+                    onClick={() => {
                         console.log('[PublicProfileComposer] Click. canSend:', canSend);
                         if (canSend) {
                             void handleSend();

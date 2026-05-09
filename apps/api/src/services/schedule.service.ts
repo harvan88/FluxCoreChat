@@ -294,6 +294,119 @@ export class ScheduleService {
       await tx.delete(specialDates).where(and(eq(specialDates.ownerType, ownerType), eq(specialDates.ownerId, ownerId)));
     });
   }
+  /**
+   * Generates a human-readable summary of all schedules for an account.
+   * Useful for RAG template content.
+   */
+  /**
+   * Generates a human-readable summary of all schedules for an account.
+   * Optimized for human readability in RAG templates.
+   */
+  async getScheduleSummary(accountId: string): Promise<string> {
+    const locations = await db
+      .select({ 
+        id: accountLocations.id, 
+        name: accountLocations.name, 
+        address: accountLocations.address,
+        streetAddress: accountLocations.streetAddress,
+        neighborhood: accountLocations.neighborhood,
+        city: accountLocations.city,
+        postalCode: accountLocations.postalCode
+      })
+      .from(accountLocations)
+      .where(and(
+        eq(accountLocations.accountId, accountId),
+        eq(accountLocations.status, 'active')
+      ));
+
+    if (locations.length === 0) return 'No hay sedes activas configuradas.';
+
+    const summaries = await Promise.all(locations.map(async (loc) => {
+      const sched = await this.getSchedule('location', loc.id);
+      const daysMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      
+      // 1. Format Address
+      let addressLine = loc.streetAddress || loc.address;
+      const addressParts = [];
+      if (loc.neighborhood) addressParts.push(loc.neighborhood);
+      if (loc.city) addressParts.push(loc.city);
+      if (loc.postalCode) addressParts.push(`(${loc.postalCode})`);
+      
+      const fullAddressLine = addressParts.length > 0 
+        ? `${addressLine}, ${addressParts.join(', ')}`
+        : addressLine;
+
+      const lines = [
+        `Sede ${loc.name}`,
+        fullAddressLine || 'Dirección no disponible',
+        ''
+      ];
+
+      // 2. Weekly Schedule Grouping
+      lines.push('Horario habitual:');
+      const dailySchedules: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const day = sched.weekly.find(d => d.dayOfWeek === i);
+        if (day?.isClosed) {
+          dailySchedules.push('Cerrado');
+        } else {
+          const intervals = sched.intervals.filter(int => int.dayOfWeek === i);
+          dailySchedules.push(intervals.length > 0 
+            ? intervals.map(t => `${t.openTime.slice(0, 5)} a ${t.closeTime.slice(0, 5)}`).join(', ')
+            : 'Cerrado');
+        }
+      }
+
+      // Dynamic Grouping
+      const groups: { days: number[], schedule: string }[] = [];
+      for (let i = 0; i < 7; i++) {
+        const currentSchedule = dailySchedules[i];
+        const lastGroup = groups[groups.length - 1];
+        if (lastGroup && lastGroup.schedule === currentSchedule) {
+          lastGroup.days.push(i);
+        } else {
+          groups.push({ days: [i], schedule: currentSchedule });
+        }
+      }
+
+      groups.forEach(group => {
+        const dayNames = group.days.map(d => daysMap[d]);
+        let dayRange = '';
+        if (group.days.length === 1) {
+          dayRange = dayNames[0];
+        } else if (group.days.length === group.days[group.days.length - 1] - group.days[0] + 1) {
+          // Consecutive
+          dayRange = `${dayNames[0]} a ${dayNames[dayNames.length - 1]}`;
+        } else {
+          // Non-consecutive
+          dayRange = dayNames.join(', ');
+        }
+        lines.push(`${dayRange}: ${group.schedule}`);
+      });
+
+      // 3. Special Dates
+      if (sched.special.length > 0) {
+        lines.push('');
+        lines.push('Fecha especial:');
+        sched.special.forEach(s => {
+          let status = s.isClosed ? 'Cerrado' : 'Abierto';
+          if (!s.isClosed && s.intervals && s.intervals.length > 0) {
+            status = s.intervals.map(i => `${i.openTime.slice(0, 5)} a ${i.closeTime.slice(0, 5)}`).join(', ');
+          }
+          
+          // Format date to "Día Mes"
+          const dateObj = DateTime.fromISO(s.date);
+          const dateFormatted = dateObj.isValid ? dateObj.setLocale('es').toFormat('d \'de\' MMMM') : s.date;
+          
+          lines.push(`${s.label || 'Feriado'} (${dateFormatted}): ${status}`);
+        });
+      }
+
+      return lines.join('\n');
+    }));
+
+    return summaries.join('\n\n');
+  }
 }
 
 export const scheduleService = new ScheduleService();

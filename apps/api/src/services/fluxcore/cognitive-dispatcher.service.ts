@@ -238,6 +238,7 @@ class CognitiveDispatcherService {
 
             // 6. Start typing keepalive (before invoking runtime)
             const typingKeepAlive = this.startTypingKeepAlive(conversationId, accountId);
+            const messageId = String(params.lastSignalSeq || turnId);
 
             try {
                 // 7. Build RuntimeInput (Canon §4.5: complete pre-resolved context)
@@ -249,8 +250,6 @@ class CognitiveDispatcherService {
 
                 console.log(`[CognitiveDispatcher] Runtime selection: ${runtimeSelection.activeRuntimeId} → Runtime: ${runtimeId}`);
                 console.log(`[FluxPipeline] 🤖 ASSIST id=${enrichedRuntimeConfig.assistantId?.slice(0, 8) ?? 'DEFAULT'} name="${enrichedRuntimeConfig.assistantName ?? 'fallback'}" model=${enrichedRuntimeConfig.provider ?? 'groq'}/${enrichedRuntimeConfig.model ?? 'llama-3.1-8b-instant'} instr=${enrichedRuntimeConfig.instructions ? Math.round(enrichedRuntimeConfig.instructions.length / 4) + ' tkn' : 'NONE'} rag=${enrichedRuntimeConfig.vectorStoreIds?.length ?? 0}`);
-                // 🎯 Identidad de Turno (v10.0)
-                const messageId = String(params.lastSignalSeq || turnId);
 
                 const input: RuntimeInput = await runtimeInputFactoryService.build({
                     accountId,

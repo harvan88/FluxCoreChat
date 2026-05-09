@@ -42,6 +42,7 @@ export function ProfileChatBlock({
     const lastMessageRef = useRef<HTMLDivElement>(null);
 
     const isPublicMode = !accountId;
+    // const isAutomationBlocked = Boolean(aiBlockInfo);
     const isAuthenticatedMode = !!accountId;
 
     const {
@@ -62,12 +63,18 @@ export function ProfileChatBlock({
 
     const {
         upload: uploadAssetRequest,
+        status: assetUploadStatus,
+        progress: assetProgress,
         error: uploadError,
+        reset: resetUpload,
     } = useAssetUpload({
         accountId,
         allowedMimeTypes: SUPPORTED_MIME_TYPES,
         maxSizeBytes: 50 * 1024 * 1024,
     });
+
+    const isUploadingAttachment = assetUploadStatus === 'creating_session' || assetUploadStatus === 'uploading' || assetUploadStatus === 'committing';
+    const uploadProgress = assetProgress?.percentage ?? 0;
 
     const shouldUseRealtime = isAuthenticatedMode || (isPublicMode && !!publicSession?.publicToken && !!resolvedConversationId);
 
@@ -167,6 +174,15 @@ export function ProfileChatBlock({
         };
     }, [uploadAssetRequest, uploadError]);
 
+    const uploadAudioForComposer = useCallback(async ({ file }: { file: File }) => {
+        const asset = await uploadAssetRequest(file);
+        return {
+            success: !!asset,
+            asset: asset || undefined,
+            error: uploadError || undefined,
+        };
+    }, [uploadAssetRequest, uploadError]);
+
     // Hook para obtener dimensiones reales del viewport y altura del input
     const [viewportDimensions] = useState({
         height: window.innerHeight,
@@ -218,7 +234,10 @@ export function ProfileChatBlock({
                                 onSend={handleSend}
                                 accountId={accountId}
                                 uploadAsset={uploadAssetForComposer}
-                                uploadAudio={uploadAssetForComposer}
+                                uploadAudio={uploadAudioForComposer}
+                                isUploading={isUploadingAttachment}
+                                uploadProgress={uploadProgress}
+                                onClearUploadError={resetUpload}
                                 onUserActivity={() => {}}
                             />
                         </div>

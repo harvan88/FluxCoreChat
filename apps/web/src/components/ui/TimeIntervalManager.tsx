@@ -65,7 +65,7 @@ export function TimeIntervalManager({
       <div className="flex justify-end">
         <Button 
           variant="ghost" 
-          size="icon" 
+          size="sm" 
           onClick={handleAddInterval} 
           className="text-accent h-6 w-6"
           disabled={disabled}
@@ -78,4 +78,4 @@ export function TimeIntervalManager({
   );
 }
 
-export type { TimeIntervalManagerProps, TimeInterval };
+export type { TimeIntervalManagerProps };

@@ -187,11 +187,6 @@ export class TemplateSemanticService {
                 eq(fluxcoreTemplateSettings.authorizeForAI, true)
             ));
         
-        if (authorized.length > 0) {
-            // Auditoría JIT (Just-In-Time) previa a la búsqueda
-            await this.guaranteeSymmetry(authorized.map(a => a.templates), accountId);
-        }
-
         const { embedding } = await embeddingService.embedWithConfig(query, {
             provider: 'local',
             model: this.MODEL_NAME,

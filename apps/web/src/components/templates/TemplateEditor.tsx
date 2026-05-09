@@ -16,7 +16,6 @@ import {
   Check,
   AlertCircle,
   Hash,
-  Globe,
   Zap
 } from 'lucide-react';
 import { FluxCoreTemplateConfig } from '../fluxcore/templates/FluxCoreTemplateConfig';
@@ -121,7 +120,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
           authorizeForAI,
           allowAutomatedUse,
           isPublic,
-          triggerKeyword: triggerKeyword || null,
+          triggerKeyword: triggerKeyword || undefined,
           aiUsageInstructions: authorizeForAI ? aiUsageInstructions : undefined,
         };
 
@@ -487,7 +486,7 @@ export function TemplateEditor({ templateId, accountId, onClose }: TemplateEdito
                       placeholder="Ej: info, promo san carlos, agendar"
                       value={triggerKeyword}
                       onChange={(e) => setTriggerKeyword(e.target.value)}
-                      icon={<Hash size={16} />}
+                      leftIcon={<Hash size={16} />}
                       fullWidth
                     />
                     <p className="text-[10px] text-muted italic">

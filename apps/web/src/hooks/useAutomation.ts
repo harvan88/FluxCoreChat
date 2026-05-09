@@ -4,17 +4,17 @@
  * Gestiona el estado de automatización en el frontend.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 
-import { getApiUrl } from '../utils/urls';
-const API_URL = getApiUrl();
+// import { getApiUrl } from '../utils/urls';
+// const API_URL = getApiUrl();
 
 /**
  * Modos de automatización
  */
 export type AutomationMode = 'auto' | 'suggest' | 'off';
 
-const AUTOMATION_UPDATE_EVENT = 'fluxcore:automation-update';
+// const AUTOMATION_UPDATE_EVENT = 'fluxcore:automation-update';
 
 /**
  * Regla de automatización
@@ -69,7 +69,7 @@ export interface TriggerEvaluation {
   reason: string;
 }
 
-const getAuthToken = () => localStorage.getItem('fluxcore_token');
+// const getAuthToken = () => localStorage.getItem('fluxcore_token');
 
 import { useAutomationStore } from '../store/automationStore';
 
@@ -113,10 +113,10 @@ export function useAutomation(accountId: string | null, relationshipId?: string)
     loadMode,
     setRule,
     // Add stub for other methods to avoid breaking existing code if any
-    registerTrigger: async () => {},
-    deleteRule: async () => {},
+    registerTrigger: async (_payload: AutomationTrigger, _options?: { mode: AutomationMode }) => null as any,
+    deleteRule: async (_id: string) => {},
     evaluate: async () => null,
-    updateRule: async () => null,
+    updateRule: async (_id: string, _data: any) => null as any,
     resetError: () => {},
   };
 }

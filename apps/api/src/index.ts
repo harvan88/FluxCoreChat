@@ -103,15 +103,9 @@ async function initializeFluxCore() {
   try {
     console.log('[Bootstrap] 🚀 Starting FluxCore v8.2 Initialization...');
 
-    // 1. KERNEL (Physical Reality)
-    const { kernelDispatcher } = await import('./core/kernel-dispatcher');
-    kernelDispatcher.start();
-    console.log('[Bootstrap] 1/4 Kernel Dispatcher started');
-
-    // 2. PROJECTORS (Business Meaning)
-    const { startProjectors } = await import('./core/kernel/projector-runner');
-    startProjectors();
-    console.log('[Bootstrap] 2/4 Projectors started');
+    // 1 & 2: KERNEL & PROJECTORS (Physical Reality)
+    // 🚀 EXCLUSIVOS DEL KERNEL: Se han eliminado de la API para evitar duplicados.
+    // El proceso kernel-runtime.ts es ahora el único responsable de estos componentes.
 
     // 3. RUNTIME GATEWAY (Registry)
     const { runtimeGateway } = await import('./services/fluxcore/runtime-gateway.service');
@@ -127,9 +121,7 @@ async function initializeFluxCore() {
     console.log('[Bootstrap] 3/4 Runtime Gateway, Semantic Engine & Triggers initialized');
 
     // 4. COGNITION WORKER (The Heartbeat)
-    const { cognitionWorker } = await import('./workers/cognition-worker');
-    cognitionWorker.start();
-    console.log('[Bootstrap] 4/4 Cognition Worker activated');
+    // 🚀 EXCLUSIVO DEL KERNEL: Se ha eliminado de la API para evitar ejecuciones dobles de la IA.
 
     // ─── Legacy/Compatibility Layer ──────────────────────────────────────────
     const { wesScheduler } = await import('./services/wes-scheduler.service');

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
     Database, 
     Save, 
@@ -7,7 +7,6 @@ import {
     Wand2, 
     AlertCircle, 
     CheckCircle2, 
-    Search,
     ChevronRight,
     Terminal as TerminalIcon,
     Code2,
@@ -30,7 +29,7 @@ export function WESStudio({ accountId, definitionId }: { accountId: string, defi
     }, [accountId, definitionId]);
 
     const loadDefinitions = async (autoSelectId?: string) => {
-        const resp = await api.request<any[]>(`/fluxcore/definitions?accountId=${accountId}`);
+        const resp = await api.getDefinitions(accountId);
         if (resp.success) {
             const defs = resp.data || [];
             setDefinitions(defs);
@@ -61,10 +60,7 @@ export function WESStudio({ accountId, definitionId }: { accountId: string, defi
         setIsSaving(true);
         try {
             const parsed = JSON.parse(jsonContent);
-            const resp = await api.request(`/fluxcore/definitions/${selectedDef.id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ definitionJson: parsed })
-            });
+            const resp = await api.updateDefinition(selectedDef.id, accountId, parsed);
             if (resp.success) {
                 setStatus({ type: 'success', message: 'Definición actualizada correctamente' });
                 loadDefinitions();

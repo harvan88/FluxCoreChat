@@ -25,35 +25,28 @@ export class ChatCoreGatewayService {
      * Debe llamarse DESPUÉS de validar el token de usuario pero ANTES de cualquier efecto.
      */
     async certifyIngress(params: {
-        accountId: string; // The Business Account ID (must exist in accounts table)
-        userId?: string;   // The Authenticated User ID (optional, for audit)
+        accountId: string; 
+        userId?: string;   
         payload: any;
         meta: {
             ip?: string;
             userAgent?: string;
             clientTimestamp?: string;
             conversationId?: string;
-            requestId?: string; // Client-provided ID for idempotency
+            requestId?: string; 
         }
     }): Promise<{ accepted: boolean; signalId?: number; reason?: string }> {
         try {
-            console.log(`[ChatCoreGateway] 🔍 CERTIFY_INGRESS START ==================`);
-            console.log(`[ChatCoreGateway] 📥 INPUT PARAMS:`);
-            console.log(`  - accountId: ${params.accountId}`);
-            console.log(`  - userId: ${params.userId || '(not provided)'}`);
-            console.log(`  - payload: ${JSON.stringify(params.payload).substring(0, 200)}...`);
-            console.log(`  - meta: ${JSON.stringify(params.meta, null, 2)}`);
-
-            // 1. Construir Evidencia Cruda (lo que el sistema VIÓ)
+            // 1. Construir Evidencia Cruda
             const evidenceRaw = {
-                accountId: params.accountId, // Required for IdentityProjector context
+                accountId: params.accountId, 
                 content: params.payload,
                 context: {
                     conversationId: params.meta.conversationId,
-                    userId: params.userId || params.accountId, // Fallback to account if no user
+                    userId: params.userId || params.accountId, 
                 },
                 metadata: {
-                    ...params.meta, // 🔑 PROPAGAR TODO (incluyendo intercepted, triggerId)
+                    ...params.meta, 
                     ip: params.meta.ip,
                     userAgent: params.meta.userAgent,
                     clientTimestamp: params.meta.clientTimestamp,
@@ -61,10 +54,9 @@ export class ChatCoreGatewayService {
                 },
                 security: {
                     authMethod: 'bearer_token',
-                    scope: 'user' // TODO: Refine scope if needed
+                    scope: 'user' 
                 }
             };
-            console.log(`[ChatCoreGateway] 📋 evidenceRaw constructed: ${JSON.stringify(evidenceRaw, null, 2).substring(0, 300)}...`);
 
             // 2. Construir Evidence Struct
             const evidence: Evidence = {
@@ -77,60 +69,34 @@ export class ChatCoreGatewayService {
                     payload: params.payload,
                     meta: params.meta
                 }),
-                    entryPoint: 'api/messages', // Endpoint lógico
+                    entryPoint: 'api/messages', 
                 },
                 claimedOccurredAt: params.meta.clientTimestamp ? new Date(params.meta.clientTimestamp).toISOString() : new Date().toISOString(),
             };
             
-            // 🔍 DIAGNÓSTICO: Verificar tipos de evidence
-            console.log(`[ChatCoreGateway] � EVIDENCE TYPE CHECK:`);
-            console.log(`  - evidence.raw type:`, typeof evidence.raw);
-            console.log(`  - evidence.format type:`, typeof evidence.format, '=', evidence.format);
-            console.log(`  - evidence.provenance type:`, typeof evidence.provenance);
-            console.log(`  - evidence.provenance.driverId type:`, typeof evidence.provenance.driverId);
-            console.log(`  - evidence.provenance.externalId type:`, typeof evidence.provenance.externalId);
-            console.log(`  - evidence.claimedOccurredAt type:`, typeof evidence.claimedOccurredAt, '=', evidence.claimedOccurredAt);
-            console.log(`  - format: ${evidence.format}`);
-            console.log(`  - driverId: ${evidence.provenance.driverId}`);
-            console.log(`  - externalId: ${evidence.provenance.externalId}`);
-            console.log(`  - entryPoint: ${evidence.provenance.entryPoint}`);
-            console.log(`  - claimedOccurredAt: ${evidence.claimedOccurredAt}`);
-
-            // 3. Definir Actores (Namespace @fluxcore/internal para usuarios del sistema)
+            // 3. Definir Actores
             const actorRef = {
                 namespace: '@fluxcore/internal',
-                key: params.accountId // Identity is tied to the Account
+                key: params.accountId 
             };
-            console.log(`[ChatCoreGateway] 👤 Actor defined: namespace=${actorRef.namespace}, key=${actorRef.key}`);
 
             // 4. Construir Candidato a Señal
             const candidate: KernelCandidateSignal = {
                 factType: 'EXTERNAL_INPUT_OBSERVED',
-                source: actorRef,   // El origen es el usuario
-                subject: actorRef,  // El sujeto también es el usuario (auto-representado)
+                source: actorRef,   
+                subject: actorRef,  
                 evidence,
                 certifiedBy: {
                     adapterId: this.ADAPTER_ID,
                     adapterVersion: this.ADAPTER_VERSION,
-                    signature: '' // Se firma abajo
+                    signature: '' 
                 }
             };
-            console.log(`[ChatCoreGateway] 📤 KernelCandidateSignal constructed:`);
-            console.log(`  - factType: ${candidate.factType}`);
-            console.log(`  - source: ${JSON.stringify(candidate.source)}`);
-            console.log(`  - subject: ${JSON.stringify(candidate.subject)}`);
-            console.log(`  - adapterId: ${candidate.certifiedBy.adapterId}`);
-            console.log(`  - adapterVersion: ${candidate.certifiedBy.adapterVersion}`);
 
             // 5. Firmar Candidato
             candidate.certifiedBy.signature = this.signCandidate(candidate);
-            console.log(`[ChatCoreGateway] ✍️  Candidate signed: signature=${candidate.certifiedBy.signature.substring(0, 16)}...`);
 
-            console.log(`[ChatCoreGateway] ➡️  Calling kernel.ingestSignal()...`);
             const seq = await kernel.ingestSignal(candidate);
-
-            console.log(`[ChatCoreGateway] ✅ CERTIFY_INGRESS SUCCESS ==================`);
-            console.log(`[ChatCoreGateway] 👁️ Certified ingress from ${params.userId || params.accountId}. Signal #${seq}`);
 
             // 🎯 TELEMETRÍA (Fase 1): Ingreso Certificado
             try {
@@ -200,28 +166,25 @@ export class ChatCoreGatewayService {
 
     // Duplicado de Kernel.canonicalize para independencia (Adapter no debe importar internal Kernel logic si fuera remoto)
     private canonicalize(value: unknown): string {
-        console.log(`[ChatCoreGateway] 🔍 CANONICALIZE INPUT TYPE:`, typeof value);
-        console.log(`[ChatCoreGateway] 🔍 CANONICALIZE INPUT:`, value);
-        
-        if (value === null || typeof value !== 'object') {
-            const result = JSON.stringify(value);
-            console.log(`[ChatCoreGateway] 🔍 CANONICALIZE PRIMITIVE RESULT:`, result);
-            return result;
+        if (
+            value === null ||
+            typeof value !== 'object' ||
+            value instanceof Date
+        ) {
+            return JSON.stringify(value);
         }
     
         if (Array.isArray(value)) {
-            const result = '[' + value.map(v => this.canonicalize(v)).join(',') + ']';
-            console.log(`[ChatCoreGateway] 🔍 CANONICALIZE ARRAY RESULT:`, result);
-            return result;
+            return '[' + value.map(v => this.canonicalize(v)).join(',') + ']';
         }
     
-        const entries = Object.entries(value as Record<string, unknown>)
-            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    
-        const result = '{' + entries
-            .map(([key, val]) => JSON.stringify(key) + ':' + this.canonicalize(val))
-            .join(',') + '}';
-        console.log(`[ChatCoreGateway] 🔍 CANONICALIZE OBJECT RESULT:`, result);
+        const result = '{' +
+            Object.entries(value)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([key, val]) => JSON.stringify(key) + ':' + this.canonicalize(val))
+                .join(',') +
+            '}';
+
         return result;
     }
 
@@ -250,13 +213,6 @@ export class ChatCoreGatewayService {
         }
         
         try {
-            console.log(`[ChatCoreGateway] 🔍 CERTIFY_STATE_CHANGE START ==================`);
-            console.log(`[ChatCoreGateway] 📥 INPUT PARAMS:`);
-            console.log(`  - stateChange: ${params.stateChange}`);
-            console.log(`  - messageId: ${params.messageId}`);
-            console.log(`  - conversationId: ${params.conversationId}`);
-            console.log(`  - mutatedBy: ${params.overwrittenBy || params.editedBy}`);
-            
             const evidenceRaw = {
                 stateChange: params.stateChange,
                 messageId: params.messageId,
@@ -273,7 +229,7 @@ export class ChatCoreGatewayService {
                 raw: evidenceRaw,
                 format: 'json',
                 provenance: {
-                    driverId: this.DRIVER_ID, // ✅ Usar el driver_id del adapter
+                    driverId: this.DRIVER_ID, 
                     externalId: `${params.stateChange}-${params.messageId}-${Date.now()}`,
                     entryPoint: 'message-deletion.service'
                 }
@@ -283,7 +239,7 @@ export class ChatCoreGatewayService {
             const subjectRef = { namespace: '@chatcore/messages', key: params.messageId };
 
             const candidate: KernelCandidateSignal = {
-                factType: 'EXTERNAL_STATE_OBSERVED', // ✅ USAR TIPO EXISTENTE
+                factType: 'EXTERNAL_STATE_OBSERVED', 
                 source: sourceRef,
                 subject: subjectRef,
                 evidence,
@@ -296,14 +252,9 @@ export class ChatCoreGatewayService {
 
             // 5. Firmar Candidato
             candidate.certifiedBy.signature = this.signCandidate(candidate);
-            console.log(`[ChatCoreGateway] ✍️  Candidate signed: signature=${candidate.certifiedBy.signature.substring(0, 16)}...`);
 
-            // 6. Ingesta en Kernel (Soberanía)
-            console.log(`[ChatCoreGateway] ➡️  Calling kernel.ingestSignal()...`);
             const seq = await kernel.ingestSignal(candidate);
 
-            console.log(`[ChatCoreGateway] ✅ STATE_CHANGE CERTIFIED ==================`);
-            console.log(`[ChatCoreGateway] 👁️ State change certified: ${params.stateChange} Signal #${seq}`);
             return { accepted: true, signalId: seq };
 
         } catch (error: any) {

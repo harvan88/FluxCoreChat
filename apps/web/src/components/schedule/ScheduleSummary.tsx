@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Pencil, Calendar, Clock } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { Button } from '../ui';
 import type { ScheduleData } from '../../hooks/useSchedules';
 
@@ -51,7 +51,7 @@ export function WeeklySummary({ status, schedule, onEdit }: WeeklySummaryProps) 
         <h3 className="text-base font-semibold text-primary">
           Horario de atención
         </h3>
-        <Button variant="ghost" size="icon" onClick={onEdit} className="h-8 w-8 text-muted hover:text-accent">
+        <Button variant="ghost" size="sm" onClick={onEdit} className="h-8 w-8 text-muted hover:text-accent">
           <Pencil size={16} />
         </Button>
       </div>
@@ -93,7 +93,7 @@ export function SpecialSummary({ schedule, onEdit }: SpecialSummaryProps) {
         <h3 className="text-base font-semibold text-primary">
           Fechas especiales
         </h3>
-        <Button variant="ghost" size="icon" onClick={onEdit} className="h-8 w-8 text-muted hover:text-accent">
+        <Button variant="ghost" size="sm" onClick={onEdit} className="h-8 w-8 text-muted hover:text-accent">
           <Pencil size={16} />
         </Button>
       </div>

@@ -139,12 +139,12 @@ export const ROUTE_REGISTRY: readonly RouteDefinition[] = [
   // Herramientas
   { id: 'tools', pattern: '/herramientas', activity: 'tools' },
   { id: 'tools.templates', pattern: '/herramientas/plantillas', activity: 'tools',
-    tabType: 'template_panel', container: 'editor', defaultTitle: 'Plantillas',
-    defaultIcon: 'FileText', identityPrefix: 'template_panel',
+    tabType: 'template-panel', container: 'editor', defaultTitle: 'Plantillas',
+    defaultIcon: 'FileText', identityPrefix: 'template-panel',
     contextBuilder: 'extension', navLevel: 2 },
   { id: 'tools.detail', pattern: '/herramientas/:id', activity: 'tools',
-    tabType: 'template_editor', container: 'editor', defaultTitle: 'Plantilla',
-    defaultIcon: 'FileText', identityPrefix: 'template_editor',
+    tabType: 'template-editor', container: 'editor', defaultTitle: 'Plantilla',
+    defaultIcon: 'FileText', identityPrefix: 'template-editor',
     supportsMulti: true, contextBuilder: 'template', navLevel: 3 },
 
   // Extensiones

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Filter, SortAsc, SortDesc, FileText, Copy, Edit, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Template, TemplateFilters, TemplateSort, TemplateSortField } from './types';
@@ -8,7 +8,7 @@ import { CollectionView } from '../fluxcore/shared/CollectionView';
 
 interface TemplateListProps {
   templates: Template[];
-  selectedId?: string;
+  // selectedId?: string;
   filters: TemplateFilters;
   sort: TemplateSort;
   onFiltersChange: (filters: TemplateFilters) => void;
@@ -31,7 +31,7 @@ const SORT_OPTIONS: { value: TemplateSortField; label: string }[] = [
 
 export function TemplateList({
   templates,
-  selectedId,
+  // _selectedId,
   filters,
   sort,
   onFiltersChange,
@@ -183,7 +183,7 @@ export function TemplateList({
         <>
           <Button 
             variant="ghost" 
-            size="icon" 
+            size="sm" 
             onClick={(e) => { e.stopPropagation(); onDuplicate(t); }}
             title="Duplicar"
           >
@@ -191,7 +191,7 @@ export function TemplateList({
           </Button>
           <Button 
             variant="ghost" 
-            size="icon" 
+            size="sm" 
             onClick={(e) => { e.stopPropagation(); onEdit(t); }}
             title="Editar"
           >
@@ -199,7 +199,7 @@ export function TemplateList({
           </Button>
           <Button 
             variant="ghost" 
-            size="icon" 
+            size="sm" 
             className="text-error hover:bg-error/10"
             onClick={(e) => { e.stopPropagation(); onDelete(t); }}
             title="Eliminar"

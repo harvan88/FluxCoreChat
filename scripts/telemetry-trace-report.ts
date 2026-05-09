@@ -23,15 +23,15 @@ import { eq, desc, or } from 'drizzle-orm';
 import { promptBuilder } from '../apps/api/src/services/fluxcore/prompt-builder.service';
 
 // --- CONFIGURATION ---
-const API_URL = 'http://localhost:3000';
-const WS_URL = 'ws://localhost:3000/ws';
+const API_URL = 'http://localhost:3001';
+const WS_URL = 'ws://localhost:3001/ws';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 // IDs Provided by User
-const RECIPIENT_ACCOUNT_ID = '5f96c4c5-473b-4574-93ce-53f54225dd18'; // FluxCore Account
-const SENDER_ACCOUNT_ID = '65d340af-97ff-4c9b-85d2-b378badeacf4';    // Dr. Jones Account
-const SENDER_USER_ID = 'c7439d6a-7e46-4e84-a4d6-d73bea3cb5fe';      // Dr. Jones Identity
-const CONVERSATION_ID = 'eadb0912-127c-4738-af5e-18b0ecb52670';     // Conv Dr Jones -> Fluxi
+const RECIPIENT_ACCOUNT_ID = '65d340af-97ff-4c9b-85d2-b378badeacf4'; // Dr Jones (Assistant)
+const SENDER_ACCOUNT_ID = '65d340af-97ff-4c9b-85d2-b378badeacf4';    // Dr Jones (Registered)
+const SENDER_USER_ID = 'c7439d6a-7e46-4e84-a4d6-d73bea3cb5fe';      // Dr Jones Owner
+const CONVERSATION_ID = 'f0f0c12e-b2e2-4e60-9afc-5bc47fbf127e';     // Conv Real
 
 const messageText = process.argv.find(a => !a.startsWith('--') && a !== process.argv[0] && !a.includes('telemetry-trace-report.ts')) || 'Hola';
 const shouldClear = process.argv.includes('--clear') || process.argv.includes('-c');
@@ -76,6 +76,11 @@ async function main() {
         let triggered = false;
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data.toString());
+            console.log(`[WS DEBUG] Received: ${data.type}`);
+            
+            if (data.type === 'error') {
+                console.error(`[WS ERROR] ${data.message}`);
+            }
 
             if (data.type === 'subscribed_telemetry' && !triggered) {
                 triggered = true;
@@ -112,7 +117,9 @@ async function main() {
 
             if (data.type === 'telemetry:distributed_trace') {
                 const payload = data.payload;
-                const phaseNames = ['DEBUG_INPUT_CHECK', 'FASE_0_SIEVE', 'FASE_1_ROUTER', 'FASE_1_5_DETERMINISTIC_SHORTCUT', 'FASE_2_RAG', 'FASE_3_RESOLUTIVE_CALL', 'FASE_4_BODY_TRANSLATION', 'IA_RUNTIME_INVOCATION'];
+                const phaseNames = ['DEBUG_INPUT_CHECK', 'FASE_0_SIEVE', 'FASE_1_ROUTER', 'FASE_1_5_DETERMINISTIC_SHORTCUT', 'FASE_2_RAG', 'FASE_2.5_SOVEREIGNTY', 'FASE_3_RESOLUTIVE_CALL', 'FASE_4_BODY_TRANSLATION', 'IA_RUNTIME_INVOCATION'];
+
+                console.log(`[WS DEBUG] Distributed Trace received: ${payload.stepName} (${payload.stepStatus || 'N/A'})`);
 
                 if (phaseNames.includes(payload.stepName)) {
                     console.log(`🧠 Phase Captured: ${payload.stepName} (${payload.stepStatus || 'processing'})`);
@@ -243,6 +250,8 @@ async function generateReport(steps: any[], phases: Record<string, any>, aiData:
         'FASE_1_ROUTER': 'Fase 1: Intent Router (Ruteo)',
         'FASE_1_5_DETERMINISTIC_SHORTCUT': 'Fase 1.5: Deterministic Shortcut (Fast-Path)',
         'FASE_2_RAG': 'Fase 2: RAG Determinista (Contexto)',
+        'FASE_2.5_SOVEREIGNTY': 'Fase 2.5: Soberanía Temporal (Ontología)',
+        'FASE_3_RESOLUTIVE_CALL': 'Fase 3: Modo Resolutivo (IA)',
         'FASE_3_RESOLUTIVE_CALL': 'Fase 3: Modo Resolutivo (IA)',
         'FASE_4_BODY_TRANSLATION': 'Fase 4: Physical Translation (Output)'
     };

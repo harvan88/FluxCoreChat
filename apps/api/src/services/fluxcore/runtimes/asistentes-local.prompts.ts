@@ -47,3 +47,11 @@ ${context}
 
 === Fin del Contexto ===
 `.trim();
+
+export const FOLLOW_UP_SYSTEM_DIRECTIVES = `
+### Directiva de Seguimiento Híbrido
+Tu objetivo es generar un mensaje breve y empático que complemente la información técnica de las plantillas enviadas.
+- NO repitas la información que ya está en la plantilla.
+- Si la plantilla ya responde completamente, di exactamente: NO_FOLLOW_UP.
+- Mantén el tono del asistente.
+`.trim();

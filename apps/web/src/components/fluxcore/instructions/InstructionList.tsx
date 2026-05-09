@@ -1,5 +1,4 @@
-import { FileText, Share2, Download } from 'lucide-react';
-import { DoubleConfirmationDeleteButton } from '../../ui';
+import { FileText } from 'lucide-react';
 import type { Instruction } from '../../../types/fluxcore';
 import { formatDate, formatSize } from '../../../lib/fluxcore';
 import { CollectionView, StatusBadge, EntityActions } from '../shared';
@@ -71,17 +70,7 @@ export function InstructionList({ instructions, loading, onCreate, onSelect, onD
       loading={loading}
       onRowClick={onSelect}
       emptyDescription="Crea instrucciones del sistema para guiar a tus asistentes"
-      renderMobileActions={(row) => (
-        <>
-          <button className="p-1 hover:bg-elevated rounded" title="Compartir" onClick={(e) => e.stopPropagation()}>
-            <Share2 size={16} className="text-muted" />
-          </button>
-          <button className="p-1 hover:bg-elevated rounded" title="Descargar" onClick={(e) => e.stopPropagation()}>
-            <Download size={16} className="text-muted" />
-          </button>
-          <DoubleConfirmationDeleteButton onConfirm={() => onDelete(row.id)} size={16} />
-        </>
-      )}
+
       renderActions={(row) => (
         <EntityActions
           onShare={() => {}}

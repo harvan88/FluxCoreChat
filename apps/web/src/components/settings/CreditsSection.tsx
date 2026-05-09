@@ -24,7 +24,7 @@ type PolicyRow = {
 };
 
 interface CreditsSectionProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 export function CreditsSection({ onBack }: CreditsSectionProps) {

@@ -18,9 +18,7 @@ import {
     CheckCircle2, 
     AlertCircle, 
     Loader2,
-    Copy,
     Share2,
-    FileJson,
     Zap,
     Search,
     Circle,
@@ -28,7 +26,7 @@ import {
     Save
 } from 'lucide-react';
 import { useTelemetry, TelemetryGroup, TechnicalTrace } from '../../hooks/useTelemetry';
-import { Badge, Button, Card, CollapsibleSection, CopyButton, Avatar } from '../ui';
+import { Badge, Button, CollapsibleSection, CopyButton, Avatar } from '../ui';
 import { useUIStore } from '../../store/uiStore';
 import { api } from '../../services/api';
 import type { Account } from '../../types';
@@ -38,13 +36,7 @@ import { clsx } from 'clsx';
 // Sub-componentes
 // ============================================================================
 
-const PipelineStep = ({ name, status, stepId }: { name: string, status?: string, stepId: string }) => {
-    const variant = useMemo(() => {
-        if (status === 'success') return 'success';
-        if (status === 'error') return 'error';
-        if (status === 'processing') return 'info';
-        return 'neutral';
-    }, [status]);
+const PipelineStep = ({ name, status }: { name: string, status?: string }) => {
 
     return (
         <div className="flex flex-col items-center gap-2 group">
@@ -117,7 +109,6 @@ export function UnifiedKernelMonitor() {
 
     const { 
         groups, 
-        status, 
         clear, 
         isConnected, 
         loadHistory, 
@@ -406,7 +397,7 @@ export function UnifiedKernelMonitor() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm" onClick={() => {
+                                <Button variant="secondary" size="sm" onClick={() => {
                                     const blob = new Blob([generateMarkdownReport(activeGroup)], { type: 'text/markdown' });
                                     const url = URL.createObjectURL(blob);
                                     const a = document.createElement('a');
@@ -420,7 +411,6 @@ export function UnifiedKernelMonitor() {
                                     text={generateMarkdownReport(activeGroup)} 
                                     variant="solid" 
                                     size="sm"
-                                    leftIcon={<Copy size={14} />}
                                 >
                                     Copia Masiva
                                 </CopyButton>
@@ -438,13 +428,13 @@ export function UnifiedKernelMonitor() {
                                 </div>
                                 <div className="flex justify-between items-start relative px-4">
                                     <div className="absolute top-5 left-10 right-10 h-[2px] bg-subtle -z-10" />
-                                    <PipelineStep name="Ingreso" stepId="ingreso" status={activeGroup.steps['ingreso']?.status} />
-                                    <PipelineStep name="Proyección" stepId="proyeccion" status={activeGroup.steps['proyeccion']?.status} />
-                                    <PipelineStep name="Worker" stepId="worker" status={activeGroup.steps['worker']?.status} />
-                                    <PipelineStep name="Dispatcher" stepId="dispatcher" status={activeGroup.steps['dispatcher']?.status} />
-                                    <PipelineStep name="IA Runtime" stepId="runtime" status={activeGroup.steps['runtime']?.status} />
-                                    <PipelineStep name="Certificación" stepId="certificacion" status={activeGroup.steps['certificacion']?.status} />
-                                    <PipelineStep name="Entrega" stepId="entrega" status={activeGroup.steps['entrega']?.status} />
+                                    <PipelineStep name="Ingreso" status={activeGroup.steps['ingreso']?.status} />
+                                    <PipelineStep name="Proyección" status={activeGroup.steps['proyeccion']?.status} />
+                                    <PipelineStep name="Worker" status={activeGroup.steps['worker']?.status} />
+                                    <PipelineStep name="Dispatcher" status={activeGroup.steps['dispatcher']?.status} />
+                                    <PipelineStep name="IA Runtime" status={activeGroup.steps['runtime']?.status} />
+                                    <PipelineStep name="Certificación" status={activeGroup.steps['certificacion']?.status} />
+                                    <PipelineStep name="Entrega" status={activeGroup.steps['entrega']?.status} />
                                 </div>
                             </section>
 

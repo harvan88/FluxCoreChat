@@ -65,152 +65,176 @@ const activeConnections = new Set<any>();
 // 🎯 NUEVO: Store para Kernel Console Telemetry (Fase 2)
 const kernelConsoleSubscriptions = new Set<any>();
 
+// 🛡️ DEDUPLICADOR DE MENSAJES (Fase 3: Estabilización)
+// Evita que el mismo proceso envíe el mismo mensaje por dos vías distintas (Local y Redis)
+const processedMessageIds = new Set<string>();
+
+function markAsProcessed(messageId: string) {
+  if (processedMessageIds.has(messageId)) return true;
+  processedMessageIds.add(messageId);
+  setTimeout(() => processedMessageIds.delete(messageId), 15000);
+  return false;
+}
+
 import { coreEventBus } from '../core/events';
 
-// Escuchar eventos de telemetría y enviarlos SOLO a la Kernel Console
-coreEventBus.on('telemetry:pipeline_step', (payload) => {
-  if (kernelConsoleSubscriptions.size === 0) return;
+/**
+ * 🎯 NUEVO: Configura los listeners del EventBus para el proceso API
+ * Esto evita que el proceso Kernel registre estos listeners innecesariamente.
+ */
+export function setupWSListeners() {
+  console.log('[ws-handler] 🔌 Setting up EventBus listeners for WebSocket broadcasting');
 
-  const message = JSON.stringify({
-    type: 'telemetry:pipeline_step',
-    payload: payload
+  // Escuchar eventos de telemetría y enviarlos SOLO a la Kernel Console
+  coreEventBus.on('telemetry:pipeline_step', (payload) => {
+    if (kernelConsoleSubscriptions.size === 0) return;
+
+    const message = JSON.stringify({
+      type: 'telemetry:pipeline_step',
+      payload: payload
+    });
+
+    const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+
+    for (const ws of kernelConsoleSubscriptions) {
+      try {
+        const socketAccountId = ws.data?.accountId;
+        if (!socketAccountId) {
+          kernelConsoleSubscriptions.delete(ws);
+          continue;
+        }
+
+        const telemetryConversationId = ws.data?.telemetryConversationId;
+
+        // 1. Si está suscrito a una conversación específica, enviamos TODO el flujo de esa conv.
+        if (telemetryConversationId && payload.conversationId === telemetryConversationId) {
+          ws.send(message);
+          continue;
+        }
+
+        // 2. Si es una suscripción global (administrador) o la cuenta coincide
+        if (!telemetryConversationId) {
+          if (socketAccountId === HARVAN_ACCOUNT_ID || payload.accountId === socketAccountId) {
+            ws.send(message);
+          }
+        }
+      } catch {
+        kernelConsoleSubscriptions.delete(ws);
+      }
+    }
   });
 
-  const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
+  // 🔥 NUEVO: Escuchar mensajes recibidos (incluyendo los de la IA que vienen de otros procesos)
+  coreEventBus.on('core:message_received', ({ envelope, result }) => {
+    if (!result.success) return;
 
-  for (const ws of kernelConsoleSubscriptions) {
+    // 🔥 El broadcast ahora se deduplica internamente en broadcastToConversationClients
+
+    const payload = {
+
+
+      type: 'message:new',
+      data: {
+        id: result.messageId,
+        conversationId: envelope.conversationId,
+        senderAccountId: envelope.senderAccountId,
+        targetAccountId: envelope.targetAccountId,
+        content: envelope.content,
+        type: envelope.type,
+        generatedBy: envelope.generatedBy || 'human',
+        createdAt: new Date().toISOString()
+      }
+    };
+
+    console.log(`[ws-handler] 📢 EventBus: Distributed broadcast for message ${result.messageId} (by=${envelope.generatedBy})`);
+    
+    // Transmitir a la conversación
+    broadcastToConversationClients(envelope.conversationId, payload);
+  });
+
+  // 🔥 NUEVO: Escuchar actualizaciones de mensajes (ej: transcripciones)
+  coreEventBus.on('core:message_updated', (payload) => {
+    const wsPayload = {
+      type: 'message:updated',
+      data: payload
+    };
+    
+    console.log(`[ws-handler] 📢 EventBus: Broadcasting updated message ${payload.messageId}`);
+    broadcastToConversationClients(payload.conversationId, wsPayload);
+  });
+
+  // Escuchar trazas distribuidas (OpenTelemetry en cascada)
+  coreEventBus.on('telemetry:distributed_trace', (payload) => {
+    if (kernelConsoleSubscriptions.size === 0) return;
+
+    console.log(`[ws-handler] 📡 ENVIANDO TELEMETRÍA (TraceID: ${payload.traceId}) a ${kernelConsoleSubscriptions.size} clientes.`);
+
+    let message;
     try {
-      const socketAccountId = ws.data?.accountId;
-      if (!socketAccountId) {
-        kernelConsoleSubscriptions.delete(ws);
-        continue;
-      }
+        message = JSON.stringify({
+          type: 'telemetry:distributed_trace',
+          payload: payload
+        });
+    } catch (err) {
+        console.error(`[ws-handler] ❌ ERROR SERIALIZANDO TELEMETRY:`, err);
+        return;
+    }
 
-      const telemetryConversationId = ws.data?.telemetryConversationId;
+    const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
 
-      // 1. Si está suscrito a una conversación específica, enviamos TODO el flujo de esa conv.
-      if (telemetryConversationId && payload.conversationId === telemetryConversationId) {
-        ws.send(message);
-        continue;
-      }
-
-      // 2. Si es una suscripción global (administrador) o la cuenta coincide
-      if (!telemetryConversationId) {
-        if (socketAccountId === HARVAN_ACCOUNT_ID || payload.accountId === socketAccountId) {
-          ws.send(message);
+    for (const ws of kernelConsoleSubscriptions) {
+      try {
+        const socketAccountId = ws.data?.accountId;
+        if (!socketAccountId) {
+          kernelConsoleSubscriptions.delete(ws);
+          continue;
         }
-      }
-    } catch {
-      kernelConsoleSubscriptions.delete(ws);
-    }
-  }
-});
 
-// 🔥 NUEVO: Escuchar mensajes recibidos (incluyendo los de la IA que vienen de otros procesos)
-coreEventBus.on('core:message_received', ({ envelope, result }) => {
-  if (!result.success) return;
+        const telemetryConversationId = ws.data?.telemetryConversationId;
 
-  const payload = {
-    type: 'message:new',
-    data: {
-      id: result.messageId,
-      conversationId: envelope.conversationId,
-      senderAccountId: envelope.senderAccountId,
-      targetAccountId: envelope.targetAccountId,
-      content: envelope.content,
-      type: envelope.type,
-      generatedBy: envelope.generatedBy || 'human',
-      createdAt: new Date().toISOString()
-    }
-  };
-
-  console.log(`[ws-handler] 📢 EventBus: Broadcasting new message ${result.messageId} (by=${envelope.generatedBy})`);
-  
-  // Transmitir a la conversación
-  broadcastToConversationClients(envelope.conversationId, payload);
-});
-
-// 🔥 NUEVO: Escuchar actualizaciones de mensajes (ej: transcripciones)
-coreEventBus.on('core:message_updated', (payload) => {
-  const wsPayload = {
-    type: 'message:updated',
-    data: payload
-  };
-  
-  console.log(`[ws-handler] 📢 EventBus: Broadcasting updated message ${payload.messageId}`);
-  broadcastToConversationClients(payload.conversationId, wsPayload);
-});
-
-// Escuchar trazas distribuidas (OpenTelemetry en cascada)
-coreEventBus.on('telemetry:distributed_trace', (payload) => {
-  if (kernelConsoleSubscriptions.size === 0) return;
-
-  console.log(`[ws-handler] 📡 ENVIANDO TELEMETRÍA (TraceID: ${payload.traceId}) a ${kernelConsoleSubscriptions.size} clientes.`);
-
-  let message;
-  try {
-      message = JSON.stringify({
-        type: 'telemetry:distributed_trace',
-        payload: payload
-      });
-  } catch (err) {
-      console.error(`[ws-handler] ❌ ERROR SERIALIZANDO TELEMETRY:`, err);
-      return;
-  }
-
-  const HARVAN_ACCOUNT_ID = '3e94f74e-e6a0-4794-bd66-16081ee3b02d';
-
-  for (const ws of kernelConsoleSubscriptions) {
-    try {
-      const socketAccountId = ws.data?.accountId;
-      if (!socketAccountId) {
-        kernelConsoleSubscriptions.delete(ws);
-        continue;
-      }
-
-      const telemetryConversationId = ws.data?.telemetryConversationId;
-
-      if (telemetryConversationId && payload.attributes?.['conversation.id'] === telemetryConversationId) {
-        ws.send(message);
-        continue;
-      }
-
-      if (!telemetryConversationId) {
-        if (socketAccountId === HARVAN_ACCOUNT_ID || payload.attributes?.['account.id'] === socketAccountId) {
+        if (telemetryConversationId && payload.attributes?.['conversation.id'] === telemetryConversationId) {
           ws.send(message);
+          continue;
         }
+
+        if (!telemetryConversationId) {
+          if (socketAccountId === HARVAN_ACCOUNT_ID || payload.attributes?.['account.id'] === socketAccountId) {
+            ws.send(message);
+          }
+        }
+      } catch {
+        kernelConsoleSubscriptions.delete(ws);
       }
-    } catch {
-      kernelConsoleSubscriptions.delete(ws);
     }
-  }
-});
+  });
 
-// Escuchar propuestas de WES y enviarlas a los clientes de la conversación
-coreEventBus.on('fluxcore.work_proposed', (payload) => {
-  console.log(`[ws-handler] 🏗️ Broadcasting work proposal: ${payload.proposedWorkId} (${payload.typeId})`);
-  
-  const message = {
-    type: 'fluxcore:work_proposed',
-    data: payload
-  };
+  // Escuchar propuestas de WES y enviarlas a los clientes de la conversación
+  coreEventBus.on('fluxcore.work_proposed', (payload) => {
+    console.log(`[ws-handler] 🏗️ Broadcasting work proposal: ${payload.proposedWorkId} (${payload.typeId})`);
+    
+    const message = {
+      type: 'fluxcore:work_proposed',
+      data: payload
+    };
 
-  broadcastToConversationClients(payload.conversationId, message);
-});
+    broadcastToConversationClients(payload.conversationId, message);
+  });
 
-// Escuchar eventos de actividad distribuida
-coreEventBus.on('core:activity', (payload) => {
-  const wsPayload = {
-    type: 'user_activity_state',
-    conversationId: payload.conversationId,
-    accountId: payload.accountId,
-    activity: payload.activity,
-    metadata: payload.metadata
-  };
-  
-  // Transmitir a los clientes locales de esta conversación
-  broadcastToConversationClients(payload.conversationId, wsPayload);
-});
+  // Escuchar eventos de actividad distribuida
+  coreEventBus.on('core:activity', (payload) => {
+    const wsPayload = {
+      type: 'user_activity_state',
+      conversationId: payload.conversationId,
+      accountId: payload.accountId,
+      activity: payload.activity,
+      metadata: payload.metadata
+    };
+    
+    // Transmitir a los clientes locales de esta conversación
+    broadcastToConversationClients(payload.conversationId, wsPayload);
+  });
+}
+
 
 export function broadcastAll(payload: any): void {
   const message = JSON.stringify(payload);
@@ -681,10 +705,11 @@ export function handleWSOpen(ws: any): void {
   }
 }
 
-export function handleWSClose(ws: any): void {
-  console.log('[WebSocket] Connection closed - Code:', ws.readyState, 'Reason:', ws.reason);
+export function handleWSClose(ws: any, code?: number, reason?: string): void {
+  console.log(`[WebSocket] Connection closed - Code: ${code ?? 'unknown'}, Reason: ${reason ?? 'none'}`);
   console.log('[WebSocket] Active connections before cleanup:', activeConnections.size);
   activeConnections.delete(ws);
+
   console.log('[WebSocket] Active connections after cleanup:', activeConnections.size);
   // Limpiar subscripciones de este ws
   for (const [relationshipId, subs] of relationshipSubscriptions.entries()) {
@@ -739,7 +764,6 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
     
     // 🔥 IGNORAR user_activity_state que no tiene propiedades de mensaje
     if (payload.type === 'user_activity_state') {
-      console.log(`[WebSocket] 🔄 Broadcasting activity state (no message filtering)`);
       subs.forEach(ws => {
         try {
           ws.send(message);
@@ -749,8 +773,16 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
       });
       return;
     }
-    
+
+    const messageId = payload.data?.id;
+    if (messageId && markAsProcessed(messageId)) {
+      console.log(`[WebSocket] 🛡️ Skipping redundant broadcast for message ${messageId}`);
+      return;
+    }
+
     console.log(`[WebSocket] 🔍 Broadcasting to ${subs.size} subscribers in relationship ${relationshipId}`);
+
+
     console.log(`[WebSocket] 📋 Payload:`, {
       senderAccountId: payload.data?.senderAccountId,
       targetAccountId: payload.data?.targetAccountId,
@@ -801,6 +833,16 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
 }
 
 export function broadcastToConversationClients(conversationId: string, payload: any): void {
+  const messageId = payload.data?.id || payload.messageId || 'no-id';
+  
+  // 🛡️ ESCUDO DE DEDUPLICACIÓN (Mover aquí para cubrir todas las vías de entrada)
+  if (messageId !== 'no-id' && markAsProcessed(messageId)) {
+    console.log(`[WebSocket] 🛡️ Skipping redundant conversation broadcast for message ${messageId}`);
+    return;
+  }
+
+  console.log(`[DUPLICATE_CHECK] 🔊 broadcastToConversationClients called for message ${messageId} | Type: ${payload.type}`);
+
   const subs = conversationSubscriptions.get(conversationId);
   if (!subs) return;
   const message = JSON.stringify(payload);

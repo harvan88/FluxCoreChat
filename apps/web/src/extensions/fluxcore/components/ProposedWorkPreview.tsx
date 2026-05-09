@@ -1,7 +1,6 @@
 
-import React, { useState } from 'react';
-import { X, Check, PenLine, Database, Loader2 } from 'lucide-react';
-import clsx from 'clsx';
+import { useState } from 'react';
+import { X, Check, Database, Loader2 } from 'lucide-react';
 
 interface ProposedWork {
     proposedWorkId: string;

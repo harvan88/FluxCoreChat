@@ -22,7 +22,7 @@ import clsx from 'clsx';
 
 export type InputVariant = 'text' | 'search' | 'email' | 'password' | 'number' | 'textarea';
 
-interface BaseInputProps {
+export interface BaseInputProps {
   /** Variante del input */
   variant?: InputVariant;
   /** Etiqueta del campo */
@@ -39,8 +39,25 @@ interface BaseInputProps {
   fullWidth?: boolean;
 }
 
-export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>, BaseInputProps {}
-export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement>, BaseInputProps {}
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+  variant?: InputVariant;
+  label?: string;
+  error?: string;
+  helperText?: string;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+  fullWidth?: boolean;
+}
+
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  variant?: InputVariant;
+  label?: string;
+  error?: string;
+  helperText?: string;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+  fullWidth?: boolean;
+}
 
 const inputBaseStyles = clsx(
   'w-full rounded-lg transition-colors',

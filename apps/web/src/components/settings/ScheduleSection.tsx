@@ -1,20 +1,19 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { 
   Building2, 
   Clock,
   Info,
-  MapPin,
   Star
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useLocations } from '../../hooks/useLocations';
 import type { LocationData as Location } from '../../hooks/useLocations';
-import { Button } from '../ui';
+// import { Button } from '../ui';
 import { CollectionView, type CollectionColumn } from '../fluxcore/shared/CollectionView';
 import { SedeScheduleView } from '../schedule/SedeScheduleView';
 
 interface ScheduleSectionProps {
-  onBack: () => void;
+  onBack?: () => void;
   onOpenTab?: (id: string, title: string, data: any) => void;
   locationId?: string;
 }
@@ -74,7 +73,6 @@ export function ScheduleSection({ onBack, onOpenTab, locationId }: ScheduleSecti
     return (
       <SedeScheduleView 
         location={selectedLocation} 
-        onBack={onBack} 
       />
     );
   }

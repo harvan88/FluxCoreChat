@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Copy, RefreshCw, Download, AlertTriangle, Clock, Check, Brain, Database, Zap, Sparkles, Terminal, ChevronDown, ChevronRight } from 'lucide-react';
+import { Copy, RefreshCw, Download, AlertTriangle, Check, Brain, Database, Zap, Sparkles, Terminal, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '../../services/api';
 import { useUIStore } from '../../store/uiStore';
 // Import removed to avoid duplication with local declaration
@@ -87,17 +87,16 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
 
   const [conversationFilter, setConversationFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   const [traces, setTraces] = useState<TraceSummary[]>([]);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
 
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<TraceDetail | null>(null);
-  const [isCopyingAll, setIsCopyingAll] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isClearingTraces, setIsClearingTraces] = useState(false);
-  const [deletingTraceId, setDeletingTraceId] = useState<string | null>(null);
+
+
   
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
@@ -138,7 +137,6 @@ export function FluxCorePromptInspectorPanel({ accountId }: { accountId?: string
   const generateTraceMarkdown = (d: any) => {
     if (d.error) return `# Trace ${d.id}\n\n**Error:** ${d.error}\n\n---\n`;
 
-    const assistantMeta = d.context?.assistantMeta || d.context?.runtimeConfig || d.requestContext?.runtimeConfig || {};
     const usageFinal = d.final?.usage
       ? `${d.final.usage.prompt_tokens} + ${d.final.usage.completion_tokens} = ${d.final.usage.total_tokens}`
       : '—';
@@ -353,7 +351,7 @@ ${JSON.stringify(contextAny, null, 2)}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <MetricCard icon={Brain} label="Inferencia" value={detail.model} subValue={detail.attempts > 1 ? `${detail.attempts} intentos` : 'Exitoso'} />
+                <MetricCard icon={Brain} label="Inferencia" value={detail.model} subValue={detail.attempts.length > 1 ? `${detail.attempts.length} intentos` : 'Exitoso'} />
                 <MetricCard icon={Zap} label="Uso de Tokens" value={detail.final?.usage?.total_tokens ?? '—'} subValue={`${detail.final?.usage?.prompt_tokens ?? 0} in / ${detail.final?.usage?.completion_tokens ?? 0} out`} />
               </div>
 
@@ -523,7 +521,7 @@ function RenderSteps({ entries }: { entries: [string, any][] }) {
   );
 }
 
-function CopyButton({ text, label, sectionId }: { text: string, label?: string, sectionId?: string }) {
+function CopyButton({ text, label }: { text: string, label?: string, sectionId?: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async (e: any) => {
     e.stopPropagation();

@@ -60,10 +60,11 @@ export function FluxCorePanel({ accountId, accountName, onOpenTab }: FluxCorePan
     <div className="h-full flex">
       {/* Sidebar */}
       <div className="w-64 flex-shrink-0">
-        <FluxCoreSidebar
+        <FluxCoreSidebar 
           activeView={activeView}
           onViewChange={setActiveView}
           accountName={accountName}
+          accountId={accountId}
         />
       </div>
 

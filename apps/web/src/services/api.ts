@@ -430,6 +430,16 @@ class ApiService {
     return this.request<{ sessions: KernelSession[] }>(`/kernel/sessions/active?${query.toString()}`);
   }
 
+  async getAgents(accountId: string): Promise<ApiResponse<any[]>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<any[]>(`/fluxcore/agents?${query.toString()}`);
+  }
+
+  async getAgent(accountId: string, agentId: string): Promise<ApiResponse<any>> {
+    const query = new URLSearchParams({ accountId });
+    return this.request<any>(`/fluxcore/agents/${encodeURIComponent(agentId)}?${query.toString()}`);
+  }
+
   async createAgent(params: {
     accountId: string;
     name: string;
@@ -796,6 +806,18 @@ class ApiService {
     const query = new URLSearchParams({ accountId, slot });
     return this.request<{ success: boolean }>(`/api/templates/${templateId}/assets/${assetId}?${query.toString()}`, {
       method: 'DELETE',
+    });
+  }
+
+  // WES Definitions
+  async getDefinitions(accountId: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>(`/fluxcore/definitions?accountId=${accountId}`);
+  }
+
+  async updateDefinition(definitionId: string, accountId: string, definitionJson: any): Promise<ApiResponse<any>> {
+    return this.request<any>(`/fluxcore/definitions/${definitionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ accountId, definitionJson }),
     });
   }
 

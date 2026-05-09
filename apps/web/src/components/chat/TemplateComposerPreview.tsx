@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { X, Zap, Send, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Zap, Send, CheckCircle2, Bot, Loader2 } from 'lucide-react';
 import type { Template } from '../templates/types';
-import { Badge } from '../ui/Badge';
 
 interface TemplateComposerPreviewProps {
     template: Template;
@@ -121,4 +120,3 @@ export function TemplateComposerPreview({ template, onCancel, onSend, isSending 
     );
 }
 
-import { Bot, Loader2 } from 'lucide-react';

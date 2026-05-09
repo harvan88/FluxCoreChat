@@ -14,14 +14,14 @@
  * - Las extensiones se registran via ExtensionHost y sus vistas se obtienen del ViewRegistry
  */
 
-import { useEffect, useState, type ComponentType } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, type ComponentType } from 'react';
+
 import { Lock, LockOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { usePanelStore } from '../../store/panelStore';
 import { useExtensions } from '../../hooks/useExtensions';
-import { FluxCoreView } from '@/types/fluxcore/views.types';
+
 
 // Core imports (ChatCore views)
 import { ConversationsList } from '../conversations/ConversationsList';
@@ -39,7 +39,6 @@ import { FluxCoreSidebar } from '../fluxcore/FluxCoreSidebar';
 // ViewRegistry and ExtensionHost
 import { viewRegistry } from '../../core/registry/ViewRegistry';
 import { extensionHost } from '../../core/extension-api/ExtensionHost';
-import { ROUTE_REGISTRY } from '../../config/route-registry';
 import type { ActivityType } from '../../types';
 
 // Mapeo de componentes de extensión por nombre (fallback legacy para extensiones no migradas a tabs)
@@ -103,9 +102,6 @@ export function Sidebar() {
     isMobile,
   } = useUIStore();
   
-  const navigate = useNavigate();
-  const { alias } = useParams<{ alias: string }>();
-
   const { installations } = useExtensions(selectedAccountId);
 
   useEffect(() => {

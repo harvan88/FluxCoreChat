@@ -25,6 +25,8 @@ export type TabContextType =
   | 'template-panel'  // Panel de gestión de plantillas
   | 'openai-assistant-editor' // Editor dedicado para asistentes OpenAI
   | 'template-editor' // Editor de plantillas
+  | 'location-detail' // Detalle de sede
+  | 'schedule-detail' // Detalle de horarios
   | 'monitoring'
   | 'custom';         // Custom
 

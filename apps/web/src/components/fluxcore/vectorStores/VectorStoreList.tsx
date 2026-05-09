@@ -1,5 +1,4 @@
-import { Database, Share2 } from 'lucide-react';
-import { DoubleConfirmationDeleteButton } from '../../ui';
+import { Database } from 'lucide-react';
 import { OpenAIIcon } from '../../../lib/icon-library';
 import type { VectorStore } from '../../../types/fluxcore';
 import { formatDate, formatSize } from '../../../lib/fluxcore';
@@ -84,14 +83,7 @@ export function VectorStoreList({ stores, loading, onCreate, onSelect, onDelete 
             loading={loading}
             onRowClick={onSelect}
             emptyDescription="Crea un vector store para almacenar conocimiento para tus asistentes"
-            renderMobileActions={(row) => (
-                <>
-                    <button className="p-1 hover:bg-elevated rounded" title="Compartir" onClick={(e) => e.stopPropagation()}>
-                        <Share2 size={16} className="text-muted" />
-                    </button>
-                    <DoubleConfirmationDeleteButton onConfirm={() => onDelete(row.id)} size={16} />
-                </>
-            )}
+
             renderActions={(row) => (
                 <EntityActions
                     onShare={() => {}}

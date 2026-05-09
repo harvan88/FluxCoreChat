@@ -28,8 +28,8 @@ import {
 
 import { SidebarNavList, Switch } from '../ui';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
-import { FluxCoreView } from '@/types/fluxcore/views.types';
 import { RuntimeSwitcher } from './RuntimeSwitcher';
+import { FluxCoreView } from '@/types/fluxcore/views.types';
 import { useAIStatus } from '../../hooks/fluxcore/useAIStatus';
 import { useExtensions } from '../../hooks/useExtensions';
 import { FluxCoreIcon } from '../../lib/icon-library';
@@ -38,6 +38,8 @@ import { useLocation } from 'react-router-dom';
 import { ROUTE_REGISTRY } from '../../config/route-registry';
 
 interface FluxCoreSidebarProps {
+  activeView?: FluxCoreView;
+  onViewChange?: (view: FluxCoreView) => void;
   accountName?: string;
   accountId?: string | null;
   isLocked?: boolean;
@@ -58,13 +60,15 @@ const navItems: SidebarNavItem[] = [
 ];
 
 export function FluxCoreSidebar({
+  activeView,
+  onViewChange,
   accountName = 'FluxCore',
   accountId,
   isLocked = false,
 }: FluxCoreSidebarProps) {
   const location = useLocation();
   const { status } = useAIStatus({ accountId });
-  const { installations, toggle } = useExtensions(accountId || undefined);
+  const { installations, toggle } = useExtensions(accountId || null);
   
   const activeRuntime = status?.activeRuntimeId || '@fluxcore/asistentes';
   const isFluxiActive = activeRuntime === '@fluxcore/fluxi';
@@ -95,7 +99,6 @@ export function FluxCoreSidebar({
         <div className="flex items-center gap-2">
           {fluxCoreInstallation && (
             <Switch
-              title={isEnabled ? "Ocultar de la barra lateral" : "Mostrar en la barra lateral"} 
               checked={isEnabled}
               onCheckedChange={(checked) => toggle('@fluxcore/asistentes', checked)}
               size="sm"
@@ -120,8 +123,8 @@ export function FluxCoreSidebar({
           
           return {
             ...item,
-            active: isActive,
-            // routeId is already included in item, SidebarNavList will handle navigation automatically
+            active: activeView === item.id || isActive,
+            onClick: () => onViewChange?.(item.id as FluxCoreView),
           };
         })}
       />

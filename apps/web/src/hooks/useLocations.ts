@@ -19,6 +19,8 @@ export interface LocationData {
   isDefault: boolean;
   status: string;
   timezone?: string | null;
+  serviceType?: string | null;
+  postalCode?: string | null;
 }
 
 export interface UseLocationsReturn {
@@ -62,7 +64,7 @@ export function useLocations(): UseLocationsReturn {
 
   const generateNextSedeName = useCallback(() => {
     const account = accounts.find(a => a.id === selectedAccountId);
-    const baseName = account?.displayName || account?.username || 'Sede';
+    const baseName = account?.displayName || account?.alias || 'Sede';
     const existingCount = locations.length;
     const letter = String.fromCharCode(65 + existingCount);
     return `${baseName} - Sede ${letter}`;
@@ -73,7 +75,7 @@ export function useLocations(): UseLocationsReturn {
     const allowedFields = [
       'name', 'address', 'phone', 'email', 'lat', 'lon', 
       'country', 'state', 'city', 'neighborhood', 'streetAddress',
-      'isDefault', 'status', 'timezone'
+      'isDefault', 'status', 'timezone', 'serviceType'
     ];
     
     const cleanData: any = {};

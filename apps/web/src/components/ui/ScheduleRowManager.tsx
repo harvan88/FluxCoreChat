@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { DayStatusToggle } from './DayStatusToggle';
+// import { DayStatusToggle } from './DayStatusToggle';
 import { TimeIntervalManager, type TimeInterval } from './TimeIntervalManager';
 import { Checkbox } from './Checkbox';
 import { Clock, Plus } from 'lucide-react';
@@ -80,7 +80,7 @@ export function ScheduleRowManager({
             {/* Si está cerrado pero el usuario quiere añadir un intervalo, el botón [+] le permite "abrirlo" */}
             <Button 
               variant="ghost" 
-              size="icon" 
+              size="sm" 
               onClick={() => {
                 onToggleClosed(false);
                 onAddInterval();

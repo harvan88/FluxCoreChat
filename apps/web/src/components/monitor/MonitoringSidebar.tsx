@@ -2,7 +2,6 @@ import clsx from 'clsx';
 import {
   MonitoringIcon,
   ExternalLinkIcon,
-  CreditsIcon,
   DocumentationIcon,
 } from '../../lib/icon-library';
 import { usePanelStore } from '../../store/panelStore';

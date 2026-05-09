@@ -15,26 +15,22 @@ interface SettingsTabContentProps {
 }
 
 export function SettingsTabContent({ section }: SettingsTabContentProps) {
-  const handleBack = () => {
-    // En el contexto de tabs, no hay "back" - el usuario cierra el tab
-  };
-
   switch (section) {
     case 'profile':
-      return <ProfileSection onBack={handleBack} />;
+      return <ProfileSection />;
 
     case 'accounts':
-      return <AccountsSection onBack={handleBack} />;
+      return <AccountsSection />;
 
     case 'credits':
-      return <CreditsSection onBack={handleBack} />;
+      return <CreditsSection />;
 
     case 'contacto':
-      return <ContactSection onBack={handleBack} />;
+      return <ContactSection />;
     case 'ubicacion':
-      return <LocationSection onBack={handleBack} />;
+      return <LocationSection />;
     case 'horario':
-      return <ScheduleSection onBack={handleBack} />;
+      return <ScheduleSection />;
     case 'appearance':
       return (
         <div className="h-full overflow-y-auto p-6">
@@ -65,7 +61,7 @@ export function SettingsTabContent({ section }: SettingsTabContentProps) {
       );
 
     case 'kernel':
-      return <KernelSessionsSection onBack={handleBack} />;
+      return <KernelSessionsSection />;
 
     default:
       return (

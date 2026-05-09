@@ -9,10 +9,8 @@ import {
   ChevronRight,
   Save,
   Loader2,
-  Building2,
   Maximize2,
   Copy,
-  Download,
   Check,
   Link,
   CheckCircle2,
@@ -31,7 +29,7 @@ import { AvatarUpload } from '../profile/AvatarUpload';
 import { IdCopyable } from '../fluxcore/detail/IdCopyable';
 
 interface ProfileSectionProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 export function ProfileSection({ onBack }: ProfileSectionProps) {
@@ -64,7 +62,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const [aiIncludePrivateContext, setAiIncludePrivateContext] = useState(true);
   const [aiIncludeTimestamp, setAiIncludeTimestamp] = useState(true);
   const [aiIncludeLocations, setAiIncludeLocations] = useState(true);
-  const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
+//   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
   const [alias, setAlias] = useState('');
   const [aliasStatus, setAliasStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved' | 'current'>('idle');
   const [country, setCountry] = useState('');
@@ -156,7 +154,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       setAiIncludePrivateContext(profile.aiIncludePrivateContext ?? true);
       setAiIncludeTimestamp(profile.aiIncludeTimestamp ?? true);
       setAiIncludeLocations(account?.aiIncludeLocations ?? true);
-      setIsBusinessEnabled(profile.accountType === 'business');
+//       setIsBusinessEnabled(profile.accountType === 'business');
       setCountry(profile.country || '');
       setTimezone(profile.timezone || '');
     }
@@ -212,15 +210,15 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
     navigator.clipboard.writeText(privateContext);
   };
 
-  const handleDownloadContext = () => {
-    const blob = new Blob([privateContext], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'contexto-ia.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+//   const handleDownloadContext = () => {
+//     const blob = new Blob([privateContext], { type: 'text/plain' });
+//     const url = URL.createObjectURL(blob);
+//     const a = document.createElement('a');
+//     a.href = url;
+//     a.download = 'contexto-ia.txt';
+//     a.click();
+//     URL.revokeObjectURL(url);
+//   };
 
   const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 

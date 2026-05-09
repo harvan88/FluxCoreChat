@@ -6,13 +6,14 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plus, FileText, RefreshCw, UploadCloud } from 'lucide-react';
+import { RefreshCw, UploadCloud } from 'lucide-react';
+// import { DayStatusToggle } from './DayStatusToggle';
 import { TemplateList } from './TemplateList';
 import { TemplateBulkImportModal } from './TemplateBulkImportModal';
 import { useTemplateStore } from './store/templateStore';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../ui/Button';
-import { EmptyState, LoadingState, ErrorState } from '../../core/components';
+// import { EmptyState, LoadingState, ErrorState } from '../../core/components';
 import type { Template } from './types';
 
 interface TemplateManagerProps {
@@ -22,8 +23,6 @@ interface TemplateManagerProps {
 export function TemplateManager({ accountId }: TemplateManagerProps) {
   // Use Zustand store for shared state
   const {
-    isLoading,
-    error,
     filters,
     sort,
     setFilters,
@@ -55,7 +54,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
     }
   }, [accountId, fetchTemplates, selectTemplate]);
 
-  const openTemplateEditor = (templateId: string, templateName: string) => {
+  const openTemplateEditor = (templateId: string, _templateName: string) => {
     navigate(`/@/${alias}/herramientas/${templateId}`);
   };
 
@@ -115,7 +114,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
       </button>
       <Button
         size="sm"
-        variant="outline"
+        variant="secondary"
         onClick={() => setIsImportModalOpen(true)}
         disabled={isCreating}
         className="hidden sm:flex"
@@ -131,7 +130,7 @@ export function TemplateManager({ accountId }: TemplateManagerProps) {
       <div className="flex-1 overflow-hidden">
         <TemplateList
           templates={filteredTemplates}
-          selectedId={undefined}
+          // selectedId={undefined}
           filters={filters}
           sort={sort}
           onFiltersChange={setFilters}

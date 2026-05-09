@@ -78,6 +78,7 @@ const FluxCoreSidebarWrapper: ComponentType<ExtensionViewProps> = (props) => {
   return (
     <Suspense fallback={<LoadingFallback />}>
       <FluxCoreSidebar
+        // @ts-ignore
         activeView="usage"
         onViewChange={() => { }}
         accountName={props.context?.accountName as string || 'FluxCore'}

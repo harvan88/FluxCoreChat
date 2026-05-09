@@ -54,7 +54,7 @@ import { OpenAIAssistantConfigView } from '../fluxcore/views/OpenAIAssistantConf
 import { FluxiView } from '../fluxcore/views/FluxiView';
 import { FluxiWorkDetail } from '../fluxcore/views/FluxiWorkDetail';
 import { FluxiProposedWorkDetail } from '../fluxcore/views/FluxiProposedWorkDetail';
-import { WESStudio } from '../fluxcore/WESStudio';
+
 import { TemplateEditor, TemplateManager } from '../templates';
 
 interface DynamicContainerProps {
@@ -465,8 +465,8 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
     return (
       <ExtensionConfigPanel
         extensionId={extensionId}
-        extensionName={extensionName || installation.manifest?.name || extensionId}
-        config={(installation.config || {}) as Record<string, unknown>}
+        extensionName={extensionName || installation?.manifest?.name || extensionId}
+        config={(installation?.config || {}) as Record<string, unknown>}
         supportsPromptInspector={isFluxCore}
         onSave={async (config) => {
           await updateConfig(extensionId, config as Record<string, unknown>);
@@ -477,7 +477,7 @@ function ExtensionTabContent({ tab, containerId }: ExtensionTabContentProps) {
   }
 
   if (view === 'panel') {
-    const panelComponentName = installation.manifest?.ui?.panel?.component;
+    const panelComponentName = installation?.manifest?.ui?.panel?.component;
     const panelComponents: Record<string, ComponentType> = {
       WebsiteBuilderPanel,
     };
@@ -624,7 +624,7 @@ function TabContent({ tab, containerId }: TabContentProps) {
       return (
         <SettingsTabContent 
           section={section} 
-          onOpenTab={(tabId, title, data) => {
+          onOpenTab={(_tabId, title, data) => {
             const { openTab } = usePanelStore.getState();
             
             // Si es el detalle de una ubicación (sede)
@@ -700,12 +700,12 @@ function TabContent({ tab, containerId }: TabContentProps) {
       );
     }
 
-    case 'template_panel': {
+    case 'template-panel': {
       const accountId = typeof tab.context.accountId === 'string' ? tab.context.accountId : '';
       return <TemplateManager accountId={accountId} />;
     }
 
-    case 'template_editor': {
+    case 'template-editor': {
       const accountId = typeof tab.context.accountId === 'string' ? tab.context.accountId : '';
       return (
         <TemplateEditor
@@ -832,7 +832,7 @@ function SettingsTabContent({ section, onOpenTab }: SettingsTabContentProps) {
       return <CreditsSection onBack={handleBack} />;
 
     case 'contacto':
-      return <ContactSection onBack={handleBack} />;
+      return <ContactSection />;
 
     case 'ubicacion':
       return <LocationSection onBack={handleBack} onOpenTab={onOpenTab} />;

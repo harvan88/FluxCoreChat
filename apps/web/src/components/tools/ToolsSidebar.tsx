@@ -2,7 +2,7 @@ import { FileTextIcon, FluxCoreIcon } from '../../lib/icon-library';
 import { useLocation } from 'react-router-dom';
 import { SidebarNavList } from '../ui/sidebar/SidebarNavList';
 import { useExtensions } from '../../hooks/useExtensions';
-import { usePanelStore } from '../../store/panelStore';
+// import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
 
@@ -11,9 +11,9 @@ interface ToolsSidebarProps {
 }
 
 export function ToolsSidebar({ accountId }: ToolsSidebarProps) {
-  const layout = usePanelStore((state) => state.layout);
+  // const layout = usePanelStore((state) => state.layout);
   const { activeActivity, setActiveActivity } = useUIStore();
-  const { installations } = useExtensions(accountId || undefined);
+  const { installations } = useExtensions(accountId ?? null);
 
   const isFluxCoreInstalled = installations.some(i => i.extensionId === '@fluxcore/asistentes');
 

@@ -21,7 +21,7 @@ const RUNTIME_GATEWAY_SIGNING_SECRET = 'sovereign-secret-key-change-me-in-prod';
 
 class RuntimeGatewayService {
     private runtimes = new Map<string, RuntimeAdapter>();
-    private readonly DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds
+    private readonly DEFAULT_TIMEOUT_MS = 60_000; // 60 seconds
 
     /**
      * Register a runtime adapter. Called at system startup.

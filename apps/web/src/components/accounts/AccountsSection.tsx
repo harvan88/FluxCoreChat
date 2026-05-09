@@ -23,7 +23,7 @@ import { IdCopyable } from '../fluxcore/detail/IdCopyable';
 import type { Account } from '../../types';
 
 interface AccountsSectionProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 export function AccountsSection({ onBack }: AccountsSectionProps) {

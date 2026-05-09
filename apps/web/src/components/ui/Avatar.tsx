@@ -13,7 +13,7 @@
 import React, { forwardRef, useState, type ImgHTMLAttributes } from 'react';
 import clsx from 'clsx';
 
-export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
 export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
 
 export interface AvatarProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'size'> {
@@ -31,6 +31,8 @@ export interface AvatarProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, '
   shape?: 'circle' | 'square';
   /** Color de fondo personalizado */
   bgColor?: string;
+  /** Deshabilitar borde/ring */
+  disableBorder?: boolean;
 }
 
 const sizeStyles: Record<AvatarSize, { container: string; text: string; status: string }> = {
@@ -40,6 +42,7 @@ const sizeStyles: Record<AvatarSize, { container: string; text: string; status: 
   lg: { container: 'w-12 h-12', text: 'text-lg', status: 'w-3 h-3' },
   xl: { container: 'w-16 h-16', text: 'text-2xl', status: 'w-4 h-4' },
   '2xl': { container: 'w-20 h-20', text: 'text-3xl', status: 'w-5 h-5' },
+  full: { container: 'w-full h-full', text: 'text-4xl', status: 'w-6 h-6' },
 };
 
 const statusStyles: Record<AvatarStatus, string> = {

@@ -34,11 +34,14 @@ export interface CollapsibleSectionProps {
   disabled?: boolean;
   /** Subtítulo opcional (más discreto) */
   subtitle?: string;
+  /** Badge opcional al lado del título */
+  badge?: ReactNode;
 }
 
 export function CollapsibleSection({
   title,
   subtitle,
+  badge,
   children,
   defaultExpanded = false,
   isCustomized = false,
@@ -100,10 +103,13 @@ export function CollapsibleSection({
           )}
 
           {/* Title & Subtitle Container */}
-          <div className="flex flex-col min-w-0">
-            <span className="text-primary font-medium text-sm truncate">
-              {title}
-            </span>
+          <div className="flex flex-col min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-primary font-medium text-sm truncate">
+                {title}
+              </span>
+              {badge}
+            </div>
             {subtitle && (
               <span className="text-muted text-xs truncate">
                 {subtitle}

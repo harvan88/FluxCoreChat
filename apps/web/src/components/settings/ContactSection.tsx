@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import React from 'react';
 import {
   Save,
   Loader2,
@@ -331,13 +330,13 @@ export function ContactSection({}: ContactSectionProps) {
                         { value: 'x', label: 'X' },
                       ].filter(opt => !socialLinks[opt.value])}
                       placeholder="Elegir..."
-                      onChange={(value) => handleAddSocial(value as SocialType)}
+                      onChange={(value: string | string[]) => handleAddSocial(value as SocialType)}
                     />
                   </div>
                   <Input type="text" placeholder="Selecciona una red social" className="flex-1" disabled />
                   <div className="flex items-center gap-1.5 px-2 h-9 rounded-lg text-muted">
                     <span className="text-[10px] font-bold uppercase tracking-wider">IA</span>
-                    <Switch size="sm" checked={false} disabled />
+                    <Switch size="sm" checked={false} onCheckedChange={() => {}} disabled />
                   </div>
                   <DoubleConfirmationDeleteButton onConfirm={() => setShowNewSocialRow(false)} className="h-9 w-9" />
                 </div>

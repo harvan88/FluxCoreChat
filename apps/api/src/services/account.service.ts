@@ -224,9 +224,9 @@ export class AccountService {
       }
     }
 
-    // PC-823: If aiIncludeLocations changed to true, provision the system template
-    if (data.aiIncludeLocations === true && !account.aiIncludeLocations) {
-      await systemTemplateProvisioner.ensureScheduleTemplate(accountId);
+    // PC-823: Sincronizar plantilla de horarios con el estado del perfil
+    if (data.aiIncludeLocations !== undefined) {
+      await systemTemplateProvisioner.syncScheduleTemplate(accountId, data.aiIncludeLocations);
     }
 
     // PC-823: Emit domain event for PolicyContext invalidation

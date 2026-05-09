@@ -15,7 +15,7 @@ export function InteractiveMapTest() {
           defaultZoom={15}
           gestureHandling={'greedy'}
           disableDefaultUI={true}
-          onCenterChanged={(ev) => {
+          onCenterChanged={() => {
             // console.log('Center changed:', ev.detail.center);
           }}
         >

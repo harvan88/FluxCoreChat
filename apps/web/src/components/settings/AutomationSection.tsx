@@ -110,7 +110,7 @@ export function AutomationSection({ onBack }: AutomationSectionProps) {
   const triggerRows = useMemo<TriggerTableRow[]>(() => {
     return rules.flatMap((rule) => {
       const configTriggers = rule.config?.triggers || [];
-      return configTriggers.map((trigger, index) => ({
+      return configTriggers.map((trigger: AutomationTrigger, index: number) => ({
         id: `${rule.id}-${index}`,
         ruleId: rule.id,
         triggerIndex: index,

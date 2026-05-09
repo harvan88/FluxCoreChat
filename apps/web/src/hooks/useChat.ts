@@ -311,7 +311,7 @@ export function useChat({ conversationId, accountId, onNewMessage }: UseChatOpti
   }, [accountId]);
 
   // Mantener método legacy por compatibilidad
-  const deleteMessageLegacy = deleteMessage; // Alias si es necesario para compatibilidad
+  // const deleteMessageLegacy = deleteMessage; // Alias si es necesario para compatibilidad
 
   // Reintentar mensaje fallido
   const retryMessage = useCallback(async (messageId: string) => {

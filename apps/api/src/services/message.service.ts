@@ -18,6 +18,7 @@ export class MessageService {
     aiApprovedBy?: string;
     metadata?: Record<string, any>;
   }) {
+    console.log(`[CREATE_MSG] 💽 MessageService.createMessage | Conv: ${data.conversationId} | By: ${data.generatedBy || 'human'} | Stack: ${new Error().stack?.split('\n').slice(1, 4).join(' <- ')}`);
     // 0. Auto-rejoin: Reactivar al participante si estaba desuscrito
     if (data.senderAccountId) {
       await conversationParticipantService.ensureActiveParticipant(

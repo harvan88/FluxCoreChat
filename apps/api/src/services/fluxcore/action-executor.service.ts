@@ -236,7 +236,8 @@ class ActionExecutorService {
         context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
-            console.log(`[ActionExecutor] �→🔑 CERTIFYING AI RESPONSE VIA KERNEL:`);
+            console.log(`[CREATE_MSG] 🚀 ActionExecutor.executeSendMessage | Conv: ${action.conversationId} | Signal: ${context.triggerSignalId || 'none'}`);
+            console.log(`[ActionExecutor] →🔑 CERTIFYING AI RESPONSE VIA KERNEL:`);
             console.log(`  - Account ID (responder): ${context.accountId}`);
             console.log(`  - Target Account (receiver): ${context.targetAccountId}`);
             console.log(`  - Conversation ID: ${action.conversationId}`);
@@ -292,6 +293,7 @@ class ActionExecutorService {
         context: ActionExecutionContext
     ): Promise<ActionExecutionResult> {
         try {
+            console.log(`[CREATE_MSG] 🚀 ActionExecutor.executeSendTemplate | Conv: ${action.conversationId} | Template: ${action.templateId}`);
             console.log(`[ActionExecutor] →🔑 CERTIFYING AI TEMPLATE RESPONSE VIA KERNEL:`);
             console.log(`  - Account ID (responder): ${context.accountId}`);
             console.log(`  - Template ID: ${action.templateId}`);

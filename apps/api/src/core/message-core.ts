@@ -38,14 +38,27 @@ export class MessageCore {
    * 🔥 NUEVO: Encola certificación en outbox para garantía de entrega
    */
   async receive(envelope: MessageEnvelope): Promise<ReceiveResult> {
-    console.log(`[MessageCore] 🌍 INPUT ORIGINAL CON VERDAD DEL MUNDO:`);
-    console.log(`📋 ENVELOPE COMPLETO:`, JSON.stringify(envelope, null, 2));
+    console.log(`[MessageCore][PID:${process.pid}] 🌍 INPUT ORIGINAL CON VERDAD DEL MUNDO:`);
+    console.log(`[MessageCore][PID:${process.pid}] 📋 ENVELOPE COMPLETO:`, JSON.stringify(envelope, null, 2));
     console.log(`📋 META CON VERDAD:`, JSON.stringify(envelope.meta || {}, null, 2));
     console.log(`📋 CONTENT CON VERDAD:`, JSON.stringify(envelope.content, null, 2));
     
     try {
+      // 🔥 FASE 3: SOBERANÍA DE REALIDAD (ChatCore)
+      // Antes de persistir, resolvemos cualquier proyección dinámica (ej: {{system:schedules}})
+      // Esto garantiza que el historial sea siempre "La Verdad del Mundo" y evita bucles cognitivos.
+      if (envelope.content?.text && envelope.content.text.includes('{{system:')) {
+        const { templateService } = await import('../services/template.service');
+        const accountId = envelope.targetAccountId || envelope.senderAccountId;
+        if (accountId) {
+          console.log(`[MessageCore] 🛠️ RESOLVIENDO VARIABLES DE SISTEMA ANTES DE GUARDAR EN DB...`);
+          envelope.content.text = await templateService.resolveSystemVariables(envelope.content.text, accountId);
+        }
+      }
+
       // 1. Persistir mensaje
       console.log(`[MessageCore] 💾 GUARDANDO EN BASE DE DATOS CON META:`, JSON.stringify(envelope.meta || {}, null, 2));
+      console.log(`[CREATE_MSG] 📥 MessageCore.receive | Conv: ${envelope.conversationId} | By: ${envelope.generatedBy} | Trigger: ${envelope.triggerSignalId || 'new'} | Stack: ${new Error().stack?.split('\n').slice(1, 4).join(' <- ')}`);
       const message = await messageService.createMessage({
         conversationId: envelope.conversationId,
         senderAccountId: envelope.senderAccountId,

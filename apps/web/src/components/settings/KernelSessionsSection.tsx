@@ -1,14 +1,14 @@
 import { ChevronRight, Shield, CheckCircle } from 'lucide-react';
 
 interface KernelSessionsSectionProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 export function KernelSessionsSection({ onBack }: KernelSessionsSectionProps) {
   return (
     <div className="flex-1 overflow-y-auto">
       <button
-        onClick={onBack}
+        onClick={() => onBack?.()}
         className="w-full p-4 flex items-center gap-2 border-b border-subtle text-primary hover:bg-hover transition-colors"
       >
         <ChevronRight size={20} className="rotate-180" />

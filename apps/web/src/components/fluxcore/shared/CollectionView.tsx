@@ -15,9 +15,9 @@
  */
 
 import { type ReactNode, type ElementType, useState } from 'react';
-import { Plus, MoreVertical } from 'lucide-react';
+import { MoreVertical } from 'lucide-react';
 import clsx from 'clsx';
-import { Button, ViewHeader, Table, ActionSheet } from '../../ui';
+import { ViewHeader, Table, ActionSheet } from '../../ui';
 import { EmptyState } from './EmptyState';
 import { LoadingState } from './LoadingState';
 
@@ -65,11 +65,7 @@ export interface CollectionViewProps<T> {
    * Wrap individual buttons with onClick stopPropagation.
    */
   renderActions?: (row: T) => ReactNode;
-  /**
-   * Render-prop for mobile-only inline actions shown inside the name cell.
-   * If omitted, no mobile actions are rendered.
-   */
-  renderMobileActions?: (row: T) => ReactNode;
+
   /** Extra class on the outermost wrapper */
   className?: string;
   /** Optional: override the create button variant */
@@ -112,7 +108,6 @@ export function CollectionView<T>({
   onRowClick,
   emptyDescription,
   renderActions,
-  renderMobileActions,
   className,
   createVariant = 'primary',
   renderMobileItem,
@@ -130,9 +125,9 @@ export function CollectionView<T>({
           icon={Icon}
           title={title}
           count={0}
-          actionLabel={createLabel}
-          onAction={onCreate}
-          actionVariant={createVariant}
+          createLabel={createLabel}
+          onCreate={onCreate}
+          createVariant={createVariant}
         />
         <div className="flex-1 overflow-auto p-6">
           <LoadingState message={`Cargando ${title.toLowerCase()}...`} />
@@ -149,9 +144,9 @@ export function CollectionView<T>({
           icon={Icon}
           title={title}
           count={0}
-          actionLabel={createLabel}
-          onAction={onCreate}
-          actionVariant={createVariant}
+          createLabel={createLabel}
+          onCreate={onCreate}
+          createVariant={createVariant}
         />
         <div className="flex-1 overflow-auto p-6">
           <EmptyState
@@ -185,7 +180,7 @@ export function CollectionView<T>({
       {/* VISTA DESKTOP: TABLA */}
       <div className="hidden md:block flex-1 overflow-auto p-6">
         <div className="bg-surface rounded-xl border border-subtle overflow-hidden">
-          <Table<T>
+          <Table
             data={data}
             columns={[
               ...columns.map(col => ({

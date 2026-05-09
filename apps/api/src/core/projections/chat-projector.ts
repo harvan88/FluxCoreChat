@@ -321,6 +321,7 @@ export class ChatProjector extends BaseProjector {
                 const fromActorId = await resolveActorId(accountId);
                 
                 console.log(`[ChatProjector] 🎭 Resolved actor for AI response: accountId=${accountId.slice(0, 8)} -> actorId=${fromActorId?.slice(0, 8) || 'null'}`);
+                console.log(`[CREATE_MSG] 📽️ ChatProjector.handleAiResponse | Signal Seq: ${signal.sequenceNumber} | Trigger: ${triggerSignalId || 'none'}`);
 
                 const { messageCore } = await import('../message-core');
                 const result = await messageCore.receive({

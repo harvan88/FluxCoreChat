@@ -138,6 +138,7 @@
  * =============================================================================
  */
 
+import { ReactNode } from 'react';
 import { Copy, Check, AlertTriangle } from 'lucide-react';
 import { useClipboard } from '../../hooks/fluxcore';
 
@@ -158,6 +159,10 @@ interface CopyButtonProps {
   onError?: (error: Error) => void;
   /** Para debugging - muestra estado actual */
   debug?: boolean;
+  /** Label opcional (si se proporciona, se renderiza como botón con texto) */
+  children?: ReactNode;
+  /** Variante visual (opcional para compatibilidad) */
+  variant?: 'ghost' | 'solid' | 'outline';
 }
 
 export function CopyButton({ 
@@ -168,7 +173,9 @@ export function CopyButton({
   title = "Copiar",
   onSuccess,
   onError,
-  debug = false
+  debug = false,
+  children,
+  variant
 }: CopyButtonProps) {
   // VALIDACIÓN DE ENTRADAS - PRINCIPIO DE FAIL FAST
   if (typeof text !== 'string') {
@@ -229,14 +236,14 @@ export function CopyButton({
     };
     
     if (isCopied) return {
-      className: 'text-green-500 bg-green-500/10',
+      className: variant === 'solid' ? 'bg-success text-inverse' : 'text-green-500 bg-green-500/10',
       icon: Check,
       title: '¡Copiado!',
       ariaLabel: 'Copiado exitosamente'
     };
     
     return {
-      className: 'text-muted hover:text-primary hover:bg-hover',
+      className: variant === 'solid' ? 'bg-accent text-inverse hover:bg-accent/80' : 'text-muted hover:text-primary hover:bg-hover',
       icon: Copy,
       title: title,
       ariaLabel: title || 'Copiar'
@@ -266,7 +273,10 @@ export function CopyButton({
       data-status={status} // Para debugging y testing
       data-debug={debug}
     >
-      <Icon size={iconSizes[size]} />
+      <div className="flex items-center gap-2">
+        <Icon size={iconSizes[size]} />
+        {children && <span className="text-[11px] font-medium">{children}</span>}
+      </div>
     </button>
   );
 }

@@ -79,6 +79,8 @@ const MOCK_TEMPLATES: Template[] = [
     createdAt: '2025-01-15T10:00:00Z',
     updatedAt: '2025-01-20T15:30:00Z',
     allowAutomatedUse: false,
+    isPublic: false,
+    triggerKeyword: null,
   },
   {
     id: '2',
@@ -100,6 +102,8 @@ const MOCK_TEMPLATES: Template[] = [
     createdAt: '2025-01-10T08:00:00Z',
     updatedAt: '2025-01-18T12:00:00Z',
     allowAutomatedUse: false,
+    isPublic: false,
+    triggerKeyword: null,
   },
   {
     id: '3',
@@ -118,6 +122,8 @@ const MOCK_TEMPLATES: Template[] = [
     createdAt: '2025-01-05T14:00:00Z',
     updatedAt: '2025-01-05T14:00:00Z',
     allowAutomatedUse: false,
+    isPublic: false,
+    triggerKeyword: null,
   },
   {
     id: '4',
@@ -139,6 +145,8 @@ const MOCK_TEMPLATES: Template[] = [
     createdAt: '2025-01-01T09:00:00Z',
     updatedAt: '2025-01-25T11:00:00Z',
     allowAutomatedUse: false,
+    isPublic: false,
+    triggerKeyword: null,
   },
 ];
 
@@ -267,6 +275,8 @@ export function useTemplates(options: UseTemplatesOptions): UseTemplatesReturn {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         allowAutomatedUse: false,
+        isPublic: data.isPublic ?? false,
+        triggerKeyword: data.triggerKeyword ?? null,
       };
       
       setTemplates(prev => [newTemplate, ...prev]);

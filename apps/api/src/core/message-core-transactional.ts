@@ -12,6 +12,7 @@ export class MessageCoreTransactional {
    * Recibe y procesa un mensaje con transacción atómica
    */
   async receive(envelope: MessageEnvelope): Promise<ReceiveResult> {
+    console.log(`[CREATE_MSG] 📥 MessageCoreTransactional.receive | Conv: ${envelope.conversationId} | By: ${envelope.generatedBy} | Stack: ${new Error().stack?.split('\n').slice(1, 4).join(' <- ')}`);
     // Iniciar transacción explícita
     const transaction = await db.transaction(async (tx) => {
       try {

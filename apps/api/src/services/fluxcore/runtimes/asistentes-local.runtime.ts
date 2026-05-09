@@ -27,6 +27,10 @@ import * as Prompts from './asistentes-local.prompts';
 import { trackCognitiveStep } from '../../../telemetry/tracer';
 import { getModelCapabilities } from '../provider-capabilities';
 import { templateRegistryService } from '../template-registry.service';
+import { scheduleService } from '../../schedule.service';
+import { DateTime } from 'luxon';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const MAX_TOOL_ROUNDS = 3;
 const ASISTENTES_LOCAL_CAPABILITY_CEILING = ['search_knowledge', 'send_template', 'list_available_templates', 'is_business_open'];
@@ -407,12 +411,12 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         return await this.executeCognitivePipeline(input);
     }
 
-    private async executeCognitivePipeline(
-        input: RuntimeInput
-    ): Promise<ExecutionAction[]> {
-        const { policyContext, authorizedContext, runtimeConfig, conversationHistory } = input;
+    private async executeCognitivePipeline(input: RuntimeInput): Promise<ExecutionAction[]> {
+        const { policyContext, authorizedContext, conversationHistory, runtimeConfig } = input;
+        const provider = (runtimeConfig.provider ?? 'openai') as any;
+        const model = runtimeConfig.model ?? 'unknown';
 
-        // 1. Guard: mode gate
+        let matchedTemplateIds: string[] = [];
         if (policyContext.mode === 'off') {
             return [{ type: 'no_action', reason: 'Automation mode is off' }];
         }
@@ -420,8 +424,6 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         // 2. Guard: loop prevention
         const lastMessage = conversationHistory[conversationHistory.length - 1];
         if (!lastMessage) return [{ type: 'no_action', reason: 'No messages in conversation' }];
-        const provider = (runtimeConfig.provider ?? 'groq') as 'groq' | 'openai';
-        const model = runtimeConfig.model ?? 'llama-3.1-8b-instant';
         const maxTokens = runtimeConfig.maxTokens ?? 1024;
         const temperature = runtimeConfig.temperature ?? 0.7;
 
@@ -443,7 +445,6 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
         const templateDefinitions = [...baseTemplateDefinitions, STALL_TEMPLATE];
         
-        let matchedTemplateIds: string[] = [];
         let extractedIntent: string | null = null;
 
         if (baseTemplateDefinitions.length > 0 || true) { // Siempre correr router para detectar bucles con STALL_TEMPLATE
@@ -564,6 +565,53 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             }
         }
 
+        // ── FASE 2.5: RESOLUCIÓN DE SOBERANÍA TEMPORAL (IN-HOUSE) ──────────────
+        const scheduleKeywords = ['horario', 'abierto', 'cerrado', 'sucursal', 'sede', 'dirección', 'donde están', 'ubica', 'atención', 'donde queda', 'is business open'];
+        
+        // CAJA NEGRA DE DEPURACIÓN (Deshabilitada por rendimiento)
+
+        const isScheduleIntent = extractedIntent && scheduleKeywords.some(kw => extractedIntent!.toLowerCase().includes(kw));
+        const hasScheduleTemplate = matchedTemplates.some(t => (t.name || '').toLowerCase().includes('horario') || t.templateId === '63C5');
+        
+        if (isScheduleIntent || hasScheduleTemplate) {
+            try {
+                const timeTruth = await trackCognitiveStep(
+                    'FASE_2.5_SOVEREIGNTY',
+                    { intent: extractedIntent || 'unknown', type: 'temporal_sovereignty' },
+                    { extractedIntent },
+                    async () => {
+                        // Obtenemos la primera sede activa para determinar el estado operativo base
+                        const locations = (authorizedContext.businessProfile as any)?.locations || [];
+                        const primaryLocation = locations.find((l: any) => l.status === 'active') || locations[0];
+                        const locationId = primaryLocation?.id || 'default';
+
+                        const scheduleVerdict = await scheduleService.isBusinessOpen('location', locationId, new Date());
+                        const scheduleSummary = await scheduleService.getScheduleSummary(authorizedContext.accountId);
+                        
+                        const timezone = (authorizedContext.businessProfile as any)?.timezone || 'UTC';
+                        
+                        return `
+ONTOLOGÍA DE TIEMPO (VERDAD DEL MUNDO):
+- Estado Operativo Actual: ${scheduleVerdict.isOpen ? '🟢 ABIERTO AHORA MISMO' : '🔴 CERRADO EN ESTE MOMENTO'}
+- Razón Determinista: ${scheduleVerdict.reason}
+- Reloj del Sistema: ${DateTime.now().setZone(timezone).toFormat('HH:mm')} (Timezone: ${timezone})
+- Resumen de Sedes y Horarios Habituales:
+${scheduleSummary}
+`.trim();
+                    },
+                    input.executionId
+                );
+
+                console.log(`✅ Veredicto inyectado en reporte de soberanía.`);
+                
+                deterministicRagContext = deterministicRagContext 
+                    ? `${deterministicRagContext}\n\n${timeTruth}`
+                    : timeTruth;
+            } catch (error: any) {
+                console.error(`[AsistentesLocal] 📛 Error en Soberanía Temporal: ${error.message}`);
+            }
+        }
+
         // 4. Preparación de Contexto de Enfoque Cognitivo (v17.1)
         // El CognitiveDispatcher ya filtró las plantillas por relevancia (Tamiz Global).
         // Aquí simplemente mantenemos las plantillas autorizadas que llegaron en el input.
@@ -577,9 +625,15 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         if (strictAuthorizedContext.businessProfile && strictAuthorizedContext.businessProfile.templates) {
             strictAuthorizedContext.businessProfile = {
                 ...strictAuthorizedContext.businessProfile,
-                templates: (strictAuthorizedContext.businessProfile.templates as any[]).filter(t => 
-                    strictAuthorizedContext.authorizedTemplates?.includes(t.templateId)
-                )
+                templates: (strictAuthorizedContext.businessProfile.templates as any[]).map(t => {
+                    const isScheduleTemplate = t.name.toLowerCase().includes('horario') || t.templateId.includes('63C5');
+                    if (isScheduleTemplate && isScheduleIntent) {
+                        // Soberanía de Fase 2: Quitamos el contenido estático para evitar colisión
+                        console.log(`[AsistentesLocal] 🛡️ Suprimiendo contenido estático de plantilla ${t.templateId} por conflicto de Soberanía.`);
+                        return { ...t, content: '(Información dinámica proporcionada en el contexto RAG/Hechos)' };
+                    }
+                    return t;
+                }).filter(t => strictAuthorizedContext.authorizedTemplates?.includes(t.templateId))
             };
             
             // También limpiar el contexto privado del perfil si existe
@@ -727,7 +781,8 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
             const isStatic = targetTemplate && 
                              !targetTemplate.content?.includes('{{') && 
-                             !targetTemplate.instructions?.includes('{{');
+                             !targetTemplate.instructions?.includes('{{') &&
+                             !targetTemplate.name.toLowerCase().includes('horario');
 
             if (isStatic && !isRepetition) {
                 return await trackCognitiveStep(

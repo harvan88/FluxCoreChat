@@ -195,14 +195,14 @@ class PromptBuilderService {
     ): string | null {
         const resolvedBusinessProfile = authorizedContext?.businessProfile ?? policyContext.resolvedBusinessProfile;
         const parts: string[] = [];
-        const shouldIncludeTemplateKnowledge = !containsTemplateProtocolInstructions(authorizedContext?.instructions);
-
         const templates = resolvedBusinessProfile.templates as Array<{
             templateId: string; name: string; instructions?: string;
             variables: Array<{ name: string; required?: boolean }>; content?: string;
         }> | undefined;
 
-        if (shouldIncludeTemplateKnowledge && templates && templates.length > 0) {
+        // FASE 0-3 CONSISTENCY: Always include templates in knowledge section if they exist.
+        // Removed mutual exclusion with instructions block to prevent "cognitive blind spots".
+        if (templates && templates.length > 0) {
             const templateLines = [`### Plantillas Disponibles`];
             templates.forEach(t => {
                 let entry = `- **${t.name}** (ID: ${t.templateId})`;

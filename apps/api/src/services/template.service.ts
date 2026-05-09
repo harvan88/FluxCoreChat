@@ -1,6 +1,7 @@
 import { db, templates, templateAssets, assets, accounts, type Template, type TemplateVariable } from '@fluxcore/db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { coreEventBus } from '../core/events';
+import { scheduleService } from './schedule.service';
 
 export interface TemplateInput {
   name: string;
@@ -197,7 +198,8 @@ export class TemplateService {
     const template = await this.getTemplate(accountId, templateId);
 
     // 2. Procesar variables en el contenido
-    let finalContent = template.content;
+    let finalContent = await this.resolveSystemVariables(template.content, accountId);
+    
     if (variables) {
       Object.entries(variables || {}).forEach(([key, value]) => {
         finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), String(value ?? ''));
@@ -399,6 +401,25 @@ export class TemplateService {
         eq(templateAssets.assetId, assetId),
         eq(templateAssets.slot, slot)
       ));
+  }
+
+  /**
+   * Resuelve variables de sistema (proyecciones dinámicas) que no dependen del input del usuario.
+   * Centraliza la lógica de "Lectura + Traducción" antes de que el contenido llegue a la IA o al usuario.
+   */
+  async resolveSystemVariables(content: string | null, accountId: string): Promise<string> {
+    if (!content) return '';
+    let resolved = content;
+
+    // {{system:schedules}} -> Resumen de horarios y sedes
+    if (resolved.includes('{{system:schedules}}')) {
+      const summary = await scheduleService.getScheduleSummary(accountId);
+      resolved = resolved.replace(/\{\{\s*system:schedules\s*\}\}/g, summary);
+    }
+
+    // Agregar aquí futuras variables de sistema (ej: {{system:active_promos}})
+
+    return resolved;
   }
 }
 

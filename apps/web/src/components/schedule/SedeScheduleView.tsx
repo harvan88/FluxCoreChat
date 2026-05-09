@@ -3,15 +3,14 @@ import { WeeklySummary, SpecialSummary } from './ScheduleSummary';
 import { WeeklyEditor, SpecialEditor } from './ScheduleEditor';
 import { useSchedules } from '../../hooks/useSchedules';
 import { useUIStore } from '../../store/uiStore';
-import { Button, ViewHeader } from '../ui';
+import { ViewHeader } from '../ui';
 import { Clock } from 'lucide-react';
 
 interface SedeScheduleViewProps {
   location: any;
-  onBack: () => void;
 }
 
-export function SedeScheduleView({ location, onBack }: SedeScheduleViewProps) {
+export function SedeScheduleView({ location }: SedeScheduleViewProps) {
   const { selectedAccountId, accounts } = useUIStore();
   const { schedule, loadSchedule } = useSchedules('location', location.id);
   const [isEditingWeekly, setIsEditingWeekly] = useState(false);
@@ -40,7 +39,7 @@ export function SedeScheduleView({ location, onBack }: SedeScheduleViewProps) {
                 ownerId={location.id} 
                 initialStatus={localStatus}
                 timezone={currentAccount?.timezone}
-                onSave={(newStatus) => { 
+                onSave={(newStatus: any) => { 
                   if (newStatus) setLocalStatus(newStatus);
                   setIsEditingWeekly(false); 
                   loadSchedule(); 

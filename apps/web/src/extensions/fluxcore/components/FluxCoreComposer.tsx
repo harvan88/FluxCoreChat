@@ -134,7 +134,7 @@ export function FluxCoreComposer(props: {
         return null;
     }, [aiEligibility, aiStatus, props.accountId]);
 
-    const isAutomationBlocked = Boolean(aiBlockInfo);
+    // const _isAutomationBlocked = Boolean(aiBlockInfo);
     const canSend = !props.disabled && !props.isSending && !isAutomaticMode && (hasText || hasQueuedMedia);
     const canOpenAIModeSelector = !!props.accountId && !props.disabled;
 

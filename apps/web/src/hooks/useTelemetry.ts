@@ -36,6 +36,7 @@ export interface TelemetryGroup {
     steps: Record<string, TelemetryStep>;
     traces: TechnicalTrace[];
     lastUpdate: string;
+    isPersisted?: boolean;
 }
 
 interface UseTelemetryOptions {
@@ -142,7 +143,7 @@ export function useTelemetry({ accountId, conversationId, autoConnect = true }: 
     };
 
     const handleTechnicalTrace = (payload: any) => {
-        const { traceId, stepName, payloadEnorme, output, stepStatus, timestamp, spanId, attributes, executionId } = payload;
+        const { stepName, payloadEnorme, output, stepStatus, timestamp, spanId, attributes, executionId } = payload;
         
         // El executionId en el backend es a menudo el messageId
         const messageId = executionId; 

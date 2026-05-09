@@ -16,7 +16,7 @@ import {
 import { Share2, MapPin, Clock } from 'lucide-react';
 import { SidebarNavList } from '../ui/sidebar/SidebarNavList';
 import type { SidebarNavItem } from '../ui/sidebar/SidebarNavList';
-import { usePanelStore } from '../../store/panelStore';
+// import { usePanelStore } from '../../store/panelStore';
 import { useAuthStore } from '../../store/authStore';
 
 type SettingsTabType =

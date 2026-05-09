@@ -9,7 +9,6 @@ import { useAccounts } from '../../store/accountStore';
 import { usePanelStore } from '../../store/panelStore';
 import { useUIStore } from '../../store/uiStore';
 import { useContextRefresh } from '../../hooks/useContextRefresh';
-import { setCurrentAccountDB } from '../../db';
 import type { Account } from '../../types';
 
 // DEBUG: Log para verificar cambios de cuenta
@@ -28,8 +27,6 @@ export function AccountSwitcher({ compact = false }: AccountSwitcherProps) {
     setActiveAccount,
     isLoading,
   } = useAccounts();
-
-  const uiSelectedAccountId = useUIStore((state) => state.selectedAccountId);
 
   // Derivar activeAccount de forma directa para evitar problemas de reactividad
   const activeAccount = accounts.find(a => a.id === activeAccountId) || null;

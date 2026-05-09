@@ -58,7 +58,8 @@ import { publicProfileRoutes } from './routes/public-profile.routes';
 import { actorsRoutes } from './routes/actors.routes';
 import { schedulesRoutes } from './routes/schedules.routes';
 import { documentationQualityRoutes } from './routes/fluxcore/documentation-quality.routes';
-import { handleWSMessage, handleWSOpen, handleWSClose } from './websocket/ws-handler';
+import { handleWSMessage, handleWSOpen, handleWSClose, setupWSListeners } from './websocket/ws-handler';
+
 import { automationScheduler } from './services/automation-scheduler.service';
 import { wesScheduler } from './services/wes-scheduler.service';
 import { mediaOrchestrator } from './services/media-orchestrator.service';
@@ -75,6 +76,7 @@ import { asistentesOpenAIRuntime } from './services/fluxcore/runtimes/asistentes
 import { fluxiRuntime } from './services/fluxcore/runtimes/fluxi.runtime';
 import { cognitionWorker } from './workers/cognition-worker';
 import { chatCoreOutboxService } from './services/chatcore-outbox.service';
+import { systemTemplateProvisioner } from './services/system-template-provisioner.service';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -546,9 +548,10 @@ try {
       open(ws) {
         handleWSOpen(ws);
       },
-      close(ws) {
-        handleWSClose(ws);
+      close(ws, code, reason) {
+        handleWSClose(ws, code, reason);
       },
+
     },
   });
 } catch (error) {
@@ -572,6 +575,10 @@ process.on('unhandledRejection', (reason, promise) => {
 console.log(`🚀 FluxCore API running at http://localhost:${server.port}`);
 console.log(`📚 Swagger docs at http://localhost:${server.port}/swagger`);
 console.log(`🔌 WebSocket at ws://localhost:${server.port}/ws`);
+
+// 🔥 NUEVO: Inicializar listeners de WebSocket distribuido
+setupWSListeners();
+
 
 const role = process.env.FLUXCORE_ROLE || 'standalone';
 const isWorker = role === 'worker' || role === 'standalone';
@@ -605,6 +612,9 @@ console.log(`[Architecture] Node Role: ${role.toUpperCase()}`);
 
       console.log('   - CognitionWorker (Always ON)');
       cognitionWorker.start();
+
+      console.log('   - System Template Provisioner');
+      systemTemplateProvisioner.setupListeners();
 
       console.log('✅ Kernel & Services started successfully');
     } else {

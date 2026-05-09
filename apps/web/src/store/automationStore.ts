@@ -13,6 +13,8 @@ export interface AutomationRule {
   mode: AutomationMode;
   enabled: boolean;
   config: any;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AutomationState {

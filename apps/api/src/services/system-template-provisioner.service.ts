@@ -1,23 +1,100 @@
-import { db, templates, fluxcoreTemplateSettings } from '@fluxcore/db';
+import { db, templates, fluxcoreTemplateSettings, accounts } from '@fluxcore/db';
 import { eq, and, sql } from 'drizzle-orm';
 import { coreEventBus } from '../core/events';
+import { templateService } from './template.service';
+import { fluxCoreTemplateSettingsService } from './fluxcore/template-settings.service';
+import { scheduleService } from './schedule.service';
+import { SYSTEM_INSTRUCTIONS } from '../core/constants/instructions';
 
 /**
  * SystemTemplateProvisionerService
  * 
- * Gestiona la provisión de plantillas automáticas del sistema para habilitar
- * capacidades cognitivas específicas (ej: horarios) sin inyección hardcodeada.
+ * Gestiona el ciclo de vida de las plantillas de sistema que habilitan capacidades cognitivas.
+ * Implementa la sincronización bidireccional entre el switch de perfil y la autorización de la plantilla.
  */
 export class SystemTemplateProvisionerService {
     private readonly SCHEDULE_TEMPLATE_TAG = 'system:schedule';
+    private readonly SCHEDULE_INSTRUCTIONS = SYSTEM_INSTRUCTIONS.SCHEDULE_TEMPLATE;
+
+
+    constructor() {
+        // No llamamos a setupListeners en el constructor para evitar problemas de inicialización circular
+        // si el servicio se importa antes de que el event bus esté listo.
+    }
 
     /**
-     * Asegura que exista la plantilla de consulta de horarios para una cuenta.
+     * Configura los listeners para mantener la sincronía bidireccional.
+     */
+    setupListeners() {
+        console.log('[SystemTemplateProvisioner] 🎧 Configurando listeners de sincronización...');
+        
+        // Cuando cambia la autorización en la plantilla -> Actualizar perfil de cuenta
+        coreEventBus.on('fluxcore.template.settings.changed', async (payload: { templateId: string; accountId: string; authorizeForAI: boolean }) => {
+            const { templateId, accountId, authorizeForAI } = payload;
+            
+            try {
+                const [template] = await db.select({ tags: templates.tags })
+                    .from(templates)
+                    .where(eq(templates.id, templateId))
+                    .limit(1);
+
+                if (template?.tags && (template.tags as string[]).includes(this.SCHEDULE_TEMPLATE_TAG)) {
+                    // Evitar bucle infinito: solo actualizar si el valor es diferente
+                    const [account] = await db.select({ aiIncludeLocations: accounts.aiIncludeLocations })
+                        .from(accounts)
+                        .where(eq(accounts.id, accountId))
+                        .limit(1);
+
+                    if (account && account.aiIncludeLocations !== authorizeForAI) {
+                        console.log(`[SystemTemplateProvisioner] 🔄 Sincronizando Perfil <- Plantilla (aiIncludeLocations = ${authorizeForAI})`);
+                        await db.update(accounts)
+                            .set({ aiIncludeLocations: authorizeForAI })
+                            .where(eq(accounts.id, accountId));
+                        
+                        // Emitimos evento de perfil actualizado para invalidar caches de contexto
+                        coreEventBus.emit('account.profile.updated', { accountId, aiIncludeLocations: authorizeForAI });
+                    }
+                }
+            } catch (err) {
+                console.error('[SystemTemplateProvisioner] Error en sync Plantilla -> Perfil:', err);
+            }
+        });
+    }
+
+    /**
+     * Sincroniza la plantilla de horarios con el estado del switch de perfil.
+     */
+    async syncScheduleTemplate(accountId: string, authorized: boolean) {
+        console.log(`[SystemTemplateProvisioner] 🔄 Sincronizando Perfil -> Plantilla (authorized = ${authorized})`);
+        const templateId = await this.ensureScheduleTemplate(accountId);
+        
+        // 1. Actualizar SOLO el flag de autorización en la tabla core (Templates)
+        // NO sobrescribimos el content aquí para respetar ediciones manuales del usuario.
+        // La variable {{system:schedules}} se resuelve dinámicamente en TemplateRegistryService.
+        await db.update(templates)
+            .set({ 
+                allowAutomatedUse: authorized, 
+                updatedAt: new Date() 
+            })
+            .where(eq(templates.id, templateId));
+
+        // 2. Actualizar el flag en la tabla de extensión (FluxCore Settings)
+        await fluxCoreTemplateSettingsService.updateSettings(
+            templateId,
+            authorized,
+            this.SCHEDULE_INSTRUCTIONS,
+            { 
+                aiIncludeName: true, 
+                aiIncludeContent: true, 
+                aiIncludeInstructions: true 
+            }
+        );
+    }
+
+    /**
+     * Asegura que exista la plantilla de horarios, usando el pipeline oficial de creación.
      */
     async ensureScheduleTemplate(accountId: string) {
-        console.log(`[SystemTemplateProvisioner] 🛠️ Asegurando plantilla de horarios para account=${accountId}`);
-
-        // 1. Buscar si ya existe por el tag del sistema
         const [existing] = await db.select()
             .from(templates)
             .where(and(
@@ -26,55 +103,36 @@ export class SystemTemplateProvisionerService {
             ))
             .limit(1);
 
-        let templateId: string;
+        if (existing) return existing.id;
 
-        if (existing) {
-            templateId = existing.id;
-            // Asegurar que esté activa y autorizada
-            if (!existing.isActive || !existing.allowAutomatedUse) {
-                await db.update(templates)
-                    .set({ isActive: true, allowAutomatedUse: true, updatedAt: new Date() })
-                    .where(eq(templates.id, existing.id));
-            }
-        } else {
-            // 2. Crear la plantilla del sistema
-            const [inserted] = await db.insert(templates).values({
-                accountId,
-                name: 'Información de Horarios y Sucursales',
-                content: 'Usa la herramienta is_business_open para responder dudas sobre horarios, apertura o disponibilidad de nuestras sedes.',
-                category: 'Sistema',
-                tags: [this.SCHEDULE_TEMPLATE_TAG],
-                isActive: true,
-                allowAutomatedUse: true,
-            }).returning();
-            
-            templateId = inserted.id;
-            console.log(`[SystemTemplateProvisioner] ✅ Plantilla creada: ${templateId}`);
-        }
+        console.log(`[SystemTemplateProvisioner] 🏗️ Ingestando plantilla de horarios para account=${accountId}`);
+        
+        // Usamos la variable dinámica {{system:schedules}} en lugar de inyectar el texto estático.
+        // Esto permite que el usuario mueva la variable o agregue texto propio sin perder la actualización de datos.
+        const content = `Nuestros horarios de atención son gestionados de forma dinámica para reflejar la realidad de cada sede.\n\n{{system:schedules}}`;
 
-        // 3. Garantizar que tenga settings de FluxCore AI (Autorización)
-        await db.insert(fluxcoreTemplateSettings)
-            .values({ 
-                templateId, 
-                authorizeForAI: true,
-                aiUsageInstructions: 'Activar cuando el usuario pregunte por horarios, disponibilidad, direcciones o si el negocio está abierto/cerrado.',
-                aiIncludeName: true,
-                aiIncludeContent: true,
-                aiIncludeInstructions: true
-            })
-            .onConflictDoUpdate({
-                target: [fluxcoreTemplateSettings.templateId],
-                set: { authorizeForAI: true, updatedAt: new Date() }
-            });
-
-        // 4. Emitir cambio para que el Tamiz Semántico la indexe inmediatamente
-        coreEventBus.emit('template.authorization.changed', {
-            templateId,
-            accountId,
-            allowAutomatedUse: true,
+        const template = await templateService.createTemplate(accountId, {
+            name: 'Información de Horarios y Sucursales',
+            content,
+            category: 'Sistema',
+            tags: [this.SCHEDULE_TEMPLATE_TAG],
+            isActive: true,
+            allowAutomatedUse: true // Se crea autorizada por defecto al activar el switch
         });
 
-        return templateId;
+        // Pipeline de FluxCore: Inicializar settings de IA con instrucciones semánticas ricas
+        await fluxCoreTemplateSettingsService.updateSettings(
+            template.id,
+            true,
+            this.SCHEDULE_INSTRUCTIONS,
+            { 
+                aiIncludeName: true, 
+                aiIncludeContent: true, 
+                aiIncludeInstructions: true 
+            }
+        );
+
+        return template.id;
     }
 }
 

@@ -79,6 +79,7 @@ export interface Account {
   timezone?: string | null;
   // New asset-based avatar field
   avatarAssetId?: string;
+  aiIncludeLocations?: boolean;
 }
 
 export interface Relationship {
