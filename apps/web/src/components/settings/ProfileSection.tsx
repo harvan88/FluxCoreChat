@@ -23,10 +23,13 @@ import { useProfile } from '../../hooks/useProfile';
 import { useLocations } from '../../hooks/useLocations';
 import { getApiUrl } from '../../utils/urls';
 import { usePanelStore } from '../../store/panelStore';
-import { Button, Input, Card, Textarea, CopyButton } from '../ui';
+import { Button, Input, Card, Textarea, CopyButton, SearchFirstSelector } from '../ui';
 import { Switch } from '../ui/Switch';
 import { AvatarUpload } from '../profile/AvatarUpload';
 import { IdCopyable } from '../fluxcore/detail/IdCopyable';
+import { getUnifiedRegionalOptions } from '../../utils/regional';
+
+const REGIONAL_OPTIONS = getUnifiedRegionalOptions();
 
 interface ProfileSectionProps {
   onBack?: () => void;
@@ -62,6 +65,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   const [aiIncludePrivateContext, setAiIncludePrivateContext] = useState(true);
   const [aiIncludeTimestamp, setAiIncludeTimestamp] = useState(true);
   const [aiIncludeLocations, setAiIncludeLocations] = useState(true);
+  const [aiIncludeSchedule, setAiIncludeSchedule] = useState(true);
 //   const [isBusinessEnabled, setIsBusinessEnabled] = useState(false);
   const [alias, setAlias] = useState('');
   const [aliasStatus, setAliasStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved' | 'current'>('idle');
@@ -154,6 +158,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       setAiIncludePrivateContext(profile.aiIncludePrivateContext ?? true);
       setAiIncludeTimestamp(profile.aiIncludeTimestamp ?? true);
       setAiIncludeLocations(account?.aiIncludeLocations ?? true);
+      setAiIncludeSchedule(profile.aiIncludeSchedule ?? account?.aiIncludeLocations ?? true);
 //       setIsBusinessEnabled(profile.accountType === 'business');
       setCountry(profile.country || '');
       setTimezone(profile.timezone || '');
@@ -174,11 +179,12 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
         aiIncludePrivateContext !== (profile.aiIncludePrivateContext ?? true) ||
         aiIncludeTimestamp !== (profile.aiIncludeTimestamp ?? true) ||
         aiIncludeLocations !== (account?.aiIncludeLocations ?? true) ||
+        aiIncludeSchedule !== (profile.aiIncludeSchedule ?? account?.aiIncludeLocations ?? true) ||
         country !== (profile.country || '') ||
         timezone !== (profile.timezone || '');
       setHasChanges(changed);
     }
-  }, [displayName, bio, alias, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, aiIncludeLocations, country, timezone, profile, account]);
+  }, [displayName, bio, alias, avatarAssetId, privateContext, allowAutomatedUse, aiIncludeName, aiIncludeBio, aiIncludePrivateContext, aiIncludeLocations, aiIncludeSchedule, country, timezone, profile, account]);
 
   const handleSave = async () => {
     const isDelegated = aiIncludeName || aiIncludeBio || aiIncludePrivateContext;
@@ -193,6 +199,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
       aiIncludePrivateContext,
       aiIncludeTimestamp,
       aiIncludeLocations,
+      aiIncludeSchedule,
       country,
       timezone,
     };
@@ -231,7 +238,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden relative">
       {/* Header */}
       <button
         onClick={onBack}
@@ -265,7 +272,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
           {/* Account ID */}
           {account && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-muted uppercase tracking-wider">ID de Cuenta</span>
+              <span className="text-xs font-medium text-muted">Id de cuenta</span>
               <IdCopyable id={account.id} />
             </div>
           )}
@@ -323,7 +330,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-primary">Nombre visible</label>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                <span className="text-[10px] text-muted font-semibold">IA</span>
                 <Switch
                   checked={aiIncludeName}
                   onCheckedChange={setAiIncludeName}
@@ -340,45 +347,36 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
 
           {/* Regional Settings Card */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-muted uppercase tracking-widest">Configuración Regional (SSOT)</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-primary">País</label>
-                <select 
-                  value={country} 
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full bg-surface border border-subtle rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
-                >
-                  <option value="">Seleccionar país...</option>
-                  <option value="AR">Argentina</option>
-                  <option value="ES">España</option>
-                  <option value="MX">México</option>
-                  <option value="CO">Colombia</option>
-                  <option value="US">Estados Unidos</option>
-                  <option value="CL">Chile</option>
-                  <option value="UY">Uruguay</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-primary">Zona Horaria</label>
-                <select 
-                  value={timezone} 
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full bg-surface border border-subtle rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
-                >
-                  <option value="">Seleccionar zona...</option>
-                  <option value="America/Argentina/Buenos_Aires">Buenos Aires (GMT-3)</option>
-                  <option value="Europe/Madrid">Madrid (GMT+1)</option>
-                  <option value="America/Mexico_City">Ciudad de México (GMT-6)</option>
-                  <option value="America/Bogota">Bogotá (GMT-5)</option>
-                  <option value="America/Santiago">Santiago (GMT-3)</option>
-                  <option value="America/Montevideo">Montevideo (GMT-3)</option>
-                  <option value="UTC">UTC / Greenwich</option>
-                </select>
-              </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-muted">Configuración regional (SSOT)</h3>
+              {country && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20">
+                  <span className="text-[10px] font-bold text-accent">{country}</span>
+                </div>
+              )}
             </div>
-            <p className="text-[10px] text-muted leading-relaxed">
-              * Estos valores son la <strong>Fuente Única de Verdad</strong> para todos tus horarios y procesos automáticos.
+            
+            <SearchFirstSelector
+              label="Ubicación y Zona Horaria"
+              value={timezone}
+              options={REGIONAL_OPTIONS}
+              onSelect={(val) => {
+                const opt = REGIONAL_OPTIONS.find(o => o.value === val);
+                if (opt) {
+                  setTimezone(opt.value);
+                  setCountry(opt.country);
+                }
+              }}
+              renderValue={(val) => {
+                const opt = REGIONAL_OPTIONS.find(o => o.value === val);
+                return opt ? `${opt.label} - ${opt.secondaryLabel}` : val;
+              }}
+              placeholder="Ej: Argentina, España, México..."
+              searchPlaceholder="Busca tu país o ciudad principal..."
+            />
+
+            <p className="text-[10px] text-muted leading-relaxed italic">
+              * Unificamos País y Zona Horaria como Fuente Única de Verdad para todos tus procesos automáticos.
             </p>
           </div>
 
@@ -387,7 +385,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-primary">Presentación</label>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                <span className="text-[10px] text-muted font-semibold">IA</span>
                 <Switch
                   checked={aiIncludeBio}
                   onCheckedChange={setAiIncludeBio}
@@ -415,7 +413,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                 </div>
                 <div className="h-4 w-px bg-subtle mx-1" />
                 <div className="flex items-center gap-2 ml-1">
-                  <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                  <span className="text-[10px] text-muted font-semibold">IA</span>
                   <Switch checked={aiIncludePrivateContext} onCheckedChange={setAiIncludePrivateContext} />
                 </div>
               </div>
@@ -445,7 +443,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                  <span className="text-[10px] text-muted font-semibold">IA</span>
                   <Switch
                     checked={aiIncludeLocations}
                     onCheckedChange={setAiIncludeLocations}
@@ -474,7 +472,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                           </div>
                           <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
                             <Truck size={10} className="text-muted" />
-                            <span className="text-[9px] font-bold text-muted uppercase">{loc.serviceType}</span>
+                            <span className="text-[9px] font-bold text-muted">{loc.serviceType}</span>
                           </div>
                         </div>
                       ))}
@@ -484,6 +482,30 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                   )}
                 </div>
               )}
+            </Card>
+          </div>
+          
+          {/* AI Schedule Gated Presence */}
+          <div className="space-y-3">
+            <Card variant="bordered" className={`p-4 border-accent/20 transition-all duration-300 ${aiIncludeSchedule ? 'bg-accent/5' : 'bg-hover/20 grayscale'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${aiIncludeSchedule ? 'bg-accent/20 text-accent' : 'bg-subtle text-muted'}`}>
+                    <span className="text-xs font-bold">📅</span>
+                  </div>
+                  <div>
+                    <div className="text-primary font-medium text-sm">Horarios de Atención</div>
+                    <div className="text-[11px] text-muted">¿La IA puede proyectar tus horarios (Digital/Sede)?</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted font-semibold">IA</span>
+                  <Switch
+                    checked={aiIncludeSchedule}
+                    onCheckedChange={setAiIncludeSchedule}
+                  />
+                </div>
+              </div>
             </Card>
           </div>
 
@@ -500,7 +522,7 @@ export function ProfileSection({ onBack }: ProfileSectionProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted uppercase tracking-wider font-semibold">IA</span>
+                <span className="text-[10px] text-muted font-semibold">IA</span>
                 <Switch
                   checked={aiIncludeTimestamp}
                   onCheckedChange={setAiIncludeTimestamp}

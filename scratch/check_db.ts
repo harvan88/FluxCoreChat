@@ -1,14 +1,16 @@
-import { db, relationships, conversations } from '@fluxcore/db';
-import { or, eq } from 'drizzle-orm';
+import { db, fluxcoreAssistants } from '@fluxcore/db';
+import { eq } from 'drizzle-orm';
 
-async function main() {
-    console.log('--- Relationships (where accountId is Dr. Jones) ---');
-    const rels1 = await db.select().from(relationships).where(eq(relationships.accountId, '65d340af-97ff-4c9b-85d2-b378badeacf4'));
-    console.log(JSON.stringify(rels1, null, 2));
-
-    console.log('\n--- Relationships (where targetAccountId is Dr. Jones) ---');
-    const rels2 = await db.select().from(relationships).where(eq(relationships.targetAccountId, '65d340af-97ff-4c9b-85d2-b378badeacf4'));
-    console.log(JSON.stringify(rels2, null, 2));
+async function checkAssistant() {
+    const accountId = '65d340af-97ff-4c9b-85d2-b378badeacf4';
+    const assistants = await db.select().from(fluxcoreAssistants).where(eq(fluxcoreAssistants.accountId, accountId));
+    
+    console.log('Assistants for account:', accountId);
+    assistants.forEach(a => {
+        console.log(`- ID: ${a.id}, Name: ${a.name}, Status: ${a.status}`);
+        console.log(`  ModelConfig:`, a.modelConfig);
+    });
+    process.exit(0);
 }
 
-main().catch(console.error);
+checkAssistant();

@@ -266,7 +266,9 @@ class FluxPolicyContextService {
 
         const policyResult = await db.execute(sql`
             SELECT account_id, mode, response_delay_ms, turn_window_ms,
-                   turn_window_typing_ms, turn_window_max_ms, off_hours_policy
+                   turn_window_typing_ms, turn_window_max_ms, off_hours_policy,
+                   ai_include_name, ai_include_bio, ai_include_locations,
+                   ai_include_schedule, ai_include_social_links, ai_include_private_context
             FROM fluxcore_account_policies
             WHERE account_id = ${accountId}
             LIMIT 1
@@ -280,6 +282,13 @@ class FluxPolicyContextService {
             turnWindowTypingMs: policyResult[0].turn_window_typing_ms,
             turnWindowMaxMs: policyResult[0].turn_window_max_ms,
             offHoursPolicy: policyResult[0].off_hours_policy,
+            // Visibility flags (FluxCore Sovereignty)
+            aiIncludeName: policyResult[0].ai_include_name,
+            aiIncludeBio: policyResult[0].ai_include_bio,
+            aiIncludeLocations: policyResult[0].ai_include_locations,
+            aiIncludeSchedule: policyResult[0].ai_include_schedule,
+            aiIncludeSocialLinks: policyResult[0].ai_include_social_links,
+            aiIncludePrivateContext: policyResult[0].ai_include_private_context,
         } : null;
 
         console.log(`[FluxPolicyContext] 📋 POLÍTICA ENCONTRADA:`);
@@ -402,25 +411,40 @@ class FluxPolicyContextService {
             .limit(1);
         if (!account) return {};
 
+        // 🛡️ SOBERANÍA: Priorizar flags de fluxcore_account_policies si existen
+        // Fallback a los flags de la tabla accounts (Legacy)
+        const policy = await db.query.fluxcoreAccountPolicies.findFirst({
+            where: (f, { eq }) => eq(f.accountId, accountId)
+        });
+
+        const canIncludeName = policy?.aiIncludeName ?? account.aiIncludeName ?? true;
+        const canIncludeBio = policy?.aiIncludeBio ?? account.aiIncludeBio ?? true;
+        const canIncludePrivate = policy?.aiIncludePrivateContext ?? account.aiIncludePrivateContext ?? true;
+        const canIncludeSocial = policy?.aiIncludeSocialLinks ?? account.aiIncludeSocialLinks ?? true;
+        const canIncludeLocations = policy?.aiIncludeLocations ?? account.aiIncludeLocations ?? true;
+
         const profile: Record<string, unknown> = {
             aiIncludeTimestamp: account.aiIncludeTimestamp ?? true,
             country: account.country,
             timezone: account.timezone,
+            // Exponer flags finales para los Providers de Realidad
+            aiIncludeLocations: canIncludeLocations,
+            aiIncludeSchedule: policy?.aiIncludeSchedule ?? account.aiIncludeLocations ?? true, // Fallback schedule -> locations if missing
         };
         const accountProfile = (account.profile || {}) as any;
 
-        if (account.aiIncludeName) {
+        if (canIncludeName) {
             profile.displayName = account.displayName || account.username;
         }
-        if (account.aiIncludeBio) {
+        if (canIncludeBio) {
             profile.bio = accountProfile.bio || undefined;
         }
-        if (account.aiIncludePrivateContext) {
+        if (canIncludePrivate) {
             profile.privateContext = account.privateContext || undefined;
         }
 
         // Social links — gated by aiIncludeSocialLinks toggle and granular aiEnabled flags
-        if (account.aiIncludeSocialLinks && account.socialLinks) {
+        if (canIncludeSocial && account.socialLinks) {
             const links = account.socialLinks as Record<string, { value: string; aiEnabled: boolean }>;
             const authorizedLinks: Record<string, string> = {};
             
@@ -461,7 +485,7 @@ class FluxPolicyContextService {
         }
 
         // Locations — gated by aiIncludeLocations toggle
-        if (account.aiIncludeLocations) {
+        if (canIncludeLocations) {
             const { accountLocations } = await import('@fluxcore/db');
             const rawLocations = await db
                 .select({

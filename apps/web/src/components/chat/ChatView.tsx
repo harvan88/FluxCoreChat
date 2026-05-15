@@ -285,6 +285,8 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
     connect: connectWS,
     subscribe,
     unsubscribe,
+    subscribeConversation,
+    unsubscribeConversation,
     reportActivity,
   } = useWebSocket({
     onMessage: (msg) => {
@@ -375,6 +377,17 @@ export function ChatView({ conversationId, accountId, relationshipId }: ChatView
       };
     }
   }, [conversationId, activeRelationshipId, subscribe, unsubscribe]);
+
+  // 🔥 CORRECCIÓN: Suscribirse también por conversationId (para broadcasts distribuidos vía EventBus)
+  useEffect(() => {
+    if (conversationId) {
+      console.log('[ChatView] Subscribing to conversation:', conversationId);
+      subscribeConversation(conversationId);
+      return () => {
+        unsubscribeConversation(conversationId);
+      };
+    }
+  }, [conversationId, subscribeConversation, unsubscribeConversation]);
 
   useEffect(() => {
     pendingConversationScrollRef.current = true;

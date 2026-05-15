@@ -11,7 +11,7 @@ location: "docs/reconstruction-phase-1/exhaustive-mapping/00-INDEX.md"
 ## 🎯 Propósito
 Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y proporciona métricas reales del estado de cobertura del proyecto FluxCore.
 
-**Última actualización:** 2026-05-08 (Infraestructura Distribuida)
+**Última actualización:** 2026-05-10 (Hidratación Soberana & Human Schedules)
 **Validador:** `DocumentationQualityService` (backend)
 
 ---
@@ -21,11 +21,11 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 | Paisaje | Documentos | Estado | Fase |
 | :--- | :--- | :--- | :--- |
 | **01-ui-landscape** | 173 docs | ✅ Completado | Fase 1 |
-| **02-backend-landscape** | 201 docs | ✅ Completado | Fase 2 |
+| **02-backend-landscape** | 202 docs | ✅ Completado | Fase 2 |
 | **03-database-landscape** | 33 docs | ✅ Completado | Fase 3 |
 | **04-end-to-end-flows** | 1 doc | ⏳ Pendiente | Fase 4 |
 | **05-configuration-state** | 2 docs | ⏳ Parcial | Fase 5 |
-| **TOTAL** | **410 docs** | 🏗️ 3/5 Fases | — |
+| **TOTAL** | **411 docs** | 🏗️ 3/5 Fases | — |
 
 ---
 
@@ -63,14 +63,23 @@ Centraliza el acceso a todos los paisajes documentados (UI, Backend, Database) y
 
 ---
 
-## ⚙️ 2. Backend Landscape — Servicios y Rutas (201 docs)
+## ⚙️ 2. Backend Landscape — Servicios y Rutas (202 docs)
 
 **Ubicación:** `02-backend-landscape/`
+
+### 🧠 FluxCore Kernel:
+```
+🏗️ Core Engines
+├── kernel.md (Estable)
+├── kernel-message-core.md (Actualizado - Hidratación Soberana)
+├── kernel-dispatcher.md
+└── core-workresolver.md
+```
 
 ### Sistema Universal de Horarios (Fase 3):
 ```
 ⏰ Schedules Engine
-├── schedule-service.md (Estable)
+├── schedule-service.md (Actualizado - Human Format)
 ├── schedules-routes.md (Estable)
 ├── location-service.md (Estable)
 ├── locations-routes.md (Estable)

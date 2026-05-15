@@ -49,17 +49,19 @@ export function useUrlBackSync() {
         const allIds = (focusedContainer?.tabs || [])
           .filter(t => t.type === activeTab.type)
           .map(t => {
+            if (!t.identity) return '';
             const prefixLen = route.identityPrefix!.length + 1;
             // Para extensiones, el formato incluye el accountId antes del resourceId
             // Ej: "extension:@fluxcore/asistentes:assistant:accountId:resourceId"
-            const rest = t.identity!.substring(prefixLen);
+            const rest = t.identity.substring(prefixLen);
             const parts = rest.split(':');
             return parts.length > 1 ? parts[1] : parts[0]; 
-          });
+          })
+          .filter(Boolean);
         targetPath = `/@/${alias}${route.pattern.replace(':id', allIds.join('+'))}`;
       } else {
         const prefixLen = route.identityPrefix!.length + 1;
-        const rest = activeTab.identity.substring(prefixLen);
+        const rest = activeTab.identity?.substring(prefixLen) || '';
         const parts = rest.split(':');
         // Para extensiones (ext:id:view:account:resourceId), rest es "accountId:resourceId"
         const id = parts.length > 1 ? parts[1] : parts[0];

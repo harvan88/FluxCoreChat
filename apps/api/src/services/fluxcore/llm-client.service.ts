@@ -37,7 +37,7 @@ export interface LLMToolCall {
 }
 
 export interface LLMCompletionParams {
-    provider: 'groq' | 'openai';
+    provider: 'groq' | 'openai' | 'google';
     model: string;
     messages: LLMMessage[];
     maxTokens?: number;
@@ -52,7 +52,7 @@ export interface LLMCompletionResult {
     toolCalls?: LLMToolCall[];
     finishReason?: string;
     model: string;
-    provider: 'groq' | 'openai';
+    provider: 'groq' | 'openai' | 'google';
     usage?: {
         promptTokens: number;
         completionTokens: number;
@@ -78,6 +78,10 @@ class LLMClientService {
             throw new Error(`[LLMClient] No API key configured for provider: ${params.provider}`);
         }
 
+        if (params.provider === 'google') {
+            return await this.callGoogleAPI(params, apiKey);
+        }
+
         return await this.callAPI(params, apiKey);
     }
 
@@ -85,7 +89,7 @@ class LLMClientService {
         params: LLMCompletionParams,
         apiKey: string
     ): Promise<LLMCompletionResult> {
-        const baseUrl = PROVIDER_BASE_URLS[params.provider];
+        const baseUrl = PROVIDER_BASE_URLS[params.provider as 'groq' | 'openai'];
         const url = `${baseUrl}/chat/completions`;
 
         const body: Record<string, unknown> = {
@@ -150,9 +154,108 @@ class LLMClientService {
         };
     }
 
-    private getApiKey(provider: 'groq' | 'openai'): string | null {
+    private async callGoogleAPI(
+        params: LLMCompletionParams,
+        apiKey: string
+    ): Promise<LLMCompletionResult> {
+        // Google Native API Endpoint
+        // format: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${params.model}:generateContent`;
+
+        // Map system message to system_instruction
+        const systemMessage = params.messages.find(m => m.role === 'system');
+        const otherMessages = params.messages.filter(m => m.role !== 'system');
+
+        const contents = otherMessages.map(m => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content || '' }]
+        }));
+
+        const body: Record<string, unknown> = {
+            contents,
+            generationConfig: {
+                maxOutputTokens: params.maxTokens ?? 1024,
+                temperature: params.temperature ?? 0.7,
+            }
+        };
+
+        if (systemMessage) {
+            body.system_instruction = {
+                parts: [{ text: systemMessage.content || '' }]
+            };
+        }
+
+        if (params.tools && params.tools.length > 0) {
+            body.tools = [
+                {
+                    function_declarations: params.tools.map(t => ({
+                        name: t.function.name,
+                        description: t.function.description,
+                        parameters: t.function.parameters
+                    }))
+                }
+            ];
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-goog-api-key': apiKey,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            const err = new Error(`Google AI API error ${response.status}: ${errText.slice(0, 200)}`);
+            (err as any).status = response.status;
+            throw err;
+        }
+
+        const data = await response.json() as any;
+        const candidate = data.candidates?.[0];
+        const message = candidate?.content;
+        const finishReason = candidate?.finishReason?.toLowerCase() || 'stop';
+
+        const content = message?.parts?.[0]?.text || null;
+        const toolCalls: LLMToolCall[] | undefined = Array.isArray(message?.parts)
+            ? message.parts
+                .filter((p: any) => p.functionCall)
+                .map((p: any) => ({
+                    id: `call_${Math.random().toString(36).substring(7)}`, // Google doesn't always provide IDs in native format
+                    type: 'function',
+                    function: {
+                        name: p.functionCall.name,
+                        arguments: JSON.stringify(p.functionCall.args)
+                    }
+                }))
+            : undefined;
+
+        if (!content && (!toolCalls || toolCalls.length === 0)) {
+            throw new Error(`Google AI returned empty content and no tool calls. Model: ${params.model}`);
+        }
+
+        return {
+            content,
+            toolCalls: (toolCalls?.length ?? 0) > 0 ? toolCalls : undefined,
+            finishReason,
+            model: params.model,
+            provider: 'google',
+            usage: data.usageMetadata ? {
+                promptTokens: data.usageMetadata.promptTokenCount ?? 0,
+                completionTokens: data.usageMetadata.candidatesTokenCount ?? 0,
+                totalTokens: data.usageMetadata.totalTokenCount ?? 0,
+            } : undefined,
+        };
+    }
+
+    private getApiKey(provider: 'groq' | 'openai' | 'google'): string | null {
         if (provider === 'groq') {
             return process.env.GROQ_API_KEY || null;
+        }
+        if (provider === 'google') {
+            return process.env.GOOGLE_API_KEY || null;
         }
         return process.env.OPENAI_API_KEY || null;
     }

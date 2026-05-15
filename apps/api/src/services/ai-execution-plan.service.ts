@@ -30,11 +30,13 @@ const OPENAI_ENGINE = 'openai_chat';
 const PROVIDER_BASE_URLS: Record<AIProviderId, string> = {
   groq: 'https://api.groq.com/openai/v1',
   openai: 'https://api.openai.com/v1',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
 };
 
 const PROVIDER_ENV_KEYS: Record<AIProviderId, { single: string; pool: string }> = {
   groq: { single: 'GROQ_API_KEY', pool: 'GROQ_API_KEYS' },
   openai: { single: 'OPENAI_API_KEY', pool: 'OPENAI_API_KEYS' },
+  google: { single: 'GOOGLE_API_KEY', pool: 'GOOGLE_API_KEYS' },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -143,7 +145,9 @@ export async function resolveExecutionPlan(
   const mc = (composition.assistant.modelConfig as Record<string, any>) || {};
 
   const assistantProvider: AIProviderId | null =
-    mc.provider === 'groq' || mc.provider === 'openai' ? (mc.provider as AIProviderId) : null;
+    mc.provider === 'groq' || mc.provider === 'openai' || mc.provider === 'google' 
+      ? (mc.provider as AIProviderId) 
+      : null;
   const assistantModel = typeof mc.model === 'string' ? mc.model : 'llama-3.1-8b-instant';
   const temperature = typeof mc.temperature === 'number' ? mc.temperature : 0.7;
   const topP = typeof mc.topP === 'number' ? mc.topP : 1.0;
@@ -153,7 +157,7 @@ export async function resolveExecutionPlan(
 
   // 4. Resolve entitlements & allowed providers
   const entitlement = await aiEntitlementsService.getEntitlement(accountId);
-  const allProviders: AIProviderId[] = ['groq', 'openai'];
+  const allProviders: AIProviderId[] = ['groq', 'openai', 'google'];
   const allowedProviders = (entitlement?.allowedProviders ?? allProviders)
     .filter((p) => getKeysForProvider(p).length > 0);
 

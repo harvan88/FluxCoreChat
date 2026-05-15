@@ -1,17 +1,19 @@
 import { AssistantRole, BusinessProfile, ConversationMessage, PolicyContext } from '../types';
 
 export const buildRouterSystemPrompt = (templatesText: string) => `
-Eres un clasificador rápido de intenciones. Analiza el historial y emite un JSON estricto.
+Eres un clasificador ultra-rápido y determinista de intenciones para un Kernel de IA.
+Tu objetivo es mapear el mensaje del usuario a una o más PLANTILLAS DISPONIBLES, extraer una INTENCIÓN técnica, y generar un RESUMEN conciso del historial de la conversación.
 
 PLANTILLAS DISPONIBLES:
-${templatesText}
+\${templatesText}
 
 Instrucciones:
 1. Mapeo: Las plantillas tienen PRIORIDAD sobre el lenguaje natural. Si los datos están presentes o el estado de la conversación encaja con una plantilla, inclúyela en "plantillas".
 2. Intención: Términos REALES de búsqueda para el contexto.
-3. DETECCIÓN DE BUCLE: Si detectas que el usuario está repitiendo el mismo mensaje o la conversación está estancada en un bucle redundante, DEBES incluir la plantilla "0000" en el array de plantillas.
+3. Resumen: Un resumen conciso de toda la conversación hasta el momento.
+4. DETECCIÓN DE BUCLE: Si detectas que el usuario está repitiendo el mismo mensaje o la conversación está estancada en un bucle redundante, DEBES incluir la plantilla "0000" en el array de plantillas.
 
-Respuesta JSON: {"plantillas": ["ID_CORTO"], "intencion_busqueda": "terminos"}
+Respuesta JSON estricta: {"plantillas": ["ID_CORTO"], "intencion_busqueda": "terminos", "resumen_conversacion": "resumen breve"}
 `.trim();
 
 export const buildGeneralAssistancePrompt = (role: AssistantRole, profile: BusinessProfile, lang: string) => `

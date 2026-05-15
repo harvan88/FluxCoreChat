@@ -7,8 +7,9 @@ import {
   accountLocations,
   accounts
 } from '@fluxcore/db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { DateTime } from 'luxon';
+import { coreEventBus } from '../core/events';
 import type { 
   WeeklySchedule, 
   NewWeeklySchedule, 
@@ -82,6 +83,7 @@ export class ScheduleService {
           });
       }
     });
+    await this.notifyUpdate(ownerType, ownerId);
   }
 
   /**
@@ -150,13 +152,35 @@ export class ScheduleService {
 
       return sd;
     });
+    await this.notifyUpdate(ownerType, ownerId);
   }
 
   /**
    * Remove special date
    */
-  async deleteSpecialDate(specialDateId: string) {
+  async deleteSpecialDate(ownerType: string, ownerId: string, specialDateId: string) {
     await db.delete(specialDates).where(eq(specialDates.id, specialDateId));
+    await this.notifyUpdate(ownerType, ownerId);
+  }
+
+  /**
+   * Notify system about schedule changes (for RAG invalidation)
+   */
+  private async notifyUpdate(ownerType: string, ownerId: string) {
+    try {
+      let accountId = ownerId;
+      if (ownerType === 'location') {
+        const [loc] = await db.select({ accountId: accountLocations.accountId })
+          .from(accountLocations)
+          .where(eq(accountLocations.id, ownerId))
+          .limit(1);
+        if (loc) accountId = loc.accountId;
+      }
+      
+      coreEventBus.emit('schedule.updated', { accountId, ownerType, ownerId });
+    } catch (e) {
+      console.warn(`[ScheduleService] ⚠️ Failed to notify schedule update:`, e);
+    }
   }
 
   /**
@@ -295,117 +319,127 @@ export class ScheduleService {
     });
   }
   /**
-   * Generates a human-readable summary of all schedules for an account.
-   * Useful for RAG template content.
+   * Generates a human-readable summary for a specific owner (Account or Location)
    */
+  async getOwnerSummary(ownerType: string, ownerId: string): Promise<string | null> {
+    const sched = await this.getSchedule(ownerType, ownerId);
+    if (sched.weekly.length === 0 && sched.special.length === 0) return null;
+
+    const daysMap = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const monthsMap = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+    const lines: string[] = [];
+    
+    // Agrupación de horarios semanales
+    const dailySchedules: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const day = sched.weekly.find(d => d.dayOfWeek === i);
+      if (day?.isClosed) {
+        dailySchedules.push('Cerrado');
+      } else {
+        const intervals = sched.intervals.filter(int => int.dayOfWeek === i);
+        dailySchedules.push(intervals.length > 0 
+          ? intervals.map(t => `${t.openTime.slice(0, 5)} a ${t.closeTime.slice(0, 5)}`).join(', ')
+          : 'Cerrado');
+      }
+    }
+
+    // Agrupación lógica (ej: Lunes a Viernes)
+    const groups: { days: number[], schedule: string }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const currentSchedule = dailySchedules[i];
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.schedule === currentSchedule) {
+        lastGroup.days.push(i);
+      } else {
+        groups.push({ days: [i], schedule: currentSchedule });
+      }
+    }
+
+    groups.forEach(group => {
+      const dayNames = group.days.map(d => daysMap[d]);
+      let dayRange = '';
+      if (group.days.length === 1) {
+        dayRange = dayNames[0];
+      } else if (group.days.length === group.days[group.days.length - 1] - group.days[0] + 1) {
+        dayRange = `${dayNames[0]} a ${dayNames[dayNames.length - 1]}`;
+      } else {
+        dayRange = dayNames.join(', ');
+      }
+      lines.push(`${dayRange}: ${group.schedule}`);
+    });
+
+    // Fechas especiales
+    if (sched.special.length > 0) {
+      lines.push('');
+      lines.push('Fechas especiales:');
+      for (const s of sched.special) {
+        let status = s.isClosed ? 'Cerrado' : 'Abierto';
+        if (!s.isClosed && s.intervals && s.intervals.length > 0) {
+          status = s.intervals.map(i => `${i.openTime.slice(0, 5)} a ${i.closeTime.slice(0, 5)}`).join(', ');
+        }
+        const d = new Date(s.date);
+        const humanDate = `${daysMap[d.getDay()]} (${d.getDate()} de ${monthsMap[d.getMonth()]})`;
+        lines.push(`- ${s.label || 'Feriado'} ${humanDate}: ${status}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   /**
    * Generates a human-readable summary of all schedules for an account.
    * Optimized for human readability in RAG templates.
    */
   async getScheduleSummary(accountId: string): Promise<string> {
-    const locations = await db
-      .select({ 
-        id: accountLocations.id, 
-        name: accountLocations.name, 
-        address: accountLocations.address,
-        streetAddress: accountLocations.streetAddress,
-        neighborhood: accountLocations.neighborhood,
-        city: accountLocations.city,
-        postalCode: accountLocations.postalCode
-      })
+    console.log(`[ScheduleService] Generating human-friendly summary for accountId: "${accountId}"`);
+    
+    const summaries: string[] = [];
+
+    // 1. Obtener horario digital/global (ownerType: 'account')
+    const digitalSummary = await this.getOwnerSummary('account', accountId);
+    if (digitalSummary) {
+      summaries.push(`🌐 ATENCIÓN DIGITAL / GLOBAL\nHorarios:\n${digitalSummary}`);
+    }
+
+    // 2. Obtener horarios de sedes físicas (ownerType: 'location')
+    const allLocations = await db
+      .select()
       .from(accountLocations)
-      .where(and(
-        eq(accountLocations.accountId, accountId),
-        eq(accountLocations.status, 'active')
-      ));
+      .where(eq(accountLocations.accountId, accountId))
+      .orderBy(desc(accountLocations.isDefault), accountLocations.name);
 
-    if (locations.length === 0) return 'No hay sedes activas configuradas.';
-
-    const summaries = await Promise.all(locations.map(async (loc) => {
-      const sched = await this.getSchedule('location', loc.id);
-      const daysMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      
-      // 1. Format Address
-      let addressLine = loc.streetAddress || loc.address;
-      const addressParts = [];
-      if (loc.neighborhood) addressParts.push(loc.neighborhood);
-      if (loc.city) addressParts.push(loc.city);
-      if (loc.postalCode) addressParts.push(`(${loc.postalCode})`);
-      
-      const fullAddressLine = addressParts.length > 0 
-        ? `${addressLine}, ${addressParts.join(', ')}`
-        : addressLine;
-
-      const lines = [
-        `Sede ${loc.name}`,
-        fullAddressLine || 'Dirección no disponible',
-        ''
-      ];
-
-      // 2. Weekly Schedule Grouping
-      lines.push('Horario habitual:');
-      const dailySchedules: string[] = [];
-      for (let i = 0; i < 7; i++) {
-        const day = sched.weekly.find(d => d.dayOfWeek === i);
-        if (day?.isClosed) {
-          dailySchedules.push('Cerrado');
-        } else {
-          const intervals = sched.intervals.filter(int => int.dayOfWeek === i);
-          dailySchedules.push(intervals.length > 0 
-            ? intervals.map(t => `${t.openTime.slice(0, 5)} a ${t.closeTime.slice(0, 5)}`).join(', ')
-            : 'Cerrado');
-        }
+    if (allLocations.length === 0) {
+      if (summaries.length === 0) {
+        return 'No hay horarios ni sedes físicas configuradas.';
       }
+    } else {
+      for (const loc of allLocations) {
+        const lines: string[] = [];
+        lines.push(`📍 Sede ${loc.name}`);
+        const address = [loc.streetAddress, loc.neighborhood, loc.city].filter(Boolean).join(', ');
+        lines.push(address || 'Dirección no disponible');
 
-      // Dynamic Grouping
-      const groups: { days: number[], schedule: string }[] = [];
-      for (let i = 0; i < 7; i++) {
-        const currentSchedule = dailySchedules[i];
-        const lastGroup = groups[groups.length - 1];
-        if (lastGroup && lastGroup.schedule === currentSchedule) {
-          lastGroup.days.push(i);
-        } else {
-          groups.push({ days: [i], schedule: currentSchedule });
+        if (loc.status !== 'active') {
+          const statusText = loc.status === 'temp_closed' ? 'Cerrada temporalmente' : 'Inactiva';
+          lines.push(`⚠️ ESTADO: ${statusText}`);
+          summaries.push(lines.join('\n'));
+          continue;
         }
-      }
 
-      groups.forEach(group => {
-        const dayNames = group.days.map(d => daysMap[d]);
-        let dayRange = '';
-        if (group.days.length === 1) {
-          dayRange = dayNames[0];
-        } else if (group.days.length === group.days[group.days.length - 1] - group.days[0] + 1) {
-          // Consecutive
-          dayRange = `${dayNames[0]} a ${dayNames[dayNames.length - 1]}`;
+        const ownerSummary = await this.getOwnerSummary('location', loc.id);
+        if (ownerSummary) {
+          lines.push('\nHorarios:');
+          lines.push(ownerSummary);
         } else {
-          // Non-consecutive
-          dayRange = dayNames.join(', ');
+          lines.push('\nSin horarios configurados.');
         }
-        lines.push(`${dayRange}: ${group.schedule}`);
-      });
 
-      // 3. Special Dates
-      if (sched.special.length > 0) {
-        lines.push('');
-        lines.push('Fecha especial:');
-        sched.special.forEach(s => {
-          let status = s.isClosed ? 'Cerrado' : 'Abierto';
-          if (!s.isClosed && s.intervals && s.intervals.length > 0) {
-            status = s.intervals.map(i => `${i.openTime.slice(0, 5)} a ${i.closeTime.slice(0, 5)}`).join(', ');
-          }
-          
-          // Format date to "Día Mes"
-          const dateObj = DateTime.fromISO(s.date);
-          const dateFormatted = dateObj.isValid ? dateObj.setLocale('es').toFormat('d \'de\' MMMM') : s.date;
-          
-          lines.push(`${s.label || 'Feriado'} (${dateFormatted}): ${status}`);
-        });
+        summaries.push(lines.join('\n'));
       }
+    }
 
-      return lines.join('\n');
-    }));
-
-    return summaries.join('\n\n');
+    return summaries.join('\n\n---\n\n');
   }
 }
 

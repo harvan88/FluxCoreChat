@@ -35,11 +35,11 @@ export function KernelSessionsSection({ onBack }: KernelSessionsSectionProps) {
 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="p-3 bg-surface border border-subtle rounded-lg">
-              <p className="text-muted text-xs uppercase">Señales</p>
+              <p className="text-muted text-xs">Señales</p>
               <p className="text-lg font-semibold text-primary">238</p>
             </div>
             <div className="p-3 bg-surface border border-subtle rounded-lg">
-              <p className="text-muted text-xs uppercase">Projectors</p>
+              <p className="text-muted text-xs">Projectors</p>
               <p className="text-lg font-semibold text-primary">4</p>
             </div>
           </div>

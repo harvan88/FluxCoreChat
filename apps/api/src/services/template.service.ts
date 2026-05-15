@@ -260,7 +260,7 @@ export class TemplateService {
   async renderTemplateContent(accountId: string, templateId: string, variables?: Record<string, string>): Promise<{text: string; media: any[]}> {
     const template = await this.getTemplate(accountId, templateId);
 
-    let finalContent = template.content;
+    let finalContent = await this.resolveSystemVariables(template.content, accountId);
     if (variables) {
       Object.entries(variables || {}).forEach(([key, value]) => {
         finalContent = finalContent.replace(new RegExp(`{{${key}}}`, 'g'), String(value ?? ''));
@@ -411,10 +411,22 @@ export class TemplateService {
     if (!content) return '';
     let resolved = content;
 
-    // {{system:schedules}} -> Resumen de horarios y sedes
+    // {{system:schedules}} -> Resumen de horarios (Atención global y sedes físicas)
     if (resolved.includes('{{system:schedules}}')) {
       const summary = await scheduleService.getScheduleSummary(accountId);
       resolved = resolved.replace(/\{\{\s*system:schedules\s*\}\}/g, summary);
+    }
+
+    // {{schedule:ownerType:ownerId}} -> Horarios parametrizados (ej: cursos, logística)
+    const scheduleRegex = /\{\{\s*schedule:([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)\s*\}\}/g;
+    let match;
+    while ((match = scheduleRegex.exec(resolved)) !== null) {
+      const fullMatch = match[0];
+      const ownerType = match[1];
+      const ownerId = match[2];
+      
+      const specificSummary = await scheduleService.getOwnerSummary(ownerType, ownerId);
+      resolved = resolved.replace(fullMatch, specificSummary || `(Sin horarios definidos para ${ownerType})`);
     }
 
     // Agregar aquí futuras variables de sistema (ej: {{system:active_promos}})

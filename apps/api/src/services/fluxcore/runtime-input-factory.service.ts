@@ -50,11 +50,28 @@ class RuntimeInputFactoryService {
             currentSystemTime = now.toISOString();
         }
 
+        // 🎯 HIDRATACIÓN DETERMINISTA (v22.0)
+        // Resolvemos variables {{system:*}} antes de que lleguen al cerebro cognitivo.
+        // Esto permite que el Fast-Path detecte plantillas "estáticas" aunque tengan proyecciones dinámicas.
+        const { templateService } = await import('../template.service');
+        const resolvedBusinessProfile = JSON.parse(JSON.stringify(policyContext.resolvedBusinessProfile));
+        
+        if (resolvedBusinessProfile?.templates && Array.isArray(resolvedBusinessProfile.templates)) {
+            for (const template of resolvedBusinessProfile.templates) {
+                if (template.content) {
+                    template.content = await templateService.resolveSystemVariables(template.content, accountId);
+                }
+                if (template.instructions) {
+                    template.instructions = await templateService.resolveSystemVariables(template.instructions, accountId);
+                }
+            }
+        }
+
         const authorizedContext: AuthorizedRuntimeContext = {
             accountId,
             conversationId,
             channel: policyContext.channel,
-            businessProfile: policyContext.resolvedBusinessProfile,
+            businessProfile: resolvedBusinessProfile,
             contactRules: policyContext.contactRules,
             authorizedTemplates: policyContext.authorizedTemplates,
             instructions: runtimeConfig.instructions,

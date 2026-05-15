@@ -7,6 +7,20 @@
  */
 
 import { sign } from 'jsonwebtoken';
+// Cargar entorno desde la raíz del proyecto usando la API nativa de Bun
+const dotEnvPath = require('path').resolve(__dirname, '../.env');
+const fs = require('fs');
+
+if (fs.existsSync(dotEnvPath)) {
+    const envContent = fs.readFileSync(dotEnvPath, 'utf8');
+    envContent.split('\n').forEach(line => {
+        const [key, ...valueParts] = line.split('=');
+        if (key && valueParts.length > 0) {
+            process.env[key.trim()] = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
+        }
+    });
+}
+
 import {
     db,
     aiTraces,
@@ -25,7 +39,13 @@ import { promptBuilder } from '../apps/api/src/services/fluxcore/prompt-builder.
 // --- CONFIGURATION ---
 const API_URL = 'http://localhost:3001';
 const WS_URL = 'ws://localhost:3001/ws';
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    console.error('❌ FATAL: JWT_SECRET no encontrado en el entorno.');
+    console.error('Asegúrese de que el archivo .env exista en la raíz del proyecto.');
+    process.exit(1);
+}
 
 // IDs Provided by User
 const RECIPIENT_ACCOUNT_ID = '65d340af-97ff-4c9b-85d2-b378badeacf4'; // Dr Jones (Assistant)
@@ -37,16 +57,29 @@ const messageText = process.argv.find(a => !a.startsWith('--') && a !== process.
 const shouldClear = process.argv.includes('--clear') || process.argv.includes('-c');
 
 async function main() {
-    console.log(`\n🚀 STARTING TELEMETRY TRACE REPORTE`);
-    console.log(`------------------------------------`);
+    console.log(`\n🚀 STARTING TELEMETRY TRACE REPORTE (REFACTORED)`);
+    console.log(`-----------------------------------------------`);
     console.log(`📝 Message: "${messageText}"`);
     console.log(`👥 From: ${SENDER_ACCOUNT_ID.slice(0, 8)}`);
     console.log(`🤖 To:   ${RECIPIENT_ACCOUNT_ID.slice(0, 8)}`);
     console.log(`💬 Conv: ${CONVERSATION_ID.slice(0, 8)}`);
     console.log(`🧹 Clear History: ${shouldClear ? 'YES' : 'NO'}`);
 
-    // 1. Generate JWT Token (Bypass)
-    const token = sign({ userId: SENDER_USER_ID, email: 'harvan@hotmail.es' }, JWT_SECRET);
+    if (shouldClear) {
+        await clearHistory(CONVERSATION_ID);
+    }
+
+    // 1. Generate JWT Token (Bypass con claims completos)
+
+    const token = sign(
+        { 
+            userId: SENDER_USER_ID, 
+            accountId: SENDER_ACCOUNT_ID, 
+            email: 'harvan@hotmail.es' 
+        }, 
+        JWT_SECRET,
+        { expiresIn: '1h' }
+    );
     console.log(`\n🔑 JWT generated (${token.slice(0, 15)}...)`);
 
     // 2. Setup WebSocket for Telemetry
@@ -60,8 +93,8 @@ async function main() {
     const wsPromise = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             ws.close();
-            reject(new Error('WebSocket timeout (30s)'));
-        }, 30000);
+            reject(new Error('WebSocket timeout (60s)'));
+        }, 60000);
 
         ws.onopen = () => {
             console.log(`✅ WebSocket connected`);
@@ -117,7 +150,7 @@ async function main() {
 
             if (data.type === 'telemetry:distributed_trace') {
                 const payload = data.payload;
-                const phaseNames = ['DEBUG_INPUT_CHECK', 'FASE_0_SIEVE', 'FASE_1_ROUTER', 'FASE_1_5_DETERMINISTIC_SHORTCUT', 'FASE_2_RAG', 'FASE_2.5_SOVEREIGNTY', 'FASE_3_RESOLUTIVE_CALL', 'FASE_4_BODY_TRANSLATION', 'IA_RUNTIME_INVOCATION'];
+                const phaseNames = ['DEBUG_INPUT_CHECK', 'FASE_0_SIEVE', 'FASE_1_ROUTER', 'FASE_1_5_DETERMINISTIC_SHORTCUT', 'FASE_2_RAG', 'FASE_2.1_CRP', 'FASE_2.5_SOVEREIGNTY', 'FASE_3_RESOLUTIVE_CALL', 'FASE_4_BODY_TRANSLATION', 'IA_RUNTIME_INVOCATION'];
 
                 console.log(`[WS DEBUG] Distributed Trace received: ${payload.stepName} (${payload.stepStatus || 'N/A'})`);
 
@@ -134,8 +167,8 @@ async function main() {
                 if (payload.stepStatus === 'completed' && payload.stepName === 'IA_RUNTIME_INVOCATION') {
                     console.log(`✅ Final AI Response captured`);
                     aiTraceData = {
-                        provider: payload.attributes?.['ai.provider'] || 'unknown',
-                        model: payload.attributes?.['ai.model'] || 'unknown',
+                        provider: payload.attributes?.['ai.provider'] || payload.attributes?.['runtime.id'] || 'unknown',
+                        model: payload.attributes?.['ai.model'] || payload.attributes?.['model'] || 'unknown',
                         output: payload.output
                     };
                 }
@@ -176,15 +209,11 @@ async function main() {
         await wsPromise;
         if (Object.keys(runtimePhases).length > 0) {
             await generateReport(capturedSteps, runtimePhases, aiTraceData);
-
-            if (shouldClear) {
-                await clearHistory(CONVERSATION_ID);
-            }
-        } else {
-            console.log(`\n⚠️ Pipeline finished but no forensic phases were captured. Verify if tracing is enabled on server.`);
         }
+        process.exit(0);
     } catch (err: any) {
         console.error(`\n❌ Simulation failed:`, err.message);
+        process.exit(1);
     }
 }
 
@@ -225,35 +254,57 @@ async function clearHistory(conversationId: string) {
 }
 
 async function generateReport(steps: any[], phases: Record<string, any>, aiData: any) {
-    console.log(`\n📊 Generando Reporte de Alta Densidad (Expandible)...`);
-
     const globalInput = phases['IA_RUNTIME_INVOCATION']?.input;
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `auditoria_inteligente_${timestamp}.md`;
+    const fileName = `auditoria_${timestamp}.md`;
     const filePath = `./docs/reconstruction-phase-1/temp/${fileName}`;
 
-    let report = `# 🧠 Auditoría Inteligente del Kernel (FluxCore)
-**Turno:** \`${globalInput?.executionId || 'N/A'}\` | **Fecha:** ${new Date().toLocaleString()}
+    let report = `# 🧠 Auditoría del Kernel FluxCore\n`;
+    report += `> **Turno:** \`${globalInput?.executionId || 'N/A'}\` | **Fecha:** ${new Date().toLocaleString()}\n`;
+    report += `> **Mensaje:** \`${messageText}\` | **Modelo:** \`${aiData?.provider}/${aiData?.model}\` | **Runtime:** \`${globalInput?.runtimeConfig?.runtimeId || 'asistentes-local'}\`\n\n`;
 
-## 📥 Contexto de Entrada
-- **Mensaje**: "${messageText}"
-- **Runtime**: \`${globalInput?.runtimeConfig?.runtimeId || 'asistentes-local'}\` | **Modelo**: \`${aiData?.provider}/${aiData?.model}\`
+    // 📊 TABLA RESUMEN (VISTA RÁPIDA)
+    report += `## 📊 Resumen Ejecutivo\n`;
+    report += `| Fase | Estado | Resultado Clave |\n`;
+    report += `| :--- | :--- | :--- |\n`;
 
----
+    const phaseNames = [
+        ['FASE_0_SIEVE', 'Sieve (Filtrado)'],
+        ['FASE_1_ROUTER', 'Router (Intención)'],
+        ['FASE_1_5_DETERMINISTIC_SHORTCUT', 'Fast-Path (Directo)'],
+        ['FASE_2_RAG', 'RAG (Contexto)'],
+        ['FASE_2.1_CRP', 'CRP (Soberanía Realidad)'],
+        ['FASE_2.5_SOVEREIGNTY', 'Legacy (Soberanía)'],
+        ['FASE_3_RESOLUTIVE_CALL', 'IA (Razonamiento)'],
+        ['FASE_4_BODY_TRANSLATION', 'Translation (Output)']
+    ];
 
-## 🛤️ Análisis de Fases (I/O & Razonamiento)
+    phaseNames.forEach(([key, name]) => {
+        const phase = phases[key];
+        if (phase) {
+            let result = '✅ Procesado';
+            if (key === 'FASE_1_ROUTER') result = `🎯 \`${phase.output.extractedIntent}\``;
+            if (key === 'FASE_1_5_DETERMINISTIC_SHORTCUT') result = `⚡ \`${phase.output[0]?.type || 'N/A'}\``;
+            if (key === 'FASE_3_RESOLUTIVE_CALL') result = `🤖 AI Response`;
+            
+            report += `| ${name} | ${phase.status === 'completed' ? '🟢' : '🟡'} | ${result} |\n`;
+        } else {
+            report += `| ${name} | ⚪ | *Omitida* |\n`;
+        }
+    });
 
-`;
+    report += `\n---\n\n`;
 
+    // 🛤️ DETALLE DE FASES
     const phaseDisplayNames: Record<string, string> = {
-        'FASE_0_SIEVE': 'Fase 0: Tamiz Semántico (Filtrado)',
-        'FASE_1_ROUTER': 'Fase 1: Intent Router (Ruteo)',
-        'FASE_1_5_DETERMINISTIC_SHORTCUT': 'Fase 1.5: Deterministic Shortcut (Fast-Path)',
-        'FASE_2_RAG': 'Fase 2: RAG Determinista (Contexto)',
-        'FASE_2.5_SOVEREIGNTY': 'Fase 2.5: Soberanía Temporal (Ontología)',
+        'FASE_0_SIEVE': 'Fase 0: Tamiz Semántico',
+        'FASE_1_ROUTER': 'Fase 1: Intent Router',
+        'FASE_1_5_DETERMINISTIC_SHORTCUT': 'Fase 1.5: Fast-Path',
+        'FASE_2_RAG': 'Fase 2: RAG Determinista',
+        'FASE_2.1_CRP': 'Fase 2.1: Cognitive Reality Protocol (Soberanía)',
+        'FASE_2.5_SOVEREIGNTY': 'Fase 2.5: Soberanía Temporal (LEGACY FALLBACK)',
         'FASE_3_RESOLUTIVE_CALL': 'Fase 3: Modo Resolutivo (IA)',
-        'FASE_3_RESOLUTIVE_CALL': 'Fase 3: Modo Resolutivo (IA)',
-        'FASE_4_BODY_TRANSLATION': 'Fase 4: Physical Translation (Output)'
+        'FASE_4_BODY_TRANSLATION': 'Fase 4: Physical Translation'
     };
 
     Object.keys(phaseDisplayNames).forEach(phaseKey => {
@@ -261,47 +312,38 @@ async function generateReport(steps: any[], phases: Record<string, any>, aiData:
         if (phase) {
             report += `### 📍 ${phaseDisplayNames[phaseKey]}\n`;
 
-            // 🟢 RESUMEN RÁPIDO
             if (phaseKey === 'FASE_1_ROUTER') {
-                report += `> **Intent**: \`${phase.output.extractedIntent}\` | **Templates**: \`${JSON.stringify(phase.output.matchedTemplateIds)}\`\n\n`;
-            } else if (phaseKey === 'FASE_2_RAG') {
-                report += `> **Chunks**: \`${phase.output.chunksUsed}\` | **Intent Search**: \`${phase.input.intent}\`\n\n`;
+                report += `**Intención:** \`${phase.output.extractedIntent}\` | **Templates:** \`${JSON.stringify(phase.output.matchedTemplateIds)}\`\n`;
             }
 
-            // 📥 INPUT (COLAPSABLE)
-            report += `<details>\n<summary>🔍 Ver Entrada & Prompt</summary>\n\n`;
-            if (phaseKey === 'FASE_1_ROUTER' && phase.input.routerSystemPrompt) {
-                report += `#### System Prompt (Router):\n\`\`\`markdown\n${phase.input.routerSystemPrompt}\n\`\`\`\n`;
-            } else if (phaseKey === 'FASE_3_RESOLUTIVE_CALL' && phase.input.messages) {
-                report += `#### Full Messages (IA):\n\`\`\`json\n${JSON.stringify(phase.input.messages, null, 2)}\n\`\`\`\n`;
-            }
-            report += `#### JSON Input:\n\`\`\`json\n${JSON.stringify(phase.input, null, 2)}\n\`\`\`\n`;
-            report += `</details>\n\n`;
-
-            // 📤 OUTPUT (SIEMPRE VISIBLE O COLAPSABLE SI ES GRANDE)
-            if (phaseKey === 'FASE_2_RAG' || phaseKey === 'FASE_0_SIEVE') {
-                report += `<details>\n<summary>📦 Ver Salida Detallada</summary>\n\n\`\`\`json\n${JSON.stringify(phase.output, null, 2)}\n\`\`\`\n</details>\n\n`;
+            // INPUT/OUTPUT COMPACTO
+            report += `#### 📥 Entrada\n`;
+            if (phaseKey === 'FASE_3_RESOLUTIVE_CALL') {
+                const systemPrompt = phase.input.messages?.find((m: any) => m.role === 'system')?.content || phase.input.systemPrompt || 'N/A';
+                const history = phase.input.messages?.filter((m: any) => m.role !== 'system') || [];
+                
+                report += `<details><summary>Ver System Prompt</summary>\n\n\`\`\`markdown\n${systemPrompt}\n\`\`\`\n</details>\n\n`;
+                
+                if (history.length > 0) {
+                    report += `**Historial de Mensajes:**\n`;
+                    report += `\`\`\`text\n${history.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}\n\`\`\`\n\n`;
+                }
+                
+                report += `**User Message:** \`${phase.input.lastUserMessage || history[history.length-1]?.content || 'N/A'}\`\n`;
             } else {
-                report += `**Resultado:**\n\`\`\`json\n${JSON.stringify(phase.output, null, 2)}\n\`\`\`\n\n`;
+                report += `\`\`\`json\n${JSON.stringify(phase.input, null, 1)}\n\`\`\`\n`;
             }
 
+            report += `#### 📤 Salida\n`;
+            report += `\`\`\`json\n${JSON.stringify(phase.output, null, 1)}\n\`\`\`\n\n`;
             report += `---\n`;
         }
     });
 
-    report += `\n## 🏁 Resultado Final de IA
-> ${aiData?.output?.content || JSON.stringify(aiData?.output || {})}
-
-<details>
-<summary>⚙️ Metadatos Técnicos</summary>
-
-- **Usage**: \`${JSON.stringify(aiData?.output?.usage || {})}\`
-- **Finish Reason**: \`${aiData?.output?.finishReason}\`
-</details>
-
----
-*Reporte de Alta Densidad (v17.0 Intelligence)*
-`;
+    // 🏁 RESULTADO FINAL
+    report += `\n## 🏁 Resultado Final\n`;
+    const finalContent = aiData?.output?.content || JSON.stringify(aiData?.output || {});
+    report += `\`\`\`text\n${finalContent}\n\`\`\`\n`;
 
     const fs = require('fs');
     if (!fs.existsSync('./docs/reconstruction-phase-1/temp')) {
@@ -310,7 +352,6 @@ async function generateReport(steps: any[], phases: Record<string, any>, aiData:
     fs.writeFileSync(filePath, report);
 
     console.log(`\n✨ REPORT CREATED: ${filePath}`);
-    console.log(`------------------------------------`);
 }
 
 main().catch(console.error);

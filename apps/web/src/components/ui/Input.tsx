@@ -130,7 +130,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             ) : (
-              <div className="text-muted pointer-events-none">{rightIcon}</div>
+              <div className="text-muted">{rightIcon}</div>
             )}
           </div>
         )}

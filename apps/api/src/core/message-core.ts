@@ -44,19 +44,25 @@ export class MessageCore {
     console.log(`📋 CONTENT CON VERDAD:`, JSON.stringify(envelope.content, null, 2));
     
     try {
+      // 1. Obtener conversación y sus datos de propiedad (LA VERDAD DEL MUNDO)
+      const conversation = await conversationService.getConversationById(envelope.conversationId);
+      
       // 🔥 FASE 3: SOBERANÍA DE REALIDAD (ChatCore)
       // Antes de persistir, resolvemos cualquier proyección dinámica (ej: {{system:schedules}})
-      // Esto garantiza que el historial sea siempre "La Verdad del Mundo" y evita bucles cognitivos.
+      // Usamos el ownerAccountId de la conversación para garantizar que la hidratación sea soberana.
       if (envelope.content?.text && envelope.content.text.includes('{{system:')) {
         const { templateService } = await import('../services/template.service');
-        const accountId = envelope.targetAccountId || envelope.senderAccountId;
-        if (accountId) {
-          console.log(`[MessageCore] 🛠️ RESOLVIENDO VARIABLES DE SISTEMA ANTES DE GUARDAR EN DB...`);
-          envelope.content.text = await templateService.resolveSystemVariables(envelope.content.text, accountId);
+        
+        // Prioridad: ownerAccountId (Realidad estructural) > targetAccountId || senderAccountId (Heurística)
+        const hydrationAccountId = conversation?.ownerAccountId || envelope.targetAccountId || envelope.senderAccountId;
+        
+        if (hydrationAccountId) {
+          console.log(`[MessageCore] 🛠️ RESOLVIENDO VARIABLES DE SISTEMA (id=${hydrationAccountId.slice(0,8)}) EN CONV ${envelope.conversationId.slice(0,8)}`);
+          envelope.content.text = await templateService.resolveSystemVariables(envelope.content.text, hydrationAccountId);
         }
       }
 
-      // 1. Persistir mensaje
+      // 2. Persistir mensaje
       console.log(`[MessageCore] 💾 GUARDANDO EN BASE DE DATOS CON META:`, JSON.stringify(envelope.meta || {}, null, 2));
       console.log(`[CREATE_MSG] 📥 MessageCore.receive | Conv: ${envelope.conversationId} | By: ${envelope.generatedBy} | Trigger: ${envelope.triggerSignalId || 'new'} | Stack: ${new Error().stack?.split('\n').slice(1, 4).join(' <- ')}`);
       const message = await messageService.createMessage({
@@ -153,8 +159,7 @@ export class MessageCore {
         }
       }
 
-      // 3. Actualizar conversación y obtener datos
-      const conversation = await conversationService.getConversationById(envelope.conversationId);
+      // 3. Registrar conversación en caché de memoria
       if (conversation) {
         this.registerConversation(conversation.id, {
           relationshipId: conversation.relationshipId,

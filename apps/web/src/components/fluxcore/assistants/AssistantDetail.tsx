@@ -4,6 +4,7 @@ import { Button, Badge, Checkbox, SliderInput, CollapsibleSection } from '../../
 import { DoubleConfirmationDeleteButton } from '../../ui/DoubleConfirmationDeleteButton';
 import {
     PROVIDER_MODELS,
+    PROVIDER_NAMES,
 } from '../../../lib/fluxcore';
 import type {
     Assistant,
@@ -384,12 +385,13 @@ export function AssistantDetail({
                             <label className="block text-sm text-muted mb-1">Empresa proveedora</label>
                             <div className="relative">
                                 <select
-                                    value={assistant.modelConfig?.provider || 'groq'}
+                                    value={assistant.modelConfig?.provider || 'openai'}
                                     onChange={(e) => handleModelConfigChange('provider', e.target.value)}
                                     className="w-full bg-active border border-subtle rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:border-accent text-primary appearance-none"
                                 >
-                                    <option value="openai">Open IA</option>
-                                    <option value="groq">Groq</option>
+                                    {Object.entries(PROVIDER_NAMES).map(([id, name]) => (
+                                        <option key={id} value={id}>{name}</option>
+                                    ))}
                                 </select>
                                 <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                             </div>

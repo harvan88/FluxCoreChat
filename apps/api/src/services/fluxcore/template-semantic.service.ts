@@ -26,6 +26,23 @@ export class TemplateSemanticService {
         coreEventBus.on('fluxcore.template.settings.changed', async (payload: { templateId: string; accountId: string; authorizeForAI: boolean }) => {
             await this.syncTemplateVector(payload.templateId, payload.accountId, payload.authorizeForAI);
         });
+
+        coreEventBus.on('schedule.updated', async (payload: { accountId: string }) => {
+            console.log(`[SemanticService] 📅 Horarios actualizados para cuenta ${payload.accountId}. Buscando plantillas dependientes...`);
+            
+            // Buscamos todas las plantillas de la cuenta que usen la variable de sistema de horarios
+            const dependentTemplates = await db.select({ id: templates.id })
+                .from(templates)
+                .where(and(
+                    eq(templates.accountId, payload.accountId),
+                    sql`content LIKE '%{{system:schedules}}%'`
+                ));
+            
+            for (const t of dependentTemplates) {
+                console.log(`[SemanticService] 🔄 Re-indexando proyección de horarios para plantilla: ${t.id}`);
+                await this.syncTemplateVector(t.id, payload.accountId, true);
+            }
+        });
     }
 
     /**
@@ -43,12 +60,20 @@ export class TemplateSemanticService {
             await db.update(assets).set({ status: 'ready' as any }).where(eq(assets.id, templateId));
 
             const [settings] = await db.select().from(fluxcoreTemplateSettings).where(eq(fluxcoreTemplateSettings.templateId, templateId)).limit(1);
-            let textToEmbed = settings?.aiUsageInstructions;
+            const [template] = await db.select().from(templates).where(eq(templates.id, templateId)).limit(1);
 
-            if (!textToEmbed) {
-                const [template] = await db.select().from(templates).where(eq(templates.id, templateId)).limit(1);
-                textToEmbed = template?.name;
+            if (!template) return;
+
+            // 🧠 SOBERANÍA MATEMÁTICA: Construimos el bloque de texto completo para el RAG
+            // Incluimos Nombre, Instrucciones y el Contenido Hidratado (Verdad del Mundo)
+            const { templateService } = await import('../template.service');
+            const hydratedContent = await templateService.resolveSystemVariables(template.content, accountId);
+            
+            let textToEmbed = `PLANTILLA: ${template.name}\n`;
+            if (settings?.aiUsageInstructions) {
+                textToEmbed += `INSTRUCCIONES: ${settings.aiUsageInstructions}\n`;
             }
+            textToEmbed += `CONTENIDO: ${hydratedContent}`;
 
             if (!textToEmbed) return;
 

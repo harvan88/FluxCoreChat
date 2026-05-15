@@ -6,12 +6,13 @@ import {
   Star,
   Edit,
   Trash2,
+  X,
 } from 'lucide-react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { api as apiService } from '../../services/api';
 import { useLocations } from '../../hooks/useLocations';
 import type { LocationData as Location } from '../../hooks/useLocations';
-import { Button, Input } from '../ui';
+import { Button, Input, SidebarItem, SearchFirstOverlay, SearchFirstHeader } from '../ui';
 import { CollectionView, type CollectionColumn } from '../../components/fluxcore/shared/CollectionView';
 // import { usePanelStore } from '../../store/panelStore';
 
@@ -97,7 +98,7 @@ export function LocationSection({ onBack, onOpenTab, locationId }: LocationSecti
   };
 
   useEffect(() => {
-    if (locationId && locationId !== 'new' && locations.length > 0) {
+    if (locationId && locationId !== 'new' && locationId !== 'nueva sede' && locations.length > 0) {
       const loc = locations.find(l => l.id === locationId);
       if (loc) {
         setFormData(loc);
@@ -106,7 +107,7 @@ export function LocationSection({ onBack, onOpenTab, locationId }: LocationSecti
         setCameraJump({ lat: loc.lat || -34.6037, lng: loc.lon || -58.3816 });
         setHasSelected(true);
       }
-    } else if (locationId === 'new') {
+    } else if (locationId === 'new' || locationId === 'nueva sede') {
       setEditingId(null);
       setHasSelected(false);
       setMapMoved(false);
@@ -343,36 +344,82 @@ export function LocationSection({ onBack, onOpenTab, locationId }: LocationSecti
 
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
-      <div className="p-6 pb-2">
-        <div className="relative">
-          <Input 
-            placeholder="Busca dirección o lugar..." 
-            value={searchQuery || ''}
-            onFocus={() => setIsFocused(true)}
-            onChange={(e) => onSearchChange(e.target.value)} 
-            className="w-full h-11"
-          />
-          {isSearchingAPI && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted" />}
+      {!isFocused && (
+        <div className="p-6 pb-2">
+          <div className="relative">
+            <Input 
+              placeholder="Busca dirección o lugar..." 
+              value={searchQuery || ''}
+              onFocus={() => setIsFocused(true)}
+              onChange={(e) => onSearchChange(e.target.value)} 
+              className="w-full h-11"
+              rightIcon={isSearchingAPI ? (
+                <Loader2 size={16} className="animate-spin text-muted" />
+              ) : null}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex-1 relative flex flex-col overflow-hidden">
-        {isFocused ? (
-          <div className="absolute inset-0 bg-background z-40 flex flex-col px-6">
-              <div className="flex-1 overflow-y-auto py-4">
-                  {searchResults.map((r, i) => (
-                      <button key={i} onClick={() => selectResult(r)} className="w-full text-left p-3 hover:bg-hover border-b border-subtle last:border-0 text-sm">
-                          {r.display_name}
-                      </button>
-                  ))}
+        <SearchFirstOverlay isOpen={isFocused} onClose={() => setIsFocused(false)}>
+          <SearchFirstHeader 
+            value={searchQuery}
+            onChange={onSearchChange}
+            onClose={() => setIsFocused(false)}
+            placeholder="Busca dirección o lugar..."
+          />
+          
+          <div className="flex-1 overflow-y-auto py-4 px-6">
+              {/* Opciones fijas iniciales usando componentes del sistema */}
+              <div className="mb-4 space-y-0.5">
+                  <SidebarItem 
+                    icon={<MapPin size={18} className="text-accent" />}
+                    label="Ubicación actual"
+                    secondaryLabel="Detectar mi posición por GPS"
+                    onClick={() => {
+                      handleUseCurrentLocation();
+                      setIsFocused(false);
+                    }}
+                    className="rounded-xl mx-0"
+                  />
+
+                  <SidebarItem 
+                    icon={<Building2 size={18} />}
+                    label="Ubicar en el mapa"
+                    secondaryLabel="Mover el pin manualmente"
+                    onClick={() => setIsFocused(false)}
+                    className="rounded-xl mx-0"
+                  />
               </div>
-              <div className="py-6">
-                  <Button variant="primary" onClick={handleSave} disabled={isSaving} className="w-full h-11 uppercase text-xs font-bold tracking-widest">
-                      {isSaving ? 'Guardando...' : 'Guardar Sede'}
-                  </Button>
-              </div>
+
+              <div className="h-px bg-subtle/50 mb-4 mx-2" />
+
+              {searchResults.map((r, i) => (
+                  <SidebarItem 
+                    key={i}
+                    label={r.display_name.split(',')[0]}
+                    secondaryLabel={r.display_name.split(',').slice(1).join(',').trim()}
+                    onClick={() => selectResult(r)}
+                    className="rounded-xl mx-0 py-3"
+                  />
+              ))}
+
+              {searchQuery.length > 3 && searchResults.length === 0 && !isSearchingAPI && (
+                  <div className="py-10 text-center text-muted text-sm">
+                      No se encontraron resultados para "{searchQuery}"
+                  </div>
+              )}
           </div>
-        ) : (
+          
+          <div className="p-6 border-t border-subtle bg-surface/50">
+              <Button variant="primary" onClick={handleSave} disabled={isSaving} className="w-full h-11 font-semibold shadow-lg shadow-accent/20">
+                  {isSaving ? 'Guardando...' : 'Guardar sede'}
+              </Button>
+          </div>
+        </SearchFirstOverlay>
+
+        {!isFocused && (
           <div className="flex-1 flex flex-col overflow-y-auto px-6 pb-6 space-y-6">
                 <div className="hidden">
                     <Input value={formData.country || ''} readOnly />
@@ -447,8 +494,8 @@ export function LocationSection({ onBack, onOpenTab, locationId }: LocationSecti
 
                 <div className="flex gap-4 pt-2 pb-10">
                   <Button variant="ghost" onClick={handleFinish} className="flex-1 h-12">Cancelar</Button>
-                  <Button variant="primary" onClick={handleSave} disabled={isSaving} className="flex-1 h-12 shadow-lg shadow-accent/20 uppercase font-bold tracking-widest text-xs">
-                    {isSaving ? 'Guardando...' : 'Guardar Sede'}
+                  <Button variant="primary" onClick={handleSave} disabled={isSaving} className="flex-1 h-12 shadow-lg shadow-accent/20 font-semibold">
+                    {isSaving ? 'Guardando...' : 'Guardar sede'}
                   </Button>
                 </div>
             </div>

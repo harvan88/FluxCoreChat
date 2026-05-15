@@ -156,18 +156,6 @@ class PromptBuilderService {
             }
         }
 
-        // Locations - Basic projection
-        if (resolvedBusinessProfile.locations && resolvedBusinessProfile.locations.length > 0) {
-            const locLines: string[] = [];
-            resolvedBusinessProfile.locations.forEach((loc: any) => {
-                let text = `* **${loc.name}**`;
-                if (loc.isDefault) text += ` (Sede Principal)`;
-                text += `\n  - Dirección: ${loc.address}`;
-                locLines.push(text);
-            });
-            lines.push(`\n### Sedes / Ubicaciones físicas\n${locLines.join('\n\n')}`);
-        }
-
         return lines.join('\n');
     }
 

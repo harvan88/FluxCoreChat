@@ -18,11 +18,13 @@
  */
 
 import { trace } from '@opentelemetry/api';
-import { db, conversations, messages, aiSuggestions, fluxcoreCognitionQueue, aiTraces, aiSignals } from '@fluxcore/db';
+import { db, conversations, messages, aiSuggestions, fluxcoreCognitionQueue, aiTraces, aiSignals, actors, relationships } from '@fluxcore/db';
 import type { ConversationMessage } from '@fluxcore/db';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, ne } from 'drizzle-orm';
 import type { RuntimeInput, ExecutionAction } from '../../core/fluxcore-types';
 import { fluxPolicyContextService } from '../flux-policy-context.service';
+import { messageDeletionService } from '../message-deletion.service';
+import { resolveActorId } from '../../utils/actor-resolver';
 import { runtimeSelectionService } from '../runtime-selection.service';
 import { runtimeCompositionService } from '../runtime-composition.service';
 import { runtimeGateway } from './runtime-gateway.service';
@@ -197,15 +199,51 @@ class CognitiveDispatcherService {
                 };
             }
 
-            // 5. Fetch + convert conversation history to semantic ConversationMessage[]
-            const rawHistory = await db
-                .select()
-                .from(messages)
-                .where(eq(messages.conversationId, conversationId))
-                .orderBy(desc(messages.createdAt))
-                .limit(MAX_HISTORY_MESSAGES);
+            // 🎯 RESOLUCIÓN DE PROYECCIÓN SOBERANA (Fase 6)
+            // Resolvemos el actor que representa la contraparte (visitante o contacto)
+            // para que la IA vea exactamente lo que el usuario ve (respetando vaciado de chat).
+            let contactActorId: string | undefined;
 
-            rawHistory.reverse(); // Chronological order
+            if (conversation.visitorToken) {
+                // Caso Widget: Buscamos el actor del visitante por su token
+                const [visitorActor] = await db
+                    .select({ id: actors.id })
+                    .from(actors)
+                    .where(eq(actors.externalKey, conversation.visitorToken))
+                    .limit(1);
+                contactActorId = visitorActor?.id;
+            } else if (conversation.relationshipId) {
+                // Caso Relación: Buscamos el otro actor en la relación que no sea la cuenta IA
+                const [rel] = await db
+                    .select()
+                    .from(relationships)
+                    .where(eq(relationships.id, conversation.relationshipId))
+                    .limit(1);
+                
+                if (rel) {
+                    const myActorId = await resolveActorId(accountId);
+                    contactActorId = rel.actorAId === myActorId ? rel.actorBId : rel.actorAId;
+                }
+            }
+
+            if (contactActorId) {
+                console.log(`[CognitiveDispatcher] 🎯 Sovereign projection active for actor: ${contactActorId.slice(0, 8)}...`);
+            } else {
+                console.log(`[CognitiveDispatcher] ⚠️ Sovereign projection fallback: using raw history (no contact actor resolved)`);
+            }
+
+            // 5. Fetch + convert conversation history to semantic ConversationMessage[]
+            const rawHistory = contactActorId 
+                ? await messageDeletionService.getMessagesWithVisibilityFilter(conversationId, contactActorId, MAX_HISTORY_MESSAGES)
+                : await (async () => {
+                    const rows = await db
+                        .select()
+                        .from(messages)
+                        .where(eq(messages.conversationId, conversationId))
+                        .orderBy(desc(messages.createdAt))
+                        .limit(MAX_HISTORY_MESSAGES);
+                    return rows.reverse();
+                })();
 
             const conversationHistory: ConversationMessage[] = rawHistory
                 .map(msg => {

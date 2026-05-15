@@ -71,3 +71,5 @@ export { DayStatusToggle } from './DayStatusToggle';
 export { ScheduleRowManager } from './ScheduleRowManager';
 export { ViewHeader } from './ViewHeader';
 export type { ViewHeaderProps } from './ViewHeader';
+
+export { SearchFirstSelector, SearchFirstOverlay, SearchFirstHeader } from './SearchFirstSelector';

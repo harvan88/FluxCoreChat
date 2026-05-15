@@ -62,18 +62,19 @@ export const useAutomationStore = create<AutomationState>((set, get) => ({
   setRule: async (accountId, relationshipId, mode) => {
     set({ isLoading: true });
     try {
+      // 🔥 CORRECCIÓN: No enviar relationshipId: null — Elysia rechaza null para t.Optional(t.String())
+      const payload: Record<string, any> = { accountId, mode, enabled: true };
+      if (relationshipId) {
+        payload.relationshipId = relationshipId;
+      }
+
       const response = await fetch(`${API_URL}/automation/rules`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
-        body: JSON.stringify({
-          accountId,
-          relationshipId,
-          mode,
-          enabled: true
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error('Failed to update rule');

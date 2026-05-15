@@ -197,7 +197,7 @@ export const SidebarSection = forwardRef<HTMLDivElement, SidebarSectionProps>(
             <button
               onClick={collapsible ? onToggleCollapse : undefined}
               className={clsx(
-                'text-xs font-semibold text-muted uppercase tracking-wider',
+                'text-xs font-semibold text-muted',
                 collapsible && 'hover:text-primary cursor-pointer'
               )}
             >

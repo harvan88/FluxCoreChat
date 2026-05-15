@@ -43,6 +43,12 @@ const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     // ── Anthropic (futuro) ───────────────────────────────────────────────
     'claude-3-5-sonnet-latest':  { supportsResponseFormat: false, supportsTools: true, supportsSystemRole: true, maxContextTokens: 200000 },
     'claude-3-5-haiku-latest':   { supportsResponseFormat: false, supportsTools: true, supportsSystemRole: true, maxContextTokens: 200000 },
+
+    // ── Google Gemini ──────────────────────────────────────────────────
+    'gemini-flash-latest':       { supportsResponseFormat: true, supportsTools: true, supportsSystemRole: true, maxContextTokens: 1048576 },
+    'gemini-pro-latest':         { supportsResponseFormat: true, supportsTools: true, supportsSystemRole: true, maxContextTokens: 2097152 },
+    'gemini-2.0-flash':          { supportsResponseFormat: true, supportsTools: true, supportsSystemRole: true, maxContextTokens: 1048576 },
+    'gemini-3.1-flash-lite-preview': { supportsResponseFormat: true, supportsTools: true, supportsSystemRole: true, maxContextTokens: 1048576 },
 };
 
 /**

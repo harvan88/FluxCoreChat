@@ -207,6 +207,27 @@ export class AccountService {
       .where(eq(accounts.id, accountId))
       .returning();
 
+    // 🛡️ SOBERANÍA: Sincronizar flags con fluxcore_account_policies
+    // Esto asegura que la política (FluxCore) tenga la última palabra
+    const visibilityFlags: any = {};
+    if (data.aiIncludeName !== undefined) visibilityFlags.aiIncludeName = data.aiIncludeName;
+    if (data.aiIncludeBio !== undefined) visibilityFlags.aiIncludeBio = data.aiIncludeBio;
+    if (data.aiIncludeLocations !== undefined) visibilityFlags.aiIncludeLocations = data.aiIncludeLocations;
+    if (data.aiIncludeSchedule !== undefined) visibilityFlags.aiIncludeSchedule = data.aiIncludeSchedule;
+    if (data.aiIncludeSocialLinks !== undefined) visibilityFlags.aiIncludeSocialLinks = data.aiIncludeSocialLinks;
+    if (data.aiIncludePrivateContext !== undefined) visibilityFlags.aiIncludePrivateContext = data.aiIncludePrivateContext;
+
+    if (Object.keys(visibilityFlags).length > 0) {
+      const { fluxcoreAccountPolicies } = await import('@fluxcore/db');
+      await db.insert(fluxcoreAccountPolicies)
+        .values({ accountId, ...visibilityFlags })
+        .onConflictDoUpdate({
+          target: [fluxcoreAccountPolicies.accountId],
+          set: { ...visibilityFlags, updatedAt: new Date() }
+        });
+      console.log(`[AccountService] 🛡️ AI Sovereignty flags synced for account ${accountId}`);
+    }
+
     // FC-823: If displayName changed, update location names to keep consistency
     if (data.displayName && account.displayName !== data.displayName) {
       const { accountLocations } = await import('@fluxcore/db');

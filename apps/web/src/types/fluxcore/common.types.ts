@@ -82,7 +82,7 @@ export interface SizeFields {
 // ============================================================================
 
 /** Proveedores de IA soportados */
-export type AIProvider = 'openai' | 'groq' | 'anthropic';
+export type AIProvider = 'openai' | 'groq' | 'anthropic' | 'google';
 
 /** Configuración del modelo de IA */
 export interface ModelConfig {

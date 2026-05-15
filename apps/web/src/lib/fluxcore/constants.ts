@@ -18,6 +18,7 @@ export const PROVIDER_MODELS: Record<AIProvider, string[]> = {
     openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4o-mini-2024-07-18'],
     groq: ['llama-3.1-8b-instant', 'llama-3.1-70b-versatile', 'llama-3.3-70b-versatile'],
     anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest'],
+    google: ['gemini-flash-latest', 'gemini-pro-latest', 'gemini-2.0-flash', 'gemini-3.1-flash-lite-preview'],
 };
 
 /**
@@ -27,6 +28,7 @@ export const PROVIDER_NAMES: Record<AIProvider, string> = {
     openai: 'OpenAI',
     groq: 'Groq',
     anthropic: 'Anthropic',
+    google: 'Google',
 };
 
 /**

@@ -1,5 +1,5 @@
 ---
-id: "message-core"
+id: "kernel-message-core"
 type: "core"
 status: "stable"
 criticality: "high"
@@ -74,10 +74,30 @@ await messageCore.process(message);
 
 ## 📋 Estado Actual
 
-- **✅ Implementado y funcional**
-- **✅ Arquitectura Distribuida (Redis)**
-- **✅ Integrado con ChatProjector**
-- **✅ Soporta múltiples tipos de contenido**
+- ✅ Implementado y funcional
+- ✅ Arquitectura Distribuida (Redis)
+- ✅ Integrado con ChatProjector
+- ✅ Soporta múltiples tipos de contenido
+- ✅ Hidratación Soberana de variables de sistema (v4.5)
+
+---
+
+## 🛡️ Hidratación Soberana (v4.5)
+
+Una de las responsabilidades críticas de `MessageCore` es la resolución de variables de sistema (ej: `{{system:schedules}}`) antes de la persistencia.
+
+### Regla de Oro:
+La hidratación **siempre** debe realizarse contra el `ownerAccountId` de la conversación. Esto garantiza que:
+1. Los horarios y datos del negocio sean los del dueño de la conversación.
+2. Se evite la confusión de identidad cuando un visitante (`actor`) interactúa con el sistema.
+3. El historial de chat contenga "La Verdad del Mundo" ya resuelta.
+
+```typescript
+// Lógica interna de MessageCore.receive
+const conversation = await conversationService.getConversationById(envelope.conversationId);
+const hydrationAccountId = conversation?.ownerAccountId || envelope.targetAccountId;
+envelope.content.text = await templateService.resolveSystemVariables(text, hydrationAccountId);
+```
 
 ---
 
@@ -107,19 +127,5 @@ await messageCore.process(message);
 - `apps/api/src/routes/messages.routes.ts`
 - `apps/api/src/routes/test-chatcore.routes.ts`
 - `apps/api/src/routes/test.routes.ts`
-- `apps/api/src/scripts/compile-kernel-files-fixed.ts`
-- `apps/api/src/scripts/compile-kernel-files.ts`
-- `apps/api/src/scripts/compile-kernel-simple.ts`
-- `apps/api/src/scripts/debug-message-core-queue.ts`
-- `apps/api/src/scripts/send-test-message-complete.ts`
-- `apps/api/src/scripts/send-test-message-final.ts`
-- `apps/api/src/scripts/send-test-message-fixed.ts`
-- `apps/api/src/scripts/send-test-message.ts`
-- `apps/api/src/scripts/update-snapshot.ts`
-- `apps/api/src/services/fluxcore/fluxi-dependency-injection.ts`
 - `apps/api/src/services/fluxcore/reality-adapter.service.ts`
-- `apps/api/src/services/message-deletion.service.ts`
-- `apps/api/src/services/runtimes/fluxcore-runtime.adapter.ts`
-- `apps/api/src/services/template.service.ts`
-- `apps/api/src/services/work-engine.service.ts`
 - `apps/api/src/websocket/ws-handler.ts`

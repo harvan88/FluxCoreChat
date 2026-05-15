@@ -28,6 +28,7 @@ import { trackCognitiveStep } from '../../../telemetry/tracer';
 import { getModelCapabilities } from '../provider-capabilities';
 import { templateRegistryService } from '../template-registry.service';
 import { scheduleService } from '../../schedule.service';
+import { realityRegistryService } from '../reality-registry.service';
 import { DateTime } from 'luxon';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -412,6 +413,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
     }
 
     private async executeCognitivePipeline(input: RuntimeInput): Promise<ExecutionAction[]> {
+        await realityRegistryService.init();
         const { policyContext, authorizedContext, conversationHistory, runtimeConfig } = input;
         const provider = (runtimeConfig.provider ?? 'openai') as any;
         const model = runtimeConfig.model ?? 'unknown';
@@ -433,7 +435,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         // ── FASE 1: INTENT ROUTER ─────────────────────────────────────────────
         // Usamos el contexto que ya viene enmascarado desde la aduana (v12.0)
         const baseTemplateDefinitions = getAuthorizedTemplateDefinitions(authorizedContext);
-        
+
         // Inyectar Plantilla de Sistema para Estancamiento Cognitivo (ID: 0000)
         const STALL_TEMPLATE = {
             templateId: '0000',
@@ -444,19 +446,19 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         };
 
         const templateDefinitions = [...baseTemplateDefinitions, STALL_TEMPLATE];
-        
+
         let extractedIntent: string | null = null;
+        let extractedSummary: string | null = null;
 
         if (baseTemplateDefinitions.length > 0 || true) { // Siempre correr router para detectar bucles con STALL_TEMPLATE
             const relevantHistory = conversationHistory
-                .slice(-4)
                 .map(h => `${h.role.toUpperCase()}: ${h.content}`)
                 .join('\n');
-            
-            // Re-mapeo para tokens cortos estables (v12.0 MaskID)
+
             const templatesText = templateDefinitions.map((t) => {
                 return `- ID: ${t.templateId}\n  Nombre: ${t.name}\n  Cuándo usarla: ${t.instructions ?? 'Coincidencia con intención'}`;
             }).join('\n\n');
+
             const routerSystemPrompt = Prompts.buildRouterSystemPrompt(templatesText);
 
             console.log(`\n======================================================`);
@@ -466,14 +468,14 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
             const routerResult = await trackCognitiveStep(
                 'FASE_1_ROUTER',
-                { 
+                {
                     'account.id': authorizedContext.accountId,
                     'conversation.id': input.policyContext.conversationId,
                     'model': model
                 },
-                { 
+                {
                     routerSystemPrompt,
-                    history: relevantHistory, 
+                    history: relevantHistory,
                     candidates: templateDefinitions.map(t => ({ id: t.templateId, name: t.name }))
                 },
                 async () => {
@@ -489,6 +491,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
             matchedTemplateIds = routerResult.matchedTemplateIds;
             extractedIntent = routerResult.extractedIntent;
+            extractedSummary = routerResult.extractedSummary;
 
             // RAG-FIX: Prioridad absoluta al Estancamiento Cognitivo
             if (matchedTemplateIds.includes('0000')) {
@@ -505,10 +508,10 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
 
         // ── FASE 2: RAG DETERMINISTA ──────────────────────────────────────────
         let deterministicRagContext = '';
-        
+
         // Detección de Bucle: IA (ID 0000) + Determinista (3 repeticiones)
         const userMessages = conversationHistory.filter(m => m.role === 'user');
-        const lastThreeUserMatch = userMessages.length >= 3 && 
+        const lastThreeUserMatch = userMessages.length >= 3 &&
             userMessages[userMessages.length - 1].content === userMessages[userMessages.length - 2].content &&
             userMessages[userMessages.length - 1].content === userMessages[userMessages.length - 3].content;
 
@@ -523,9 +526,9 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
         const isAmbiguous = matchedTemplateIds.length > 1;
         const noTemplatesFound = matchedTemplateIds.length === 0;
 
-        const shouldRunRag = extractedIntent && 
-                             (isAmbiguous || hasDynamicVariables || noTemplatesFound) && 
-                             !isStalled;
+        const shouldRunRag = extractedIntent &&
+            (isAmbiguous || hasDynamicVariables || noTemplatesFound) &&
+            !isStalled;
 
         if (shouldRunRag) {
             console.log(`\n======================================================`);
@@ -540,7 +543,7 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
                     { intent: extractedIntent, vectorStores: runtimeConfig.vectorStoreIds },
                     async () => {
                         const lastUserMessage = input.conversationHistory[input.conversationHistory.length - 1]?.content || query;
-                        
+
                         return await retrievalService.buildContext(
                             lastUserMessage,
                             runtimeConfig.vectorStoreIds,
@@ -565,57 +568,50 @@ export class AsistentesLocalRuntime implements RuntimeAdapter {
             }
         }
 
-        // ── FASE 2.5: RESOLUCIÓN DE SOBERANÍA TEMPORAL (IN-HOUSE) ──────────────
+        // Determinar si la intención requiere soberanía de horarios
         const scheduleKeywords = ['horario', 'abierto', 'cerrado', 'sucursal', 'sede', 'dirección', 'donde están', 'ubica', 'atención', 'donde queda', 'is business open'];
-        
-        // CAJA NEGRA DE DEPURACIÓN (Deshabilitada por rendimiento)
-
         const isScheduleIntent = extractedIntent && scheduleKeywords.some(kw => extractedIntent!.toLowerCase().includes(kw));
-        const hasScheduleTemplate = matchedTemplates.some(t => (t.name || '').toLowerCase().includes('horario') || t.templateId === '63C5');
+
+        // ── FASE 2.1: COGNITIVE REALITY PROTOCOL (CRP) ──────────────
+        // Nuevo enfoque robusto basado en proveedores de realidad.
+        // Resolvemos hechos deterministas basados en las plantillas seleccionadas.
+        let crpContext = '';
+        const uniqueTags = Array.from(new Set(matchedTemplates.map(t => t.templateId)));
         
-        if (isScheduleIntent || hasScheduleTemplate) {
+        if (uniqueTags.length > 0 || isScheduleIntent) {
             try {
-                const timeTruth = await trackCognitiveStep(
-                    'FASE_2.5_SOVEREIGNTY',
-                    { intent: extractedIntent || 'unknown', type: 'temporal_sovereignty' },
-                    { extractedIntent },
-                    async () => {
-                        // Obtenemos la primera sede activa para determinar el estado operativo base
-                        const locations = (authorizedContext.businessProfile as any)?.locations || [];
-                        const primaryLocation = locations.find((l: any) => l.status === 'active') || locations[0];
-                        const locationId = primaryLocation?.id || 'default';
-
-                        const scheduleVerdict = await scheduleService.isBusinessOpen('location', locationId, new Date());
-                        const scheduleSummary = await scheduleService.getScheduleSummary(authorizedContext.accountId);
-                        
-                        const timezone = (authorizedContext.businessProfile as any)?.timezone || 'UTC';
-                        
-                        return `
-ONTOLOGÍA DE TIEMPO (VERDAD DEL MUNDO):
-- Estado Operativo Actual: ${scheduleVerdict.isOpen ? '🟢 ABIERTO AHORA MISMO' : '🔴 CERRADO EN ESTE MOMENTO'}
-- Razón Determinista: ${scheduleVerdict.reason}
-- Reloj del Sistema: ${DateTime.now().setZone(timezone).toFormat('HH:mm')} (Timezone: ${timezone})
-- Resumen de Sedes y Horarios Habituales:
-${scheduleSummary}
-`.trim();
-                    },
-                    input.executionId
-                );
-
-                console.log(`✅ Veredicto inyectado en reporte de soberanía.`);
+                // Mapeo dinámico de IDs e intenciones a dominios canónicos (ej: 63C5 o 'is business open' -> system:schedule)
+                const requestedDomains = Array.from(new Set([
+                    ...uniqueTags.map(id => {
+                        if (id === '63C5' || id.toLowerCase().includes('horario')) return 'system:schedule';
+                        return null;
+                    }),
+                    (isScheduleIntent ? 'system:schedule' : null)
+                ])).filter(Boolean) as string[];
                 
-                deterministicRagContext = deterministicRagContext 
-                    ? `${deterministicRagContext}\n\n${timeTruth}`
-                    : timeTruth;
-            } catch (error: any) {
-                console.error(`[AsistentesLocal] 📛 Error en Soberanía Temporal: ${error.message}`);
+                if (requestedDomains.length > 0) {
+                    const facts = await realityRegistryService.resolveFacts(requestedDomains, authorizedContext.accountId, policyContext);
+                    if (facts.length > 0) {
+                        crpContext = facts.map(f => f.content).join('\n\n');
+                        console.log(`[CRP] ✅ Realidad resuelta para dominios: ${requestedDomains.join(', ')}`);
+                    }
+                }
+            } catch (error) {
+                console.error(`[CRP] 📛 Error resolviendo realidad cognitiva:`, error);
             }
+        }
+
+        // Integrar el contexto de realidad (CRP) en el RAG Context
+        if (crpContext) {
+            deterministicRagContext = deterministicRagContext
+                ? `${deterministicRagContext}\n\n${crpContext}`
+                : crpContext;
         }
 
         // 4. Preparación de Contexto de Enfoque Cognitivo (v17.1)
         // El CognitiveDispatcher ya filtró las plantillas por relevancia (Tamiz Global).
         // Aquí simplemente mantenemos las plantillas autorizadas que llegaron en el input.
-        
+
         const strictAuthorizedContext = {
             ...authorizedContext,
             instructions: isStalled ? "" : templateRegistryService.stripLegacyBlocks(authorizedContext.instructions || ''),
@@ -625,17 +621,9 @@ ${scheduleSummary}
         if (strictAuthorizedContext.businessProfile && strictAuthorizedContext.businessProfile.templates) {
             strictAuthorizedContext.businessProfile = {
                 ...strictAuthorizedContext.businessProfile,
-                templates: (strictAuthorizedContext.businessProfile.templates as any[]).map(t => {
-                    const isScheduleTemplate = t.name.toLowerCase().includes('horario') || t.templateId.includes('63C5');
-                    if (isScheduleTemplate && isScheduleIntent) {
-                        // Soberanía de Fase 2: Quitamos el contenido estático para evitar colisión
-                        console.log(`[AsistentesLocal] 🛡️ Suprimiendo contenido estático de plantilla ${t.templateId} por conflicto de Soberanía.`);
-                        return { ...t, content: '(Información dinámica proporcionada en el contexto RAG/Hechos)' };
-                    }
-                    return t;
-                }).filter(t => strictAuthorizedContext.authorizedTemplates?.includes(t.templateId))
+                templates: (strictAuthorizedContext.businessProfile.templates as any[]).filter(t => strictAuthorizedContext.authorizedTemplates?.includes(t.templateId))
             };
-            
+
             // También limpiar el contexto privado del perfil si existe
             if (strictAuthorizedContext.businessProfile.privateContext) {
                 strictAuthorizedContext.businessProfile.privateContext = templateRegistryService.stripLegacyBlocks(strictAuthorizedContext.businessProfile.privateContext as string);
@@ -661,16 +649,16 @@ ${scheduleSummary}
             STALL_TEMPLATE
         ];
         const targetTemplate = matchedTemplateIds.length === 1 ? templates.find(t => t.templateId === matchedTemplateIds[0]) : null;
-        
-        const isRepetition = lastAssistantMsg && targetTemplate && 
-                            (lastAssistantMsg.content === targetTemplate.content || 
-                             lastAssistantMsg.content?.includes(targetTemplate.content?.slice(0, 20) || '___'));
+
+        const isRepetition = lastAssistantMsg && targetTemplate &&
+            (lastAssistantMsg.content === targetTemplate.content ||
+                lastAssistantMsg.content?.includes(targetTemplate.content?.slice(0, 20) || '___'));
 
         let effectiveTemplates = templates;
         let effectiveTemperature = temperature;
 
         if (isRepetition || isStalled) {
-            effectiveTemperature = 1.0; 
+            effectiveTemperature = 1.0;
             if (targetTemplate && targetTemplate.templateId !== '0000') {
                 effectiveTemplates = templates.filter(t => t.templateId !== targetTemplate.templateId);
                 console.log(`[AsistentesLocal] 🚫 Blacklist temporal activada para plantilla: ${targetTemplate.templateId}`);
@@ -692,25 +680,30 @@ ${scheduleSummary}
         let messages: Array<{ role: 'user' | 'assistant'; content: string }>;
         let finalTemplates = effectiveTemplates;
         let finalInstructions = focusedRuntimeInstructions;
+        if (extractedSummary) {
+            finalInstructions += `\n\n### Resumen de la conversación (generado en Fase 1):\n${extractedSummary}`;
+        }
         let finalTemplateEnforcement = Prompts.buildTemplateEnforcement();
 
         if (isStalled) {
             console.log(`[AsistentesLocal] 🚨 EVENTO 0000 DETECTADO: Aplicando Arquitectura Antibucle.`);
             // Aislamos a la IA de herramientas técnicas para forzar resolución humana
-            finalTemplates = []; 
-            finalTemplateEnforcement = ""; 
+            finalTemplates = [];
+            finalTemplateEnforcement = "";
             finalInstructions = `\n\n⚠️ INSTRUCCIÓN DEL SISTEMA (MODO RECUPERACIÓN):\nSe ha detectado un estancamiento en la conversación.\n1. DETÉN el bucle.\n2. NO uses plantillas ni comandos técnicos.\n3. ADMITE el estancamiento de forma cordial.\n4. OFRECE una salida humana (derivar a agente) o cambia el enfoque.`;
-            
+
             // Limpiamos residuos técnicos en el historial para evitar imitación
             messages = conversationHistory
                 .filter(m => m.role === 'user' || m.role === 'assistant')
-                .map(m => ({ 
-                    role: m.role as 'user' | 'assistant', 
-                    content: m.content.replace(/CALL_TEMPLATE:[\s\S]*?(\n|$)/g, '').trim() 
+                .slice(-4)
+                .map(m => ({
+                    role: m.role as 'user' | 'assistant',
+                    content: m.content.replace(/CALL_TEMPLATE:[\s\S]*?(\n|$)/g, '').trim()
                 }));
         } else {
             messages = conversationHistory
                 .filter(m => m.role === 'user' || m.role === 'assistant')
+                .slice(-4)
                 .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
         }
 
@@ -779,26 +772,30 @@ ${scheduleSummary}
             const maskId = matchedTemplateIds[0];
             const targetTemplate = templates.filter(t => t.templateId !== '0000').find(t => t.templateId === maskId);
 
-            const isStatic = targetTemplate && 
-                             !targetTemplate.content?.includes('{{') && 
-                             !targetTemplate.instructions?.includes('{{') &&
-                             !targetTemplate.name.toLowerCase().includes('horario');
+            const isStatic = targetTemplate &&
+                !targetTemplate.content?.includes('{{') &&
+                !targetTemplate.instructions?.includes('{{');
 
-            if (isStatic && !isRepetition) {
+            // 🚀 SOBERANÍA CRP: Solo usamos Fast-Path para intenciones estáticas o horarios generales.
+            // Según el paradigma original, 'is business open' DEBE continuar a las siguientes fases (IA).
+            const isDeterministicRealTime = (isStatic && extractedIntent !== 'is business open') || (crpContext && extractedIntent === 'horarios');
+
+            if (isDeterministicRealTime && !isRepetition) {
                 return await trackCognitiveStep(
                     'FASE_1_5_DETERMINISTIC_SHORTCUT',
                     {
                         'account.id': authorizedContext.accountId,
                         'conversation.id': input.policyContext.conversationId,
-                        'matched.mask': maskId
+                        'matched.mask': maskId,
+                        'with_crp': !!crpContext
                     },
-                    { 
-                        reason: 'Single static template detected with simple intent. Bypassing Phase 3 (Resolutive Call).',
+                    {
+                        reason: 'Deterministic truth available via CRP or static template. Bypassing Phase 3.',
                         templateName: targetTemplate?.name,
                         intent: extractedIntent
                     },
                     async () => {
-                        console.log(`[AsistentesLocal] ⚡ Fast-Path activado para ${maskId} ("${targetTemplate?.name}").`);
+                        console.log(`[AsistentesLocal] ⚡ Fast-Path (CRP) activado para ${maskId} ("${targetTemplate?.name}").`);
                         return [{
                             type: 'send_template',
                             templateId: maskId,
@@ -814,31 +811,31 @@ ${scheduleSummary}
         // ── FASE 3: MODO RESOLUTIVO ───────────────────────────────────────────
         try {
             for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-            // Mitigación de Rate Limit por inmediatez:
-            if (round > 0) {
-                const delayMs = 3000;
-                console.log(`[AsistentesLocal] 🕒 Esperando ${delayMs}ms para mitigar Rate Limit antes del round ${round}...`);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            }
+                // Mitigación de Rate Limit por inmediatez:
+                if (round > 0) {
+                    const delayMs = 3000;
+                    console.log(`[AsistentesLocal] 🕒 Esperando ${delayMs}ms para mitigar Rate Limit antes del round ${round}...`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                }
 
-            console.log(`\n======================================================`);
-            console.log(`🧠 [FASE 3] LLM MODO RESOLUTIVO - INPUT COMPLETO (ROUND ${round})`);
-            console.log(`======================================================`);
-            console.log(`[System Prompt Principal (Abreviado)]:\n... ${systemPrompt.substring(0, 300)} ...`);
-            console.log(`\n[Contexto RAG Injectado en este turno]:\n${deterministicRagContext ? deterministicRagContext.substring(0, 300) + '...' : '(Vacío - No hay RAG)'}\n`);
+                console.log(`\n======================================================`);
+                console.log(`🧠 [FASE 3] LLM MODO RESOLUTIVO - INPUT COMPLETO (ROUND ${round})`);
+                console.log(`======================================================`);
+                console.log(`[System Prompt Principal (Abreviado)]:\n... ${systemPrompt.substring(0, 300)} ...`);
+                console.log(`\n[Contexto RAG Injectado en este turno]:\n${deterministicRagContext ? deterministicRagContext.substring(0, 300) + '...' : '(Vacío - No hay RAG)'}\n`);
 
-            const sovereignMessages = currentMessages;
+                const sovereignMessages = currentMessages;
 
-            const result = await trackCognitiveStep(
-                'FASE_3_RESOLUTIVE_CALL',
-                { 
-                    'account.id': authorizedContext.accountId,
-                    'conversation.id': input.policyContext.conversationId,
-                    'round': String(round),
-                    'model': model
-                },
-                { messages: sovereignMessages, tools: tools.map(t => t.function.name) },
-                async () => {
+                const result = await trackCognitiveStep(
+                    'FASE_3_RESOLUTIVE_CALL',
+                    {
+                        'account.id': authorizedContext.accountId,
+                        'conversation.id': input.policyContext.conversationId,
+                        'round': String(round),
+                        'model': model
+                    },
+                    { messages: sovereignMessages, tools: tools.map(t => t.function.name) },
+                    async () => {
                         return await llmClient.complete({
                             provider,
                             model,
@@ -848,105 +845,105 @@ ${scheduleSummary}
                             tools: tools.length > 0 ? tools : undefined,
                             toolChoice: tools.length > 0 ? 'auto' : undefined,
                         });
-                },
-                input.executionId
-            );
-            logLLMCompletion({ phase: 'main', round, result });
+                    },
+                    input.executionId
+                );
+                logLLMCompletion({ phase: 'main', round, result });
 
-            // No tool calls — final text response
-            if (!result.toolCalls || result.toolCalls.length === 0) {
-                const responseText = result.content?.trim();
-                if (!responseText) {
-                    return queuedTemplateActions.length > 0
-                        ? dedupeTemplateActions(queuedTemplateActions)
-                        : [{ type: 'no_action', reason: 'LLM returned empty response' }];
-                }
-
-                const parsedTemplateResponse = parseTemplateResponse({
-                    responseText,
-                    conversationId: policyContext.conversationId,
-                    authorizedTemplateIds: strictAuthorizedContext.authorizedTemplates,
-                    templateDefinitions: strictAuthorizedContext.businessProfile?.templates || [],
-                });
-
-                // Si hay errores de validación (ej. faltan variables), retroalimentar a la IA
-                if (parsedTemplateResponse.errors && parsedTemplateResponse.errors.length > 0) {
-                    if (round >= MAX_TOOL_ROUNDS) {
-                        console.warn(`[AsistentesLocal] ⚠️ Se alcanzó el máximo de rondas y la plantilla sigue fallando: ${parsedTemplateResponse.errors[0]}`);
-                        return [{
-                            type: 'send_message',
-                            conversationId: policyContext.conversationId,
-                            content: `Lo siento, me faltan algunos detalles para poder darte la respuesta exacta. ¿Podrías comentarme un poco más sobre tu consulta?`
-                        }];
+                // No tool calls — final text response
+                if (!result.toolCalls || result.toolCalls.length === 0) {
+                    const responseText = result.content?.trim();
+                    if (!responseText) {
+                        return queuedTemplateActions.length > 0
+                            ? dedupeTemplateActions(queuedTemplateActions)
+                            : [{ type: 'no_action', reason: 'LLM returned empty response' }];
                     }
 
-                    console.warn(`[AsistentesLocal] ⚠️ Template validation failed: ${parsedTemplateResponse.errors.join(', ')}`);
-                    currentMessages = [
-                        ...currentMessages,
-                        { role: 'assistant', content: responseText },
-                        { 
-                            role: 'system', 
-                            content: `Error interno de validación. Las variables correctas para esta plantilla son: ${parsedTemplateResponse.errors.join('. ')}. Reintentá la invocación usando exactamente esos nombres de variables según el esquema definido. No menciones este error al usuario ni pidas disculpas por él, simplemente corregí la llamada.` 
-                        }
-                    ];
-                    continue; // Continuar el bucle para que la IA se autocorrija
-                }
-
-                const templateActions = dedupeTemplateActions([
-                    ...queuedTemplateActions,
-                    ...parsedTemplateResponse.templateActions,
-                ]);
-
-                if (templateActions.length > 0) {
-                    const residualText = parsedTemplateResponse.foundTemplateMarker
-                        ? parsedTemplateResponse.residualText
-                        : normalizeResidualText(responseText);
-
-                    if (!residualText) {
-                        console.log(`[AsistentesLocal] ✅ Template-only response (${result.usage?.totalTokens ?? '?'} tokens)`);
-                        return templateActions;
-                    }
-
-                    const templateFollowUpContext = buildTemplateFollowUpContext(templateActions, maskedAuthorizedContext);
-                    if (templateFollowUpContext.length === 0) {
-                        console.warn(`[AsistentesLocal] ⚠️ No template context available, proceeding with direct execution`);
-                    }
-
-                    const followUpText = await this.generateTemplateAwareFollowUp({
-                        provider,
-                        model,
-                        maxTokens,
-                        temperature,
-                        systemPrompt,
-                        messages,
-                        lastUserMessage: lastMessage.content,
-                        residualText,
-                        templateFollowUpContext,
+                    const parsedTemplateResponse = parseTemplateResponse({
+                        responseText,
+                        conversationId: policyContext.conversationId,
+                        authorizedTemplateIds: strictAuthorizedContext.authorizedTemplates,
+                        templateDefinitions: strictAuthorizedContext.businessProfile?.templates || [],
                     });
 
-                    if (!followUpText) {
-                        console.log(`[AsistentesLocal] ✅ Template response without safe follow-up (${result.usage?.totalTokens ?? '?'} tokens)`);
-                        return templateActions;
+                    // Si hay errores de validación (ej. faltan variables), retroalimentar a la IA
+                    if (parsedTemplateResponse.errors && parsedTemplateResponse.errors.length > 0) {
+                        if (round >= MAX_TOOL_ROUNDS) {
+                            console.warn(`[AsistentesLocal] ⚠️ Se alcanzó el máximo de rondas y la plantilla sigue fallando: ${parsedTemplateResponse.errors[0]}`);
+                            return [{
+                                type: 'send_message',
+                                conversationId: policyContext.conversationId,
+                                content: `Lo siento, me faltan algunos detalles para poder darte la respuesta exacta. ¿Podrías comentarme un poco más sobre tu consulta?`
+                            }];
+                        }
+
+                        console.warn(`[AsistentesLocal] ⚠️ Template validation failed: ${parsedTemplateResponse.errors.join(', ')}`);
+                        currentMessages = [
+                            ...currentMessages,
+                            { role: 'assistant', content: responseText },
+                            {
+                                role: 'system',
+                                content: `Error interno de validación. Las variables correctas para esta plantilla son: ${parsedTemplateResponse.errors.join('. ')}. Reintentá la invocación usando exactamente esos nombres de variables según el esquema definido. No menciones este error al usuario ni pidas disculpas por él, simplemente corregí la llamada.`
+                            }
+                        ];
+                        continue; // Continuar el bucle para que la IA se autocorrija
                     }
 
-                    console.log(`[AsistentesLocal] ✅ Hybrid template response (${result.usage?.totalTokens ?? '?'} tokens)`);
-                    return [
-                        ...templateActions,
-                        {
-                            type: 'send_message',
-                            conversationId: policyContext.conversationId,
-                            content: followUpText,
-                        },
-                    ];
-                }
+                    const templateActions = dedupeTemplateActions([
+                        ...queuedTemplateActions,
+                        ...parsedTemplateResponse.templateActions,
+                    ]);
 
-                console.log(`[AsistentesLocal] ✅ Response (${result.usage?.totalTokens ?? '?'} tokens)`);
-                return [{
-                    type: 'send_message',
-                    conversationId: policyContext.conversationId,
-                    content: responseText,
-                }];
-            }
+                    if (templateActions.length > 0) {
+                        const residualText = parsedTemplateResponse.foundTemplateMarker
+                            ? parsedTemplateResponse.residualText
+                            : normalizeResidualText(responseText);
+
+                        if (!residualText) {
+                            console.log(`[AsistentesLocal] ✅ Template-only response (${result.usage?.totalTokens ?? '?'} tokens)`);
+                            return templateActions;
+                        }
+
+                        const templateFollowUpContext = buildTemplateFollowUpContext(templateActions, strictAuthorizedContext);
+                        if (templateFollowUpContext.length === 0) {
+                            console.warn(`[AsistentesLocal] ⚠️ No template context available, proceeding with direct execution`);
+                        }
+
+                        const followUpText = await this.generateTemplateAwareFollowUp({
+                            provider,
+                            model,
+                            maxTokens,
+                            temperature,
+                            systemPrompt,
+                            messages,
+                            lastUserMessage: lastMessage.content,
+                            residualText,
+                            templateFollowUpContext,
+                        });
+
+                        if (!followUpText) {
+                            console.log(`[AsistentesLocal] ✅ Template response without safe follow-up (${result.usage?.totalTokens ?? '?'} tokens)`);
+                            return templateActions;
+                        }
+
+                        console.log(`[AsistentesLocal] ✅ Hybrid template response (${result.usage?.totalTokens ?? '?'} tokens)`);
+                        return [
+                            ...templateActions,
+                            {
+                                type: 'send_message',
+                                conversationId: policyContext.conversationId,
+                                content: followUpText,
+                            },
+                        ];
+                    }
+
+                    console.log(`[AsistentesLocal] ✅ Response (${result.usage?.totalTokens ?? '?'} tokens)`);
+                    return [{
+                        type: 'send_message',
+                        conversationId: policyContext.conversationId,
+                        content: responseText,
+                    }];
+                }
 
                 if (round >= MAX_TOOL_ROUNDS) {
                     console.warn(`[AsistentesLocal] Max tool rounds reached, suppressing remaining tool calls`);
@@ -1012,11 +1009,11 @@ ${scheduleSummary}
     }
 
     private async evaluateTemplateIntents(params: {
-        provider: 'groq' | 'openai';
+        provider: 'groq' | 'openai' | 'google';
         model: string;
         conversationContext: string;
         templates: AuthorizedTemplateDefinition[];
-    }): Promise<{ matchedTemplateIds: string[], extractedIntent: string | null }> {
+    }): Promise<{ matchedTemplateIds: string[], extractedIntent: string | null, extractedSummary: string | null }> {
         const { provider, model, conversationContext, templates } = params;
 
         // Map templates to their current IDs (which are MaskIDs in v12.0)
@@ -1057,7 +1054,7 @@ ${scheduleSummary}
             logLLMCompletion({ phase: 'intent_router', result, round: 0 });
 
             const text = result.content?.trim() ?? '{}';
-            let parsed: any = { plantillas: [], intencion_busqueda: null };
+            let parsed: any = { plantillas: [], intencion_busqueda: null, resumen_conversacion: null };
 
             try {
                 parsed = JSON.parse(text);
@@ -1069,6 +1066,9 @@ ${scheduleSummary}
             const intent = typeof parsed.intencion_busqueda === 'string' && parsed.intencion_busqueda.trim() !== ''
                 ? parsed.intencion_busqueda.trim()
                 : null;
+            const summary = typeof parsed.resumen_conversacion === 'string' && parsed.resumen_conversacion.trim() !== ''
+                ? parsed.resumen_conversacion.trim()
+                : null;
 
             // Map short aliases back to true UUIDs
             const ids = rawTemplates
@@ -1078,16 +1078,17 @@ ${scheduleSummary}
 
             return {
                 matchedTemplateIds: ids,
-                extractedIntent: intent
+                extractedIntent: intent,
+                extractedSummary: summary
             };
         } catch (error: any) {
             console.error(`[IntentRouter] ⚠️ Fallo en el enrutamiento previo: ${error.message}`);
-            return { matchedTemplateIds: [], extractedIntent: null };
+            return { matchedTemplateIds: [], extractedIntent: null, extractedSummary: null };
         }
     }
 
     private async generateTemplateAwareFollowUp(params: {
-        provider: 'groq' | 'openai';
+        provider: 'groq' | 'openai' | 'google';
         model: string;
         maxTokens: number;
         temperature: number;

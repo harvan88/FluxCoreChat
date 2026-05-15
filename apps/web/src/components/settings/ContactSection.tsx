@@ -208,7 +208,7 @@ export function ContactSection({}: ContactSectionProps) {
               data.aiEnabled ? 'bg-accent/10 text-accent' : 'text-muted'
             }`}
           >
-            <span className="text-[10px] font-bold uppercase tracking-wider">IA</span>
+            <span className="text-[10px] font-bold text-muted">IA</span>
             <Switch 
               checked={data.aiEnabled}
               onCheckedChange={(v) => handleSocialChange('website', 'aiEnabled', v)}
@@ -261,7 +261,7 @@ export function ContactSection({}: ContactSectionProps) {
             data.aiEnabled ? 'bg-accent/10 text-accent' : 'text-muted'
           }`}
         >
-          <span className="text-[10px] font-bold uppercase tracking-wider">IA</span>
+          <span className="text-[10px] font-bold text-muted">IA</span>
           <Switch 
             checked={data.aiEnabled}
             onCheckedChange={(v) => handleSocialChange(key, 'aiEnabled', v)}
@@ -305,7 +305,7 @@ export function ContactSection({}: ContactSectionProps) {
               {renderContactField('phone')}
               
               <div className="flex items-center justify-end py-2">
-                <p className="text-[10px] text-muted uppercase tracking-widest">Los datos de contacto se asocian a tu sede principal</p>
+                <p className="text-[10px] text-muted">Los datos de contacto se asocian a tu sede principal</p>
               </div>
             </div>
           </CollapsibleSection>
@@ -335,7 +335,7 @@ export function ContactSection({}: ContactSectionProps) {
                   </div>
                   <Input type="text" placeholder="Selecciona una red social" className="flex-1" disabled />
                   <div className="flex items-center gap-1.5 px-2 h-9 rounded-lg text-muted">
-                    <span className="text-[10px] font-bold uppercase tracking-wider">IA</span>
+                    <span className="text-[10px] font-bold text-muted">IA</span>
                     <Switch size="sm" checked={false} onCheckedChange={() => {}} disabled />
                   </div>
                   <DoubleConfirmationDeleteButton onConfirm={() => setShowNewSocialRow(false)} className="h-9 w-9" />
@@ -373,7 +373,7 @@ export function ContactSection({}: ContactSectionProps) {
                       type="text" 
                       value={primaryColor} 
                       onChange={(e) => setPrimaryColor(e.target.value)}
-                      className="font-mono text-sm uppercase"
+                      className="font-mono text-sm"
                     />
                   </div>
                 </div>

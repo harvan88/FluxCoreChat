@@ -1,7 +1,7 @@
 import { db, accountAiEntitlements } from '@fluxcore/db';
 import { eq } from 'drizzle-orm';
 
-export type AIProviderId = 'groq' | 'openai';
+export type AIProviderId = 'groq' | 'openai' | 'google';
 
 export interface AccountAiEntitlementView {
   accountId: string;
@@ -21,10 +21,10 @@ class AiEntitlementsService {
     if (!row) return null;
 
     const allowedProviders = Array.isArray(row.allowedProviders)
-      ? (row.allowedProviders.filter((p) => p === 'groq' || p === 'openai') as AIProviderId[])
+      ? (row.allowedProviders.filter((p) => p === 'groq' || p === 'openai' || p === 'google') as AIProviderId[])
       : [];
 
-    const defaultProvider = row.defaultProvider === 'groq' || row.defaultProvider === 'openai'
+    const defaultProvider = row.defaultProvider === 'groq' || row.defaultProvider === 'openai' || row.defaultProvider === 'google'
       ? (row.defaultProvider as AIProviderId)
       : null;
 
@@ -47,13 +47,13 @@ class AiEntitlementsService {
     const existing = await this.getEntitlement(accountId);
 
     const allowedProviders = data.allowedProviders
-      ? data.allowedProviders.filter((p) => p === 'groq' || p === 'openai')
+      ? data.allowedProviders.filter((p) => p === 'groq' || p === 'openai' || p === 'google')
       : existing?.allowedProviders ?? [];
 
     const defaultProvider =
       data.defaultProvider === null
         ? null
-        : data.defaultProvider === 'groq' || data.defaultProvider === 'openai'
+        : data.defaultProvider === 'groq' || data.defaultProvider === 'openai' || data.defaultProvider === 'google'
           ? data.defaultProvider
           : existing?.defaultProvider ?? null;
 

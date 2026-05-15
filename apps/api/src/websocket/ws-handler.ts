@@ -66,13 +66,22 @@ const activeConnections = new Set<any>();
 const kernelConsoleSubscriptions = new Set<any>();
 
 // 🛡️ DEDUPLICADOR DE MENSAJES (Fase 3: Estabilización)
-// Evita que el mismo proceso envíe el mismo mensaje por dos vías distintas (Local y Redis)
-const processedMessageIds = new Set<string>();
+// Separado por canal para evitar que un broadcast legítimo por conversation
+// sea bloqueado por un broadcast previo por relationship (o viceversa).
+const processedRelationshipMsgIds = new Set<string>();
+const processedConversationMsgIds = new Set<string>();
 
-function markAsProcessed(messageId: string) {
-  if (processedMessageIds.has(messageId)) return true;
-  processedMessageIds.add(messageId);
-  setTimeout(() => processedMessageIds.delete(messageId), 15000);
+function markRelationshipProcessed(messageId: string) {
+  if (processedRelationshipMsgIds.has(messageId)) return true;
+  processedRelationshipMsgIds.add(messageId);
+  setTimeout(() => processedRelationshipMsgIds.delete(messageId), 15000);
+  return false;
+}
+
+function markConversationProcessed(messageId: string) {
+  if (processedConversationMsgIds.has(messageId)) return true;
+  processedConversationMsgIds.add(messageId);
+  setTimeout(() => processedConversationMsgIds.delete(messageId), 15000);
   return false;
 }
 
@@ -501,17 +510,23 @@ export async function handleWSMessage(ws: any, message: string | Buffer): Promis
           
           const userId = senderAccount[0]?.ownerUserId || data.senderAccountId; // Fallback
           
+          // 🎯 SOBERANÍA: Resolver el accountId del NEGOCIO para el contexto cognitivo
+          // Si el sender es un guest, necesitamos el targetAccountId (el Dr. Jones) para cargar las políticas.
+          const { conversationService } = await import('../services/conversation.service');
+          const conversation = await conversationService.getById(data.conversationId!);
+          const businessAccountId = (conversation?.accountId || data.senderAccountId) as string;
+
           chatCoreGateway.certifyIngress({
-            accountId: data.senderAccountId, // Business Context
-            userId: userId,                    // Authenticated Actor (owner del account)
-            payload: data.content,
+            accountId: businessAccountId, // Business Context (Source of Truth)
+            userId: userId,                // Authenticated Actor
             meta: {
               ip: wsData.ip,
               userAgent: wsData.userAgent,
               clientTimestamp: data.createdAt || new Date().toISOString(),
               conversationId: data.conversationId,
               requestId: wsData.requestId
-            }
+            },
+            payload: data.content
           }).then((certification) => {
             if (!certification.accepted) {
               console.warn(`[WS] 🛑 Gateway rejected ingress: ${certification.reason}`);
@@ -775,8 +790,8 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
     }
 
     const messageId = payload.data?.id;
-    if (messageId && markAsProcessed(messageId)) {
-      console.log(`[WebSocket] 🛡️ Skipping redundant broadcast for message ${messageId}`);
+    if (messageId && markRelationshipProcessed(messageId)) {
+      console.log(`[WebSocket] 🛡️ Skipping redundant relationship broadcast for message ${messageId}`);
       return;
     }
 
@@ -835,45 +850,24 @@ export function broadcastToRelationship(relationshipId: string, payload: any): v
 export function broadcastToConversationClients(conversationId: string, payload: any): void {
   const messageId = payload.data?.id || payload.messageId || 'no-id';
   
-  // 🛡️ ESCUDO DE DEDUPLICACIÓN (Mover aquí para cubrir todas las vías de entrada)
-  if (messageId !== 'no-id' && markAsProcessed(messageId)) {
+  // 🛡️ ESCUDO DE DEDUPLICACIÓN (separado del canal relationship)
+  if (messageId !== 'no-id' && markConversationProcessed(messageId)) {
     console.log(`[WebSocket] 🛡️ Skipping redundant conversation broadcast for message ${messageId}`);
     return;
   }
 
-  console.log(`[DUPLICATE_CHECK] 🔊 broadcastToConversationClients called for message ${messageId} | Type: ${payload.type}`);
-
   const subs = conversationSubscriptions.get(conversationId);
-  if (!subs) return;
+  if (!subs || subs.size === 0) return;
+
+  console.log(`[WebSocket] 🔊 Broadcasting to ${subs.size} conversation subscribers for ${conversationId.slice(0, 8)} | Type: ${payload.type}`);
+
   const message = JSON.stringify(payload);
   for (const ws of subs) {
     try {
-      // 🔥 CRÍTICO: Solo enviar si el WebSocket está autorizado para recibir este mensaje
-      const wsAccountId = ws.data?.accountId;
-      const messageSenderId = payload.data?.senderAccountId;
-      const messageTargetId = payload.data?.targetAccountId;
-      
-      // Si no hay accountId en el WebSocket, enviar por defecto (compatibilidad)
-      if (!wsAccountId) {
-        console.log(`[WebSocket] 🔄 No accountId in ws.data, sending conversation to all (compatibility)`);
-        ws.send(message);
-        continue;
-      }
-      
-      // Enviar solo si:
-      // 1. Es el remitente del mensaje, O
-      // 2. Es el destinatario del mensaje, O
-      // 3. Es un mensaje de IA (broadcast a todos)
-      const isAIMessage = payload.data?.generatedBy === 'ai';
-      const isSender = wsAccountId === messageSenderId;
-      const isRecipient = wsAccountId === messageTargetId;
-      
-      if (isAIMessage || isSender || isRecipient) {
-        console.log(`[WebSocket] 🎯 Sending to conversation ${wsAccountId}: sender=${messageSenderId}, target=${messageTargetId}, isAI=${isAIMessage}`);
-        ws.send(message);
-      } else {
-        console.log(`[WebSocket] 🚫 Filtering conversation message for ${wsAccountId}: not authorized`);
-      }
+      // 🔥 CORRECCIÓN: Si un cliente está suscrito a esta conversación,
+      // ya fue autorizado al suscribirse (validación de participante ocurre en 'subscribe').
+      // No filtrar aquí — enviar a TODOS los suscriptos de la conversación.
+      ws.send(message);
     } catch (error) {
       subs.delete(ws);
     }

@@ -4,7 +4,7 @@
  * Gestiona el estado de automatización en el frontend.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 // import { getApiUrl } from '../utils/urls';
 // const API_URL = getApiUrl();
@@ -78,10 +78,23 @@ import { useAutomationStore } from '../store/automationStore';
  */
 export function useAutomation(accountId: string | null, relationshipId?: string) {
   const store = useAutomationStore();
+  const lastFetchedAccountIdRef = useRef<string | null>(null);
   
   const currentMode = store.getMode(relationshipId || null);
   const isLoading = store.isLoading;
   const error = store.error;
+
+  // 🔥 CORRECCIÓN: Cargar reglas automáticamente al montar o cuando cambia el accountId.
+  // Usa un ref para evitar fetches repetidos (previene loop).
+  // Solo hace fetch si el accountId cambió respecto al último fetch exitoso.
+  useEffect(() => {
+    if (!accountId) return;
+    if (lastFetchedAccountIdRef.current === accountId) return;
+    
+    lastFetchedAccountIdRef.current = accountId;
+    store.fetchRules(accountId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId]);
 
   const setRule = useCallback(async (
     mode: AutomationMode,
@@ -120,3 +133,4 @@ export function useAutomation(accountId: string | null, relationshipId?: string)
     resetError: () => {},
   };
 }
+
